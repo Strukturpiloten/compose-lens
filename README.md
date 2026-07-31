@@ -57,6 +57,10 @@ Repository-specific guidance for coding agents is in [AGENTS.md](AGENTS.md).
 
 ComposeLens is implemented from scratch. It is not a fork of `compose_spec_rs` and does not copy or mechanically translate its source code.
 
+## Stewardship
+
+ComposeLens is created and maintained by [Martin “Becks” Beckert](https://github.com/TheRealBecks) through [Strukturpiloten OHG](https://www.strukturpiloten.de/). The project is part of Strukturpiloten's work on open, maintainable, and portable container infrastructure.
+
 ## License
 
 ComposeLens is licensed under the [Mozilla Public License 2.0](LICENSE).

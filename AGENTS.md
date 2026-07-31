@@ -11,7 +11,8 @@ Read these documents in order:
 3. `docs/project-structure.md`
 4. `docs/processing-model.md`
 5. `docs/testing.md`
-6. `docs/decisions/README.md` and all accepted ADRs
+6. `docs/dependency-policy.md`
+7. `docs/decisions/README.md` and all accepted ADRs
 
 Architectural changes require documentation and an ADR update in the same change.
 
@@ -46,5 +47,21 @@ Third-party parsing dependencies require deliberate review. Record choices that 
 - Add conformance and regression fixtures with every parsing or resolution behavior change.
 - Store source, license, implementation version, and environment metadata for external fixtures.
 - Update documentation and compatibility claims with behavior changes.
+- Pin every GitHub Action to its full commit SHA and append its exact release tag as a comment. Verify new pins upstream; Renovate must preserve and update both values.
 
-No Rust crate exists yet. Once scaffolded, add the canonical formatting, linting, testing, documentation, and compatibility commands here and in `docs/testing.md`.
+## Canonical development commands
+
+The crate uses Rust 2024, supports Rust 1.85.0 and newer, and pins the normal development toolchain in `rust-toolchain.toml`.
+
+```shell
+cargo fmt --all -- --check
+cargo ci-check
+cargo ci-clippy
+cargo ci-test
+cargo ci-doctest
+RUSTDOCFLAGS="-D warnings" cargo ci-doc
+cargo +1.85.0 ci-check
+cargo deny check
+```
+
+The `ci-*` aliases in `.cargo/config.toml` use locked resolution and all workspace features and targets where applicable. Conformance, property, and fuzz commands must be added here when their harnesses are introduced.

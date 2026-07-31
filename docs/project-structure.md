@@ -1,39 +1,45 @@
-# Target project structure
+# Project structure
 
-ComposeLens begins as one public crate with strong internal module boundaries. Separate published crates are not justified until an independent consumer and release need are demonstrated.
+ComposeLens is one library crate with strong internal module boundaries. The crate foundation exists; entries marked `planned` are created with their first behavior and tests. Separate published crates are not justified until an independent consumer and release need are demonstrated.
 
 ```text
 compose-lens/
 ├── Cargo.toml
 ├── Cargo.lock
 ├── rust-toolchain.toml
+├── rustfmt.toml
+├── clippy.toml
+├── deny.toml
+├── .cargo/
+│   └── config.toml        # canonical Cargo aliases
 ├── AGENTS.md
 ├── README.md
 ├── LICENSE
 ├── src/
 │   ├── lib.rs
-│   ├── source/             # source identifiers, spans, and diagnostics
-│   ├── syntax/             # YAML-facing loss-aware representation
-│   ├── model/              # native typed Compose document
-│   ├── loader/             # files, includes, origins, and project discovery
-│   ├── merge/              # multi-file composition
-│   ├── interpolation/      # expressions and environment providers
-│   ├── profiles/           # profile selection and implementation profiles
-│   ├── validation/         # validation rules and capability classification
-│   ├── render/             # preservation and canonical rendering
-│   └── diagnostic/         # structured errors and warnings
-├── tests/
+│   ├── source/             # planned: source identifiers, spans, and diagnostics
+│   ├── syntax/             # planned: YAML-facing loss-aware representation
+│   ├── model/              # planned: native typed Compose document
+│   ├── loader/             # planned: files, includes, origins, and project discovery
+│   ├── merge/              # planned: multi-file composition
+│   ├── interpolation/      # planned: expressions and environment providers
+│   ├── profiles/           # planned: profile selection and implementation profiles
+│   ├── validation/         # planned: validation rules and capability classification
+│   ├── render/             # planned: preservation and canonical rendering
+│   └── diagnostic/         # planned: structured errors and warnings
+├── tests/                  # planned with the first implemented behavior
 │   ├── syntax/
 │   ├── conformance/
 │   ├── implementations/
 │   ├── roundtrip/
 │   └── real-world/
-├── fixtures/
+├── fixtures/               # planned with the first external fixture
 │   └── README.md           # fixture provenance and licensing rules
 ├── docs/
 └── .github/
-    ├── workflows/
-    └── ISSUE_TEMPLATE/
+    ├── renovate.json
+    └── workflows/
+        └── ci.yml
 ```
 
 ## Module placement rules

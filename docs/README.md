@@ -8,6 +8,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Project structure](project-structure.md) — intended crate and module organization
 - [Processing model](processing-model.md) — explicit document and project stages
 - [Testing strategy](testing.md) — parser, resolver, conformance, and round-trip tests
+- [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
 - [Roadmap](roadmap.md) — implementation order
 - [Architecture decisions](decisions/README.md) — durable design choices
 
