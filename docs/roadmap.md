@@ -6,43 +6,48 @@ Cross-repository delivery uses the stable task numbers in the [implementation pl
 
 The parser-selection, source/diagnostic kernel, and initial preservation milestones are delivered by T2. Typed Compose behavior begins with T5.
 
-## Phase 0: foundation
+## Status key
 
-- Accept architecture and origin ADR.
-- Select the YAML parsing strategy through an ADR and prototypes.
-- Scaffold the crate, CI, lints, MSRV policy, and fixture metadata format.
-- Define source spans, diagnostics, and public API stability policy.
+- [x] Completed and validated
+- [ ] Open
 
-## Phase 1: syntax and source model
+## Phase 0: foundation — completed
 
-- Parse YAML into a source-aware document.
-- Preserve unknown mappings and scalar spelling.
-- Implement structured syntax diagnostics.
-- Establish round-trip and malformed-input test suites.
+- [x] Accept architecture and origin ADR.
+- [x] Select the YAML parsing strategy through an ADR and prototypes.
+- [x] Scaffold the crate, CI, lints, MSRV policy, and fixture metadata format.
+- [x] Define source spans, diagnostics, and public API stability policy.
 
-## Phase 2: typed Compose document
+## Phase 1: syntax and source model — completed
 
-- Implement top-level project, services, networks, volumes, configs, and secrets.
-- Add short/long syntax value types.
-- Preserve extensions and unknown fields.
-- Support tolerant image references and source provenance.
+- [x] Parse YAML into a source-aware document.
+- [x] Preserve unknown mappings and scalar spelling.
+- [x] Implement structured syntax diagnostics.
+- [x] Establish round-trip and malformed-input test suites.
 
-## Phase 3: project processing
+## Phase 2: typed Compose document — open
 
-- Implement explicit environment providers and interpolation.
-- Implement multi-file loading and merging.
-- Implement profile selection, path origins, references, and configurable defaults.
-- Add implementation-specific compatibility profiles.
+- [ ] Implement top-level project, services, networks, volumes, configs, and secrets.
+- [ ] Add short/long syntax value types.
+- [ ] Preserve extensions and unknown fields.
+- [ ] Support tolerant image references and source provenance.
 
-## Phase 4: rendering and editing
+## Phase 3: project processing — open
 
-- Implement deterministic canonical rendering.
-- Implement preservation-oriented edits where the syntax layer permits them.
-- Define formatting options without coupling semantics to presentation.
+- [ ] Implement explicit environment providers and interpolation.
+- [ ] Implement multi-file loading and merging.
+- [ ] Implement profile selection, path origins, references, and configurable defaults.
+- [ ] Add implementation-specific compatibility profiles.
 
-## Phase 5: ecosystem hardening
+## Phase 4: rendering and editing — open
 
-- Expand Docker Compose and Podman Compose version matrices.
-- Grow the licensed real-world corpus.
-- Stabilize the public crate API.
-- Publish releases and compatibility documentation.
+- [ ] Implement deterministic canonical rendering.
+- [ ] Implement preservation-oriented edits where the syntax layer permits them.
+- [ ] Define formatting options without coupling semantics to presentation.
+
+## Phase 5: ecosystem hardening — open
+
+- [ ] Expand Docker Compose and Podman Compose version matrices.
+- [ ] Grow the licensed real-world corpus.
+- [ ] Stabilize the public crate API.
+- [ ] Publish releases and compatibility documentation.
