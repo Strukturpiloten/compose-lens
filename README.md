@@ -5,7 +5,7 @@ ComposeLens is a Rust library for reading, understanding, transforming, validati
 It is designed for tools that need more than strict deserialization: source-aware diagnostics, implementation extensions, optional interpolation, multi-file projects, profiles, and round-trip-safe transformations.
 
 > [!IMPORTANT]
-> ComposeLens is in its initial design phase. It does not yet provide a usable crate or a stable API.
+> ComposeLens is in early development. Its first loss-aware YAML syntax API is available, but it does not yet provide a typed Compose model, project processing, or a stable API.
 
 ## Goals
 
@@ -48,6 +48,8 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Target project structure](docs/project-structure.md)
 - [Processing model](docs/processing-model.md)
 - [Testing strategy](docs/testing.md)
+- [Cross-repository implementation plan](docs/implementation-plan.md)
+- [API stability policy](docs/api-stability.md)
 - [Roadmap](docs/roadmap.md)
 - [Architecture decisions](docs/decisions/README.md)
 

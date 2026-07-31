@@ -1,0 +1,21 @@
+schema = 1
+id = "stable-reparse"
+suite = "roundtrip"
+description = "Protects stable parse-render-parse behavior for quoted and plain Compose scalar spellings."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is provided."
+
+[expectations]
+summary = "Two preservation parse/render cycles produce identical source without diagnostics."
+
+[extensions.roundtrip]
+expected_diagnostics = []

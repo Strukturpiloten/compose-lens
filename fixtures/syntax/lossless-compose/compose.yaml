@@ -1,0 +1,15 @@
+# An extension anchor remains native YAML syntax.
+x-defaults: &defaults
+  image: "registry.example/web:01@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  command: ['printf', '%s\n', "01"]
+
+services:
+  web:
+    <<: *defaults
+    x-podman:
+      rootfs: true
+    environment:
+      BOOL_LIKE: "false"
+      FROM_CALLER: ${VALUE:-unchanged}
+    duplicate: first
+    duplicate: second # Duplicate keys are retained for later diagnostics.

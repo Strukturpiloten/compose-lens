@@ -25,6 +25,8 @@ The syntax layer owns YAML representation, comments where supported, scalar spel
 
 It must represent syntactically valid input even when the typed Compose model does not recognize every field.
 
+The initial implementation stores an immutable loss-aware concrete syntax tree plus the original source. [`yaml-edit`](https://docs.rs/yaml-edit/0.2.3/yaml_edit/) is private behind ComposeLens-owned APIs as decided in [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md). Recoverable malformed input produces both a renderable syntax document and structured diagnostics.
+
 ### Typed document model
 
 The typed layer exposes Compose concepts such as services, networks, volumes, configs, secrets, build configuration, dependencies, and deployment settings.

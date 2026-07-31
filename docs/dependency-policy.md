@@ -24,3 +24,7 @@ Do not silence an advisory, allow a Git source, clarify a license, or skip a dup
 ## Automation
 
 Run `cargo deny check` after installing `cargo-deny`. CI checks advisories, licenses, bans, and sources. Renovate proposes Cargo, lockfile, Rust toolchain, and GitHub Actions updates; updates still require the same tests and review as human-authored dependency changes.
+
+## Current representation dependency
+
+`yaml-edit` 0.2.3 is pinned exactly with default features disabled. This keeps its optional binary/base64 support out of the dependency graph. The dependency and alternatives are reviewed in [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md) and the [YAML representation evaluation](research/yaml-representation.md). No `yaml-edit` type may appear in the public API.

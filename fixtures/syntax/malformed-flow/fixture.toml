@@ -1,0 +1,21 @@
+schema = 1
+id = "malformed-flow"
+suite = "syntax"
+description = "Protects recovery and source-spanned diagnostics for an unclosed flow sequence."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No environment or external parser is used."
+
+[expectations]
+summary = "Parsing returns a renderable document and an unclosed-flow-sequence diagnostic."
+
+[extensions.syntax]
+expected_diagnostics = ["compose.yaml.unclosed-flow-sequence"]

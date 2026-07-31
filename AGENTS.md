@@ -7,12 +7,14 @@ This file applies to the entire ComposeLens repository.
 Read these documents in order:
 
 1. `README.md`
-2. `docs/architecture.md`
-3. `docs/project-structure.md`
-4. `docs/processing-model.md`
-5. `docs/testing.md`
-6. `docs/dependency-policy.md`
-7. `docs/decisions/README.md` and all accepted ADRs
+2. `docs/implementation-plan.md`
+3. `docs/architecture.md`
+4. `docs/project-structure.md`
+5. `docs/processing-model.md`
+6. `docs/testing.md`
+7. `docs/dependency-policy.md`
+8. `docs/api-stability.md`
+9. `docs/decisions/README.md` and all accepted ADRs
 
 Architectural changes require documentation and an ADR update in the same change.
 

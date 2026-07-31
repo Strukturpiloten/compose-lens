@@ -17,8 +17,8 @@ compose-lens/
 ├── LICENSE
 ├── src/
 │   ├── lib.rs
-│   ├── source/             # planned: source identifiers, spans, and diagnostics
-│   ├── syntax/             # planned: YAML-facing loss-aware representation
+│   ├── source/             # source identifiers, spans, and line/column lookup
+│   ├── syntax/             # loss-aware YAML document and parser diagnostics
 │   ├── model/              # planned: native typed Compose document
 │   ├── loader/             # planned: files, includes, origins, and project discovery
 │   ├── merge/              # planned: multi-file composition
@@ -26,15 +26,20 @@ compose-lens/
 │   ├── profiles/           # planned: profile selection and implementation profiles
 │   ├── validation/         # planned: validation rules and capability classification
 │   ├── render/             # planned: preservation and canonical rendering
-│   └── diagnostic/         # planned: structured errors and warnings
+│   └── diagnostic/         # stable codes, severities, labels, and notes
 ├── tests/
 │   ├── README.md           # suite ownership and introduction rules
 │   ├── repository_policy.rs # fixture and workflow-pin enforcement
+│   ├── syntax.rs           # preservation and malformed-input behavior
+│   ├── roundtrip.rs        # parse/render/parse stability
 │   └── support/            # private repository-test helpers
 ├── fixtures/
-│   └── README.md           # fixture location and safety rules
+│   ├── README.md           # fixture location and safety rules
+│   ├── syntax/             # authored syntax and recovery cases
+│   └── roundtrip/          # authored stability cases
 ├── docs/
-│   └── fixture-format.md   # versioned fixture manifest contract
+│   ├── fixture-format.md   # versioned fixture manifest contract
+│   └── research/           # versioned technical evaluations
 └── .github/
     ├── renovate.json
     └── workflows/

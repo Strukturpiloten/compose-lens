@@ -1,0 +1,21 @@
+schema = 1
+id = "lossless-compose"
+suite = "syntax"
+description = "Protects source preservation for Compose-shaped YAML with anchors, aliases, duplicate keys, comments, extensions, and scalar spelling."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is provided; dollar expressions remain source text."
+
+[expectations]
+summary = "Parsing succeeds and preservation rendering is byte-for-byte identical to the input."
+
+[extensions.syntax]
+expected_diagnostics = []

@@ -2,6 +2,10 @@
 
 The roadmap is ordered by dependencies rather than dates.
 
+Cross-repository delivery uses the stable task numbers in the [implementation plan](implementation-plan.md). This roadmap remains the detailed internal phase order for ComposeLens.
+
+The parser-selection, source/diagnostic kernel, and initial preservation milestones are delivered by T2. Typed Compose behavior begins with T5.
+
 ## Phase 0: foundation
 
 - Accept architecture and origin ADR.

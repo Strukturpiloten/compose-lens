@@ -21,6 +21,9 @@ license = "MPL-2.0"
 homepage = "https://www.strukturpiloten.de/"
 repository = "https://github.com/Strukturpiloten/compose-lens"
 
+[dependencies]
+yaml-edit = { version = "=0.2.3", default-features = false }
+
 [dev-dependencies]
 toml = "=1.1.4"
 
