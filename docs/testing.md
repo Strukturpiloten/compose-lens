@@ -36,6 +36,10 @@ Observed behavior becomes evidence, not an unquestionable specification. Conflic
 
 Use licensed projects and minimal reproductions of reported behavior. Every fixture needs provenance, redistribution permission, secret review, and a statement of what it protects.
 
+## Test organization
+
+Cargo-discovered integration tests live in [`../tests/`](../tests/README.md), with private helpers in `tests/support/`. Fixtures live in [`../fixtures/`](../fixtures/README.md) and are validated against the versioned [fixture manifest contract](fixture-format.md). Product suites are added only with implemented behavior and meaningful assertions.
+
 ## Regression rule
 
 Every bug fix adds the smallest fixture that failed before the fix. When an external implementation changes, preserve old-version expectations if ComposeLens still claims compatibility with that version.
@@ -47,11 +51,13 @@ The crate uses Rust 2024 with an MSRV of 1.85.0. `rust-toolchain.toml` pins the 
 ```shell
 cargo fmt --all -- --check
 cargo ci-check
+cargo ci-policy
 cargo ci-clippy
 cargo ci-test
 cargo ci-doctest
 RUSTDOCFLAGS="-D warnings" cargo ci-doc
 cargo +1.85.0 ci-check
+cargo +1.85.0 ci-policy
 cargo deny check
 ```
 

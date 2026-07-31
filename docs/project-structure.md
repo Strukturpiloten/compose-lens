@@ -27,15 +27,14 @@ compose-lens/
 │   ├── validation/         # planned: validation rules and capability classification
 │   ├── render/             # planned: preservation and canonical rendering
 │   └── diagnostic/         # planned: structured errors and warnings
-├── tests/                  # planned with the first implemented behavior
-│   ├── syntax/
-│   ├── conformance/
-│   ├── implementations/
-│   ├── roundtrip/
-│   └── real-world/
-├── fixtures/               # planned with the first external fixture
-│   └── README.md           # fixture provenance and licensing rules
+├── tests/
+│   ├── README.md           # suite ownership and introduction rules
+│   ├── repository_policy.rs # fixture and workflow-pin enforcement
+│   └── support/            # private repository-test helpers
+├── fixtures/
+│   └── README.md           # fixture location and safety rules
 ├── docs/
+│   └── fixture-format.md   # versioned fixture manifest contract
 └── .github/
     ├── renovate.json
     └── workflows/
