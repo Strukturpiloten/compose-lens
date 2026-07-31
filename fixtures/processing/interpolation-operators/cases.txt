@@ -1,0 +1,13 @@
+$SET => value
+${SET} => value
+${MISSING:-default} => default
+${EMPTY:-default} => default
+${EMPTY-default} => <empty>
+${MISSING-default} => default
+${SET:+alternate} => alternate
+${EMPTY:+alternate} => <empty>
+${EMPTY+alternate} => alternate
+${MISSING+alternate} => <empty>
+${MISSING:-${FALLBACK}} => fallback
+$$SET => $SET
+$5 => $5

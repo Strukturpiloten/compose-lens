@@ -21,7 +21,7 @@ The repository that owns a task is authoritative for its detailed status. Update
 | T2 | ComposeLens | completed | Loss-aware YAML syntax and diagnostic kernel |
 | T3 | QuadletLens | planned | Ordered Quadlet syntax and rendering kernel |
 | T4 | BoxFerry | planned | Independent neutral model and conversion engine |
-| T5 | All repositories | planned | Minimum native typed subsets for the first conversion |
+| T5 | All repositories | in progress | Minimum native typed subsets for the first conversion |
 | T6 | BoxFerry, integrating both Lens libraries | planned | First Compose-to-Quadlet vertical slice |
 | T7 | All repositories | planned | Expanded conformance, runtime, and release testing tiers |
 
@@ -67,11 +67,13 @@ Implement neutral application, service, volume, network, port, environment, and 
 
 ## T5: Minimum native typed subsets
 
-Status: planned. Each repository owns its native types; BoxFerry owns mappings.
+Status: in progress. Each repository owns its native types; BoxFerry owns mappings.
 
-- ComposeLens: services, images, commands, environment, ports, volumes, networks, and profiles.
+- ComposeLens (completed): services, images, commands, environment, ports, volumes, networks, profiles, configs, and secrets.
 - QuadletLens: `.container`, `.volume`, `.network`, and required generic systemd sections.
 - BoxFerry: mappings, path-policy differences, and Podman 5.4 fallback decisions.
+
+Delivered ComposeLens slice: source-aware services and typed top-level resource definitions; tolerant image references; distinct command, environment, port, volume, service-network, config-grant, secret-grant, and label forms; deferred scalar expressions; field provenance; and retained extensions and unknown fields. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) prohibits implicit form normalization. The [Phase 2 typed-model document](typed-model.md) defines the completed boundary and evidence.
 
 Before integration, document dependency and release mechanics. Prefer early pre-1.0 Lens releases; use commit-pinned Git dependencies only as a temporary fallback.
 

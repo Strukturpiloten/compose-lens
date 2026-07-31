@@ -1,0 +1,21 @@
+schema = 1
+id = "document-interpolation"
+suite = "processing"
+description = "Protects per-file interpolation of eligible YAML values while preserving keys, single-quoted values, unknown fields, and original source."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "TAG=1.2, LABEL_VALUE is sensitive, VALUE and FUTURE are unset, and every other variable is unset."
+
+[expectations]
+summary = "Eligible YAML values produce a non-destructive overlay; mapping keys and single-quoted values are not interpolated."
+
+[extensions.processing]
+stage = "per-file-before-merge"

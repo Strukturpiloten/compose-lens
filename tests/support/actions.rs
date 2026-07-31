@@ -10,8 +10,7 @@ pub(crate) fn validate_action_pins(repository_root: &Path) -> Result<(), String>
 
     let mut errors = Vec::new();
     for path in files {
-        let text = fs::read_to_string(&path)
-            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        let text = fs::read_to_string(&path).map_err(|error| format!("failed to read {}: {error}", path.display()))?;
 
         for (index, line) in text.lines().enumerate() {
             let Some(reference) = action_reference(line) else {
@@ -36,12 +35,11 @@ pub(crate) fn validate_action_pins(repository_root: &Path) -> Result<(), String>
 }
 
 fn collect_workflows(directory: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
-    let entries = fs::read_dir(directory)
-        .map_err(|error| format!("failed to read {}: {error}", directory.display()))?;
+    let entries =
+        fs::read_dir(directory).map_err(|error| format!("failed to read {}: {error}", directory.display()))?;
 
     for entry in entries {
-        let entry =
-            entry.map_err(|error| format!("failed to inspect {}: {error}", directory.display()))?;
+        let entry = entry.map_err(|error| format!("failed to inspect {}: {error}", directory.display()))?;
         let path = entry.path();
         let file_type = entry
             .file_type()
@@ -90,9 +88,7 @@ fn is_immutable_versioned_action(reference: &str) -> bool {
 
 fn is_exact_version(version: &str) -> bool {
     let version = version.strip_prefix('v').unwrap_or(version);
-    let core = version
-        .split_once('-')
-        .map_or(version, |(core, _prerelease)| core);
+    let core = version.split_once('-').map_or(version, |(core, _prerelease)| core);
     let core = core.split_once('+').map_or(core, |(core, _build)| core);
     let mut components = core.split('.');
 

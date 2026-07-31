@@ -1,0 +1,22 @@
+schema = 1
+id = "merge-tags"
+suite = "processing"
+description = "Protects Compose reset and override tags for scalar-command, mapping, and unique-sequence fields."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is required; files are supplied in base-then-override order."
+
+[expectations]
+summary = "Reset clears prior mappings and sequences while override bypasses append and uniqueness behavior, with both operations recorded."
+
+[extensions.processing]
+stage = "merge-tags"
+minimum_docker_compose_for_override = "2.24.4"

@@ -1,0 +1,44 @@
+services:
+  app:
+    image: "example/override:${TAG}"
+    command: ["echo", "override"]
+    entrypoint: ["/override-entrypoint"]
+    healthcheck:
+      test: ["CMD", "override-health"]
+      timeout: 5s
+    environment:
+      - SHARED=override
+      - LIST_ONLY=added
+    labels:
+      shared: override
+      map.only: added
+    ports:
+      - target: 80
+        published: "8080"
+        host_ip: 127.0.0.1
+        protocol: tcp
+        mode: host
+      - "7070:70"
+    volumes:
+      - type: bind
+        source: ./override
+        target: /data
+        read_only: true
+        bind:
+          selinux: Z
+      - logs:/logs
+    devices:
+      - /dev/override:/dev/device:rw
+      - /dev/new:/dev/new
+    configs:
+      - source: override-config
+        target: /config
+        uid: "1000"
+    secrets:
+      - source: replacement-secret
+        target: app-secret
+        mode: 0440
+    cap_add: [SYS_TIME]
+    x-unknown:
+      nested: override
+      added: true

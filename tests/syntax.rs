@@ -15,10 +15,7 @@ fn preserves_compose_shaped_yaml_without_normalization() -> Result<(), Box<dyn s
     assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
     assert_eq!(document.source_id(), source_id);
     assert_eq!(document.source_span().range(), 0..LOSSLESS_COMPOSE.len());
-    assert_eq!(
-        document.text(document.source_span()),
-        Some(LOSSLESS_COMPOSE)
-    );
+    assert_eq!(document.text(document.source_span()), Some(LOSSLESS_COMPOSE));
     assert_eq!(document.document_count(), 1);
     assert_eq!(document.comment_count(), 2);
     assert_eq!(document.render_preserved(), LOSSLESS_COMPOSE);
@@ -32,8 +29,7 @@ fn preserves_compose_shaped_yaml_without_normalization() -> Result<(), Box<dyn s
 }
 
 #[test]
-fn malformed_yaml_returns_a_spanned_diagnostic_and_a_document()
--> Result<(), Box<dyn std::error::Error>> {
+fn malformed_yaml_returns_a_spanned_diagnostic_and_a_document() -> Result<(), Box<dyn std::error::Error>> {
     let source_id = SourceId::new(11);
     let parsed = SyntaxDocument::parse(source_id, MALFORMED_FLOW)?;
 
@@ -41,16 +37,16 @@ fn malformed_yaml_returns_a_spanned_diagnostic_and_a_document()
     assert_eq!(parsed.document().render_preserved(), MALFORMED_FLOW);
     assert!(parsed.diagnostics().iter().any(|diagnostic| {
         diagnostic.code() == YAML_UNCLOSED_FLOW_SEQUENCE
-            && diagnostic.labels().iter().any(|label| {
-                label.span().source_id() == source_id && label.span().end() <= MALFORMED_FLOW.len()
-            })
+            && diagnostic
+                .labels()
+                .iter()
+                .any(|label| label.span().source_id() == source_id && label.span().end() <= MALFORMED_FLOW.len())
     }));
     Ok(())
 }
 
 #[test]
-fn preserves_unicode_and_crlf_while_reporting_byte_locations()
--> Result<(), Box<dyn std::error::Error>> {
+fn preserves_unicode_and_crlf_while_reporting_byte_locations() -> Result<(), Box<dyn std::error::Error>> {
     let source = "# Käfer\r\nservices:\r\n  app:\r\n    image: demo\r\n";
     let parsed = SyntaxDocument::parse(SourceId::new(19), source)?;
     let document = parsed.document();

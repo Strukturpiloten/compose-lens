@@ -1,0 +1,14 @@
+name: document-interpolation
+x-future: "future-${FUTURE:-enabled}"
+services:
+  app:
+    image: "example/app:${TAG}"
+    command: 'echo ${SINGLE_QUOTED}'
+    environment:
+      - "VALUE=${VALUE:-default}"
+      - "RUNTIME=$$RUNTIME"
+      - BLOCKED=${MISSING}
+      - plain
+    labels:
+      "${LABEL_KEY}": "${LABEL_VALUE}"
+      static: unchanged

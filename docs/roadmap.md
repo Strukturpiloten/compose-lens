@@ -25,19 +25,36 @@ The parser-selection, source/diagnostic kernel, and initial preservation milesto
 - [x] Implement structured syntax diagnostics.
 - [x] Establish round-trip and malformed-input test suites.
 
-## Phase 2: typed Compose document — open
+## Phase 2: typed Compose document — completed
 
-- [ ] Implement top-level project, services, networks, volumes, configs, and secrets.
-- [ ] Add short/long syntax value types.
-- [ ] Preserve extensions and unknown fields.
-- [ ] Support tolerant image references and source provenance.
+Phase 2 is complete for the first BoxFerry conversion boundary. Fields outside that documented
+boundary remain loss-aware unknown-field references; typing the entire Compose Specification is
+not a Phase 2 exit criterion. See the [Phase 2 typed model](typed-model.md).
 
-## Phase 3: project processing — open
+- [x] Establish source-aware project, service, network, volume, config, and secret collections.
+- [x] Complete the typed service and top-level resource fields required by the first conversion boundary.
+- [x] Define the representation-fidelity policy for non-interchangeable syntax forms.
+- [x] Implement distinct short and long service-volume types, including bind and SELinux options.
+- [x] Add field-specific syntax variants for commands, environment, ports, networks, configs, and secrets.
+- [x] Preserve extensions and unknown fields for the implemented typed subset.
+- [x] Provide reusable typed-value source provenance.
+- [x] Support tolerant image references, including combined tags and digests.
+- [x] Preserve deferred boolean expressions, null values, empty values, scalar kinds, extensions, and unknown fields.
+- [x] Validate valid and recoverable-invalid Phase 2 forms with authored, source-spanned fixtures.
 
-- [ ] Implement explicit environment providers and interpolation.
-- [ ] Implement multi-file loading and merging.
-- [ ] Implement profile selection, path origins, references, and configurable defaults.
-- [ ] Add implementation-specific compatibility profiles.
+## Phase 3: project processing — completed
+
+- [x] Implement explicit environment providers and the source-aware interpolation kernel.
+- [x] Apply interpolation to eligible YAML values as a non-destructive per-file overlay.
+- [x] Load ordered caller-supplied documents with unique source IDs, explicit origins, recoverable diagnostics, and first-file project-directory semantics.
+- [x] Merge loaded documents with provenance and Compose field-specific rules.
+- [x] Select active services from an explicit profile request without mutating the merged project.
+- [x] Classify and lexically resolve supported host paths from retained project origins and explicit home context.
+- [x] Validate selected-service references to services, networks, volumes, configs, and secrets.
+- [x] Request documented semantic defaults from a caller-owned policy without modifying source values.
+- [x] Add exact-version specification, Docker Compose, `podman-compose`, and tolerant compatibility profiles.
+- [x] Separate the Compose provider from its optional Docker or Podman backend runtime.
+- [x] Add published versioned evidence for syntax-form asymmetries, beginning with long bind SELinux behavior.
 
 ## Phase 4: rendering and editing — open
 

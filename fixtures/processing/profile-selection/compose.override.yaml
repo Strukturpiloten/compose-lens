@@ -1,0 +1,3 @@
+services:
+  reset:
+    profiles: !reset []

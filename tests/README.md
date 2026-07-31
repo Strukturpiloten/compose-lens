@@ -7,7 +7,8 @@ Suites are introduced with the behavior they verify:
 - `repository-policy` — fixture metadata and repository security invariants
 - `syntax` — YAML-facing syntax, malformed input, spans, and recovery
 - `typed-model` — native Compose types and short/long forms
-- `processing` — loading, merging, interpolation, profiles, and references
+- `processing` — loading, merging, interpolation, profiles, paths, references, and defaults
+- `compatibility` — exact implementation versions, provider/runtime profiles, evidence, and findings
 - `roundtrip` — preservation and deterministic canonical rendering
 - `conformance` — behavior observed from identified Compose implementations
 - `real-world` — licensed external projects and regression cases

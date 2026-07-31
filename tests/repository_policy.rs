@@ -81,25 +81,15 @@ summary = "Must not be accepted."
     );
 
     assert!(
-        errors
-            .iter()
-            .any(|error| error.contains("secrets_reviewed")),
+        errors.iter().any(|error| error.contains("secrets_reviewed")),
         "{errors:#?}"
     );
     assert!(
-        errors
-            .iter()
-            .any(|error| error.contains("unsafe fixture path")),
+        errors.iter().any(|error| error.contains("unsafe fixture path")),
         "{errors:#?}"
     );
-    assert!(
-        errors.iter().any(|error| error.contains("`url`")),
-        "{errors:#?}"
-    );
-    assert!(
-        errors.iter().any(|error| error.contains("`revision`")),
-        "{errors:#?}"
-    );
+    assert!(errors.iter().any(|error| error.contains("`url`")), "{errors:#?}");
+    assert!(errors.iter().any(|error| error.contains("`revision`")), "{errors:#?}");
 }
 
 fn repository_root() -> PathBuf {

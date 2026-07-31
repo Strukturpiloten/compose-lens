@@ -5,12 +5,13 @@ ComposeLens is a Rust library for reading, understanding, transforming, validati
 It is designed for tools that need more than strict deserialization: source-aware diagnostics, implementation extensions, optional interpolation, multi-file projects, profiles, and round-trip-safe transformations.
 
 > [!IMPORTANT]
-> ComposeLens is in early development. Its first loss-aware YAML syntax API is available, but it does not yet provide a typed Compose model, project processing, or a stable API.
+> ComposeLens is in early development. Its loss-aware YAML syntax API, Phase 2 source-aware typed model, explicit project processing, and version-aware compatibility profiles are available. The typed boundary covers the service and resource fields required by the first BoxFerry Compose-to-Quadlet conversion; broad runtime conformance matrices, the complete Compose model, rendering, and a stable API are not yet available.
 
 ## Goals
 
 - Parse Compose YAML without forcing immediate normalization or interpolation.
 - Represent syntax, typed Compose concepts, extensions, and unknown fields explicitly.
+- Preserve field-specific short and long syntax when their defaults or runtime behavior can differ.
 - Preserve enough source information for actionable diagnostics and safe editing.
 - Support multi-file project loading, merging, profile selection, and configurable interpolation.
 - Model behavior found in real Docker Compose and Podman Compose projects.
@@ -34,7 +35,9 @@ source text
   → loss-aware syntax document
   → typed Compose document
   → loaded multi-file project
-  → selected profiles and optional interpolation
+  → optional per-file interpolation
+  → provenance-preserving merged project
+  → selected profiles, references, paths, and defaults
   → validated semantic view
   → rendered Compose document
 ```
@@ -47,6 +50,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Software architecture](docs/architecture.md)
 - [Target project structure](docs/project-structure.md)
 - [Processing model](docs/processing-model.md)
+- [Phase 2 typed model](docs/typed-model.md)
 - [Testing strategy](docs/testing.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)

@@ -1,0 +1,21 @@
+schema = 1
+id = "interpolation-operators"
+suite = "processing"
+description = "Protects Compose direct, default, alternative, nested, escaped-dollar, and invalid-name interpolation behavior."
+secrets_reviewed = true
+files = ["cases.txt"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "SET=value, EMPTY is set to an empty string, FALLBACK=fallback, and all other variables are unset."
+
+[expectations]
+summary = "Interpolation distinguishes unset from empty values and evaluates every supported operator without reading the process environment."
+
+[extensions.processing]
+operators = ["direct", "default", "alternative", "nested", "escaped-dollar"]

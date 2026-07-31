@@ -1,0 +1,22 @@
+schema = 1
+id = "compatibility-profiles"
+suite = "processing"
+description = "Protects version-aware compatibility classification without claiming unverified provider or runtime support."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No profiles are active; provider and runtime versions are supplied independently by each test."
+
+[expectations]
+summary = "Tag-plus-digest images, SELinux syntax forms, merge tags, and extensions receive profile-specific evidence-backed classifications."
+
+[extensions.processing]
+stage = "post-merge-compatibility-validation"
+providers = ["specification", "docker-compose", "podman-compose", "tolerant"]

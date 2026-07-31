@@ -43,22 +43,14 @@ impl SourceSpan {
     #[must_use]
     pub const fn new(source_id: SourceId, start: usize, end: usize) -> Option<Self> {
         if start <= end {
-            Some(Self {
-                source_id,
-                start,
-                end,
-            })
+            Some(Self { source_id, start, end })
         } else {
             None
         }
     }
 
     pub(crate) const fn from_valid_offsets(source_id: SourceId, start: usize, end: usize) -> Self {
-        Self {
-            source_id,
-            start,
-            end,
-        }
+        Self { source_id, start, end }
     }
 
     /// Returns the source document identifier.

@@ -1,0 +1,34 @@
+name: volume-forms
+x-top-level-note: retained
+services:
+  app:
+    image: example/app:1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    x-podman-userns: keep-id
+    volumes:
+      - ./shared:/srv/shared:z
+      - "./private:/srv/private:Z,ro"
+      - cache:/cache
+      - type: bind
+        source: ./strict
+        target: /srv/strict
+        read_only: true
+        bind:
+          create_host_path: false
+          propagation: rshared
+          selinux: Z
+          x-podman-note: retained
+          future_bind_option: retained
+        consistency: delegated
+        x-mount-note: retained
+networks:
+  frontend: {}
+volumes:
+  cache:
+    driver: local
+    x-podman-copy: false
+configs:
+  app-config:
+    file: ./app.conf
+secrets:
+  app-secret:
+    external: true

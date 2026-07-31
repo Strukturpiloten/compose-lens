@@ -1,0 +1,6 @@
+name: multi-file-loading
+services:
+  app:
+    image: "example/base:${TAG}"
+    volumes:
+      - ./data:/srv/data

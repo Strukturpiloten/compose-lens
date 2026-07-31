@@ -19,12 +19,13 @@ compose-lens/
 │   ├── lib.rs
 │   ├── source/             # source identifiers, spans, and line/column lookup
 │   ├── syntax/             # loss-aware YAML document and parser diagnostics
-│   ├── model/              # planned: native typed Compose document
-│   ├── loader/             # planned: files, includes, origins, and project discovery
-│   ├── merge/              # planned: multi-file composition
-│   ├── interpolation/      # planned: expressions and environment providers
-│   ├── profiles/           # planned: profile selection and implementation profiles
-│   ├── validation/         # planned: validation rules and capability classification
+│   ├── model/              # Phase 2 typed document, field variants, resources, and values
+│   ├── loader/             # ordered caller inputs, origins, diagnostics, and project overlays
+│   ├── merge/              # field-aware semantic composition and source provenance
+│   ├── interpolation/      # explicit providers, operators, provenance, and redacted diagnostics
+│   ├── profiles/           # explicit post-merge service profile selection
+│   ├── resolution/         # host paths, cross-references, and default decisions
+│   ├── validation/         # exact versions, compatibility profiles, evidence, and findings
 │   ├── render/             # planned: preservation and canonical rendering
 │   └── diagnostic/         # stable codes, severities, labels, and notes
 ├── tests/
@@ -32,13 +33,18 @@ compose-lens/
 │   ├── repository_policy.rs # fixture and workflow-pin enforcement
 │   ├── syntax.rs           # preservation and malformed-input behavior
 │   ├── roundtrip.rs        # parse/render/parse stability
+│   ├── typed_model.rs      # typed structure, short/long forms, and diagnostics
+│   ├── processing.rs       # interpolation, loading, merge, and later project operations
 │   └── support/            # private repository-test helpers
 ├── fixtures/
 │   ├── README.md           # fixture location and safety rules
 │   ├── syntax/             # authored syntax and recovery cases
-│   └── roundtrip/          # authored stability cases
+│   ├── roundtrip/          # authored stability cases
+│   ├── typed-model/        # authored typed extraction and form-fidelity cases
+│   └── processing/         # authored processing operators and recovery cases
 ├── docs/
 │   ├── fixture-format.md   # versioned fixture manifest contract
+│   ├── typed-model.md      # completed Phase 2 boundary and parse contract
 │   └── research/           # versioned technical evaluations
 └── .github/
     ├── renovate.json
@@ -53,12 +59,13 @@ compose-lens/
 | Text positions and source identity     | `source`        |
 | YAML structure and spelling            | `syntax`        |
 | Compose-native types                   | `model`         |
-| File access and path origins           | `loader`        |
+| Caller-supplied documents and origins  | `loader`        |
 | Overlay semantics                      | `merge`         |
 | Variable expressions and substitution  | `interpolation` |
 | Compose service profiles               | `profiles`      |
+| Paths, references, and defaults         | `resolution`    |
 | Implementation support and correctness | `validation`    |
 | YAML output                            | `render`        |
 | Stable diagnostic codes                | `diagnostic`    |
 
-Do not place file access in syntax parsing, automatic interpolation in deserialization, or BoxFerry conversion types in the native model.
+Do not place file access in syntax parsing, automatic interpolation in deserialization, or BoxFerry conversion types in the native model. Application adapters perform file access and pass explicit text and origins to the loader.

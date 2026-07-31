@@ -1,0 +1,12 @@
+services:
+  always:
+    image: example/always
+  debug:
+    image: example/debug
+    profiles: [debug]
+  tools:
+    image: example/tools
+    profiles: [tools, debug]
+  reset:
+    image: example/reset
+    profiles: [legacy]

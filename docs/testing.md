@@ -10,7 +10,7 @@ Cover scalars, mappings, sequences, anchors, aliases, comments where supported, 
 
 ### Typed-model tests
 
-Cover every supported field in short and long syntax, unknown fields, extensions, image references, ports, volumes, environment values, commands, health checks, build definitions, and discriminated unions.
+Cover every field in the documented [Phase 2 boundary](typed-model.md), all supported syntax variants, unknown fields, extensions, image references, ports, volumes, environment values, commands, networks, profiles, configs, secrets, top-level resources, and discriminated unions.
 
 ### Processing tests
 
@@ -40,7 +40,12 @@ Use licensed projects and minimal reproductions of reported behavior. Every fixt
 
 Cargo-discovered integration tests live in [`../tests/`](../tests/README.md), with private helpers in `tests/support/`. Fixtures live in [`../fixtures/`](../fixtures/README.md) and are validated against the versioned [fixture manifest contract](fixture-format.md). Product suites are added only with implemented behavior and meaningful assertions.
 
-The initial syntax corpus exercises comments, anchors, aliases, duplicate keys, extension fields, scalar spelling, interpolation-shaped text, tag-plus-digest image references, Unicode, CRLF input, malformed flow syntax, source spans, and exact parse/render/parse stability.
+The initial syntax corpus exercises comments, anchors, aliases, duplicate keys, extension fields, scalar spelling, interpolation-shaped text, tag-plus-digest image references, Unicode, CRLF input, malformed flow syntax, source spans, and exact parse/render/parse stability. The Phase 2 typed-model corpus covers its complete field boundary, deferred expressions, empty and null values, extensions and unknowns, partial invalid-input recovery, and stable source-spanned diagnostics. It also keeps short `:z`, short `:Z,ro`, and long `bind.selinux: Z` volume mounts distinct. The first processing corpus protects every interpolation operator, nested expressions, escaped dollars, missing-variable policies, required-value redaction, sensitivity propagation, and nesting recovery. It also covers ordered multi-file loading, explicit origin retention, first-file base-directory selection, duplicate source IDs, recoverable diagnostics, and one per-file interpolation overlay before merge. Field-aware merge fixtures cover mapping recursion, ordinary append, command replacement, mixed environment and label forms, unique ports, volumes, devices, configs, and secrets, YAML merge keys, unknown fields, reset/override tags, provenance, and sensitive-value debug redaction. Post-merge fixtures cover explicit and all-profile selection, profile reset behavior, inactive-service exclusion, relative and caller-supplied home path origins, named-resource references, inactive and missing service edges, documented defaults, no-default policy behavior, and rejection of selections from another project. Compatibility fixtures cover exact version parsing and ranges, selected-service feature discovery, Docker's documented `!override` boundary, distinct provider/runtime identities, conservative `podman-compose` unknowns, tolerant notes, source preservation, evidence scope, stable diagnostics, and sensitive-value redaction.
+
+The built-in compatibility rules are unit/integration evidence, not a substitute for the runtime
+conformance tier. Phase 5 expands the exact Docker Compose, `podman-compose`, Docker Engine, and
+Podman matrices. A runtime observation may be promoted into a built-in rule only with an exact
+command, provider version, runtime version, platform assumptions, and retained result.
 
 ## Regression rule
 

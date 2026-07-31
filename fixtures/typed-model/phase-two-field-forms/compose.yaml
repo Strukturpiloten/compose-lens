@@ -1,0 +1,130 @@
+name: phase-two-forms
+services:
+  app:
+    image: registry.example:5000/team/app:1.2@sha256:abcdef
+    command: null
+    environment:
+      INHERITED:
+      EMPTY: ""
+      ENABLED: true
+      COUNT: 3
+      EXPRESSION: ${APP_VALUE:-fallback}
+    ports:
+      - "127.0.0.1:8080:80/tcp"
+      - target: 443
+        published: "8443"
+        host_ip: "::1"
+        protocol: tcp
+        app_protocol: https
+        mode: host
+        name: web-secure
+        x-podman-note: retained
+        future_port_option: retained
+    volumes:
+      - cache:/var/cache/app
+      - type: bind
+        source: ./data
+        target: /srv/data
+        read_only: ${READ_ONLY:-false}
+        bind:
+          create_host_path: ${CREATE_PATH:-true}
+    networks:
+      implicit:
+      frontend:
+        aliases: [app, api]
+        interface_name: eth1
+        ipv4_address: 172.28.0.10
+        ipv6_address: fd00::10
+        link_local_ips: [169.254.10.10]
+        mac_address: "02:42:ac:1c:00:0a"
+        driver_opts:
+          com.example.option: 7
+        gw_priority: 10
+        priority: ${NETWORK_PRIORITY:-100}
+        x-network-note: retained
+        future_network_option: retained
+    profiles: [development, "${APP_PROFILE:-default}"]
+    configs:
+      - app-config
+      - source: generated-config
+        target: /etc/app/generated.conf
+        uid: "1000"
+        gid: "1000"
+        mode: "0440"
+    secrets:
+      - app-secret
+      - source: token
+        target: /run/secrets/token
+        uid: "1000"
+        gid: "1000"
+        mode: "0400"
+  worker:
+    command: []
+    environment:
+      - INHERITED
+      - EMPTY=
+      - PAIR=a=b
+    networks: [frontend]
+  shell:
+    command: ""
+networks:
+  implicit:
+  frontend:
+    driver: bridge
+    driver_opts:
+      com.example.mtu: 1400
+    attachable: ${ATTACHABLE:-true}
+    enable_ipv4: true
+    enable_ipv6: false
+    external: false
+    internal: ${INTERNAL:-false}
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          ip_range: 172.28.5.0/24
+          gateway: 172.28.0.1
+          aux_addresses:
+            gateway-host: 172.28.0.2
+      options:
+        com.example.ipam: strict
+    labels:
+      com.strukturpiloten.role: frontend
+    name: phase-two-frontend
+    x-network-note: retained
+    future_network_option: retained
+volumes:
+  implicit:
+  cache:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${CACHE_PATH:-./cache}
+      o: bind
+    external: ${CACHE_EXTERNAL:-false}
+    labels:
+      - com.strukturpiloten.role=cache
+    name: phase-two-cache
+    x-volume-note: retained
+    future_volume_option: retained
+configs:
+  implicit:
+  app-config:
+    file: ./app.conf
+  generated-config:
+    content: |
+      mode=generated
+  environment-config:
+    environment: APP_CONFIG
+  external-config:
+    external: ${CONFIG_EXTERNAL:-true}
+    name: shared-config
+secrets:
+  implicit:
+  app-secret:
+    file: ./app.secret
+  token:
+    environment: APP_TOKEN
+  external-secret:
+    external: true
+    name: shared-secret

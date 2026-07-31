@@ -16,7 +16,10 @@ Represents one Compose document with native Compose types. Values may still cont
 
 ### Loaded project
 
-Represents an ordered collection of documents plus their origins and external sources. It does not imply that every optional transformation has run.
+Represents an ordered collection of documents plus their origins. The implemented loader retains
+each document's display label and directory, requires unique caller-managed source IDs, and uses the
+first document's directory as the multi-file project base. It does not imply that any optional
+transformation has run.
 
 ### Semantic view
 
@@ -26,7 +29,10 @@ Represents a chosen interpretation of the project for a particular implementatio
 
 ### Load
 
-Reads named documents and optional environment sources through caller-provided interfaces. Paths retain the document origin needed for later resolution.
+Accepts named source texts and origins supplied by the caller. The core loader performs no file or
+environment access. Recoverable syntax and typed-model diagnostics stay attached to their document
+and are aggregated without preventing analysis. File discovery and I/O belong in application
+adapters; paths retain the origin needed for later resolution.
 
 ### Interpolate
 
@@ -34,21 +40,91 @@ Evaluates supported variable expressions using an explicit provider. The provide
 
 The result retains a distinction between the original expression and the resolved value. Sensitive values are redacted from diagnostics.
 
+The implemented interpolation kernel supports direct, default, required, alternative, nested, and escaped-dollar expressions. `EmptyEnvironment`, `MapEnvironment`, and the public `EnvironmentProvider` trait keep variable access explicit. A provider value can be marked sensitive; that classification propagates only when its content enters the result. Diagnostics never contain resolved values or the caller-authored message operand of a required expression.
+
+The document overlay applies the kernel to unquoted and double-quoted YAML values while leaving mapping keys and single-quoted values unchanged. A loaded project can create one overlay per file in input order. A future application-level environment loader will construct provider precedence from explicit caller inputs and the selected implementation profile; merge still occurs only after interpolation.
+
 ### Merge
 
-Combines documents according to an explicit Compose implementation profile. Merge results retain provenance for replaced, appended, reset, or removed values.
+Combines loaded documents into a parser-independent semantic tree. The implemented merge retains
+source spans and classifies authored, added, replaced, recursively merged, appended, reset, and
+overridden values. It handles ordinary mappings and sequences, shell-command replacement,
+environment and label keys across map/list forms, unique service resources, YAML merge keys,
+`!reset`, and `!override`.
+
+The operation accepts an optional set of matching per-file interpolation overlays. Omitting them is
+an explicit request to merge authored expressions. A mismatched project/overlay pair is rejected.
+Implementation compatibility classification remains a later stage. The evidence and remaining
+runtime test requirements are recorded in [Compose multi-file merge evidence](research/compose-merge.md),
+and ADR 0006 defines the [merge representation](decisions/0006-provenance-preserving-compose-merge.md).
 
 ### Select profiles
 
-Activates services using an explicit set of profile names. ComposeLens does not invent active profiles. Services without profiles follow the selected implementation profile's normal rules.
+`select_profiles` creates a non-destructive service view from a merged project and an explicit
+`ProfileRequest`. Services without an effective `profiles` restriction are active. Restricted
+services are active when one of their valid names is requested, or when the caller explicitly
+requests all profiles. The operation validates the Compose profile-name grammar and preserves
+inactive services in the merged source.
+
+Command-line service targeting can activate a targeted service's profiles in Docker Compose. That
+is runtime-command behavior, not an implicit part of this library operation; an application must
+model it as an explicit input if it needs that behavior. References do not silently activate a
+profile-disabled service.
 
 ### Resolve references and paths
 
-Resolves internal references and optionally path origins without requiring conversion to an absolute host path. Raw, normalized, and resolved forms must not be conflated.
+`resolve_paths` classifies the supported host paths and retains their raw text, source span,
+purpose, first-file project origin, and optional lexically resolved form. Relative paths use the
+merged project's retained base directory. `~` expansion requires a caller-supplied
+`PathContext`; ComposeLens does not inspect the process home directory. Resolution does not
+canonicalize, follow symlinks, test existence, or otherwise access the file system. Inactive
+service mounts are not part of the selected view, while top-level config and secret file sources
+remain project resources.
+
+`validate_references` inspects active services and distinguishes found, missing, and
+profile-inactive targets. The initial boundary covers networks, named volumes, configs, secrets,
+`depends_on`, service namespace modes, links, and local `extends`. Diagnostics never delete or
+rewrite the authored reference.
+
+Every resolver rejects a `ProfileSelection` created from a different merged project, even when the
+caller reused the same source identifiers.
+
+### Apply defaults
+
+`resolve_defaults` turns omissions into explicit `DefaultRequest` values and asks a caller-owned
+`DefaultProvider` for each decision. `NoDefaults` leaves every omission unresolved.
+`ComposeDefaults` supplies the documented network, port, volume, config, secret, and restart
+defaults for an explicit Linux or Windows container platform. The result is a decision overlay;
+the merged tree is unchanged.
+
+Defaulting remains separate from parsing and implementation compatibility. A future Docker Compose
+or Podman Compose profile may deliberately supply different values or decline a specification
+default when versioned runtime evidence requires it.
 
 ### Validate
 
-Produces structured diagnostics for syntax, native model constraints, cross-references, and implementation compatibility. Validation does not delete unsupported content.
+`validate_compatibility` discovers compatibility-sensitive constructs in the selected merged view
+and applies an explicit `CompatibilityProfile`. The initial detector covers combined image tags and
+digests, short and long bind `SELinux` relabeling, `!reset`, `!override`, and `x-` extensions.
+Supported occurrences remain in the report without diagnostics; implementation-specific,
+deprecated, unsupported, and unknown classifications receive stable diagnostics at the authored
+span. Validation never deletes or normalizes the construct.
+
+Profiles identify the exact Compose provider independently from the optional backend runtime.
+Docker Compose can target Docker Engine or Podman. The independent `containers/podman-compose`
+provider is distinct from Podman's `podman compose` wrapper, which delegates to an external
+provider. ComposeLens therefore has no ambiguous “Podman Compose” target that guesses which
+provider was executed.
+
+Implementation versions are exact three-component numeric values. Evidence can carry inclusive
+minimum and maximum provider and runtime ranges. ComposeLens never substitutes “latest” when the
+caller omitted a version. Built-in classifications distinguish specification text, official
+documentation, public issue reproductions, and future ComposeLens-controlled runtime conformance.
+Unknown remains an honest result when evidence does not cover the selected version pair.
+
+The tolerant profile preserves constructs and emits notes for unknown runtime behavior. It does
+not turn missing evidence into a support claim. A selection belonging to another merged project is
+rejected before compatibility discovery.
 
 ### Render
 

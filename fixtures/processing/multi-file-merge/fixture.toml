@@ -1,0 +1,22 @@
+schema = 1
+id = "multi-file-merge"
+suite = "processing"
+description = "Protects recursive mappings, sequence append, command replacement, keyed map/list forms, unique resources, aliases, unknown fields, and provenance."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The base and override files are supplied in order and both interpolate TAG=3.2 before merge."
+
+[expectations]
+summary = "Compose field-aware merge rules preserve deterministic order, syntax evidence, unknown fields, and all contributing source spans."
+
+[extensions.processing]
+stage = "interpolate-then-merge"
+rules = ["mapping", "append", "shell-command", "keyed", "unique-resource", "yaml-merge-key"]
