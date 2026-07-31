@@ -1,0 +1,20 @@
+# This header and all unrelated bytes must survive.
+name: 'preservation-demo'
+services:
+  app: # keep this service comment
+    image: "registry.example/app:2.0@sha256:abc"
+    command: ['serve', "--port=8080"]
+    environment:
+      PLAIN: "contains # marker"
+      SINGLE: 'Martin''s value'
+      BOOLEAN: false
+      NUMBER: 2.5
+      NULLABLE: null
+    volumes:
+      - "./data:/data:Z" # keep this mount comment
+    x-future:
+      untouched: "yes"
+  worker:
+    image: worker:v1
+x-root:
+  future: [one, 'two']

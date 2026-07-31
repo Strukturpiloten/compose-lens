@@ -91,12 +91,31 @@ is never promoted to support merely because a tolerant profile was selected. ADR
 
 ### Renderer
 
-The renderer supports at least:
+The renderer has two deliberately separate paths:
 
-- preservation-oriented editing from the syntax document
-- canonical deterministic output from a typed or processed model
+- deterministic canonical output from a merged project, which is implemented; and
+- preservation-oriented editing from a syntax document, which is implemented for exact value
+  scalars.
 
-Canonical rendering does not claim byte-for-byte round trips.
+The implemented canonical-v1 renderer retains merged mapping and sequence order plus effective
+Compose short/long forms. It uses fixed two-space indentation and double-quoted keys and string
+scalars. An optional matching profile selection removes inactive services without removing
+top-level resources. Rendering never performs another processing stage, and it does not claim
+byte parity with `docker compose config`. Unresolved aliases and invalid retained tags produce
+structured recovery diagnostics. Sensitive output is available explicitly but redacted from
+`Debug`. ADR 0009 records the [canonical-rendering contract](decisions/0009-deterministic-canonical-rendering.md).
+
+Preservation editing accepts typed string, boolean, number, and null replacements at exact
+value-scalar spans. It validates a complete batch before applying descending byte-range patches to
+the original source, so every unrelated byte stays unchanged and failures are atomic. Keys,
+collections, aliases, empty values, block scalars, and multiline scalars remain outside the initial
+boundary. Sensitive replacement values are redacted from debug output and diagnostics. ADR 0010
+records the [preservation-edit contract](decisions/0010-atomic-span-based-preservation-edits.md).
+
+`CanonicalFormatting` changes only indentation width, explicit LF/CRLF line endings, document-marker
+emission, and final-line-ending emission. Its default remains byte-identical canonical-v1. It
+cannot reorder data, normalize Compose forms, or activate any processing stage. ADR 0011 records
+the [presentation-only formatting boundary](decisions/0011-presentation-only-render-formatting.md).
 
 ## Dependency direction
 
@@ -114,5 +133,8 @@ Canonical rendering does not claim byte-for-byte round trips.
 - Host-path resolution is lexical and uses only caller-supplied path context.
 - Default resolution is pure when supplied an immutable default provider.
 - Compatibility validation is pure and never invokes a Compose provider or container runtime.
+- Canonical rendering is pure and consumes only a merged project plus an optional matching profile selection.
+- Custom rendering additionally consumes an explicit presentation-only `CanonicalFormatting` value.
+- Preservation editing is pure and consumes only a syntax document plus caller-supplied exact-span edits.
 - ComposeLens never contacts Docker, Podman, or Kubernetes.
 - ComposeLens never starts services or builds images.

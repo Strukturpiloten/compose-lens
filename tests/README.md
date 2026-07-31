@@ -10,6 +10,8 @@ Suites are introduced with the behavior they verify:
 - `processing` — loading, merging, interpolation, profiles, paths, references, and defaults
 - `compatibility` — exact implementation versions, provider/runtime profiles, evidence, and findings
 - `roundtrip` — preservation and deterministic canonical rendering
+- `rendering` — canonical/custom output, formatting boundaries, profile filtering, recovery, stability, and redaction
+- `preservation-editing` — atomic exact-span scalar changes and byte-preservation failures
 - `conformance` — behavior observed from identified Compose implementations
 - `real-world` — licensed external projects and regression cases
 

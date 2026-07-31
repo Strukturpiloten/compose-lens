@@ -73,9 +73,10 @@ grammar would reject it.
 
 An omitted mapping value, for example `INHERITED:` in an environment mapping or `cache:` in a
 top-level volume collection, is an explicit null-like authored value. The typed extractor uses
-source indentation to recover same-level sibling entries when the private YAML dependency nests
-them under that empty value. Regression fixtures require the empty entry and all following siblings
-to remain independently visible.
+source columns to recover same-level sibling entries when the private YAML dependency nests them
+under that empty value. Recovery crosses the private tree boundary when an empty value is the last
+entry of a child mapping, so later parent fields are not silently reparented. Regression fixtures
+require the empty entry and all following siblings to remain independently visible.
 
 ## Diagnostics and evidence
 

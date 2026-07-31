@@ -128,7 +128,36 @@ rejected before compatibility discovery.
 
 ### Render
 
-Renders either a preservation-oriented syntax document or a deterministic canonical document. Rendering does not implicitly load, interpolate, merge, or validate.
+`render_canonical` emits the fixed `compose-lens-canonical-v1` YAML form from a merged project. A
+matching optional profile selection filters inactive services while retaining top-level resources.
+The result contains output, structured diagnostics, validity, and sensitivity state. Safe retained
+YAML tags survive; invalid tags are diagnosed and dropped; unresolved aliases are diagnosed and
+recovered as `null` so the output remains parseable.
+
+Canonical rendering does not implicitly load, interpolate, merge, resolve, default, normalize, or
+validate. In particular, it retains effective short and long Compose forms instead of reproducing
+the normalizing behavior of `docker compose config`. The exact format and security boundary are
+documented in [ADR 0009](decisions/0009-deterministic-canonical-rendering.md). Preservation-oriented
+syntax editing remains a separate operation with its own source-level contract.
+
+`apply_preservation_edits` atomically replaces existing YAML value scalars at exact source spans.
+The initial replacement types are string, sensitive string, boolean, validated number, and null.
+The operation patches the original syntax text rather than serializing the typed document, so
+comments, whitespace, ordering, extensions, unknown fields, and untouched scalar spelling remain
+byte-identical. Any mismatched source, non-scalar target, unsupported block/multiline style,
+invalid number, or overlap rejects the complete batch and returns the original text.
+
+Spans are revision-specific. A caller parses successful output again before creating another edit
+from the new document. Structural insertions, removals, collection transformations, and block
+scalar editing remain outside the initial boundary. See the [editing guide](preservation-editing.md)
+and [ADR 0010](decisions/0010-atomic-span-based-preservation-edits.md).
+
+`render_canonical_with_formatting` uses the same merged project and optional selection as canonical
+rendering, plus explicit `CanonicalFormatting`. The only choices are a positive space-indentation
+width, LF or CRLF, document-marker emission, and final-line-ending emission. Default formatting is
+byte-identical canonical-v1. Formatting does not alter ordering, quoting safety, Compose syntax
+forms, diagnostics, or sensitivity. See the [formatting guide](render-formatting.md) and
+[ADR 0011](decisions/0011-presentation-only-render-formatting.md).
 
 ## Unknown and implementation-specific data
 

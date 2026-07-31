@@ -56,11 +56,11 @@ not a Phase 2 exit criterion. See the [Phase 2 typed model](typed-model.md).
 - [x] Separate the Compose provider from its optional Docker or Podman backend runtime.
 - [x] Add published versioned evidence for syntax-form asymmetries, beginning with long bind SELinux behavior.
 
-## Phase 4: rendering and editing — open
+## Phase 4: rendering and editing — completed
 
-- [ ] Implement deterministic canonical rendering.
-- [ ] Implement preservation-oriented edits where the syntax layer permits them.
-- [ ] Define formatting options without coupling semantics to presentation.
+- [x] Implement deterministic canonical rendering.
+- [x] Implement preservation-oriented edits where the syntax layer permits them.
+- [x] Define formatting options without coupling semantics to presentation.
 
 ## Phase 5: ecosystem hardening — open
 

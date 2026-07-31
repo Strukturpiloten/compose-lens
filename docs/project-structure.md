@@ -26,7 +26,7 @@ compose-lens/
 │   ├── profiles/           # explicit post-merge service profile selection
 │   ├── resolution/         # host paths, cross-references, and default decisions
 │   ├── validation/         # exact versions, compatibility profiles, evidence, and findings
-│   ├── render/             # planned: preservation and canonical rendering
+│   ├── render/             # canonical rendering and atomic exact-span scalar editing
 │   └── diagnostic/         # stable codes, severities, labels, and notes
 ├── tests/
 │   ├── README.md           # suite ownership and introduction rules
@@ -35,6 +35,8 @@ compose-lens/
 │   ├── roundtrip.rs        # parse/render/parse stability
 │   ├── typed_model.rs      # typed structure, short/long forms, and diagnostics
 │   ├── processing.rs       # interpolation, loading, merge, and later project operations
+│   ├── rendering.rs        # canonical/custom output, stability, recovery, and redaction
+│   ├── preservation_editing.rs # atomic scalar edits and byte-preservation failures
 │   └── support/            # private repository-test helpers
 ├── fixtures/
 │   ├── README.md           # fixture location and safety rules

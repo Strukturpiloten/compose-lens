@@ -14,6 +14,7 @@ const VOLUME_FORMS: &str = include_str!("../fixtures/typed-model/volume-syntax-f
 const INVALID_VOLUME_FORMS: &str = include_str!("../fixtures/typed-model/invalid-volume-forms/compose.yaml");
 const PHASE_TWO_FORMS: &str = include_str!("../fixtures/typed-model/phase-two-field-forms/compose.yaml");
 const INVALID_PHASE_TWO_FORMS: &str = include_str!("../fixtures/typed-model/invalid-phase-two-forms/compose.yaml");
+const TRAILING_EMPTY_VALUE: &str = include_str!("../fixtures/roundtrip/canonical-merged/compose.yaml");
 
 #[test]
 fn retains_short_and_long_volume_forms_as_distinct_variants() -> Result<(), Box<dyn std::error::Error>> {
@@ -166,6 +167,27 @@ fn retains_image_command_and_environment_forms() -> Result<(), Box<dyn std::erro
     assert_eq!(entries[2].value(), Some("a=b"));
     assert!(matches!(worker.command(), Some(Command::List { values, .. }) if values.is_empty()));
     assert!(matches!(shell.command(), Some(Command::String(value)) if value.value().is_empty()));
+    Ok(())
+}
+
+#[test]
+fn trailing_empty_value_does_not_absorb_parent_fields() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(42), TRAILING_EMPTY_VALUE)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document was not recovered")?;
+    let app = document.service("app").ok_or("app service is missing")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    let Some(Environment::Map { entries, .. }) = app.environment() else {
+        return Err("app environment did not retain mapping syntax".into());
+    };
+    assert_eq!(entries.len(), 3);
+    assert_eq!(entries[2].name().value(), "EMPTY");
+    assert_eq!(*entries[2].value().value(), ComposeScalar::Null);
+    assert_eq!(app.ports().len(), 1);
+    assert_eq!(app.volumes().len(), 1);
+    assert_eq!(app.extension_fields().len(), 1);
     Ok(())
 }
 

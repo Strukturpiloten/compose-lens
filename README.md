@@ -5,7 +5,7 @@ ComposeLens is a Rust library for reading, understanding, transforming, validati
 It is designed for tools that need more than strict deserialization: source-aware diagnostics, implementation extensions, optional interpolation, multi-file projects, profiles, and round-trip-safe transformations.
 
 > [!IMPORTANT]
-> ComposeLens is in early development. Its loss-aware YAML syntax API, Phase 2 source-aware typed model, explicit project processing, and version-aware compatibility profiles are available. The typed boundary covers the service and resource fields required by the first BoxFerry Compose-to-Quadlet conversion; broad runtime conformance matrices, the complete Compose model, rendering, and a stable API are not yet available.
+> ComposeLens is in early development. Its loss-aware YAML syntax API, Phase 2 source-aware typed model, explicit project processing, version-aware compatibility profiles, deterministic merged-project renderer, presentation-only formatting, and atomic value-scalar editing are available. The typed boundary covers the service and resource fields required by the first BoxFerry Compose-to-Quadlet conversion; structural editing, broad runtime conformance matrices, the complete Compose model, and a stable API are not yet available.
 
 ## Goals
 
@@ -28,7 +28,7 @@ It is designed for tools that need more than strict deserialization: source-awar
 
 Cross-format conversion belongs to [BoxFerry](https://github.com/Strukturpiloten/boxferry). Quadlet handling belongs to [QuadletLens](https://github.com/Strukturpiloten/quadlet-lens).
 
-## Planned processing levels
+## Processing levels
 
 ```text
 source text
@@ -50,6 +50,8 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Software architecture](docs/architecture.md)
 - [Target project structure](docs/project-structure.md)
 - [Processing model](docs/processing-model.md)
+- [Preservation-oriented editing](docs/preservation-editing.md)
+- [Render formatting](docs/render-formatting.md)
 - [Phase 2 typed model](docs/typed-model.md)
 - [Testing strategy](docs/testing.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)

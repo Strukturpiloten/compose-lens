@@ -141,6 +141,20 @@ impl SyntaxDocument {
         values
     }
 
+    pub(crate) fn editable_value_scalars(&self) -> Vec<EditableValueScalar> {
+        let mut values = Vec::new();
+        if let Some(document) = self.parse.tree().document() {
+            if let Some(mapping) = document.as_mapping() {
+                collect_editable_value_scalars(self.source_id, YamlNode::Mapping(mapping), &mut values);
+            } else if let Some(sequence) = document.as_sequence() {
+                collect_editable_value_scalars(self.source_id, YamlNode::Sequence(sequence), &mut values);
+            } else if let Some(scalar) = document.as_scalar() {
+                collect_editable_value_scalars(self.source_id, YamlNode::Scalar(scalar), &mut values);
+            }
+        }
+        values
+    }
+
     pub(crate) fn merge_root(&self) -> Option<MergeSyntaxValue> {
         let document = self.parse.tree().document()?;
         let root = if let Some(mapping) = document.as_mapping() {
@@ -164,6 +178,12 @@ impl SyntaxDocument {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ValueScalar {
     pub(crate) value: String,
+    pub(crate) span: SourceSpan,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EditableValueScalar {
+    pub(crate) raw: String,
     pub(crate) span: SourceSpan,
 }
 
@@ -320,6 +340,36 @@ fn collect_value_scalars(source_id: SourceId, node: YamlNode, values: &mut Vec<V
     }
 }
 
+fn collect_editable_value_scalars(source_id: SourceId, node: YamlNode, values: &mut Vec<EditableValueScalar>) {
+    match node {
+        YamlNode::Scalar(scalar) => {
+            values.push(EditableValueScalar {
+                raw: scalar.value(),
+                span: position_span(source_id, scalar.byte_range()),
+            });
+        }
+        YamlNode::Mapping(mapping) => {
+            for value in mapping.entries().filter_map(|entry| entry.value_node()) {
+                collect_editable_value_scalars(source_id, value, values);
+            }
+        }
+        YamlNode::Sequence(sequence) => {
+            for value in sequence.values() {
+                collect_editable_value_scalars(source_id, value, values);
+            }
+        }
+        YamlNode::TaggedNode(tagged) => {
+            if let Some(node) = tagged
+                .as_node()
+                .and_then(|node| node.children().find_map(YamlNode::from_syntax))
+            {
+                collect_editable_value_scalars(source_id, node, values);
+            }
+        }
+        YamlNode::Alias(_) => {}
+    }
+}
+
 fn extract_merge_value(
     source_id: SourceId,
     source: &str,
@@ -439,40 +489,57 @@ fn raw_merge_fields(source_id: SourceId, mapping: &Mapping) -> Vec<RawMergeField
 }
 
 fn flatten_merge_fields(source_id: SourceId, source: &str, fields: Vec<RawMergeField>) -> Vec<RawMergeField> {
+    let Some(target_column) = fields
+        .first()
+        .map(|field| source_column(source, field.key.span.start()))
+    else {
+        return fields;
+    };
+    recover_merge_fields(source_id, source, fields, target_column)
+}
+
+fn recover_merge_fields(
+    source_id: SourceId,
+    source: &str,
+    fields: Vec<RawMergeField>,
+    target_column: usize,
+) -> Vec<RawMergeField> {
     let mut flattened = Vec::new();
     for mut field in fields {
-        let continuation = field
-            .value
-            .as_ref()
-            .and_then(YamlNode::as_mapping)
-            .filter(|mapping| {
-                mapping
+        let field_column = source_column(source, field.key.span.start());
+        let nested_mapping = field.value.as_ref().and_then(YamlNode::as_mapping).cloned();
+        let continuation = nested_mapping.as_ref().is_some_and(|mapping| {
+            !is_flow_mapping(source, mapping)
+                && mapping
                     .entries()
                     .find_map(|entry| entry.key_node()?.as_scalar().map(Scalar::byte_range))
-                    .is_some_and(|position| {
-                        indentation(source, position.start as usize) <= indentation(source, field.key.span.start())
-                    })
-            })
-            .cloned();
-        if let Some(mapping) = continuation {
+                    .is_some_and(|position| source_column(source, position.start as usize) <= field_column)
+        });
+        if continuation {
             field.value = None;
+        }
+        if field_column == target_column {
             flattened.push(field);
+        }
+        if let Some(mapping) = nested_mapping.filter(|mapping| !is_flow_mapping(source, mapping)) {
             let nested = raw_merge_fields(source_id, &mapping);
-            flattened.extend(flatten_merge_fields(source_id, source, nested));
-        } else {
-            flattened.push(field);
+            flattened.extend(recover_merge_fields(source_id, source, nested, target_column));
         }
     }
     flattened
 }
 
-fn indentation(source: &str, offset: usize) -> usize {
+fn is_flow_mapping(source: &str, mapping: &Mapping) -> bool {
+    let position = mapping.byte_range();
+    source
+        .get(position.start as usize..position.end as usize)
+        .is_some_and(|text| text.trim_start().starts_with('{'))
+}
+
+fn source_column(source: &str, offset: usize) -> usize {
     let prefix = &source[..offset.min(source.len())];
     let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
-    source[line_start..offset.min(source.len())]
-        .chars()
-        .take_while(|character| *character == ' ' || *character == '\t')
-        .count()
+    source[line_start..offset.min(source.len())].chars().count()
 }
 
 fn resolve_alias(node: YamlNode, registry: &AnchorRegistry) -> YamlNode {

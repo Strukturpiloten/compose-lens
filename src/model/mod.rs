@@ -623,13 +623,10 @@ impl Parser {
         entries
     }
 
-    fn indentation(&self, offset: usize) -> usize {
+    fn source_column(&self, offset: usize) -> usize {
         let prefix = self.source.get(..offset).unwrap_or_default();
         let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
-        self.source[line_start..offset]
-            .chars()
-            .take_while(|character| character.is_whitespace())
-            .count()
+        self.source[line_start..offset].chars().count()
     }
 
     fn parse_service_ports(&mut self, field: &ParsedField) -> Vec<Port> {
@@ -1541,38 +1538,50 @@ impl Parser {
     }
 
     fn flatten_empty_value_continuations(&mut self, fields: Vec<ParsedField>) -> Vec<ParsedField> {
+        let Some(target_column) = fields.first().map(|field| self.source_column(field.name.span.start())) else {
+            return fields;
+        };
+        self.recover_fields(fields, target_column)
+    }
+
+    fn recover_fields(&mut self, fields: Vec<ParsedField>, target_column: usize) -> Vec<ParsedField> {
         let mut flattened = Vec::new();
         for mut field in fields {
-            let continuation = field
-                .value
-                .as_ref()
-                .and_then(YamlNode::as_mapping)
-                .filter(|mapping| {
-                    mapping
+            let field_column = self.source_column(field.name.span.start());
+            let nested_mapping = field.value.as_ref().and_then(YamlNode::as_mapping).cloned();
+            let continuation = nested_mapping.as_ref().is_some_and(|mapping| {
+                !self.is_flow_mapping(mapping)
+                    && mapping
                         .entries()
                         .find_map(|entry| {
                             let key = entry.key_node()?;
                             let scalar = key.as_scalar()?;
                             Some(scalar.byte_range().start as usize)
                         })
-                        .is_some_and(|key_start| {
-                            self.indentation(key_start) <= self.indentation(field.name.span.start())
-                        })
-                })
-                .cloned();
+                        .is_some_and(|key_start| self.source_column(key_start) <= field_column)
+            });
 
-            if let Some(mapping) = continuation {
+            if continuation {
                 field.value = None;
                 field.value_span = None;
                 field.span = field.name.span;
+            }
+            if field_column == target_column {
                 flattened.push(field);
+            }
+            if let Some(mapping) = nested_mapping.filter(|mapping| !self.is_flow_mapping(mapping)) {
                 let nested = self.raw_fields(&mapping);
-                flattened.extend(self.flatten_empty_value_continuations(nested));
-            } else {
-                flattened.push(field);
+                flattened.extend(self.recover_fields(nested, target_column));
             }
         }
         flattened
+    }
+
+    fn is_flow_mapping(&self, mapping: &Mapping) -> bool {
+        let position = mapping.byte_range();
+        self.source
+            .get(position.start as usize..position.end as usize)
+            .is_some_and(|text| text.trim_start().starts_with('{'))
     }
 
     fn record_duplicate(&mut self, seen: &mut BTreeMap<String, SourceSpan>, field: &ParsedField) -> bool {

@@ -7,6 +7,8 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Architecture](architecture.md) — layers, dependency direction, and invariants
 - [Project structure](project-structure.md) — intended crate and module organization
 - [Processing model](processing-model.md) — explicit document and project stages
+- [Preservation-oriented editing](preservation-editing.md) — atomic scalar edits, style behavior, diagnostics, and limits
+- [Render formatting](render-formatting.md) — indentation, line endings, document markers, and the semantic boundary
 - [Phase 2 typed model](typed-model.md) — implemented field boundary, fidelity rules, and diagnostics
 - [Testing strategy](testing.md) — parser, resolver, conformance, and round-trip tests
 - [Fixture format](fixture-format.md) — shared metadata, provenance, and secrets contract
@@ -16,6 +18,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Compose merge evidence](research/compose-merge.md) — ordering, field-specific rules, tags, and path bases
 - [Post-merge processing evidence](research/compose-post-merge-processing.md) — profiles, paths, references, and defaults
 - [Compatibility-profile evidence](research/compose-compatibility-profiles.md) — providers, runtimes, versions, and initial rules
+- [Canonical-rendering evidence](research/compose-canonical-rendering.md) — fixed output, explicit processing boundary, recovery, and redaction
 - [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
 - [API stability policy](api-stability.md) — pre-1.0 compatibility and public dependency boundaries
 - [Implementation plan](implementation-plan.md) — synchronized cross-repository tasks T1–T7
