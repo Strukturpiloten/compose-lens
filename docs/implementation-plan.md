@@ -23,7 +23,7 @@ The repository that owns a task is authoritative for its detailed status. Update
 | T4 | BoxFerry | planned | Independent neutral model and conversion engine |
 | T5 | All repositories | in progress | Minimum native typed subsets for the first conversion |
 | T6 | BoxFerry, integrating both Lens libraries | planned | First Compose-to-Quadlet vertical slice |
-| T7 | All repositories | planned | Expanded conformance, runtime, and release testing tiers |
+| T7 | All repositories | in progress | Expanded conformance, runtime, and release testing tiers |
 
 ## T1: Testing foundations
 
@@ -83,12 +83,23 @@ Status: planned. BoxFerry coordinates this task.
 
 Deliver tested Compose-to-Quadlet conversion for images, commands, environment, ports, named volumes, bind mounts, networks, and explicit Compose profile selection. Every conversion emits compatibility and manual-action reports. After synthetic scenarios are stable, use `Strukturpiloten/typo3-container` as the first public real-world showcase and regression corpus.
 
+ComposeLens has established the licensed, sanitized `Strukturpiloten/typo3-container` regression
+fixture. The BoxFerry conversion showcase remains part of T6 and must consume that fixture only
+after the adapter boundary is ready.
+
 ## T7: Expanded testing tiers
 
-Status: planned.
+Status: in progress. ComposeLens's Phase 5 repository work is completed; QuadletLens and BoxFerry
+retain their own T7 work.
 
 - Per pull request: unit, integration, golden, round-trip, and property tests.
 - Scheduled: Docker Compose, Podman Compose, and real Quadlet generator conformance.
 - Release validation: supported Podman matrices, rootless/rootful contexts, real-world projects, and eventually disposable Kubernetes clusters.
 
 Each harness becomes required only after its command, isolation model, version source, fixture provenance, and failure policy are documented.
+
+ComposeLens delivery evidence includes 48 reviewed exact provider-config records, a 36-entry
+fail-closed runtime-effect matrix, two independently licensed real-world fixtures, narrowly scoped
+compatibility rules, a consumer-facing 0.1.x API contract, and a CI-verified release package. The
+runtime entries remain planned until suitable isolated SELinux hosts execute them. Credentialed
+crates.io and GitHub publication remains a maintainer-controlled release operation.

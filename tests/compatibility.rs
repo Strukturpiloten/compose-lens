@@ -8,7 +8,7 @@ use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::source::SourceId;
 use compose_lens::validation::{
     CompatibilityClassification, CompatibilityFeature, CompatibilityProfile, CompatibilityReport, ComposeProvider,
-    ContainerRuntime, IMPLEMENTATION_SPECIFIC_FEATURE, ImplementationVersion, UNKNOWN_FEATURE_SUPPORT,
+    ContainerRuntime, EvidenceKind, IMPLEMENTATION_SPECIFIC_FEATURE, ImplementationVersion, UNKNOWN_FEATURE_SUPPORT,
     UNSUPPORTED_FEATURE, VersionRange, validate_compatibility,
 };
 
@@ -116,6 +116,64 @@ fn applies_the_documented_docker_override_version_boundary() -> Result<(), Box<d
         evidence[0].provider_versions().and_then(VersionRange::minimum),
         Some(ImplementationVersion::new(2, 24, 4))
     );
+    assert_eq!(evidence[0].kind(), EvidenceKind::OfficialDocumentation);
+    let old_evidence = old
+        .findings()
+        .iter()
+        .find(|finding| finding.occurrence().feature() == CompatibilityFeature::OverrideTag)
+        .ok_or("old override finding expected")?
+        .rule()
+        .evidence();
+    assert_eq!(old_evidence[0].kind(), EvidenceKind::ProviderConformance);
+    assert_eq!(
+        old_evidence[0].provider_versions(),
+        Some(VersionRange::exact(ImplementationVersion::new(2, 24, 3)))
+    );
+    Ok(())
+}
+
+#[test]
+fn applies_reviewed_provider_outcomes_only_to_their_exact_versions() -> Result<(), Box<dyn std::error::Error>> {
+    let project = compatibility_project()?;
+    let observed = validate_compatibility(
+        &project,
+        None,
+        CompatibilityProfile::docker_compose(ImplementationVersion::new(5, 3, 1)),
+    );
+    let unobserved = validate_compatibility(
+        &project,
+        None,
+        CompatibilityProfile::docker_compose(ImplementationVersion::new(5, 3, 0)),
+    );
+
+    assert_eq!(
+        classification(&observed, CompatibilityFeature::ImageTagAndDigest),
+        Some(CompatibilityClassification::Supported)
+    );
+    assert_eq!(
+        classification(&observed, CompatibilityFeature::ResetTag),
+        Some(CompatibilityClassification::Supported)
+    );
+    assert_eq!(
+        classification(&unobserved, CompatibilityFeature::ImageTagAndDigest),
+        Some(CompatibilityClassification::ImplementationSpecific)
+    );
+    assert_eq!(
+        classification(&unobserved, CompatibilityFeature::ResetTag),
+        Some(CompatibilityClassification::ImplementationSpecific)
+    );
+    let evidence = observed
+        .findings()
+        .iter()
+        .find(|finding| finding.occurrence().feature() == CompatibilityFeature::ImageTagAndDigest)
+        .ok_or("image evidence expected")?
+        .rule()
+        .evidence();
+    assert_eq!(evidence[0].kind(), EvidenceKind::ProviderConformance);
+    assert_eq!(
+        evidence[0].provider_versions(),
+        Some(VersionRange::exact(ImplementationVersion::new(5, 3, 1)))
+    );
     Ok(())
 }
 
@@ -162,15 +220,28 @@ fn separates_compose_provider_from_the_podman_runtime() -> Result<(), Box<dyn st
 }
 
 #[test]
-fn does_not_invent_podman_compose_support_without_evidence() -> Result<(), Box<dyn std::error::Error>> {
+fn applies_exact_podman_compose_provider_evidence_without_claiming_runtime_effects()
+-> Result<(), Box<dyn std::error::Error>> {
     let project = compatibility_project()?;
     let profile = CompatibilityProfile::podman_compose(ImplementationVersion::new(1, 5, 0))
         .with_runtime(ContainerRuntime::Podman(ImplementationVersion::new(5, 8, 2)));
     let report = validate_compatibility(&project, None, profile);
 
-    assert!(report.is_valid());
+    assert!(!report.is_valid());
     assert_eq!(
         classification(&report, CompatibilityFeature::ResetTag),
+        Some(CompatibilityClassification::Unsupported)
+    );
+    assert_eq!(
+        classification(&report, CompatibilityFeature::OverrideTag),
+        Some(CompatibilityClassification::Supported)
+    );
+    assert_eq!(
+        classification(&report, CompatibilityFeature::ImageTagAndDigest),
+        Some(CompatibilityClassification::Supported)
+    );
+    assert_eq!(
+        classification(&report, CompatibilityFeature::LongBindSelinuxRelabel),
         Some(CompatibilityClassification::Unknown)
     );
     assert_eq!(
@@ -181,13 +252,29 @@ fn does_not_invent_podman_compose_support_without_evidence() -> Result<(), Box<d
         report
             .diagnostics()
             .iter()
-            .all(|diagnostic| diagnostic.severity() == Severity::Warning)
+            .any(|diagnostic| diagnostic.code() == UNSUPPORTED_FEATURE)
     );
-    assert!(
-        report
-            .diagnostics()
-            .iter()
-            .all(|diagnostic| diagnostic.code() == UNKNOWN_FEATURE_SUPPORT)
+    assert!(report.diagnostics().iter().any(|diagnostic| {
+        diagnostic.severity() == Severity::Warning && diagnostic.code() == UNKNOWN_FEATURE_SUPPORT
+    }));
+    Ok(())
+}
+
+#[test]
+fn records_podman_compose_1_3_override_as_unsupported() -> Result<(), Box<dyn std::error::Error>> {
+    let project = compatibility_project()?;
+    let report = validate_compatibility(
+        &project,
+        None,
+        CompatibilityProfile::podman_compose(ImplementationVersion::new(1, 3, 0)),
+    );
+    assert_eq!(
+        classification(&report, CompatibilityFeature::OverrideTag),
+        Some(CompatibilityClassification::Unsupported)
+    );
+    assert_eq!(
+        classification(&report, CompatibilityFeature::ResetTag),
+        Some(CompatibilityClassification::Unsupported)
     );
     Ok(())
 }

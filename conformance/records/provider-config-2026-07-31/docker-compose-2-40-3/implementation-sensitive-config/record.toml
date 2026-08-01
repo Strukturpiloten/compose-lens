@@ -1,0 +1,51 @@
+artifact_sha256 = "dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372"
+artifact_url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64"
+execution = ["linux-x86_64-native"]
+fixture = "fixtures/conformance/implementation-sensitive-config"
+fixture_files = [
+    "compose.yaml",
+    "compose.override.yaml",
+]
+fixture_sha256 = "a1b623234cf49a7f7dea0153224ff0e6efa8c40f221d71d13141c2686d33b5a8"
+launcher_file = "docker-compose-2.40.3"
+launcher_sha256 = "dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372"
+observed_unix_seconds = 1785531257
+platform = "openSUSE-Tumbleweed-20260728_linux-7.1.4-1-default_x86_64_provider-config-only_runtime-not-invoked_selinux-unavailable"
+probe = "implementation-sensitive-config"
+probe_arguments = [
+    "--file",
+    "compose.yaml",
+    "--file",
+    "compose.override.yaml",
+    "config",
+    "--no-interpolate",
+]
+probe_exit_code = 1
+probe_success = false
+provider = "docker-compose"
+provider_version = "2.40.3"
+release_url = "https://github.com/docker/compose/releases/tag/v2.40.3"
+review_status = "reviewed"
+reviewed = "2026-07-31"
+outcome = "combined-rejected"
+summary = "The combined input was rejected before every feature could be evaluated; feature-specific records are authoritative."
+normalizations = ["Replaced the local repository root with <repository> in retained output.", "Replaced the temporary acquisition root with <acquisition> in retained output."]
+schema = 1
+target = "docker-compose-2-40-3"
+version_arguments = [
+    "version",
+    "--short",
+]
+version_exit_code = 0
+version_success = true
+working_directory = "fixtures/conformance/implementation-sensitive-config"
+
+[environment]
+HOME = "<result>/home"
+LANG = "C"
+LC_ALL = "C"
+PATH = "/usr/bin:/bin"
+XDG_CACHE_HOME = "<result>/cache"
+XDG_CONFIG_HOME = "<result>/config"
+XDG_RUNTIME_DIR = "<result>/runtime"
+inherited = false

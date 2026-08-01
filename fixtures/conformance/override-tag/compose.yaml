@@ -1,0 +1,5 @@
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    ports:
+      - "127.0.0.1:18080:80/tcp"

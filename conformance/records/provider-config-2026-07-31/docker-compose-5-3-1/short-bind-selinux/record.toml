@@ -1,0 +1,46 @@
+artifact_sha256 = "f9ebc6ebdb19d769b793c245a736caaeb198c62587f13b25c660c13b4987f959"
+artifact_url = "https://github.com/docker/compose/releases/download/v5.3.1/docker-compose-linux-x86_64"
+execution = ["linux-x86_64-native"]
+fixture = "fixtures/conformance/short-bind-selinux"
+fixture_files = ["compose.yaml"]
+fixture_sha256 = "d188daadfe5279011c8d5e6ce46de89b46effe2994faf3b921d0f6978066f016"
+launcher_file = "docker-compose-5.3.1"
+launcher_sha256 = "f9ebc6ebdb19d769b793c245a736caaeb198c62587f13b25c660c13b4987f959"
+observed_unix_seconds = 1785531520
+platform = "openSUSE-Tumbleweed-20260728_linux-7.1.4-1-default_x86_64_provider-config-only_runtime-not-invoked_selinux-unavailable"
+probe = "short-bind-selinux"
+probe_arguments = [
+    "--file",
+    "compose.yaml",
+    "config",
+    "--no-interpolate",
+]
+probe_exit_code = 0
+probe_success = true
+provider = "docker-compose"
+provider_version = "5.3.1"
+release_url = "https://github.com/docker/compose/releases/tag/v5.3.1"
+review_status = "reviewed"
+reviewed = "2026-07-31"
+outcome = "accepted-provider-only"
+summary = "Provider config accepted the short SELinux relabel form; runtime relabeling was not exercised."
+normalizations = ["Replaced the local repository root with <repository> in retained output.", "Replaced the temporary acquisition root with <acquisition> in retained output."]
+schema = 1
+target = "docker-compose-5-3-1"
+version_arguments = [
+    "version",
+    "--short",
+]
+version_exit_code = 0
+version_success = true
+working_directory = "fixtures/conformance/short-bind-selinux"
+
+[environment]
+HOME = "<result>/home"
+LANG = "C"
+LC_ALL = "C"
+PATH = "/usr/bin:/bin"
+XDG_CACHE_HOME = "<result>/cache"
+XDG_CONFIG_HOME = "<result>/config"
+XDG_RUNTIME_DIR = "<result>/runtime"
+inherited = false

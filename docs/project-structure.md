@@ -1,6 +1,9 @@
 # Project structure
 
-ComposeLens is one library crate with strong internal module boundaries. The crate foundation exists; entries marked `planned` are created with their first behavior and tests. Separate published crates are not justified until an independent consumer and release need are demonstrated.
+ComposeLens is one published library crate with strong internal module boundaries. Repository-only
+conformance tooling remains an ignored integration test and is not part of the library API.
+Separate published crates are not justified until an independent consumer and release need are
+demonstrated.
 
 ```text
 compose-lens/
@@ -14,6 +17,7 @@ compose-lens/
 │   └── config.toml        # canonical Cargo aliases
 ├── AGENTS.md
 ├── README.md
+├── CHANGELOG.md
 ├── LICENSE
 ├── src/
 │   ├── lib.rs
@@ -37,16 +41,28 @@ compose-lens/
 │   ├── processing.rs       # interpolation, loading, merge, and later project operations
 │   ├── rendering.rs        # canonical/custom output, stability, recovery, and redaction
 │   ├── preservation_editing.rs # atomic scalar edits and byte-preservation failures
+│   ├── compatibility.rs    # exact provider/runtime compatibility behavior
+│   ├── conformance.rs      # provider matrix policy and ignored capture runner
+│   ├── runtime_conformance.rs # fail-closed planned runtime matrix policy
+│   ├── real_world.rs       # licensed project regressions
+│   ├── public_api.rs       # supported 0.1.x consumer contract
 │   └── support/            # private repository-test helpers
 ├── fixtures/
 │   ├── README.md           # fixture location and safety rules
 │   ├── syntax/             # authored syntax and recovery cases
 │   ├── roundtrip/          # authored stability cases
 │   ├── typed-model/        # authored typed extraction and form-fidelity cases
-│   └── processing/         # authored processing operators and recovery cases
+│   ├── processing/         # authored processing operators and recovery cases
+│   ├── conformance/        # authored questions for exact external providers
+│   └── real-world/         # licensed external project corpus
+├── conformance/
+│   ├── provider-config-matrix.toml # exact provider/probe selections and evidence state
+│   ├── runtime-effect-matrix.toml # exact planned provider/runtime/privilege contexts
+│   └── records/            # reviewed retained external observations
 ├── docs/
 │   ├── fixture-format.md   # versioned fixture manifest contract
 │   ├── typed-model.md      # completed Phase 2 boundary and parse contract
+│   ├── releases/           # release notes and credentialed publication checklist
 │   └── research/           # versioned technical evaluations
 └── .github/
     ├── renovate.json

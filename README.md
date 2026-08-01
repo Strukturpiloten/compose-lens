@@ -5,7 +5,7 @@ ComposeLens is a Rust library for reading, understanding, transforming, validati
 It is designed for tools that need more than strict deserialization: source-aware diagnostics, implementation extensions, optional interpolation, multi-file projects, profiles, and round-trip-safe transformations.
 
 > [!IMPORTANT]
-> ComposeLens is in early development. Its loss-aware YAML syntax API, Phase 2 source-aware typed model, explicit project processing, version-aware compatibility profiles, deterministic merged-project renderer, presentation-only formatting, and atomic value-scalar editing are available. The typed boundary covers the service and resource fields required by the first BoxFerry Compose-to-Quadlet conversion; structural editing, broad runtime conformance matrices, the complete Compose model, and a stable API are not yet available.
+> ComposeLens is preparing its first pre-1.0 release. Its supported 0.1.x API covers loss-aware YAML syntax, the Phase 2 source-aware typed model, explicit project processing, version-aware compatibility profiles, deterministic merged-project rendering, presentation-only formatting, and atomic value-scalar editing. The typed boundary covers the service and resource fields required by the first BoxFerry Compose-to-Quadlet conversion. Structural editing, the complete Compose model, and reviewed runtime-effect results are not yet available.
 
 ## Goals
 
@@ -54,8 +54,12 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Render formatting](docs/render-formatting.md)
 - [Phase 2 typed model](docs/typed-model.md)
 - [Testing strategy](docs/testing.md)
+- [Compose implementation conformance](docs/conformance.md)
+- [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
+- [0.1.0 release-candidate notes](docs/releases/0.1.0.md)
+- [Changelog](CHANGELOG.md)
 - [Roadmap](docs/roadmap.md)
 - [Architecture decisions](docs/decisions/README.md)
 

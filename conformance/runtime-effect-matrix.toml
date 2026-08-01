@@ -1,0 +1,423 @@
+schema = 1
+reviewed = "2026-07-31"
+
+[isolation]
+result_directory = "new-and-empty"
+workspace = "inside-result-directory"
+host_source = "inside-workspace"
+network = "none"
+image = "caller-supplied-preloaded-digest-pinned"
+registry_access = false
+selinux = "enforcing"
+cleanup = "always-run-provider-down-then-audit-runtime-project-resources"
+failure_policy = "retain-observation-and-cleanup-results-without-promoting-support"
+
+[[contexts]]
+id = "dockercompose-2403-podman-562-rootless"
+provider_target = "docker-compose-2-40-3"
+provider = "docker-compose"
+provider_version = "2.40.3"
+runtime = "podman"
+runtime_version = "5.6.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.6.2"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-2403-podman-562-rootful"
+provider_target = "docker-compose-2-40-3"
+provider = "docker-compose"
+provider_version = "2.40.3"
+runtime = "podman"
+runtime_version = "5.6.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.6.2"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-531-podman-540-rootless"
+provider_target = "docker-compose-5-3-1"
+provider = "docker-compose"
+provider_version = "5.3.1"
+runtime = "podman"
+runtime_version = "5.4.0"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.4.0"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-531-podman-540-rootful"
+provider_target = "docker-compose-5-3-1"
+provider = "docker-compose"
+provider_version = "5.3.1"
+runtime = "podman"
+runtime_version = "5.4.0"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.4.0"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-531-podman-582-rootless"
+provider_target = "docker-compose-5-3-1"
+provider = "docker-compose"
+provider_version = "5.3.1"
+runtime = "podman"
+runtime_version = "5.8.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.8.2"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-531-podman-582-rootful"
+provider_target = "docker-compose-5-3-1"
+provider = "docker-compose"
+provider_version = "5.3.1"
+runtime = "podman"
+runtime_version = "5.8.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.8.2"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-531-podman-602-rootless"
+provider_target = "docker-compose-5-3-1"
+provider = "docker-compose"
+provider_version = "5.3.1"
+runtime = "podman"
+runtime_version = "6.0.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v6.0.2"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-531-podman-602-rootful"
+provider_target = "docker-compose-5-3-1"
+provider = "docker-compose"
+provider_version = "5.3.1"
+runtime = "podman"
+runtime_version = "6.0.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v6.0.2"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "podmancompose-150-podman-540-rootless"
+provider_target = "podman-compose-1-5-0"
+provider = "podman-compose"
+provider_version = "1.5.0"
+runtime = "podman"
+runtime_version = "5.4.0"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.4.0"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "podmancompose-150-podman-540-rootful"
+provider_target = "podman-compose-1-5-0"
+provider = "podman-compose"
+provider_version = "1.5.0"
+runtime = "podman"
+runtime_version = "5.4.0"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.4.0"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "podmancompose-150-podman-562-rootless"
+provider_target = "podman-compose-1-5-0"
+provider = "podman-compose"
+provider_version = "1.5.0"
+runtime = "podman"
+runtime_version = "5.6.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.6.2"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "podmancompose-150-podman-562-rootful"
+provider_target = "podman-compose-1-5-0"
+provider = "podman-compose"
+provider_version = "1.5.0"
+runtime = "podman"
+runtime_version = "5.6.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.6.2"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "podmancompose-150-podman-582-rootless"
+provider_target = "podman-compose-1-5-0"
+provider = "podman-compose"
+provider_version = "1.5.0"
+runtime = "podman"
+runtime_version = "5.8.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.8.2"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "podmancompose-150-podman-582-rootful"
+provider_target = "podman-compose-1-5-0"
+provider = "podman-compose"
+provider_version = "1.5.0"
+runtime = "podman"
+runtime_version = "5.8.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v5.8.2"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "podmancompose-150-podman-602-rootless"
+provider_target = "podman-compose-1-5-0"
+provider = "podman-compose"
+provider_version = "1.5.0"
+runtime = "podman"
+runtime_version = "6.0.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v6.0.2"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "podmancompose-150-podman-602-rootful"
+provider_target = "podman-compose-1-5-0"
+provider = "podman-compose"
+provider_version = "1.5.0"
+runtime = "podman"
+runtime_version = "6.0.2"
+runtime_release_url = "https://github.com/containers/podman/releases/tag/v6.0.2"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-531-dockerengine-2962-rootless"
+provider_target = "docker-compose-5-3-1"
+provider = "docker-compose"
+provider_version = "5.3.1"
+runtime = "docker-engine"
+runtime_version = "29.6.2"
+runtime_release_url = "https://docs.docker.com/engine/release-notes/29/#2962"
+privilege = "rootless"
+selinux = "enforcing"
+status = "planned"
+
+[[contexts]]
+id = "dockercompose-531-dockerengine-2962-rootful"
+provider_target = "docker-compose-5-3-1"
+provider = "docker-compose"
+provider_version = "5.3.1"
+runtime = "docker-engine"
+runtime_version = "29.6.2"
+runtime_release_url = "https://docs.docker.com/engine/release-notes/29/#2962"
+privilege = "rootful"
+selinux = "enforcing"
+status = "planned"
+
+[[probes]]
+id = "short-bind-selinux-effect"
+fixture = "fixtures/conformance/runtime-selinux-short"
+files = ["compose.yaml"]
+fixture_sha256 = "1b3ce3208a147262b2383ee929619b2b4ed410496dcc16fa0c477c904b17d6d0"
+observation = "Capture the host label before provider create, after create, and after cleanup."
+
+[[probes]]
+id = "long-bind-selinux-effect"
+fixture = "fixtures/conformance/runtime-selinux-long"
+files = ["compose.yaml"]
+fixture_sha256 = "b8f0d81b2e4e334e621d51f260bd9d2d42137749960b86d282e6f5d2070ee12a"
+observation = "Capture the host label before provider create, after create, and after cleanup."
+
+[[runs]]
+context = "dockercompose-2403-podman-562-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-2403-podman-562-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-2403-podman-562-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-2403-podman-562-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-540-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-540-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-540-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-540-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-582-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-582-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-582-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-582-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-602-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-602-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-602-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-podman-602-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-540-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-540-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-540-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-540-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-562-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-562-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-562-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-562-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-582-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-582-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-582-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-582-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-602-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-602-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-602-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "podmancompose-150-podman-602-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-dockerengine-2962-rootless"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-dockerengine-2962-rootless"
+probe = "long-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-dockerengine-2962-rootful"
+probe = "short-bind-selinux-effect"
+status = "planned"
+
+[[runs]]
+context = "dockercompose-531-dockerengine-2962-rootful"
+probe = "long-bind-selinux-effect"
+status = "planned"

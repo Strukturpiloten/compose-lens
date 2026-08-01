@@ -6,6 +6,8 @@ use crate::diagnostic::Severity;
 const SPEC_URL: &str = "https://github.com/compose-spec/compose-spec/blob/main/spec.md";
 const DOCKER_MERGE_URL: &str = "https://docs.docker.com/reference/compose-file/merge/";
 const DOCKER_SELINUX_ISSUE_URL: &str = "https://github.com/docker/compose/issues/13396";
+const PROVIDER_CONFORMANCE_URL: &str =
+    "https://github.com/Strukturpiloten/compose-lens/blob/main/docs/research/provider-config-conformance-2026-07-31.md";
 
 const SPEC_EVIDENCE: &[CompatibilityEvidence] = &[CompatibilityEvidence::new(
     EvidenceKind::Specification,
@@ -35,9 +37,34 @@ const DOCKER_PODMAN_SELINUX_EVIDENCE: &[CompatibilityEvidence] = &[Compatibility
     Some(VersionRange::exact(ImplementationVersion::new(2, 40, 3))),
     Some(VersionRange::exact(ImplementationVersion::new(5, 6, 2))),
 )];
+const DOCKER_2_24_3_PROVIDER_EVIDENCE: &[CompatibilityEvidence] = &[provider_evidence(
+    "reviewed feature-specific Docker Compose 2.24.3 config observations",
+    ImplementationVersion::new(2, 24, 3),
+)];
+const DOCKER_2_24_4_PROVIDER_EVIDENCE: &[CompatibilityEvidence] = &[provider_evidence(
+    "reviewed feature-specific Docker Compose 2.24.4 config observations",
+    ImplementationVersion::new(2, 24, 4),
+)];
+const DOCKER_2_40_3_PROVIDER_EVIDENCE: &[CompatibilityEvidence] = &[provider_evidence(
+    "reviewed feature-specific Docker Compose 2.40.3 config observations",
+    ImplementationVersion::new(2, 40, 3),
+)];
+const DOCKER_5_3_1_PROVIDER_EVIDENCE: &[CompatibilityEvidence] = &[provider_evidence(
+    "reviewed feature-specific Docker Compose 5.3.1 config observations",
+    ImplementationVersion::new(5, 3, 1),
+)];
+const PODMAN_COMPOSE_1_3_0_PROVIDER_EVIDENCE: &[CompatibilityEvidence] = &[provider_evidence(
+    "reviewed feature-specific podman-compose 1.3.0 config observations",
+    ImplementationVersion::new(1, 3, 0),
+)];
+const PODMAN_COMPOSE_1_5_0_PROVIDER_EVIDENCE: &[CompatibilityEvidence] = &[provider_evidence(
+    "reviewed feature-specific podman-compose 1.5.0 config observations",
+    ImplementationVersion::new(1, 5, 0),
+)];
 
 /// A compatibility-sensitive Compose construct recognized by this release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum CompatibilityFeature {
     /// An image reference combining a tag and a digest.
     ImageTagAndDigest,
@@ -55,6 +82,7 @@ pub enum CompatibilityFeature {
 
 /// How a selected profile classifies one construct.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum CompatibilityClassification {
     /// The evidence supports the construct for the selected context.
     Supported,
@@ -72,6 +100,7 @@ pub enum CompatibilityClassification {
 
 /// The Compose parser/provider whose behavior is being assessed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ComposeProvider {
     /// The current Compose Specification, without claiming runtime support.
     Specification,
@@ -85,6 +114,7 @@ pub enum ComposeProvider {
 
 /// The backend container runtime used by a Compose provider.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ContainerRuntime {
     /// Docker Engine at an exact released version.
     DockerEngine(ImplementationVersion),
@@ -164,7 +194,7 @@ impl CompatibilityProfile {
         match self.provider {
             ComposeProvider::Specification => specification_rule(feature),
             ComposeProvider::DockerCompose(version) => docker_rule(self, version, feature),
-            ComposeProvider::PodmanCompose(_) => podman_compose_rule(feature),
+            ComposeProvider::PodmanCompose(version) => podman_compose_rule(version, feature),
             ComposeProvider::Tolerant => tolerant_rule(feature),
         }
     }
@@ -172,6 +202,7 @@ impl CompatibilityProfile {
 
 /// The provenance category of one compatibility claim.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum EvidenceKind {
     /// Normative or descriptive Compose Specification text.
     Specification,
@@ -179,6 +210,8 @@ pub enum EvidenceKind {
     OfficialDocumentation,
     /// A versioned public issue containing a reproducible observation.
     IssueReproduction,
+    /// A reviewed `ComposeLens` provider-only config observation.
+    ProviderConformance,
     /// A ComposeLens-controlled runtime conformance result.
     RuntimeConformance,
 }
@@ -318,6 +351,13 @@ fn docker_rule(
     feature: CompatibilityFeature,
 ) -> CompatibilityRule {
     match feature {
+        CompatibilityFeature::OverrideTag if version == ImplementationVersion::new(2, 24, 3) => rule(
+            feature,
+            CompatibilityClassification::Unsupported,
+            Some(Severity::Error),
+            "Docker Compose 2.24.3 accepted !override syntax but did not apply replacement semantics",
+            DOCKER_2_24_3_PROVIDER_EVIDENCE,
+        ),
         CompatibilityFeature::OverrideTag if version < ImplementationVersion::new(2, 24, 4) => rule(
             feature,
             CompatibilityClassification::Unsupported,
@@ -331,6 +371,13 @@ fn docker_rule(
             None,
             "the selected Docker Compose version meets the documented !override minimum",
             DOCKER_OVERRIDE_EVIDENCE,
+        ),
+        CompatibilityFeature::ResetTag if !docker_provider_evidence(version).is_empty() => rule(
+            feature,
+            CompatibilityClassification::Supported,
+            None,
+            "the selected exact Docker Compose version applied !reset in reviewed provider conformance",
+            docker_provider_evidence(version),
         ),
         CompatibilityFeature::ResetTag => rule(
             feature,
@@ -358,14 +405,21 @@ fn docker_rule(
             CompatibilityClassification::ImplementationSpecific,
             Some(Severity::Warning),
             "SELinux relabeling depends on the backend runtime, host platform, and authored mount form",
-            &[],
+            docker_provider_evidence(version),
         ),
         CompatibilityFeature::LongBindSelinuxRelabel => rule(
             feature,
             CompatibilityClassification::Unknown,
             Some(Severity::Warning),
             "no versioned evidence covers long-form SELinux behavior for the selected provider/runtime pair",
-            DOCKER_PODMAN_SELINUX_EVIDENCE,
+            docker_provider_evidence(version),
+        ),
+        CompatibilityFeature::ImageTagAndDigest if !docker_provider_evidence(version).is_empty() => rule(
+            feature,
+            CompatibilityClassification::Supported,
+            None,
+            "the selected exact Docker Compose version retained the combined tag and digest",
+            docker_provider_evidence(version),
         ),
         CompatibilityFeature::ImageTagAndDigest => rule(
             feature,
@@ -384,7 +438,7 @@ fn docker_rule(
     }
 }
 
-fn podman_compose_rule(feature: CompatibilityFeature) -> CompatibilityRule {
+fn podman_compose_rule(version: ImplementationVersion, feature: CompatibilityFeature) -> CompatibilityRule {
     if feature == CompatibilityFeature::ExtensionField {
         return rule(
             feature,
@@ -394,6 +448,47 @@ fn podman_compose_rule(feature: CompatibilityFeature) -> CompatibilityRule {
             SPEC_EVIDENCE,
         );
     }
+    let evidence = podman_compose_provider_evidence(version);
+    if !evidence.is_empty() {
+        return match feature {
+            CompatibilityFeature::ImageTagAndDigest => rule(
+                feature,
+                CompatibilityClassification::Supported,
+                None,
+                "the selected exact podman-compose version retained the combined tag and digest",
+                evidence,
+            ),
+            CompatibilityFeature::ResetTag => rule(
+                feature,
+                CompatibilityClassification::Unsupported,
+                Some(Severity::Error),
+                "the selected exact podman-compose version failed while processing !reset",
+                evidence,
+            ),
+            CompatibilityFeature::OverrideTag if version == ImplementationVersion::new(1, 3, 0) => rule(
+                feature,
+                CompatibilityClassification::Unsupported,
+                Some(Severity::Error),
+                "podman-compose 1.3.0 rejected !override",
+                evidence,
+            ),
+            CompatibilityFeature::OverrideTag => rule(
+                feature,
+                CompatibilityClassification::Supported,
+                None,
+                "podman-compose 1.5.0 applied !override replacement semantics",
+                evidence,
+            ),
+            CompatibilityFeature::ShortBindSelinuxRelabel | CompatibilityFeature::LongBindSelinuxRelabel => rule(
+                feature,
+                CompatibilityClassification::Unknown,
+                Some(Severity::Warning),
+                "provider config accepted the SELinux form, but no reviewed runtime-effect record establishes relabeling",
+                evidence,
+            ),
+            CompatibilityFeature::ExtensionField => unreachable!("extension fields returned above"),
+        };
+    }
     rule(
         feature,
         CompatibilityClassification::Unknown,
@@ -401,6 +496,34 @@ fn podman_compose_rule(feature: CompatibilityFeature) -> CompatibilityRule {
         "no versioned podman-compose conformance evidence covers this construct yet",
         &[],
     )
+}
+
+const fn provider_evidence(summary: &'static str, version: ImplementationVersion) -> CompatibilityEvidence {
+    CompatibilityEvidence::new(
+        EvidenceKind::ProviderConformance,
+        PROVIDER_CONFORMANCE_URL,
+        summary,
+        Some(VersionRange::exact(version)),
+        None,
+    )
+}
+
+fn docker_provider_evidence(version: ImplementationVersion) -> &'static [CompatibilityEvidence] {
+    match version {
+        value if value == ImplementationVersion::new(2, 24, 3) => DOCKER_2_24_3_PROVIDER_EVIDENCE,
+        value if value == ImplementationVersion::new(2, 24, 4) => DOCKER_2_24_4_PROVIDER_EVIDENCE,
+        value if value == ImplementationVersion::new(2, 40, 3) => DOCKER_2_40_3_PROVIDER_EVIDENCE,
+        value if value == ImplementationVersion::new(5, 3, 1) => DOCKER_5_3_1_PROVIDER_EVIDENCE,
+        _ => &[],
+    }
+}
+
+fn podman_compose_provider_evidence(version: ImplementationVersion) -> &'static [CompatibilityEvidence] {
+    match version {
+        value if value == ImplementationVersion::new(1, 3, 0) => PODMAN_COMPOSE_1_3_0_PROVIDER_EVIDENCE,
+        value if value == ImplementationVersion::new(1, 5, 0) => PODMAN_COMPOSE_1_5_0_PROVIDER_EVIDENCE,
+        _ => &[],
+    }
 }
 
 fn tolerant_rule(feature: CompatibilityFeature) -> CompatibilityRule {

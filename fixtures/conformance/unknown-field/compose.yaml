@@ -1,0 +1,4 @@
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    future_service_option: retained

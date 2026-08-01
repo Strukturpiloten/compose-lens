@@ -48,9 +48,26 @@ Run selected fixtures through known Docker Compose and Podman Compose versions. 
 
 Observed behavior becomes evidence, not an unquestionable specification. Conflicts between implementations are represented through compatibility profiles.
 
+The first repository-side harness and exact provider-config matrix are implemented. The harness is
+an ignored integration test: normal tests validate its complete matrix and authored fixture, but
+external execution requires an absolute launcher, exact expected version, caller-verified artifact
+URL and SHA-256 metadata, a full fixture revision, explicit platform and path inputs, and a new
+result directory. It clears inherited environment variables and retains raw outputs for review.
+See the [conformance guide](conformance.md) and
+[ADR 0012](decisions/0012-repository-conformance-harness.md).
+
 ### Real-world fixtures
 
 Use licensed projects and minimal reproductions of reported behavior. Every fixture needs provenance, redistribution permission, secret review, and a statement of what it protects.
+
+The first real-world fixture is a generated PostgreSQL variant of
+`Strukturpiloten/typo3-container`. It exercises five interacting services, Podman-specific
+unknown fields, short-form SELinux mounts, dependencies, external networks, tag-plus-digest
+images, caller-owned interpolation, sensitive-value redaction, reference validation, and stable
+canonical rendering. An independent, byte-identical Docker Awesome Compose fixture adds build
+definitions, health checks, dependency conditions, a top-level secret and grant, a named volume,
+and a long read-only bind mount. The generation, licensing, sanitization, and update rules are
+documented in the [real-world corpus guide](real-world-corpus.md).
 
 ## Test organization
 
@@ -60,8 +77,9 @@ The initial syntax corpus exercises comments, anchors, aliases, duplicate keys, 
 
 The built-in compatibility rules are unit/integration evidence, not a substitute for the runtime
 conformance tier. Phase 5 expands the exact Docker Compose, `podman-compose`, Docker Engine, and
-Podman matrices. A runtime observation may be promoted into a built-in rule only with an exact
-command, provider version, runtime version, platform assumptions, and retained result.
+Podman matrices. Planned matrix entries make no support claim. A runtime observation may be
+promoted into a built-in rule only with an exact command, provider version, runtime version,
+platform assumptions, and reviewed retained result.
 
 ## Regression rule
 
@@ -82,6 +100,15 @@ RUSTDOCFLAGS="-D warnings" cargo ci-doc
 cargo +1.85.0 ci-check
 cargo +1.85.0 ci-policy
 cargo deny check
+cargo test --locked --test conformance
+cargo test --locked --test runtime_conformance
+cargo test --locked --test real_world
+cargo test --locked --test public_api
+cargo package --locked
 ```
 
-The `ci-*` aliases use `--locked`, all workspace features, and all targets where the Cargo command supports them. CI also runs markdownlint and lychee over the documentation. Add exact conformance, property, and fuzz commands here before those harnesses become required checks.
+The `ci-*` aliases use `--locked`, all workspace features, and all targets where the Cargo command
+supports them. CI also runs markdownlint and lychee over the documentation. The ordinary
+conformance command validates matrix policy and leaves its external runner ignored. The explicit
+collection command is documented in [`../conformance/README.md`](../conformance/README.md). Add
+property and fuzz commands here before those harnesses become required checks.

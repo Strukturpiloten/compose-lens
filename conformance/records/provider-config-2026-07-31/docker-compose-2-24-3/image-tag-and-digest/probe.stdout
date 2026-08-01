@@ -1,0 +1,9 @@
+name: image-tag-and-digest
+services:
+  app:
+    image: example.invalid/composelens/app:1.2.3@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    networks:
+      default: null
+networks:
+  default:
+    name: image-tag-and-digest_default

@@ -1,0 +1,22 @@
+schema = 1
+id = "runtime-selinux-short"
+suite = "conformance"
+description = "Defines an isolated runtime probe for short bind-mount SELinux relabel effects."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The future runtime runner must supply an already-loaded digest-pinned image and a new isolated workspace; no registry access is allowed."
+
+[expectations]
+summary = "The runtime record captures host labels before creation, after creation, and after cleanup without inferring behavior from provider config output."
+
+[extensions.conformance]
+operation = "runtime-effect"
+features = ["short-bind-selinux"]

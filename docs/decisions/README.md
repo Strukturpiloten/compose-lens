@@ -22,5 +22,7 @@
 | [0009](0009-deterministic-canonical-rendering.md) | accepted | Explicit merged-project canonical YAML with a fixed v1 presentation |
 | [0010](0010-atomic-span-based-preservation-edits.md) | accepted | Atomic typed scalar replacements over exact source spans |
 | [0011](0011-presentation-only-render-formatting.md) | accepted | Deterministic presentation options separated from semantic processing |
+| [0012](0012-repository-conformance-harness.md) | accepted | Exact-version repository conformance with reviewed retained evidence |
+| [0013](0013-versioned-public-api-and-release-contract.md) | accepted | Versioned pre-1.0 public API and auditable release contract |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

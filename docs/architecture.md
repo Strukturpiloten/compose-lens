@@ -138,3 +138,16 @@ the [presentation-only formatting boundary](decisions/0011-presentation-only-ren
 - Preservation editing is pure and consumes only a syntax document plus caller-supplied exact-span edits.
 - ComposeLens never contacts Docker, Podman, or Kubernetes.
 - ComposeLens never starts services or builds images.
+
+The repository's ignored conformance harness is intentionally outside the library boundary. It
+invokes an absolute caller-selected provider only when explicitly requested, clears ambient
+environment variables, and writes an unreviewed result to a caller-selected new directory. ADR
+0012 defines this [evidence-collection boundary](decisions/0012-repository-conformance-harness.md).
+
+## Public release boundary
+
+ComposeLens publishes one library crate. The supported 0.1.x surface follows the layer boundaries
+above and exposes only ComposeLens-owned types; parser dependencies remain private. Patch releases
+preserve the documented consumer path, diagnostic code strings, side-effect boundaries, and
+canonical-v1 defaults. ADR 0013 defines the
+[versioned public API and release contract](decisions/0013-versioned-public-api-and-release-contract.md).

@@ -1,0 +1,22 @@
+schema = 1
+id = "long-bind-selinux"
+suite = "conformance"
+description = "Isolates provider config handling of long bind.selinux relabel syntax."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider either retains long bind.selinux or returns a feature-specific rejection."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["long-bind-selinux"]

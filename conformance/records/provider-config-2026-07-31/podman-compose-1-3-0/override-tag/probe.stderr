@@ -1,0 +1,49 @@
+Traceback (most recent call last):
+  File "<acquisition>/venv-1.3.0/bin/podman-compose", line 6, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/podman_compose.py", line 3711, in main
+    asyncio.run(async_main())
+    ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.13/asyncio/runners.py", line 196, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib64/python3.13/asyncio/runners.py", line 119, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib64/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/podman_compose.py", line 3707, in async_main
+    await podman_compose.run()
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/podman_compose.py", line 1859, in run
+    self._parse_compose_file()
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/podman_compose.py", line 1955, in _parse_compose_file
+    content = yaml.safe_load(f)
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/__init__.py", line 125, in safe_load
+    return load(stream, SafeLoader)
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/__init__.py", line 81, in load
+    return loader.get_single_data()
+           ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/constructor.py", line 51, in get_single_data
+    return self.construct_document(node)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/constructor.py", line 60, in construct_document
+    for dummy in generator:
+                 ^^^^^^^^^
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/constructor.py", line 413, in construct_yaml_map
+    value = self.construct_mapping(node)
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/constructor.py", line 218, in construct_mapping
+    return super().construct_mapping(node, deep=deep)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/constructor.py", line 143, in construct_mapping
+    value = self.construct_object(value_node, deep=deep)
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/constructor.py", line 100, in construct_object
+    data = constructor(self, node)
+  File "<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/yaml/constructor.py", line 427, in construct_undefined
+    raise ConstructorError(None, None,
+            "could not determine a constructor for the tag %r" % node.tag,
+            node.start_mark)
+yaml.constructor.ConstructorError: could not determine a constructor for the tag '!override'
+  in "compose.override.yaml", line 3, column 12

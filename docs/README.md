@@ -11,6 +11,8 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Render formatting](render-formatting.md) — indentation, line endings, document markers, and the semantic boundary
 - [Phase 2 typed model](typed-model.md) — implemented field boundary, fidelity rules, and diagnostics
 - [Testing strategy](testing.md) — parser, resolver, conformance, and round-trip tests
+- [Compose implementation conformance](conformance.md) — exact matrices, evidence lifecycle, and open runtime work
+- [Real-world fixture corpus](real-world-corpus.md) — admission, licensing, sanitization, and covered projects
 - [Fixture format](fixture-format.md) — shared metadata, provenance, and secrets contract
 - [YAML representation evaluation](research/yaml-representation.md) — versioned parser prototype evidence
 - [Compose syntax-fidelity evidence](research/compose-syntax-fidelity.md) — why short and long forms remain distinct
@@ -18,9 +20,12 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Compose merge evidence](research/compose-merge.md) — ordering, field-specific rules, tags, and path bases
 - [Post-merge processing evidence](research/compose-post-merge-processing.md) — profiles, paths, references, and defaults
 - [Compatibility-profile evidence](research/compose-compatibility-profiles.md) — providers, runtimes, versions, and initial rules
+- [Provider-config conformance results](research/provider-config-conformance-2026-07-31.md) — 48 exact reviewed observations
 - [Canonical-rendering evidence](research/compose-canonical-rendering.md) — fixed output, explicit processing boundary, recovery, and redaction
 - [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
 - [API stability policy](api-stability.md) — pre-1.0 compatibility and public dependency boundaries
+- [0.1.0 release-candidate notes](releases/0.1.0.md) — capabilities, limits, and maintainer publication checklist
+- [Changelog](../CHANGELOG.md) — release-facing behavior changes
 - [Implementation plan](implementation-plan.md) — synchronized cross-repository tasks T1–T7
 - [Roadmap](roadmap.md) — implementation order
 - [Architecture decisions](decisions/README.md) — durable design choices

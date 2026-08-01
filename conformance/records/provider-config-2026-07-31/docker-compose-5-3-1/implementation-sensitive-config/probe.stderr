@@ -1,0 +1,1 @@
+validating <repository>/fixtures/conformance/implementation-sensitive-config/compose.yaml: services.app.volumes.1.bind additional properties 'future_bind_option' not allowed

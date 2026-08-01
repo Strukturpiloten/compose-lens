@@ -1,0 +1,425 @@
+schema = 1
+reviewed = "2026-07-31"
+
+[[targets]]
+id = "docker-compose-2-24-3"
+provider = "docker-compose"
+version = "2.24.3"
+release_url = "https://github.com/docker/compose/releases/tag/v2.24.3"
+artifact_url = "https://github.com/docker/compose/releases/download/v2.24.3/docker-compose-linux-x86_64"
+artifact_sha256 = "49b3b71e4428585f75294a83702d259f442a8fcdb2351864c6dcaa3f7e29b3aa"
+execution = ["linux-x86_64-native"]
+version_arguments = ["version", "--short"]
+file_argument = "--file"
+config_arguments = ["config", "--no-interpolate"]
+purpose = "Measure the release immediately before Docker's documented !override boundary."
+
+[[targets]]
+id = "docker-compose-2-24-4"
+provider = "docker-compose"
+version = "2.24.4"
+release_url = "https://github.com/docker/compose/releases/tag/v2.24.4"
+artifact_url = "https://github.com/docker/compose/releases/download/v2.24.4/docker-compose-linux-x86_64"
+artifact_sha256 = "b506272a7f34ea056e36ba23e83593c491fd8419b0ed30ecacc42fe2eee8c964"
+execution = ["linux-x86_64-native"]
+version_arguments = ["version", "--short"]
+file_argument = "--file"
+config_arguments = ["config", "--no-interpolate"]
+purpose = "Measure Docker's documented first release with !override support."
+
+[[targets]]
+id = "docker-compose-2-40-3"
+provider = "docker-compose"
+version = "2.40.3"
+release_url = "https://github.com/docker/compose/releases/tag/v2.40.3"
+artifact_url = "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-x86_64"
+artifact_sha256 = "dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372"
+execution = ["linux-x86_64-native"]
+version_arguments = ["version", "--short"]
+file_argument = "--file"
+config_arguments = ["config", "--no-interpolate"]
+purpose = "Retain the provider side of the published Podman 5.6.2 SELinux reproduction."
+
+[[targets]]
+id = "docker-compose-5-3-1"
+provider = "docker-compose"
+version = "5.3.1"
+release_url = "https://github.com/docker/compose/releases/tag/v5.3.1"
+artifact_url = "https://github.com/docker/compose/releases/download/v5.3.1/docker-compose-linux-x86_64"
+artifact_sha256 = "f9ebc6ebdb19d769b793c245a736caaeb198c62587f13b25c660c13b4987f959"
+execution = ["linux-x86_64-native"]
+version_arguments = ["version", "--short"]
+file_argument = "--file"
+config_arguments = ["config", "--no-interpolate"]
+purpose = "Measure the current stable Docker Compose release at the matrix review date."
+
+[[targets]]
+id = "podman-compose-1-3-0"
+provider = "podman-compose"
+version = "1.3.0"
+release_url = "https://github.com/containers/podman-compose/releases/tag/v1.3.0"
+artifact_url = "https://files.pythonhosted.org/packages/e3/53/41ec4fcb57fe32a02c7616a2b4e05343ed4c0daaa76b1e04a2a0ccb5c7e6/podman_compose-1.3.0-py2.py3-none-any.whl"
+artifact_sha256 = "34599a9fd404bb80b587d5dda316d83928d7a33917e8a0adcd07f7aa6c52da4b"
+execution = ["python=3.13.14", "python-dotenv=1.2.2", "PyYAML=6.0.3"]
+version_arguments = ["--dry-run", "version", "--short"]
+file_argument = "--file"
+config_arguments = ["--dry-run", "config"]
+purpose = "Measure a widely packaged earlier 1.x provider without inferring support."
+
+[[targets]]
+id = "podman-compose-1-5-0"
+provider = "podman-compose"
+version = "1.5.0"
+release_url = "https://github.com/containers/podman-compose/releases/tag/v1.5.0"
+artifact_url = "https://files.pythonhosted.org/packages/41/4b/75ab5c151b9d170fdae0048a6f6528535aff848140c007f408af9ac555d6/podman_compose-1.5.0-py3-none-any.whl"
+artifact_sha256 = "f0b9d35f4da1b309172adf208a5cb7a882b532a834c2202666c1988b6f147546"
+execution = ["python=3.13.14", "python-dotenv=1.2.2", "PyYAML=6.0.3"]
+version_arguments = ["--dry-run", "version", "--short"]
+file_argument = "--file"
+config_arguments = ["--dry-run", "config"]
+purpose = "Measure the current stable podman-compose release at the matrix review date."
+
+[[probes]]
+id = "implementation-sensitive-config"
+fixture = "fixtures/conformance/implementation-sensitive-config"
+files = ["compose.yaml", "compose.override.yaml"]
+fixture_sha256 = "a1b623234cf49a7f7dea0153224ff0e6efa8c40f221d71d13141c2686d33b5a8"
+purpose = "Observe config handling for tag-plus-digest images, both SELinux bind forms, !reset, !override, extensions, and unknown fields."
+
+[[probes]]
+id = "image-tag-and-digest"
+fixture = "fixtures/conformance/image-tag-and-digest"
+files = ["compose.yaml"]
+fixture_sha256 = "9df228157be9f7f1d786e8f7227947742c3112741f45081cebefdb32bad5954f"
+purpose = "Measure tag-plus-digest image parsing and rendering without another feature masking the result."
+
+[[probes]]
+id = "short-bind-selinux"
+fixture = "fixtures/conformance/short-bind-selinux"
+files = ["compose.yaml"]
+fixture_sha256 = "d188daadfe5279011c8d5e6ce46de89b46effe2994faf3b921d0f6978066f016"
+purpose = "Measure short bind-mount SELinux option handling independently."
+
+[[probes]]
+id = "long-bind-selinux"
+fixture = "fixtures/conformance/long-bind-selinux"
+files = ["compose.yaml"]
+fixture_sha256 = "6a4bb4a63e6406ca74562b6d6ad03cd91b432f8c5172c2e33fb8f74041ef7df7"
+purpose = "Measure long bind.selinux handling independently."
+
+[[probes]]
+id = "reset-tag"
+fixture = "fixtures/conformance/reset-tag"
+files = ["compose.yaml", "compose.override.yaml"]
+fixture_sha256 = "08ba353851044f900021773cce056557b620174f078aaf24de8056a18d7502a1"
+purpose = "Measure the reset tag independently across a base and override file."
+
+[[probes]]
+id = "override-tag"
+fixture = "fixtures/conformance/override-tag"
+files = ["compose.yaml", "compose.override.yaml"]
+fixture_sha256 = "6a11f73376e3ef36ac7534175df774b3ad07c4e7f89e018d567fd68f8fd51ee3"
+purpose = "Measure the override tag independently across a base and override file."
+
+[[probes]]
+id = "extension-fields"
+fixture = "fixtures/conformance/extension-fields"
+files = ["compose.yaml"]
+fixture_sha256 = "d30be1a776c486ea73390ce87611a66597b46d92d06d2efb50a5f643bcaa3bbc"
+purpose = "Measure top-level and service extension-field handling independently."
+
+[[probes]]
+id = "unknown-field"
+fixture = "fixtures/conformance/unknown-field"
+files = ["compose.yaml"]
+fixture_sha256 = "fba0dbf8a1189539c4283986ef90cdbb2e2f1630bb9f7eb19321cbdab87d2013"
+purpose = "Measure rejection or retention of one unknown service field independently."
+
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "implementation-sensitive-config"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-3/implementation-sensitive-config/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "implementation-sensitive-config"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-4/implementation-sensitive-config/record.toml"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "implementation-sensitive-config"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-40-3/implementation-sensitive-config/record.toml"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "implementation-sensitive-config"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-5-3-1/implementation-sensitive-config/record.toml"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "implementation-sensitive-config"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-3-0/implementation-sensitive-config/record.toml"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "implementation-sensitive-config"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/implementation-sensitive-config/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "image-tag-and-digest"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-3/image-tag-and-digest/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "short-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-3/short-bind-selinux/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "long-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-3/long-bind-selinux/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "reset-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-3/reset-tag/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "override-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-3/override-tag/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "extension-fields"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-3/extension-fields/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "unknown-field"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-3/unknown-field/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "image-tag-and-digest"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-4/image-tag-and-digest/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "short-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-4/short-bind-selinux/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "long-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-4/long-bind-selinux/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "reset-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-4/reset-tag/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "override-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-4/override-tag/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "extension-fields"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-4/extension-fields/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "unknown-field"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-24-4/unknown-field/record.toml"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "image-tag-and-digest"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-40-3/image-tag-and-digest/record.toml"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "short-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-40-3/short-bind-selinux/record.toml"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "long-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-40-3/long-bind-selinux/record.toml"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "reset-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-40-3/reset-tag/record.toml"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "override-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-40-3/override-tag/record.toml"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "extension-fields"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-40-3/extension-fields/record.toml"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "unknown-field"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-2-40-3/unknown-field/record.toml"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "image-tag-and-digest"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-5-3-1/image-tag-and-digest/record.toml"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "short-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-5-3-1/short-bind-selinux/record.toml"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "long-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-5-3-1/long-bind-selinux/record.toml"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "reset-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-5-3-1/reset-tag/record.toml"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "override-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-5-3-1/override-tag/record.toml"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "extension-fields"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-5-3-1/extension-fields/record.toml"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "unknown-field"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/docker-compose-5-3-1/unknown-field/record.toml"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "image-tag-and-digest"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-3-0/image-tag-and-digest/record.toml"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "short-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-3-0/short-bind-selinux/record.toml"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "long-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-3-0/long-bind-selinux/record.toml"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "reset-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-3-0/reset-tag/record.toml"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "override-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-3-0/override-tag/record.toml"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "extension-fields"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-3-0/extension-fields/record.toml"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "unknown-field"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-3-0/unknown-field/record.toml"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "image-tag-and-digest"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/image-tag-and-digest/record.toml"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "short-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/short-bind-selinux/record.toml"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "long-bind-selinux"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/long-bind-selinux/record.toml"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "reset-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/reset-tag/record.toml"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "override-tag"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/override-tag/record.toml"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "extension-fields"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/extension-fields/record.toml"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "unknown-field"
+status = "observed"
+record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/unknown-field/record.toml"

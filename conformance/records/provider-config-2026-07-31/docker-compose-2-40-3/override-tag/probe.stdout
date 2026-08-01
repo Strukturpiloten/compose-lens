@@ -1,0 +1,15 @@
+name: override-tag
+networks:
+  default:
+    name: override-tag_default
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    networks:
+      default: null
+    ports:
+      - host_ip: 127.0.0.1
+        mode: ingress
+        protocol: tcp
+        published: "18443"
+        target: 443

@@ -66,6 +66,15 @@ RUSTDOCFLAGS="-D warnings" cargo ci-doc
 cargo +1.85.0 ci-check
 cargo +1.85.0 ci-policy
 cargo deny check
+cargo test --locked --test conformance
+cargo test --locked --test runtime_conformance
+cargo test --locked --test real_world
+cargo test --locked --test public_api
+cargo package --locked
 ```
 
 The `ci-*` aliases in `.cargo/config.toml` use locked resolution and all workspace features and targets where applicable. Conformance, property, and fuzz commands must be added here when their harnesses are introduced.
+
+The ordinary conformance tests validate repository policy and never invoke a provider or runtime.
+The explicitly ignored evidence-capture command and its required isolation inputs are documented in
+`conformance/README.md`.

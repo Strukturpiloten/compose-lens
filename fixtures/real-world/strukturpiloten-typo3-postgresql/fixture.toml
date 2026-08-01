@@ -1,0 +1,31 @@
+schema = 1
+id = "strukturpiloten-typo3-postgresql"
+suite = "real-world"
+description = "Exercises a generated five-service TYPO3 Compose project with Podman extensions, SELinux mounts, dependencies, and tag-plus-digest images."
+secrets_reviewed = true
+files = ["compose.yaml", "environment.env", "UPSTREAM_LICENSE"]
+
+[provenance]
+source = "external"
+url = "https://github.com/Strukturpiloten/typo3-container/tree/21c00ee39aab42b8c232c3d6020aeb8e9569a13e"
+revision = "21c00ee39aab42b8c232c3d6020aeb8e9569a13e"
+license = "AGPL-3.0-only"
+redistribution = "allowed"
+modifications = "Generated the PostgreSQL and reverse-proxy variant; added a final newline to compose.yaml; replaced generated host paths and credentials with deterministic fixture-only values in environment.env."
+
+[environment]
+description = "environment.env supplies every active interpolation variable; the two credential-shaped fixture values are classified as sensitive by the tests."
+format = "dotenv-subset"
+sensitive = ["DATABASE_SQL_PASSWORD", "TYPO3_SETUP_ADMIN_PASSWORD"]
+
+[expectations]
+summary = "The source remains byte-preservable, all five services type-check, Podman-specific unknown fields survive processing, short z/Z mounts remain distinct, references resolve, and canonical output reparses."
+
+[extensions.real-world]
+upstream_project = "Strukturpiloten/typo3-container"
+upstream_input = "compose.yaml.tmpl"
+generated_variant = "PostgreSQL with an external reverse-proxy network"
+generator = "deps/container-setup/setup"
+generator_command = "setup -non-interactive -quiet -project-dir <checkout> -data-dir <fixture-output> -database-sql postgresql -domain typo3.example.invalid -reverse-proxy true -reverse-proxy-network-name shared-reverse-proxy -uid 1000 -gid 1000 -podman-namespace strukturpiloten -podman-service typo3 -podman-stage test"
+generated_compose_sha256 = "36db30ca24c2d5d12ebf695b4f4ad28876e8b3da17a58f1774dd27b2cfd16109"
+stored_compose_sha256 = "98529231df7a0083103446d928480d6fc97740d9ba89a1e571b1971f3782cb76"

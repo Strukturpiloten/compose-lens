@@ -1,0 +1,10 @@
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    volumes:
+      - type: bind
+        source: ./private
+        target: /srv/private
+        bind:
+          create_host_path: false
+          selinux: Z

@@ -62,9 +62,27 @@ not a Phase 2 exit criterion. See the [Phase 2 typed model](typed-model.md).
 - [x] Implement preservation-oriented edits where the syntax layer permits them.
 - [x] Define formatting options without coupling semantics to presentation.
 
-## Phase 5: ecosystem hardening — open
+## Phase 5: ecosystem hardening — completed as a release candidate
 
-- [ ] Expand Docker Compose and Podman Compose version matrices.
-- [ ] Grow the licensed real-world corpus.
-- [ ] Stabilize the public crate API.
-- [ ] Publish releases and compatibility documentation.
+- [x] Expand Docker Compose and Podman Compose version matrices.
+  - [x] Define an exact-version provider-config matrix with explicit planned and observed states.
+  - [x] Add an authored implementation-sensitive fixture and a pure matrix policy test.
+  - [x] Add an ignored, environment-cleared result-capture runner and evidence-review contract.
+  - [x] Execute and review the six initial provider targets across all eight probes from trusted artifacts.
+  - [x] Add isolated Docker Engine and Podman runtime-effect matrices.
+  - [x] Promote reviewed feature outcomes into narrowly scoped compatibility rules.
+- [x] Grow the licensed real-world corpus.
+  - [x] Define admission, licensing, generation, sanitization, and update policy.
+  - [x] Add the generated `Strukturpiloten/typo3-container` PostgreSQL fixture with source and processing regressions.
+  - [x] Add independently licensed projects that contribute distinct Compose behavior.
+- [x] Stabilize and regression-test the supported pre-1.0 public crate API.
+- [x] Prepare and validate the 0.1.0 release package, release notes, and compatibility documentation.
+
+## Maintainer-controlled release operations
+
+These credentialed external actions are deliberately not represented as implementation work:
+
+- [ ] Publish ComposeLens 0.1.0 to crates.io from an approved clean release commit.
+- [ ] Create and push the `v0.1.0` tag and corresponding GitHub release.
+
+The exact operational checklist is in the [0.1.0 release-candidate notes](releases/0.1.0.md).

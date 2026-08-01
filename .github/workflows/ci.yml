@@ -40,6 +40,8 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo ci-doc
+      - name: Verify release package
+        run: cargo ci-package
 
   msrv:
     name: MSRV 1.85.0

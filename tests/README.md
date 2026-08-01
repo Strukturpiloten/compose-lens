@@ -12,7 +12,9 @@ Suites are introduced with the behavior they verify:
 - `roundtrip` — preservation and deterministic canonical rendering
 - `rendering` — canonical/custom output, formatting boundaries, profile filtering, recovery, stability, and redaction
 - `preservation-editing` — atomic exact-span scalar changes and byte-preservation failures
-- `conformance` — behavior observed from identified Compose implementations
+- `conformance` — exact provider/probe matrix policy plus an explicitly invoked observation runner
+- `runtime-conformance` — exact planned runtime contexts, fixture hashes, and fail-closed isolation policy
 - `real-world` — licensed external projects and regression cases
+- `public-api` — consumer-facing compile and behavior contract for the supported 0.1.x pipeline
 
 Do not add an empty test binary merely to reserve a suite name. Add the entry point, its fixtures, and meaningful assertions together.

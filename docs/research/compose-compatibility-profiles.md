@@ -2,15 +2,17 @@
 
 - Evaluated: 2026-07-31
 - Scope: initial provider/runtime identity and compatibility rules
-- Runtime automation: not yet implemented
+- Provider conformance: 48 reviewed config observations
+- Runtime-effect execution: planned in an isolated 36-run matrix; no local SELinux-capable runtime evidence
 
 ## Current release context
 
-The official release pages identified these latest stable releases on the evaluation date:
+The owners' release channels identified these current stable candidates on the evaluation date:
 
-- [Docker Compose 5.1.4](https://github.com/docker/compose/releases/tag/v5.1.4)
+- [Docker Compose 5.3.1](https://github.com/docker/compose/releases/tag/v5.3.1)
 - [`containers/podman-compose` 1.5.0](https://github.com/containers/podman-compose/releases/tag/v1.5.0)
-- [Podman 5.8.2](https://github.com/containers/podman/releases/tag/v5.8.2)
+- [Docker Engine 29.6.2](https://docs.docker.com/engine/release-notes/29/#2962)
+- [Podman 6.0.2](https://github.com/containers/podman/releases/tag/v6.0.2)
 
 These values document research context only. ComposeLens has no “latest” profile and makes no
 blanket support claim for these releases. A caller supplies the exact versions it wants assessed.
@@ -39,9 +41,11 @@ The [Docker merge reference](https://docs.docker.com/reference/compose-file/merg
 requires Docker Compose 2.24.4 or later for `!override`. The built-in Docker profile therefore
 classifies earlier exact versions as unsupported and later versions as supported.
 
-The same reference documents `!reset` without an introduction version. Docker profiles classify it
-as implementation-specific until a release boundary or broader conformance matrix is recorded.
-The specification-oriented profile accepts both tags; the `podman-compose` profile remains unknown.
+The same reference documents `!reset` without an introduction version. Reviewed provider
+conformance shows it working in the four selected Docker Compose releases. Exact observed Docker
+versions are supported; unobserved versions remain implementation-specific. `podman-compose`
+1.3.0 and 1.5.0 reject `!reset`. Version 1.3.0 also rejects `!override`, while 1.5.0 applies it.
+The full evidence table is in [provider-config conformance](provider-config-conformance-2026-07-31.md).
 
 ### Short and long bind SELinux behavior
 
@@ -63,7 +67,9 @@ new evidence.
 ComposeLens retains `name:tag@digest` because real tools accept this useful form. The current
 specification grammar presents tag and digest as alternatives, so the specification and Docker
 profiles classify the combination as implementation-specific rather than rejecting it during
-parsing. `podman-compose` remains unknown until its exact versions are exercised.
+parsing. The four observed Docker Compose versions and both observed `podman-compose` versions
+retain the combined value, so their exact profiles classify it as supported. Other provider
+versions remain implementation-specific or unknown.
 
 ### Extensions and tolerant behavior
 
@@ -77,19 +83,16 @@ and report; it does not mean supported everywhere.
 - `VersionRange` has inclusive optional minimum and maximum values.
 - `CompatibilityEvidence` separates provider-version and runtime-version scopes.
 - Evidence kinds distinguish specification, official documentation, issue reproduction, and future
-  ComposeLens runtime conformance.
+  ComposeLens provider and runtime conformance.
 - Findings never store raw compatibility-sensitive values and diagnostics use value-free text.
 
 The authored `fixtures/processing/compatibility-profiles` project exercises all initial features.
 `tests/compatibility.rs` verifies exact boundaries, source preservation, selected-service filtering,
 evidence scopes, provider/runtime separation, conservative unknowns, and redaction.
 
-## Remaining conformance work
+## Runtime conformance boundary
 
-- Run the fixture with pinned Docker Compose providers against pinned Docker Engine and Podman
-  backends.
-- Run it directly with pinned `containers/podman-compose` and Podman combinations.
-- Record commands, environment, platform/SELinux state, exit status, normalized configuration, and
-  runtime effects.
-- Promote a classification only for the measured range. Preserve old-version rules while those
-  versions remain supported.
+Provider-only evidence is complete for the selected Phase 5 matrix. The separate runtime-effect
+matrix defines 18 exact provider/runtime/privilege contexts and two SELinux probes. Its 36 entries
+remain planned because this development host has no SELinux filesystem and cannot establish
+relabel effects. No runtime rule is promoted from provider output.

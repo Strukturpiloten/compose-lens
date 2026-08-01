@@ -1,0 +1,22 @@
+schema = 1
+id = "unknown-field"
+suite = "conformance"
+description = "Isolates provider config handling of a non-extension unknown service field."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider either retains or rejects the unknown field without another feature masking the result."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["unknown-field"]
