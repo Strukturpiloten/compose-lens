@@ -14,6 +14,7 @@ use compose_lens::validation::{
 
 const BASE: &str = include_str!("../fixtures/processing/compatibility-profiles/compose.yaml");
 const OVERRIDE: &str = include_str!("../fixtures/processing/compatibility-profiles/compose.override.yaml");
+const ISSUE_BACKLOG: &str = include_str!("../fixtures/typed-model/post-01-issue-backlog/compose.yaml");
 
 #[test]
 fn parses_exact_versions_and_checks_inclusive_evidence_ranges() -> Result<(), Box<dyn std::error::Error>> {
@@ -367,6 +368,54 @@ fn implementation_specific_diagnostics_use_a_stable_code() -> Result<(), Box<dyn
             .diagnostics()
             .iter()
             .any(|diagnostic| diagnostic.code() == IMPLEMENTATION_SPECIFIC_FEATURE)
+    );
+    Ok(())
+}
+
+#[test]
+fn classifies_evidence_backed_runtime_tokens_separately() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(251),
+        DocumentOrigin::new("compose.yaml", "fixtures/typed-model/post-01-issue-backlog"),
+        ISSUE_BACKLOG,
+    )])?;
+    let merge = merge_project(&loaded, None);
+    let project = merge.project().ok_or("merged issue-backlog project expected")?;
+    let report = validate_compatibility(project, None, CompatibilityProfile::specification());
+
+    assert_eq!(feature_count(&report, CompatibilityFeature::HostGatewayToken), 3);
+    assert_eq!(feature_count(&report, CompatibilityFeature::PodmanUserNamespaceMode), 1);
+    for feature in [
+        CompatibilityFeature::HostGatewayToken,
+        CompatibilityFeature::PodmanUserNamespaceMode,
+    ] {
+        assert_eq!(
+            classification(&report, feature),
+            Some(CompatibilityClassification::ImplementationSpecific)
+        );
+        let finding = report
+            .findings()
+            .iter()
+            .find(|finding| finding.occurrence().feature() == feature)
+            .ok_or("runtime-token finding expected")?;
+        assert!(
+            finding
+                .rule()
+                .evidence()
+                .iter()
+                .any(|evidence| evidence.kind() == EvidenceKind::OfficialDocumentation)
+        );
+    }
+    let userns = report
+        .findings()
+        .iter()
+        .find(|finding| finding.occurrence().feature() == CompatibilityFeature::PodmanUserNamespaceMode)
+        .ok_or("Podman userns finding expected")?;
+    assert_eq!(
+        userns.rule().evidence()[0]
+            .runtime_versions()
+            .and_then(VersionRange::minimum),
+        Some(ImplementationVersion::new(5, 4, 0))
     );
     Ok(())
 }

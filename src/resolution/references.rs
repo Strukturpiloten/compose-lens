@@ -14,6 +14,14 @@ pub const MISSING_REFERENCE: DiagnosticCode = DiagnosticCode::new("compose.refer
 /// A selected service references a service excluded by the active profiles.
 pub const INACTIVE_SERVICE_REFERENCE: DiagnosticCode = DiagnosticCode::new("compose.references.inactive-service");
 
+/// A healthy dependency has no Compose health check and requires image/runtime verification.
+pub const UNVERIFIED_DEPENDENCY_HEALTHCHECK: DiagnosticCode =
+    DiagnosticCode::new("compose.references.healthcheck-unverified");
+
+/// A healthy dependency explicitly disables its health check.
+pub const DISABLED_DEPENDENCY_HEALTHCHECK: DiagnosticCode =
+    DiagnosticCode::new("compose.references.healthcheck-disabled");
+
 /// The semantic kind of a Compose cross-reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ReferenceKind {
@@ -55,6 +63,7 @@ pub struct Reference {
     kind: ReferenceKind,
     status: ReferenceStatus,
     sensitive: bool,
+    required: bool,
 }
 
 impl Reference {
@@ -93,6 +102,14 @@ impl Reference {
     pub const fn is_sensitive(&self) -> bool {
         self.sensitive
     }
+
+    /// Reports whether an unavailable dependency is an error rather than a warning.
+    ///
+    /// Non-dependency reference kinds are always required.
+    #[must_use]
+    pub const fn is_required(&self) -> bool {
+        self.required
+    }
 }
 
 impl fmt::Debug for Reference {
@@ -105,6 +122,7 @@ impl fmt::Debug for Reference {
             .field("kind", &self.kind)
             .field("status", &self.status)
             .field("sensitive", &self.sensitive)
+            .field("required", &self.required)
             .finish()
     }
 }
@@ -180,6 +198,7 @@ pub fn validate_references(project: &MergedProject, selection: Option<&ProfileSe
             &mut diagnostics,
         );
         collect_service_references(service, &service_names, selection, &mut references, &mut diagnostics);
+        validate_dependency_healthchecks(service, services, selection, &mut diagnostics);
     }
 
     ReferenceValidation {
@@ -236,6 +255,7 @@ fn collect_networks(
                     ReferenceStatus::Missing
                 },
                 false,
+                true,
                 references,
                 diagnostics,
             );
@@ -360,6 +380,7 @@ fn collect_service_references(
                 super::effective_span(value),
                 ReferenceKind::ServiceNamespace,
                 scalar.is_sensitive(),
+                true,
                 service_names,
                 selection,
                 references,
@@ -380,6 +401,7 @@ fn collect_service_references(
                     super::effective_span(link),
                     ReferenceKind::Link,
                     scalar.is_sensitive(),
+                    true,
                     service_names,
                     selection,
                     references,
@@ -398,6 +420,7 @@ fn collect_service_references(
                         super::effective_span(target),
                         ReferenceKind::Extends,
                         scalar.is_sensitive(),
+                        true,
                         service_names,
                         selection,
                         references,
@@ -407,6 +430,77 @@ fn collect_service_references(
             }
         }
     }
+}
+
+fn validate_dependency_healthchecks(
+    service: &MergedEntry,
+    services: &[MergedEntry],
+    selection: Option<&ProfileSelection>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(dependencies) = service.value().get("depends_on").and_then(MergedValue::as_mapping) else {
+        return;
+    };
+    for dependency in dependencies {
+        let Some(condition) = dependency.value().get("condition") else {
+            continue;
+        };
+        if condition.as_scalar().map(MergedScalar::value) != Some("service_healthy") {
+            continue;
+        }
+        let Some(target) = services.iter().find(|candidate| candidate.key() == dependency.key()) else {
+            continue;
+        };
+        if !service_in_scope(selection, target.key()) {
+            continue;
+        }
+        let span = super::effective_span(condition);
+        let required = dependency
+            .value()
+            .get("required")
+            .and_then(MergedValue::as_scalar)
+            .is_none_or(|value| value.value() != "false");
+        match target.value().get("healthcheck") {
+            None => diagnostics.push(
+                Diagnostic::new(
+                    UNVERIFIED_DEPENDENCY_HEALTHCHECK,
+                    Severity::Warning,
+                    "service_healthy dependency has no Compose healthcheck to validate",
+                )
+                .with_label(DiagnosticLabel::primary(span, "image health metadata is not available"))
+                .with_note("the dependency image may still define a health check; verify it at build or runtime"),
+            ),
+            Some(healthcheck) if healthcheck_is_disabled(healthcheck) => diagnostics.push(
+                Diagnostic::new(
+                    DISABLED_DEPENDENCY_HEALTHCHECK,
+                    if required { Severity::Error } else { Severity::Warning },
+                    if required {
+                        "service_healthy dependency explicitly disables its health check"
+                    } else {
+                        "optional service_healthy dependency explicitly disables its health check"
+                    },
+                )
+                .with_label(DiagnosticLabel::primary(span, "dependency cannot become healthy")),
+            ),
+            Some(_) => {}
+        }
+    }
+}
+
+fn healthcheck_is_disabled(healthcheck: &MergedValue) -> bool {
+    if healthcheck
+        .get("disable")
+        .and_then(MergedValue::as_scalar)
+        .is_some_and(|value| value.value() == "true")
+    {
+        return true;
+    }
+    healthcheck
+        .get("test")
+        .and_then(MergedValue::as_sequence)
+        .and_then(|values| values.first())
+        .and_then(MergedValue::as_scalar)
+        .is_some_and(|value| value.value() == "NONE")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -428,6 +522,7 @@ fn collect_service_collection(
                     super::effective_span(dependency),
                     kind,
                     scalar.is_sensitive(),
+                    true,
                     service_names,
                     selection,
                     references,
@@ -437,12 +532,18 @@ fn collect_service_collection(
         }
     } else if let Some(entries) = value.as_mapping() {
         for dependency in entries {
+            let required = dependency
+                .value()
+                .get("required")
+                .and_then(MergedValue::as_scalar)
+                .is_none_or(|value| value.value() != "false");
             push_service(
                 service.key(),
                 dependency.key(),
                 entry_span(dependency),
                 kind,
                 false,
+                required,
                 service_names,
                 selection,
                 references,
@@ -474,6 +575,7 @@ fn push_resource(
             ReferenceStatus::Missing
         },
         sensitive,
+        true,
         references,
         diagnostics,
     );
@@ -486,6 +588,7 @@ fn push_service(
     source: SourceSpan,
     kind: ReferenceKind,
     sensitive: bool,
+    required: bool,
     service_names: &BTreeSet<&str>,
     selection: Option<&ProfileSelection>,
     references: &mut Vec<Reference>,
@@ -505,6 +608,7 @@ fn push_service(
         kind,
         status,
         sensitive,
+        required,
         references,
         diagnostics,
     );
@@ -518,6 +622,7 @@ fn push_reference(
     kind: ReferenceKind,
     status: ReferenceStatus,
     sensitive: bool,
+    required: bool,
     references: &mut Vec<Reference>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -535,8 +640,18 @@ fn push_reference(
                 "target service is inactive",
             )
         };
-        diagnostics
-            .push(Diagnostic::new(code, Severity::Error, message).with_label(DiagnosticLabel::primary(source, label)));
+        diagnostics.push(
+            Diagnostic::new(
+                code,
+                if required { Severity::Error } else { Severity::Warning },
+                if required {
+                    message
+                } else {
+                    "optional service dependency is unavailable"
+                },
+            )
+            .with_label(DiagnosticLabel::primary(source, label)),
+        );
     }
     references.push(Reference {
         source_service: source_service.to_owned(),
@@ -545,5 +660,6 @@ fn push_reference(
         kind,
         status,
         sensitive,
+        required,
     });
 }

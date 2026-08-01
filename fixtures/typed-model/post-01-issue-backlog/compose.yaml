@@ -1,0 +1,98 @@
+name: issue-backlog
+services:
+  app:
+    image: example/app
+    user: "${UID:-1000}:${GID:-1000}"
+    userns_mode: "keep-id:uid=1000,gid=1000"
+    extra_hosts:
+      - "api=192.0.2.10"
+      - "legacy:192.0.2.11"
+      - "ipv6=::1"
+      - "bracketed=[2001:db8::1]"
+      - "host.containers.internal=host-gateway"
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: -1
+        hard: 1048576
+      memlock: ${MEMLOCK:--1}
+    depends_on:
+      database:
+        condition: service_healthy
+        restart: true
+        required: true
+      image-health:
+        condition: service_healthy
+      disabled-health:
+        condition: service_healthy
+      missing:
+        condition: service_started
+      optional-missing:
+        condition: service_started
+        required: false
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 2s
+    volumes:
+      - /project/node_modules
+      - type: bind
+        source: C:\host\data
+        target: /srv/data
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        VERSION: "1"
+      extra_hosts:
+        - "builder=host-gateway"
+      entitlements: [network.host]
+      target: production
+      x-build-note: retained
+      future_build_field: retained
+    deploy:
+      mode: replicated
+      replicas: 2
+      endpoint_mode: vip
+      labels:
+        com.example.role: frontend
+      placement:
+        constraints: [node.labels.zone==primary]
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+      rollback_config:
+        parallelism: 1
+      x-deploy-note: retained
+      future_deploy_field: retained
+  database:
+    image: example/database
+    healthcheck:
+      test: "pg_isready"
+  image-health:
+    image: example/with-image-healthcheck
+  disabled-health:
+    image: example/disabled
+    healthcheck:
+      test: ["NONE"]
+  mapped-hosts:
+    image: example/hosts
+    extra_hosts:
+      api: "192.0.2.20"
+      ipv6: "::1"
+      gateway: host-gateway
+    depends_on: [database]
+  numeric-user:
+    image: example/numeric
+    user: "1000:1001"
+  named-user:
+    image: example/named
+    user: "www-data:staff"

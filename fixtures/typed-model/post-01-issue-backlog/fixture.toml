@@ -1,0 +1,25 @@
+schema = 1
+id = "post-01-issue-backlog"
+suite = "typed-model"
+description = "Covers issue-derived extra-host, identity, ulimit, health/dependency, container-path, build, deploy, and Podman value forms."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation or runtime is used; expressions and provider-specific tokens remain deferred."
+
+[expectations]
+summary = "All new forms are extracted without normalization; dependency validation distinguishes required and optional missing services, a disabled healthcheck, and image-health uncertainty."
+
+[extensions.typed-model]
+expected_diagnostics = [
+  "compose.dependencies.missing-service",
+  "compose.dependencies.missing-healthcheck",
+  "compose.dependencies.healthcheck-unverified",
+]

@@ -5,9 +5,10 @@ use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{MergedProject, merge_project};
 use compose_lens::profiles::{INVALID_PROFILE_NAME, ProfileRequest, ServiceStatus, select_profiles};
 use compose_lens::resolution::{
-    ComposeDefaults, ContainerPlatform, DefaultKind, DefaultLocation, DefaultValue, HOME_DIRECTORY_REQUIRED,
-    HostPathKind, INACTIVE_SERVICE_REFERENCE, MISSING_REFERENCE, NoDefaults, PathContext, PathPurpose, ReferenceKind,
-    ReferenceStatus, SELECTION_PROJECT_MISMATCH, resolve_defaults, resolve_paths, validate_references,
+    ComposeDefaults, ContainerPlatform, DISABLED_DEPENDENCY_HEALTHCHECK, DefaultKind, DefaultLocation, DefaultValue,
+    HOME_DIRECTORY_REQUIRED, HostPathKind, INACTIVE_SERVICE_REFERENCE, MISSING_REFERENCE, NoDefaults, PathContext,
+    PathPurpose, ReferenceKind, ReferenceStatus, SELECTION_PROJECT_MISMATCH, UNVERIFIED_DEPENDENCY_HEALTHCHECK,
+    resolve_defaults, resolve_paths, validate_references,
 };
 use compose_lens::source::SourceId;
 use std::collections::BTreeMap;
@@ -16,6 +17,7 @@ use std::path::Path;
 const PROFILE_BASE: &str = include_str!("../fixtures/processing/profile-selection/compose.yaml");
 const PROFILE_OVERRIDE: &str = include_str!("../fixtures/processing/profile-selection/compose.override.yaml");
 const RESOLUTION_PROJECT: &str = include_str!("../fixtures/processing/project-resolution/compose.yaml");
+const ISSUE_BACKLOG: &str = include_str!("../fixtures/typed-model/post-01-issue-backlog/compose.yaml");
 
 #[test]
 fn selects_profiles_without_mutating_the_merged_project() -> Result<(), Box<dyn std::error::Error>> {
@@ -185,6 +187,38 @@ fn validates_resource_and_selected_service_references() -> Result<(), Box<dyn st
             .iter()
             .any(|diagnostic| diagnostic.code() == INACTIVE_SERVICE_REFERENCE)
     );
+    Ok(())
+}
+
+#[test]
+fn validates_healthy_dependencies_after_merge_without_assuming_image_metadata() -> Result<(), Box<dyn std::error::Error>>
+{
+    let merged = one_file_project(ISSUE_BACKLOG, 215)?;
+    let validation = validate_references(&merged, None);
+
+    assert!(validation.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == UNVERIFIED_DEPENDENCY_HEALTHCHECK
+            && diagnostic.severity() == compose_lens::diagnostic::Severity::Warning
+    }));
+    assert!(validation.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == DISABLED_DEPENDENCY_HEALTHCHECK
+            && diagnostic.severity() == compose_lens::diagnostic::Severity::Error
+    }));
+    assert!(
+        validation
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == MISSING_REFERENCE)
+    );
+    let optional = validation
+        .references()
+        .iter()
+        .find(|reference| reference.target() == "optional-missing")
+        .ok_or("optional missing dependency expected")?;
+    assert!(!optional.is_required());
+    assert!(validation.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == MISSING_REFERENCE && diagnostic.severity() == compose_lens::diagnostic::Severity::Warning
+    }));
     Ok(())
 }
 

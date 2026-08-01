@@ -10,7 +10,11 @@ Cover scalars, mappings, sequences, anchors, aliases, comments where supported, 
 
 ### Typed-model tests
 
-Cover every field in the documented [Phase 2 boundary](typed-model.md), all supported syntax variants, unknown fields, extensions, image references, ports, volumes, environment values, commands, networks, profiles, configs, secrets, top-level resources, and discriminated unions.
+Cover every field in the documented [typed boundary](typed-model.md), all supported syntax variants,
+unknown fields, extensions, image references, ports, volumes, host/container path separation,
+environment values, commands, extra hosts, raw identities, ulimits, health checks, dependency
+conditions, field-level build/deploy identities, networks, profiles, configs, secrets, top-level
+resources, and discriminated unions.
 
 ### Processing tests
 
@@ -61,8 +65,8 @@ See the [conformance guide](conformance.md) and
 Use licensed projects and minimal reproductions of reported behavior. Every fixture needs provenance, redistribution permission, secret review, and a statement of what it protects.
 
 The first real-world fixture is a generated PostgreSQL variant of
-`Strukturpiloten/typo3-container`. It exercises five interacting services, Podman-specific
-unknown fields, short-form SELinux mounts, dependencies, external networks, tag-plus-digest
+`Strukturpiloten/typo3-container`. It exercises five interacting services, typed Podman-specific
+user namespace values, short-form SELinux mounts, dependencies, external networks, tag-plus-digest
 images, caller-owned interpolation, sensitive-value redaction, reference validation, and stable
 canonical rendering. An independent, byte-identical Docker Awesome Compose fixture adds build
 definitions, health checks, dependency conditions, a top-level secret and grant, a named volume,
@@ -80,6 +84,13 @@ conformance tier. Phase 5 expands the exact Docker Compose, `podman-compose`, Do
 Podman matrices. Planned matrix entries make no support claim. A runtime observation may be
 promoted into a built-in rule only with an exact command, provider version, runtime version,
 platform assumptions, and reviewed retained result.
+
+The issue-derived regression tier adds authored fixtures for both valid and malformed
+`extra_hosts`, user/group interpolation, unlimited ulimits, health checks, dependency conditions,
+anonymous Linux container paths, and independently identified build/deploy fields. The licensed
+TYPO3 fixture demonstrates the Podman `keep-id` consumer. Compatibility tests detect
+`host-gateway` and Podman user-namespace modes and require official Podman 5.4 evidence while
+keeping unobserved provider pass-through classified as unknown.
 
 ## Regression rule
 

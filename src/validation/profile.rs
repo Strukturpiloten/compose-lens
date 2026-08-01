@@ -6,6 +6,8 @@ use crate::diagnostic::Severity;
 const SPEC_URL: &str = "https://github.com/compose-spec/compose-spec/blob/main/spec.md";
 const DOCKER_MERGE_URL: &str = "https://docs.docker.com/reference/compose-file/merge/";
 const DOCKER_SELINUX_ISSUE_URL: &str = "https://github.com/docker/compose/issues/13396";
+const DOCKER_HOST_GATEWAY_URL: &str = "https://docs.docker.com/compose/how-tos/networking/";
+const PODMAN_5_4_RUN_URL: &str = "https://docs.podman.io/en/v5.4.0/markdown/podman-run.1.html";
 const PROVIDER_CONFORMANCE_URL: &str =
     "https://github.com/Strukturpiloten/compose-lens/blob/main/docs/research/provider-config-conformance-2026-07-31.md";
 
@@ -36,6 +38,29 @@ const DOCKER_PODMAN_SELINUX_EVIDENCE: &[CompatibilityEvidence] = &[Compatibility
     "Docker Compose 2.40.3 with Podman 5.6.2 applied short-form relabeling but long-form relabeling was ineffective",
     Some(VersionRange::exact(ImplementationVersion::new(2, 40, 3))),
     Some(VersionRange::exact(ImplementationVersion::new(5, 6, 2))),
+)];
+const HOST_GATEWAY_EVIDENCE: &[CompatibilityEvidence] = &[
+    CompatibilityEvidence::new(
+        EvidenceKind::OfficialDocumentation,
+        DOCKER_HOST_GATEWAY_URL,
+        "Docker documents host-gateway as an implementation-provided host address",
+        None,
+        None,
+    ),
+    CompatibilityEvidence::new(
+        EvidenceKind::OfficialDocumentation,
+        PODMAN_5_4_RUN_URL,
+        "Podman 5.4 documents host-gateway for --add-host",
+        None,
+        Some(VersionRange::from_minimum(ImplementationVersion::new(5, 4, 0))),
+    ),
+];
+const PODMAN_USERNS_EVIDENCE: &[CompatibilityEvidence] = &[CompatibilityEvidence::new(
+    EvidenceKind::OfficialDocumentation,
+    PODMAN_5_4_RUN_URL,
+    "Podman 5.4 documents keep-id, auto, and nomap user namespace modes",
+    None,
+    Some(VersionRange::from_minimum(ImplementationVersion::new(5, 4, 0))),
 )];
 const DOCKER_2_24_3_PROVIDER_EVIDENCE: &[CompatibilityEvidence] = &[provider_evidence(
     "reviewed feature-specific Docker Compose 2.24.3 config observations",
@@ -76,6 +101,10 @@ pub enum CompatibilityFeature {
     ResetTag,
     /// Compose's `!override` merge tag.
     OverrideTag,
+    /// The runtime-resolved `host-gateway` extra-host token.
+    HostGatewayToken,
+    /// A Podman-specific `userns_mode` value such as `keep-id`.
+    PodmanUserNamespaceMode,
     /// A reserved `x-` extension field.
     ExtensionField,
 }
@@ -332,6 +361,20 @@ fn specification_rule(feature: CompatibilityFeature) -> CompatibilityRule {
             "x- fields use the Compose extension namespace",
             SPEC_EVIDENCE,
         ),
+        CompatibilityFeature::HostGatewayToken => rule(
+            feature,
+            CompatibilityClassification::ImplementationSpecific,
+            Some(Severity::Warning),
+            "host-gateway is resolved by container implementations rather than by Compose syntax alone",
+            HOST_GATEWAY_EVIDENCE,
+        ),
+        CompatibilityFeature::PodmanUserNamespaceMode => rule(
+            feature,
+            CompatibilityClassification::ImplementationSpecific,
+            Some(Severity::Warning),
+            "the Compose field is portable but keep-id, auto, and nomap values are Podman-specific",
+            PODMAN_USERNS_EVIDENCE,
+        ),
         CompatibilityFeature::ShortBindSelinuxRelabel
         | CompatibilityFeature::LongBindSelinuxRelabel
         | CompatibilityFeature::ResetTag
@@ -435,6 +478,20 @@ fn docker_rule(
             "x- fields use the Compose extension namespace",
             SPEC_EVIDENCE,
         ),
+        CompatibilityFeature::HostGatewayToken => rule(
+            feature,
+            CompatibilityClassification::ImplementationSpecific,
+            Some(Severity::Warning),
+            "host-gateway depends on provider pass-through and runtime network configuration",
+            HOST_GATEWAY_EVIDENCE,
+        ),
+        CompatibilityFeature::PodmanUserNamespaceMode => rule(
+            feature,
+            CompatibilityClassification::Unknown,
+            Some(Severity::Warning),
+            "Podman documents this runtime value, but no versioned Docker Compose pass-through observation is recorded",
+            PODMAN_USERNS_EVIDENCE,
+        ),
     }
 }
 
@@ -485,6 +542,20 @@ fn podman_compose_rule(version: ImplementationVersion, feature: CompatibilityFea
                 Some(Severity::Warning),
                 "provider config accepted the SELinux form, but no reviewed runtime-effect record establishes relabeling",
                 evidence,
+            ),
+            CompatibilityFeature::HostGatewayToken => rule(
+                feature,
+                CompatibilityClassification::Unknown,
+                Some(Severity::Warning),
+                "Podman 5.4 documents the runtime token, but provider pass-through has not been recorded",
+                HOST_GATEWAY_EVIDENCE,
+            ),
+            CompatibilityFeature::PodmanUserNamespaceMode => rule(
+                feature,
+                CompatibilityClassification::Unknown,
+                Some(Severity::Warning),
+                "Podman 5.4 documents the runtime mode, but provider pass-through has not been recorded",
+                PODMAN_USERNS_EVIDENCE,
             ),
             CompatibilityFeature::ExtensionField => unreachable!("extension fields returned above"),
         };

@@ -31,7 +31,7 @@ The first fixture is generated from [`Strukturpiloten/typo3-container`](https://
 It protects:
 
 - generation from a Go template into a five-service PostgreSQL deployment;
-- Podman-oriented `userns_mode` and `pull_policy` fields retained outside the current typed subset;
+- typed Podman-oriented `userns_mode` values plus retained `pull_policy` fields;
 - 15 short-form bind mounts whose `z` and `Z` semantics must not be normalized into long syntax;
 - service dependencies and internal/external networks;
 - image references combining a tag and SHA-256 digest;
@@ -55,7 +55,7 @@ It protects a distinct ecosystem shape:
 - a top-level secret with a service secret grant;
 - a named database volume;
 - a long-form read-only bind mount;
-- retained build fields outside the current typed service subset; and
+- independently identified build subfields with nested values retained losslessly; and
 - valid reference resolution plus deterministic canonical reparsing.
 
 Tests never read the referenced secret, enter either build context, contact a registry, or start a

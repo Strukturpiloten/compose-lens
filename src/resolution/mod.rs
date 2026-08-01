@@ -12,8 +12,8 @@ pub use paths::{
     HOME_DIRECTORY_REQUIRED, HostPathKind, PathContext, PathPurpose, PathResolution, ResolvedHostPath, resolve_paths,
 };
 pub use references::{
-    INACTIVE_SERVICE_REFERENCE, MISSING_REFERENCE, Reference, ReferenceKind, ReferenceStatus, ReferenceValidation,
-    validate_references,
+    DISABLED_DEPENDENCY_HEALTHCHECK, INACTIVE_SERVICE_REFERENCE, MISSING_REFERENCE, Reference, ReferenceKind,
+    ReferenceStatus, ReferenceValidation, UNVERIFIED_DEPENDENCY_HEALTHCHECK, validate_references,
 };
 
 use crate::diagnostic::{Diagnostic, DiagnosticCode, Severity};

@@ -3,7 +3,7 @@
 use super::{CompatibilityClassification, CompatibilityFeature, CompatibilityProfile, CompatibilityRule};
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::merge::{MergeOperation, MergedEntry, MergedProject, MergedValue, MergedValueKind};
-use crate::model::{Located, ShortVolumeMount};
+use crate::model::{Located, ShortExtraHost, ShortVolumeMount, UserNamespaceMode};
 use crate::profiles::ProfileSelection;
 use crate::resolution::{effective_span, selection_matches, service_in_scope};
 use crate::source::SourceSpan;
@@ -202,6 +202,35 @@ fn collect_service_features(service: &MergedValue, path: &[String], occurrences:
         }
     }
 
+    if let Some(userns_mode) = service.get("userns_mode") {
+        if let Some(scalar) = userns_mode.as_scalar() {
+            let source = effective_span(userns_mode);
+            let mode = UserNamespaceMode::parse(Located::new(scalar.value().to_owned(), source));
+            if mode.is_podman_specific() {
+                let mut mode_path = path.to_owned();
+                mode_path.push("userns_mode".to_owned());
+                occurrences.push(CompatibilityOccurrence {
+                    feature: CompatibilityFeature::PodmanUserNamespaceMode,
+                    path: mode_path,
+                    source,
+                    sensitive: scalar.is_sensitive(),
+                });
+            }
+        }
+    }
+
+    if let Some(extra_hosts) = service.get("extra_hosts") {
+        let mut hosts_path = path.to_owned();
+        hosts_path.push("extra_hosts".to_owned());
+        collect_host_gateway(extra_hosts, &hosts_path, occurrences);
+    }
+    if let Some(extra_hosts) = service.get("build").and_then(|build| build.get("extra_hosts")) {
+        let mut hosts_path = path.to_owned();
+        hosts_path.push("build".to_owned());
+        hosts_path.push("extra_hosts".to_owned());
+        collect_host_gateway(extra_hosts, &hosts_path, occurrences);
+    }
+
     let Some(volumes) = service.get("volumes").and_then(MergedValue::as_sequence) else {
         return;
     };
@@ -233,6 +262,44 @@ fn collect_service_features(service: &MergedValue, path: &[String], occurrences:
             source: effective_span(selinux),
             sensitive: selinux.is_sensitive(),
         });
+    }
+}
+
+fn collect_host_gateway(extra_hosts: &MergedValue, path: &[String], occurrences: &mut Vec<CompatibilityOccurrence>) {
+    if let Some(values) = extra_hosts.as_sequence() {
+        for (index, value) in values.iter().enumerate() {
+            let Some(scalar) = value.as_scalar() else {
+                continue;
+            };
+            let source = effective_span(value);
+            let entry = ShortExtraHost::parse(Located::new(scalar.value().to_owned(), source));
+            if entry.address().is_some_and(crate::model::HostAddress::is_host_gateway) {
+                let mut occurrence_path = path.to_owned();
+                occurrence_path.push(index.to_string());
+                occurrences.push(CompatibilityOccurrence {
+                    feature: CompatibilityFeature::HostGatewayToken,
+                    path: occurrence_path,
+                    source,
+                    sensitive: scalar.is_sensitive(),
+                });
+            }
+        }
+    } else if let Some(entries) = extra_hosts.as_mapping() {
+        for entry in entries {
+            let Some(address) = entry.value().as_scalar() else {
+                continue;
+            };
+            if address.value() == "host-gateway" {
+                let mut occurrence_path = path.to_owned();
+                occurrence_path.push(entry.key().to_owned());
+                occurrences.push(CompatibilityOccurrence {
+                    feature: CompatibilityFeature::HostGatewayToken,
+                    path: occurrence_path,
+                    source: effective_span(entry.value()),
+                    sensitive: address.is_sensitive(),
+                });
+            }
+        }
     }
 }
 

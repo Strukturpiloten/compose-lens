@@ -21,6 +21,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Post-merge processing evidence](research/compose-post-merge-processing.md) — profiles, paths, references, and defaults
 - [Compatibility-profile evidence](research/compose-compatibility-profiles.md) — providers, runtimes, versions, and initial rules
 - [Provider-config conformance results](research/provider-config-conformance-2026-07-31.md) — 48 exact reviewed observations
+- [Podlet and compose_spec_rs regression review](research/podlet-compose-spec-rs-regressions-2026-08-01.md) — upstream user cases, existing coverage, and post-0.1 candidates
 - [Canonical-rendering evidence](research/compose-canonical-rendering.md) — fixed output, explicit processing boundary, recovery, and redaction
 - [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
 - [API stability policy](api-stability.md) — pre-1.0 compatibility and public dependency boundaries

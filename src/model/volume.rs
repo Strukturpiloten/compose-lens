@@ -21,6 +21,57 @@ pub enum SelinuxRelabel {
     Private,
 }
 
+/// A container-side mount path classified independently of the host operating system.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContainerPath {
+    raw: String,
+    kind: ContainerPathKind,
+}
+
+impl ContainerPath {
+    fn parse(raw: String) -> Self {
+        let kind = if raw.starts_with('/') {
+            ContainerPathKind::UnixAbsolute
+        } else if is_windows_drive_absolute(&raw) {
+            ContainerPathKind::WindowsDriveAbsolute
+        } else if raw.starts_with(r"\\") || raw.starts_with("//") {
+            ContainerPathKind::WindowsUnc
+        } else if raw.contains('$') {
+            ContainerPathKind::Deferred
+        } else {
+            ContainerPathKind::Relative
+        };
+        Self { raw, kind }
+    }
+
+    /// Returns the target path without changing separators or spelling.
+    #[must_use]
+    pub fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    /// Returns the container-platform lexical path kind.
+    #[must_use]
+    pub const fn kind(&self) -> ContainerPathKind {
+        self.kind
+    }
+}
+
+/// The lexical family of a container-side path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ContainerPathKind {
+    /// A `/`-prefixed Unix container path.
+    UnixAbsolute,
+    /// A drive-letter Windows container path.
+    WindowsDriveAbsolute,
+    /// A Windows UNC container path.
+    WindowsUnc,
+    /// A relative path retained for later validation.
+    Relative,
+    /// A path whose shape depends on interpolation.
+    Deferred,
+}
+
 /// A long-syntax service-volume mount type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MountType {
@@ -64,6 +115,7 @@ pub struct ShortVolumeMount {
     raw: Located<String>,
     source: Option<String>,
     target: Option<String>,
+    target_path: Option<ContainerPath>,
     options: Vec<String>,
 }
 
@@ -73,6 +125,7 @@ impl ShortVolumeMount {
         Self {
             raw,
             source,
+            target_path: target.as_ref().map(|value| ContainerPath::parse(value.clone())),
             target,
             options,
         }
@@ -94,6 +147,15 @@ impl ShortVolumeMount {
     #[must_use]
     pub fn target(&self) -> Option<&str> {
         self.target.as_deref()
+    }
+
+    /// Returns the target classified using container-platform lexical rules.
+    ///
+    /// This does not consult the host operating system, so `/project/node_modules` remains an
+    /// anonymous Unix-container target even when `ComposeLens` runs on Windows.
+    #[must_use]
+    pub const fn target_path(&self) -> Option<&ContainerPath> {
+        self.target_path.as_ref()
     }
 
     /// Returns access-mode tokens in authored order.
@@ -203,6 +265,7 @@ pub struct LongVolumeMount {
     mount_type: Option<Located<MountType>>,
     source: Option<Located<String>>,
     target: Option<Located<String>>,
+    target_path: Option<Located<ContainerPath>>,
     read_only: Option<Located<BooleanValue>>,
     bind: Option<BindOptions>,
     extension_fields: Vec<FieldReference>,
@@ -216,6 +279,7 @@ impl LongVolumeMount {
             mount_type: None,
             source: None,
             target: None,
+            target_path: None,
             read_only: None,
             bind: None,
             extension_fields: Vec::new(),
@@ -232,6 +296,7 @@ impl LongVolumeMount {
     }
 
     pub(super) fn set_target(&mut self, value: Located<String>) {
+        self.target_path = Some(Located::new(ContainerPath::parse(value.value.clone()), value.span));
         self.target = Some(value);
     }
 
@@ -273,6 +338,12 @@ impl LongVolumeMount {
     #[must_use]
     pub const fn target(&self) -> Option<&Located<String>> {
         self.target.as_ref()
+    }
+
+    /// Returns the target classified using container-platform lexical rules.
+    #[must_use]
+    pub const fn target_path(&self) -> Option<&Located<ContainerPath>> {
+        self.target_path.as_ref()
     }
 
     /// Returns the explicitly authored read-only setting.
@@ -372,9 +443,17 @@ fn is_drive_separator(value: &str, field_start: usize, colon_index: usize) -> bo
     field.len() == 1 && field.as_bytes()[0].is_ascii_alphabetic() && matches!(next, Some('/' | '\\'))
 }
 
+fn is_windows_drive_absolute(value: &str) -> bool {
+    value.as_bytes().get(1) == Some(&b':')
+        && value.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+        && matches!(value.as_bytes().get(2), Some(b'/' | b'\\'))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::split_short_volume;
+    use super::{ContainerPathKind, ShortVolumeMount, split_short_volume};
+    use crate::model::Located;
+    use crate::source::{SourceId, SourceSpan};
 
     #[test]
     fn conservatively_splits_linux_and_windows_short_mounts() {
@@ -398,5 +477,18 @@ mod tests {
             split_short_volume("cache:/cache"),
             (Some("cache".to_owned()), Some("/cache".to_owned()), Vec::new())
         );
+    }
+
+    #[test]
+    fn classifies_anonymous_targets_without_host_path_apis() -> Result<(), &'static str> {
+        let raw = "/project/node_modules";
+        let span = SourceSpan::new(SourceId::new(1), 0, raw.len()).ok_or("valid test span expected")?;
+        let mount = ShortVolumeMount::new(Located::new(raw.to_owned(), span));
+        assert_eq!(mount.source(), None);
+        assert_eq!(
+            mount.target_path().map(super::ContainerPath::kind),
+            Some(ContainerPathKind::UnixAbsolute)
+        );
+        Ok(())
     }
 }

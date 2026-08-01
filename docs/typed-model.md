@@ -33,7 +33,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `image`, `command`, `environment`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `image`, `build`, `command`, `environment`, `extra_hosts`, `user`, `userns_mode`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -51,12 +51,45 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 - ports: scalar short syntax or mapping long syntax;
 - service volumes: scalar short syntax or mapping long syntax;
 - service networks: name sequence or options mapping;
-- service config and secret grants: name short syntax or mapping long syntax; and
+- service config and secret grants: name short syntax or mapping long syntax;
+- extra hosts: hostname/address sequence or mapping, retaining delimiters and IPv6 brackets;
+- dependencies: service-name sequence or condition/options mapping;
+- health-check tests: shell-command scalar or tokenized list;
+- ulimits: one scalar or separate soft/hard values;
+- build: scalar context or a mapping of independently identified specification fields;
 - labels: list or mapping.
 
 The raw short volume and port strings remain authoritative. Conservative helper parsing must not
 turn platform-dependent path or address grammars into false certainty. ADR 0003 defines the full
 [syntax-form policy](decisions/0003-preserve-compose-syntax-forms.md).
+
+Container-side mount targets additionally expose a lexical `ContainerPath` classification for Unix
+absolute, Windows drive-letter, Windows UNC, relative, and deferred paths. This classification is
+independent of the machine running ComposeLens. Host bind sources continue through the separate
+host-path resolver with explicit origins and home context.
+
+## Issue-derived model expansion
+
+Raw `user` values are authoritative. User/group helpers recognize names, numeric IDs, empty
+components, and deferred interpolation without resolving accounts. The split ignores colons inside
+`${VAR:-default}`, avoiding a common false decomposition. `ulimits` recognizes authored `-1` as an
+explicit unlimited value in both scalar and soft/hard forms.
+
+`service_healthy`, `service_started`, and `service_completed_successfully` dependency conditions
+are native types. `ComposeDocument::validate_dependencies` checks one document; post-merge
+`validate_references` checks the selected project. A missing Compose health check produces a
+warning because the image may contain health metadata. An explicitly disabled health check is an
+error for a required `service_healthy` edge. `required: false` downgrades unavailable dependency
+diagnostics to warnings without hiding the reference.
+
+Build and deploy definitions expose every current top-level subfield as its own stable kind and
+source reference. This is intentionally field-level evaluation, not a claim that every nested
+value is already semantically typed or supported by every converter.
+
+Podman `keep-id`, `auto`, and `nomap` user-namespace values and the `host-gateway` token have native
+classifications. Their compatibility findings cite official implementation documentation and do
+not promote untested provider pass-through to supported. See
+[ADR 0014](decisions/0014-issue-derived-native-model-expansion.md).
 
 ## Deferred values
 
@@ -84,7 +117,8 @@ Invalid collection shapes, invalid short/long alternatives, incomplete long form
 fields, and invalid typed scalars produce stable diagnostic codes and source labels. Extraction
 continues wherever partial data remains useful.
 
-The authored `typed-model` fixtures cover valid Phase 2 forms, invalid recoverable forms, combined
+The authored `typed-model` fixtures cover valid Phase 2 forms, issue-derived post-0.1 forms,
+invalid recoverable forms, combined
 image tags and digests, deferred expressions, empty values, extension fields, unknown fields, and
 the short/long service-volume SELinux asymmetry.
 
@@ -96,3 +130,6 @@ Primary format references:
 - [Docker Compose volumes reference](https://docs.docker.com/reference/compose-file/volumes/)
 - [Docker Compose configs reference](https://docs.docker.com/reference/compose-file/configs/)
 - [Docker Compose secrets reference](https://docs.docker.com/reference/compose-file/secrets/)
+- [Docker Compose build reference](https://docs.docker.com/reference/compose-file/build/)
+- [Docker Compose deploy reference](https://docs.docker.com/reference/compose-file/deploy/)
+- [Podman 5.4 run reference](https://docs.podman.io/en/v5.4.0/markdown/podman-run.1.html)

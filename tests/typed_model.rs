@@ -1,11 +1,15 @@
 //! Public typed-model behavior and representation fidelity.
 
 use compose_lens::model::{
-    BooleanValue, Command, ComposeDocument, ComposeScalar, ConfigGrant, EXPECTED_BOOLEAN, EXPECTED_FIELD_FORM,
-    EXPECTED_MAPPING, EXPECTED_SEQUENCE, Environment, GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE, Labels, Located,
+    BooleanValue, Build, BuildFieldKind, Command, ComposeDocument, ComposeScalar, ConfigGrant, ContainerPathKind,
+    DEPENDENCY_HEALTHCHECK_UNVERIFIED, DEPENDENCY_INVALID_CONDITION, DEPENDENCY_MISSING_HEALTHCHECK,
+    DEPENDENCY_MISSING_SERVICE, DependencyCondition, DeployFieldKind, EXPECTED_BOOLEAN, EXPECTED_FIELD_FORM,
+    EXPECTED_MAPPING, EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Environment, ExtraHostSeparator, ExtraHosts,
+    GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE, HEALTHCHECK_INVALID_DURATION, HEALTHCHECK_INVALID_RETRIES,
+    HEALTHCHECK_INVALID_TEST, HealthcheckTestKind, HostAddressKind, IdentityComponent, Labels, LimitValue, Located,
     MountType, PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, SecretGrant, SelinuxRelabel,
-    ServiceNetworks, VOLUME_EXPECTED_FORM, VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE,
-    VolumeMount, VolumeSyntax,
+    ServiceNetworks, ULIMIT_INVALID_VALUE, UlimitValue, UserNamespaceModeKind, VOLUME_EXPECTED_FORM,
+    VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE, VolumeMount, VolumeSyntax,
 };
 use compose_lens::source::SourceId;
 use compose_lens::syntax::SyntaxDocument;
@@ -14,6 +18,8 @@ const VOLUME_FORMS: &str = include_str!("../fixtures/typed-model/volume-syntax-f
 const INVALID_VOLUME_FORMS: &str = include_str!("../fixtures/typed-model/invalid-volume-forms/compose.yaml");
 const PHASE_TWO_FORMS: &str = include_str!("../fixtures/typed-model/phase-two-field-forms/compose.yaml");
 const INVALID_PHASE_TWO_FORMS: &str = include_str!("../fixtures/typed-model/invalid-phase-two-forms/compose.yaml");
+const POST_01_FORMS: &str = include_str!("../fixtures/typed-model/post-01-issue-backlog/compose.yaml");
+const POST_01_INVALID: &str = include_str!("../fixtures/typed-model/post-01-invalid/compose.yaml");
 const TRAILING_EMPTY_VALUE: &str = include_str!("../fixtures/roundtrip/canonical-merged/compose.yaml");
 
 #[test]
@@ -431,5 +437,180 @@ fn invalid_phase_two_forms_return_partial_data_and_stable_diagnostics() -> Resul
                 label.span().source_id() == SourceId::new(53) && label.span().end() <= INVALID_PHASE_TWO_FORMS.len()
             }))
     );
+    Ok(())
+}
+
+#[test]
+fn types_issue_derived_runtime_values_without_erasing_authored_forms() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(59), POST_01_FORMS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+    let app = document.service("app").ok_or("app service expected")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+
+    let Some(ExtraHosts::Short { entries, .. }) = app.extra_hosts() else {
+        return Err("short extra_hosts expected".into());
+    };
+    assert_eq!(entries.len(), 5);
+    assert_eq!(entries[1].separator(), Some(ExtraHostSeparator::Colon));
+    assert_eq!(
+        entries[2].address().map(compose_lens::model::HostAddress::raw),
+        Some("::1")
+    );
+    assert_eq!(
+        entries[3].address().map(compose_lens::model::HostAddress::kind),
+        Some(HostAddressKind::Ipv6 { bracketed: true })
+    );
+    assert!(app.extra_hosts().is_some_and(ExtraHosts::contains_host_gateway));
+
+    let user = app.user().ok_or("typed user expected")?;
+    assert_eq!(user.raw().value(), "${UID:-1000}:${GID:-1000}");
+    assert!(matches!(user.user(), IdentityComponent::Expression(value) if value == "${UID:-1000}"));
+    assert!(matches!(user.group(), Some(IdentityComponent::Expression(value)) if value == "${GID:-1000}"));
+    assert_eq!(
+        app.userns_mode().map(compose_lens::model::UserNamespaceMode::kind),
+        Some(UserNamespaceModeKind::PodmanKeepId)
+    );
+    let numeric = document
+        .service("numeric-user")
+        .and_then(compose_lens::model::Service::user)
+        .ok_or("numeric user expected")?;
+    assert!(matches!(numeric.user(), IdentityComponent::Numeric(value) if value == "1000"));
+    assert!(matches!(numeric.group(), Some(IdentityComponent::Numeric(value)) if value == "1001"));
+    let named = document
+        .service("named-user")
+        .and_then(compose_lens::model::Service::user)
+        .ok_or("named user expected")?;
+    assert!(matches!(named.user(), IdentityComponent::Name(value) if value == "www-data"));
+    assert!(matches!(named.group(), Some(IdentityComponent::Name(value)) if value == "staff"));
+
+    let ulimits = app.ulimits().ok_or("typed ulimits expected")?;
+    assert_eq!(ulimits.entries().len(), 3);
+    let nofile = ulimits
+        .entries()
+        .iter()
+        .find(|limit| limit.name().value() == "nofile")
+        .ok_or("nofile expected")?;
+    let UlimitValue::Range(range) = nofile.value() else {
+        return Err("nofile range expected".into());
+    };
+    assert_eq!(range.soft().map(Located::value), Some(&LimitValue::Unlimited));
+    assert_eq!(
+        range.hard().map(Located::value),
+        Some(&LimitValue::Number("1048576".to_owned()))
+    );
+
+    let depends_on = app.depends_on().ok_or("typed dependencies expected")?;
+    let compose_lens::model::DependsOn::Long { services, .. } = depends_on else {
+        return Err("long dependencies expected".into());
+    };
+    assert!(services.iter().any(|dependency| {
+        dependency.service().value() == "database"
+            && matches!(
+                dependency.condition().map(Located::value),
+                Some(DependencyCondition::ServiceHealthy)
+            )
+    }));
+    assert_eq!(
+        app.healthcheck()
+            .and_then(compose_lens::model::Healthcheck::test)
+            .and_then(compose_lens::model::HealthcheckTest::kind),
+        Some(HealthcheckTestKind::CmdShell)
+    );
+
+    let VolumeMount::Short(anonymous) = &app.volumes()[0] else {
+        return Err("anonymous short volume expected".into());
+    };
+    assert_eq!(anonymous.source(), None);
+    assert_eq!(
+        anonymous.target_path().map(compose_lens::model::ContainerPath::kind),
+        Some(ContainerPathKind::UnixAbsolute)
+    );
+
+    let diagnostics = document.validate_dependencies();
+    for code in [
+        DEPENDENCY_MISSING_SERVICE,
+        DEPENDENCY_MISSING_HEALTHCHECK,
+        DEPENDENCY_HEALTHCHECK_UNVERIFIED,
+    ] {
+        assert!(diagnostics.iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    assert!(diagnostics.iter().any(|diagnostic| {
+        diagnostic.code() == DEPENDENCY_MISSING_SERVICE
+            && diagnostic.severity() == compose_lens::diagnostic::Severity::Warning
+    }));
+    Ok(())
+}
+
+#[test]
+fn identifies_build_and_deploy_subfields_independently() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(60), POST_01_FORMS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let app = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .ok_or("app service expected")?;
+
+    let Some(Build::Definition(build)) = app.build() else {
+        return Err("build definition expected".into());
+    };
+    for kind in [
+        BuildFieldKind::Context,
+        BuildFieldKind::Dockerfile,
+        BuildFieldKind::Args,
+        BuildFieldKind::ExtraHosts,
+        BuildFieldKind::Entitlements,
+        BuildFieldKind::Target,
+    ] {
+        assert!(build.field(kind).is_some(), "missing build field {kind:?}");
+    }
+    assert_eq!(build.extension_fields().len(), 1);
+    assert_eq!(build.unknown_fields().len(), 1);
+
+    let deploy = app.deploy().ok_or("deploy definition expected")?;
+    for kind in [
+        DeployFieldKind::Mode,
+        DeployFieldKind::Replicas,
+        DeployFieldKind::EndpointMode,
+        DeployFieldKind::Labels,
+        DeployFieldKind::Placement,
+        DeployFieldKind::Resources,
+        DeployFieldKind::RestartPolicy,
+        DeployFieldKind::UpdateConfig,
+        DeployFieldKind::RollbackConfig,
+    ] {
+        assert!(deploy.field(kind).is_some(), "missing deploy field {kind:?}");
+    }
+    assert_eq!(deploy.extension_fields().len(), 1);
+    assert_eq!(deploy.unknown_fields().len(), 1);
+    Ok(())
+}
+
+#[test]
+fn malformed_issue_derived_fields_return_partial_data() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(61), POST_01_INVALID)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let app = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .ok_or("app service expected")?;
+
+    assert!(!parsed.is_valid());
+    for code in [
+        EXTRA_HOST_INVALID_ENTRY,
+        ULIMIT_INVALID_VALUE,
+        HEALTHCHECK_INVALID_TEST,
+        HEALTHCHECK_INVALID_DURATION,
+        HEALTHCHECK_INVALID_RETRIES,
+        DEPENDENCY_INVALID_CONDITION,
+        EXPECTED_FIELD_FORM,
+        EXPECTED_MAPPING,
+    ] {
+        assert!(parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    assert!(matches!(app.extra_hosts(), Some(ExtraHosts::Short { entries, .. }) if entries.len() == 2));
+    assert_eq!(app.ulimits().map(|limits| limits.entries().len()), Some(2));
     Ok(())
 }

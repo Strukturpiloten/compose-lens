@@ -1,0 +1,30 @@
+schema = 1
+id = "post-01-invalid"
+suite = "typed-model"
+description = "Exercises recoverable diagnostics for malformed issue-derived field forms."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation, external files, or runtime are used."
+
+[expectations]
+summary = "Malformed new fields emit stable diagnostics while retaining valid sibling entries."
+
+[extensions.typed-model]
+expected_diagnostics = [
+  "compose.extra-hosts.invalid-entry",
+  "compose.ulimits.invalid-value",
+  "compose.healthcheck.invalid-test",
+  "compose.healthcheck.invalid-duration",
+  "compose.healthcheck.invalid-retries",
+  "compose.dependencies.invalid-condition",
+  "compose.model.expected-field-form",
+  "compose.model.expected-mapping",
+]

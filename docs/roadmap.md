@@ -86,3 +86,22 @@ These credentialed external actions are deliberately not represented as implemen
 - [ ] Create and push the `v0.1.0` tag and corresponding GitHub release.
 
 The exact operational checklist is in the [0.1.0 release-candidate notes](releases/0.1.0.md).
+
+## Post-0.1 issue-derived backlog
+
+The [Podlet and `compose_spec_rs` regression review](research/podlet-compose-spec-rs-regressions-2026-08-01.md)
+confirms existing coverage and records additional native Compose candidates without reopening the
+completed first-conversion boundary.
+
+- [x] Type `extra_hosts`, preserving short/long forms, IPv6 spelling, and implementation tokens.
+- [x] Type raw-preserving user/group values and unlimited `ulimits`.
+- [x] Complete native dependency-condition and health-check types and validation.
+- [x] Separate host-platform paths from container-platform anonymous-volume targets.
+- [x] Add typed Podman/Compose extensions only with a demonstrated consumer and compatibility evidence.
+- [x] Evaluate build and deploy subfields individually instead of treating either section as one support flag.
+
+Completed by [ADR 0014](decisions/0014-issue-derived-native-model-expansion.md), the authored
+`post-01-issue-backlog` and `post-01-invalid` fixtures, the licensed TYPO3 consumer regression,
+and typed, post-merge, compatibility, and platform-path tests. Provider pass-through for Podman's
+`userns_mode` values and `host-gateway` deliberately remains `unknown` until an exact conformance
+record exists; that evidence gap does not return these values to the untyped model.

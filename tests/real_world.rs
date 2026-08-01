@@ -37,12 +37,7 @@ fn preserves_and_processes_docker_awesome_compose() -> Result<(), Box<dyn std::e
 
     let backend = document.service("backend").ok_or("backend service expected")?;
     assert_eq!(backend.secrets().len(), 1);
-    assert!(
-        backend
-            .unknown_fields()
-            .iter()
-            .any(|field| field.name().value() == "build")
-    );
+    assert!(backend.build().is_some());
     let database = document.service("db").ok_or("database service expected")?;
     assert_eq!(database.secrets().len(), 1);
     assert_eq!(database.volumes().len(), 1);
@@ -134,9 +129,8 @@ fn preserves_and_types_the_generated_typo3_project() -> Result<(), Box<dyn std::
     );
     assert!(document.services().iter().all(|service| {
         service
-            .unknown_fields()
-            .iter()
-            .any(|field| field.name().value() == "userns_mode")
+            .userns_mode()
+            .is_some_and(|mode| mode.kind() == compose_lens::model::UserNamespaceModeKind::PodmanKeepId)
     }));
     Ok(())
 }
@@ -205,6 +199,14 @@ fn processes_and_renders_the_sanitized_typo3_project() -> Result<(), Box<dyn std
             .filter(|finding| finding.occurrence().feature() == CompatibilityFeature::ShortBindSelinuxRelabel)
             .count(),
         15
+    );
+    assert_eq!(
+        compatibility
+            .findings()
+            .iter()
+            .filter(|finding| finding.occurrence().feature() == CompatibilityFeature::PodmanUserNamespaceMode)
+            .count(),
+        5
     );
 
     let rendered = render_canonical(project, Some(&selection));

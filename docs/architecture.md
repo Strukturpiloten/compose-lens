@@ -35,7 +35,14 @@ Typed nodes retain source references and unknown fields. Parsing into typed data
 
 Short and long syntax remain distinct field-specific variants. They are not normalized merely because they describe similar concepts: defaults, available options, and runtime behavior can differ. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) defines the representation-fidelity rule.
 
-The completed Phase 2 boundary types images, commands, environment, ports, volumes, service networks, profiles, config and secret grants, and the corresponding top-level network, volume, config, and secret definitions. Deferred interpolation expressions, empty values, extensions, and unknown fields remain distinguishable. The exact boundary and parse contract are documented in the [Phase 2 typed model](typed-model.md).
+The completed native boundary types images, build field identities, commands, environment, extra
+hosts, raw user and user-namespace values, ulimits, health checks, dependencies, deploy field
+identities, ports, volumes, service networks, profiles, config and secret grants, and the
+corresponding top-level network, volume, config, and secret definitions. Deferred interpolation
+expressions, empty values, extensions, and unknown fields remain distinguishable. Container paths
+are classified independently of host paths. The exact boundary and parse contract are documented
+in the [typed model](typed-model.md) and
+[ADR 0014](decisions/0014-issue-derived-native-model-expansion.md).
 
 ### Project loader
 
@@ -64,7 +71,8 @@ ADR 0006 records the [merge-view decision](decisions/0006-provenance-preserving-
 Post-merge processing remains a set of independent views. Profile selection records active and
 inactive services without deleting either. Path resolution uses retained origins plus explicit
 caller context and performs no file access. Reference validation reports found, missing, and
-profile-inactive targets. Default resolution asks a caller-owned policy and records decisions
+profile-inactive targets plus healthy-dependency evidence gaps and contradictions. Default
+resolution asks a caller-owned policy and records decisions
 without rewriting omissions. A selection carries an exact merged-project snapshot so it cannot be
 accidentally applied to another project that reuses source identifiers. ADR 0007 records these
 [post-merge boundaries](decisions/0007-explicit-post-merge-views.md).

@@ -23,7 +23,7 @@ compose-lens/
 │   ├── lib.rs
 │   ├── source/             # source identifiers, spans, and line/column lookup
 │   ├── syntax/             # loss-aware YAML document and parser diagnostics
-│   ├── model/              # Phase 2 typed document, field variants, resources, and values
+│   ├── model/              # native document, form-specific fields, resources, paths, and values
 │   ├── loader/             # ordered caller inputs, origins, diagnostics, and project overlays
 │   ├── merge/              # field-aware semantic composition and source provenance
 │   ├── interpolation/      # explicit providers, operators, provenance, and redacted diagnostics
@@ -81,7 +81,7 @@ compose-lens/
 | Overlay semantics                      | `merge`         |
 | Variable expressions and substitution  | `interpolation` |
 | Compose service profiles               | `profiles`      |
-| Paths, references, and defaults         | `resolution`    |
+| Paths, references, and defaults        | `resolution`    |
 | Implementation support and correctness | `validation`    |
 | YAML output                            | `render`        |
 | Stable diagnostic codes                | `diagnostic`    |

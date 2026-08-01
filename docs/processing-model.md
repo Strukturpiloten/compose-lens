@@ -82,9 +82,12 @@ service mounts are not part of the selected view, while top-level config and sec
 remain project resources.
 
 `validate_references` inspects active services and distinguishes found, missing, and
-profile-inactive targets. The initial boundary covers networks, named volumes, configs, secrets,
-`depends_on`, service namespace modes, links, and local `extends`. Diagnostics never delete or
-rewrite the authored reference.
+profile-inactive targets. The boundary covers networks, named volumes, configs, secrets,
+`depends_on`, service namespace modes, links, and local `extends`. A `service_healthy` dependency
+with no Compose health check produces a warning because image metadata is unavailable; an
+explicitly disabled health check produces an error. Diagnostics never delete or rewrite the
+authored reference. Long dependencies with `required: false` remain visible but downgrade missing,
+inactive, or disabled-health failures to warnings.
 
 Every resolver rejects a `ProfileSelection` created from a different merged project, even when the
 caller reused the same source identifiers.

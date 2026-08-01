@@ -1,23 +1,39 @@
 //! Source-aware native Compose document types.
 
 mod command;
+mod dependency;
 mod environment;
+mod host;
+mod identity;
 mod image;
 mod network;
 mod port;
 mod resource;
+mod sections;
+mod ulimit;
 mod value;
 mod volume;
 
 pub use command::Command;
+pub use dependency::{
+    DependencyCondition, DependsOn, Healthcheck, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
+    HealthcheckTestKind, ServiceDependency,
+};
 pub use environment::{Environment, EnvironmentListEntry, EnvironmentMapEntry};
+pub use host::{ExtraHostSeparator, ExtraHosts, HostAddress, HostAddressKind, LongExtraHost, ShortExtraHost};
+pub use identity::{IdentityComponent, UserNamespaceMode, UserNamespaceModeKind, UserSpec};
 pub use image::{ImageDigest, ImageReference};
 pub use network::{Ipam, IpamConfig, NetworkDefinition, ServiceNetwork, ServiceNetworks};
 pub use port::{LongPort, Port, ShortPort};
 pub use resource::{ConfigDefinition, ConfigGrant, LongGrant, SecretDefinition, SecretGrant, VolumeDefinition};
+pub use sections::{
+    Build, BuildDefinition, BuildField, BuildFieldKind, DeployDefinition, DeployField, DeployFieldKind,
+};
+pub use ulimit::{LimitValue, Ulimit, UlimitRange, UlimitValue, Ulimits};
 pub use value::{BooleanValue, ComposeScalar, KeyValueEntry, Labels};
 pub use volume::{
-    BindOptions, LongVolumeMount, MountType, SelinuxRelabel, ShortVolumeMount, VolumeMount, VolumeSyntax,
+    BindOptions, ContainerPath, ContainerPathKind, LongVolumeMount, MountType, SelinuxRelabel, ShortVolumeMount,
+    VolumeMount, VolumeSyntax,
 };
 
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
@@ -76,6 +92,35 @@ pub const VOLUME_MISSING_TARGET: DiagnosticCode = DiagnosticCode::new("compose.v
 
 /// A long-syntax bind mount has an invalid `SELinux` value.
 pub const VOLUME_INVALID_SELINUX: DiagnosticCode = DiagnosticCode::new("compose.volume.bind.invalid-selinux");
+
+/// A short `extra_hosts` entry does not contain a hostname/address separator.
+pub const EXTRA_HOST_INVALID_ENTRY: DiagnosticCode = DiagnosticCode::new("compose.extra-hosts.invalid-entry");
+
+/// A service limit is neither unlimited, a non-negative integer, nor deferred.
+pub const ULIMIT_INVALID_VALUE: DiagnosticCode = DiagnosticCode::new("compose.ulimits.invalid-value");
+
+/// A health-check list has no valid command-mode token.
+pub const HEALTHCHECK_INVALID_TEST: DiagnosticCode = DiagnosticCode::new("compose.healthcheck.invalid-test");
+
+/// A health-check duration does not follow Compose duration syntax.
+pub const HEALTHCHECK_INVALID_DURATION: DiagnosticCode = DiagnosticCode::new("compose.healthcheck.invalid-duration");
+
+/// A health-check retry count is not a non-negative integer or deferred expression.
+pub const HEALTHCHECK_INVALID_RETRIES: DiagnosticCode = DiagnosticCode::new("compose.healthcheck.invalid-retries");
+
+/// A long dependency uses an unrecognized condition.
+pub const DEPENDENCY_INVALID_CONDITION: DiagnosticCode = DiagnosticCode::new("compose.dependencies.invalid-condition");
+
+/// A typed dependency names a service missing from the same document.
+pub const DEPENDENCY_MISSING_SERVICE: DiagnosticCode = DiagnosticCode::new("compose.dependencies.missing-service");
+
+/// A `service_healthy` dependency has no enabled health check.
+pub const DEPENDENCY_MISSING_HEALTHCHECK: DiagnosticCode =
+    DiagnosticCode::new("compose.dependencies.missing-healthcheck");
+
+/// A `service_healthy` dependency may rely on health metadata from its image.
+pub const DEPENDENCY_HEALTHCHECK_UNVERIFIED: DiagnosticCode =
+    DiagnosticCode::new("compose.dependencies.healthcheck-unverified");
 
 /// A typed value and the exact source span from which it was read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,7 +184,7 @@ impl FieldReference {
     }
 }
 
-/// A typed Compose service in the initial Phase 2 subset.
+/// A source-aware typed Compose service.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Service {
     name: Located<String>,
@@ -147,6 +192,14 @@ pub struct Service {
     image: Option<Located<ImageReference>>,
     command: Option<Command>,
     environment: Option<Environment>,
+    extra_hosts: Option<ExtraHosts>,
+    user: Option<UserSpec>,
+    userns_mode: Option<UserNamespaceMode>,
+    ulimits: Option<Ulimits>,
+    depends_on: Option<DependsOn>,
+    healthcheck: Option<Healthcheck>,
+    build: Option<Build>,
+    deploy: Option<DeployDefinition>,
     ports: Vec<Port>,
     volumes: Vec<VolumeMount>,
     networks: Option<ServiceNetworks>,
@@ -186,6 +239,54 @@ impl Service {
     #[must_use]
     pub const fn environment(&self) -> Option<&Environment> {
         self.environment.as_ref()
+    }
+
+    /// Returns additional host mappings with short and long forms retained.
+    #[must_use]
+    pub const fn extra_hosts(&self) -> Option<&ExtraHosts> {
+        self.extra_hosts.as_ref()
+    }
+
+    /// Returns the raw-preserving container user/group value.
+    #[must_use]
+    pub const fn user(&self) -> Option<&UserSpec> {
+        self.user.as_ref()
+    }
+
+    /// Returns the raw-preserving user-namespace mode.
+    #[must_use]
+    pub const fn userns_mode(&self) -> Option<&UserNamespaceMode> {
+        self.userns_mode.as_ref()
+    }
+
+    /// Returns explicitly authored service resource limits.
+    #[must_use]
+    pub const fn ulimits(&self) -> Option<&Ulimits> {
+        self.ulimits.as_ref()
+    }
+
+    /// Returns service dependencies with short and long forms retained.
+    #[must_use]
+    pub const fn depends_on(&self) -> Option<&DependsOn> {
+        self.depends_on.as_ref()
+    }
+
+    /// Returns the service health-check definition.
+    #[must_use]
+    pub const fn healthcheck(&self) -> Option<&Healthcheck> {
+        self.healthcheck.as_ref()
+    }
+
+    /// Returns the build declaration with short and long forms retained.
+    #[must_use]
+    pub const fn build(&self) -> Option<&Build> {
+        self.build.as_ref()
+    }
+
+    /// Returns independently classified deploy subfields.
+    #[must_use]
+    pub const fn deploy(&self) -> Option<&DeployDefinition> {
+        self.deploy.as_ref()
     }
 
     /// Returns published ports in authored order.
@@ -237,7 +338,7 @@ impl Service {
     }
 }
 
-/// The initial source-aware native Compose document.
+/// A source-aware native Compose document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComposeDocument {
     source_id: SourceId,
@@ -291,6 +392,61 @@ impl ComposeDocument {
     #[must_use]
     pub fn service(&self, name: &str) -> Option<&Service> {
         self.services.iter().find(|service| service.name.value == name)
+    }
+
+    /// Validates dependency targets and `service_healthy` health-check requirements in this document.
+    ///
+    /// Multi-file callers should validate the merged project view through
+    /// [`crate::resolution::validate_references`] instead.
+    #[must_use]
+    pub fn validate_dependencies(&self) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+        for service in &self.services {
+            let Some(depends_on) = service.depends_on() else {
+                continue;
+            };
+            match depends_on {
+                DependsOn::Short { services, .. } => {
+                    for target in services {
+                        if self.service(target.value()).is_none() {
+                            diagnostics.push(missing_dependency_diagnostic(target.span(), false, true));
+                        }
+                    }
+                }
+                DependsOn::Long { services, .. } => {
+                    for dependency in services {
+                        let required = !matches!(
+                            dependency.required().map(Located::value),
+                            Some(BooleanValue::Literal(false))
+                        );
+                        let Some(target) = self.service(dependency.service().value()) else {
+                            diagnostics.push(missing_dependency_diagnostic(
+                                dependency.service().span(),
+                                false,
+                                required,
+                            ));
+                            continue;
+                        };
+                        let needs_healthcheck = matches!(
+                            dependency.condition().map(Located::value),
+                            Some(DependencyCondition::ServiceHealthy)
+                        );
+                        if needs_healthcheck && target.healthcheck().is_none() {
+                            let span = dependency
+                                .condition()
+                                .map_or_else(|| dependency.service().span(), Located::span);
+                            diagnostics.push(unverified_healthcheck_diagnostic(span));
+                        } else if needs_healthcheck && target.healthcheck().is_some_and(Healthcheck::is_disabled) {
+                            let span = dependency
+                                .condition()
+                                .map_or_else(|| dependency.service().span(), Located::span);
+                            diagnostics.push(missing_dependency_diagnostic(span, true, required));
+                        }
+                    }
+                }
+            }
+        }
+        diagnostics
     }
 
     /// Returns top-level network definitions in authored order.
@@ -364,6 +520,43 @@ impl ModelParse {
     pub fn into_parts(self) -> (Option<ComposeDocument>, Vec<Diagnostic>) {
         (self.document, self.diagnostics)
     }
+}
+
+fn missing_dependency_diagnostic(span: SourceSpan, healthcheck: bool, required: bool) -> Diagnostic {
+    let severity = if required { Severity::Error } else { Severity::Warning };
+    if healthcheck {
+        Diagnostic::new(
+            DEPENDENCY_MISSING_HEALTHCHECK,
+            severity,
+            if required {
+                "service_healthy dependency requires an enabled health check"
+            } else {
+                "optional service_healthy dependency has no enabled health check"
+            },
+        )
+        .with_label(DiagnosticLabel::primary(span, "dependency cannot become healthy"))
+    } else {
+        Diagnostic::new(
+            DEPENDENCY_MISSING_SERVICE,
+            severity,
+            if required {
+                "service dependency is not declared in this Compose document"
+            } else {
+                "optional service dependency is not declared in this Compose document"
+            },
+        )
+        .with_label(DiagnosticLabel::primary(span, "missing dependency service"))
+    }
+}
+
+fn unverified_healthcheck_diagnostic(span: SourceSpan) -> Diagnostic {
+    Diagnostic::new(
+        DEPENDENCY_HEALTHCHECK_UNVERIFIED,
+        Severity::Warning,
+        "service_healthy dependency has no Compose healthcheck to validate",
+    )
+    .with_label(DiagnosticLabel::primary(span, "image health metadata is not available"))
+    .with_note("the dependency image may still define a health check; verify it at build or runtime")
 }
 
 #[derive(Debug)]
@@ -506,6 +699,14 @@ impl Parser {
             image: None,
             command: None,
             environment: None,
+            extra_hosts: None,
+            user: None,
+            userns_mode: None,
+            ulimits: None,
+            depends_on: None,
+            healthcheck: None,
+            build: None,
+            deploy: None,
             ports: Vec::new(),
             volumes: Vec::new(),
             networks: None,
@@ -529,6 +730,32 @@ impl Parser {
                 }
                 "environment" if !duplicate => {
                     service.environment = self.parse_environment(&service_field);
+                }
+                "extra_hosts" if !duplicate => {
+                    service.extra_hosts = self.parse_extra_hosts(&service_field);
+                }
+                "user" if !duplicate => {
+                    service.user = self.parse_string(&service_field, "service user").map(UserSpec::parse);
+                }
+                "userns_mode" if !duplicate => {
+                    service.userns_mode = self
+                        .parse_string(&service_field, "service user namespace mode")
+                        .map(UserNamespaceMode::parse);
+                }
+                "ulimits" if !duplicate => {
+                    service.ulimits = self.parse_ulimits(&service_field);
+                }
+                "depends_on" if !duplicate => {
+                    service.depends_on = self.parse_depends_on(&service_field);
+                }
+                "healthcheck" if !duplicate => {
+                    service.healthcheck = self.parse_healthcheck(&service_field);
+                }
+                "build" if !duplicate => {
+                    service.build = self.parse_build(&service_field);
+                }
+                "deploy" if !duplicate => {
+                    service.deploy = self.parse_deploy(&service_field);
                 }
                 "ports" if !duplicate => {
                     service.ports = self.parse_service_ports(&service_field);
@@ -621,6 +848,375 @@ impl Parser {
             }
         }
         entries
+    }
+
+    fn parse_extra_hosts(&mut self, field: &ParsedField) -> Option<ExtraHosts> {
+        match field.value.as_ref() {
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let entries = self
+                    .parse_scalar_nodes(sequence.values(), field.span, "extra_hosts entries must be scalars")
+                    .into_iter()
+                    .map(|raw| {
+                        let entry = ShortExtraHost::parse(raw);
+                        if !entry.is_complete() {
+                            self.diagnostics.push(
+                                Diagnostic::new(
+                                    EXTRA_HOST_INVALID_ENTRY,
+                                    Severity::Error,
+                                    "short extra_hosts entry must contain a hostname and address",
+                                )
+                                .with_label(DiagnosticLabel::primary(
+                                    entry.raw().span(),
+                                    "missing separator or value",
+                                )),
+                            );
+                        }
+                        entry
+                    })
+                    .collect();
+                Some(ExtraHosts::Short { span, entries })
+            }
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let mut entries = Vec::new();
+                let mut seen = BTreeMap::new();
+                for host in self.fields(mapping) {
+                    if self.record_duplicate(&mut seen, &host) {
+                        continue;
+                    }
+                    if let Some(address) = self.parse_string(&host, "extra host address") {
+                        let address = Located::new(HostAddress::parse(address.value), address.span);
+                        entries.push(LongExtraHost::new(host.name, address, host.span));
+                    }
+                }
+                Some(ExtraHosts::Long { span, entries })
+            }
+            _ => {
+                self.expected(EXPECTED_FIELD_FORM, field, "extra_hosts must be a sequence or mapping");
+                None
+            }
+        }
+    }
+
+    fn parse_ulimits(&mut self, field: &ParsedField) -> Option<Ulimits> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "ulimits must be a mapping");
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut entries = Vec::new();
+        let mut seen = BTreeMap::new();
+        for limit in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &limit) {
+                continue;
+            }
+            let value = match limit.value.as_ref() {
+                Some(YamlNode::Scalar(_)) => self.parse_limit_value(&limit, "ulimit value").map(UlimitValue::Single),
+                Some(YamlNode::Mapping(range)) => Some(UlimitValue::Range(self.parse_ulimit_range(range))),
+                _ => {
+                    self.expected(
+                        EXPECTED_FIELD_FORM,
+                        &limit,
+                        "ulimit must be a scalar or soft/hard mapping",
+                    );
+                    None
+                }
+            };
+            if let Some(value) = value {
+                entries.push(Ulimit::new(limit.name, limit.span, value));
+            }
+        }
+        Some(Ulimits::new(span, entries))
+    }
+
+    fn parse_ulimit_range(&mut self, mapping: &Mapping) -> UlimitRange {
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut range = UlimitRange::new(span);
+        let mut seen = BTreeMap::new();
+        for field in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &field);
+            match field.name.value.as_str() {
+                "soft" if !duplicate => self
+                    .parse_limit_value(&field, "ulimit soft value")
+                    .into_iter()
+                    .for_each(|value| range.set_soft(value)),
+                "hard" if !duplicate => self
+                    .parse_limit_value(&field, "ulimit hard value")
+                    .into_iter()
+                    .for_each(|value| range.set_hard(value)),
+                name if name.starts_with("x-") => range.push_extension(field.reference()),
+                _ if duplicate => {}
+                _ => range.push_unknown(field.reference()),
+            }
+        }
+        range
+    }
+
+    fn parse_limit_value(&mut self, field: &ParsedField, description: &str) -> Option<Located<LimitValue>> {
+        let value = self.parse_string(field, description)?;
+        let parsed = LimitValue::parse(value.value);
+        if !parsed.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    ULIMIT_INVALID_VALUE,
+                    Severity::Error,
+                    "ulimit must be -1, a non-negative integer, or an interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(value.span, "invalid ulimit value")),
+            );
+        }
+        Some(Located::new(parsed, value.span))
+    }
+
+    fn parse_depends_on(&mut self, field: &ParsedField) -> Option<DependsOn> {
+        match field.value.as_ref() {
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let services = self.parse_scalar_nodes(
+                    sequence.values(),
+                    field.span,
+                    "dependency service names must be scalars",
+                );
+                Some(DependsOn::Short { span, services })
+            }
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let mut services = Vec::new();
+                let mut seen = BTreeMap::new();
+                for dependency in self.fields(mapping) {
+                    if self.record_duplicate(&mut seen, &dependency) {
+                        continue;
+                    }
+                    let mut parsed = ServiceDependency::new(dependency.name.clone(), dependency.span);
+                    if Self::field_is_null(&dependency) {
+                        services.push(parsed);
+                        continue;
+                    }
+                    let Some(options) = dependency.value.as_ref().and_then(YamlNode::as_mapping) else {
+                        self.expected(
+                            EXPECTED_MAPPING,
+                            &dependency,
+                            "long dependency options must be a mapping or null",
+                        );
+                        continue;
+                    };
+                    let mut option_seen = BTreeMap::new();
+                    for option in self.fields(options) {
+                        let duplicate = self.record_duplicate(&mut option_seen, &option);
+                        match option.name.value.as_str() {
+                            "condition" if !duplicate => {
+                                if let Some(value) = self.parse_string(&option, "dependency condition") {
+                                    let condition = DependencyCondition::parse(value.value);
+                                    if !condition.is_known() {
+                                        self.diagnostics.push(
+                                            Diagnostic::new(
+                                                DEPENDENCY_INVALID_CONDITION,
+                                                Severity::Error,
+                                                "dependency condition is not defined by Compose",
+                                            )
+                                            .with_label(
+                                                DiagnosticLabel::primary(value.span, "unknown dependency condition"),
+                                            ),
+                                        );
+                                    }
+                                    parsed.set_condition(Located::new(condition, value.span));
+                                }
+                            }
+                            "restart" if !duplicate => self
+                                .parse_boolean(&option, "dependency restart")
+                                .into_iter()
+                                .for_each(|value| parsed.set_restart(value)),
+                            "required" if !duplicate => self
+                                .parse_boolean(&option, "dependency required")
+                                .into_iter()
+                                .for_each(|value| parsed.set_required(value)),
+                            name if name.starts_with("x-") => parsed.push_extension(option.reference()),
+                            _ if duplicate => {}
+                            _ => parsed.push_unknown(option.reference()),
+                        }
+                    }
+                    services.push(parsed);
+                }
+                Some(DependsOn::Long { span, services })
+            }
+            _ => {
+                self.expected(EXPECTED_FIELD_FORM, field, "depends_on must be a sequence or mapping");
+                None
+            }
+        }
+    }
+
+    fn parse_healthcheck(&mut self, field: &ParsedField) -> Option<Healthcheck> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "healthcheck must be a mapping");
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut healthcheck = Healthcheck::new(span);
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &option);
+            match option.name.value.as_str() {
+                "test" if !duplicate => self
+                    .parse_healthcheck_test(&option)
+                    .into_iter()
+                    .for_each(|value| healthcheck.set_test(value)),
+                "interval" if !duplicate => self
+                    .parse_healthcheck_duration(&option, "healthcheck interval")
+                    .into_iter()
+                    .for_each(|value| healthcheck.set_interval(value)),
+                "timeout" if !duplicate => self
+                    .parse_healthcheck_duration(&option, "healthcheck timeout")
+                    .into_iter()
+                    .for_each(|value| healthcheck.set_timeout(value)),
+                "retries" if !duplicate => self
+                    .parse_healthcheck_retries(&option)
+                    .into_iter()
+                    .for_each(|value| healthcheck.set_retries(value)),
+                "start_period" if !duplicate => self
+                    .parse_healthcheck_duration(&option, "healthcheck start period")
+                    .into_iter()
+                    .for_each(|value| healthcheck.set_start_period(value)),
+                "start_interval" if !duplicate => self
+                    .parse_healthcheck_duration(&option, "healthcheck start interval")
+                    .into_iter()
+                    .for_each(|value| healthcheck.set_start_interval(value)),
+                "disable" if !duplicate => self
+                    .parse_boolean(&option, "healthcheck disable")
+                    .into_iter()
+                    .for_each(|value| healthcheck.set_disable(value)),
+                name if name.starts_with("x-") => healthcheck.push_extension(option.reference()),
+                _ if duplicate => {}
+                _ => healthcheck.push_unknown(option.reference()),
+            }
+        }
+        Some(healthcheck)
+    }
+
+    fn parse_healthcheck_duration(
+        &mut self,
+        field: &ParsedField,
+        description: &str,
+    ) -> Option<Located<HealthcheckDuration>> {
+        let value = self.parse_string(field, description)?;
+        let duration = HealthcheckDuration::parse(value.value);
+        if !duration.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    HEALTHCHECK_INVALID_DURATION,
+                    Severity::Error,
+                    "healthcheck duration must use Compose duration syntax or interpolation",
+                )
+                .with_label(DiagnosticLabel::primary(value.span, "invalid healthcheck duration")),
+            );
+        }
+        Some(Located::new(duration, value.span))
+    }
+
+    fn parse_healthcheck_retries(&mut self, field: &ParsedField) -> Option<Located<HealthcheckRetries>> {
+        let value = self.parse_string(field, "healthcheck retries")?;
+        let retries = HealthcheckRetries::parse(value.value);
+        if !retries.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    HEALTHCHECK_INVALID_RETRIES,
+                    Severity::Error,
+                    "healthcheck retries must be a non-negative integer or interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(value.span, "invalid healthcheck retry count")),
+            );
+        }
+        Some(Located::new(retries, value.span))
+    }
+
+    fn parse_healthcheck_test(&mut self, field: &ParsedField) -> Option<HealthcheckTest> {
+        match field.value.as_ref() {
+            Some(YamlNode::Scalar(_)) => self
+                .parse_string(field, "healthcheck test")
+                .map(HealthcheckTest::String),
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let values =
+                    self.parse_scalar_nodes(sequence.values(), field.span, "healthcheck test items must be scalars");
+                let kind = values.first().map(|value| HealthcheckTestKind::parse(value.value()));
+                if kind.is_none()
+                    || kind == Some(HealthcheckTestKind::Other)
+                    || (kind == Some(HealthcheckTestKind::None) && values.len() != 1)
+                {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            HEALTHCHECK_INVALID_TEST,
+                            Severity::Error,
+                            "healthcheck list must begin with NONE, CMD, or CMD-SHELL",
+                        )
+                        .with_label(DiagnosticLabel::primary(span, "invalid healthcheck command mode")),
+                    );
+                }
+                Some(HealthcheckTest::List { span, kind, values })
+            }
+            _ => {
+                self.expected(
+                    EXPECTED_FIELD_FORM,
+                    field,
+                    "healthcheck test must be a scalar or sequence",
+                );
+                None
+            }
+        }
+    }
+
+    fn parse_build(&mut self, field: &ParsedField) -> Option<Build> {
+        match field.value.as_ref() {
+            Some(YamlNode::Scalar(_)) => self.parse_string(field, "build context").map(Build::Context),
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let mut definition = BuildDefinition::new(span);
+                let mut seen = BTreeMap::new();
+                for option in self.fields(mapping) {
+                    let duplicate = self.record_duplicate(&mut seen, &option);
+                    if duplicate {
+                        continue;
+                    }
+                    if let Some(kind) = BuildFieldKind::from_name(option.name.value()) {
+                        definition.push_field(BuildField::new(kind, option.reference()));
+                    } else if option.name.value().starts_with("x-") {
+                        definition.push_extension(option.reference());
+                    } else {
+                        definition.push_unknown(option.reference());
+                    }
+                }
+                Some(Build::Definition(definition))
+            }
+            _ => {
+                self.expected(EXPECTED_FIELD_FORM, field, "build must be a scalar context or mapping");
+                None
+            }
+        }
+    }
+
+    fn parse_deploy(&mut self, field: &ParsedField) -> Option<DeployDefinition> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "deploy must be a mapping");
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut definition = DeployDefinition::new(span);
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &option);
+            if duplicate {
+                continue;
+            }
+            if let Some(kind) = DeployFieldKind::from_name(option.name.value()) {
+                definition.push_field(DeployField::new(kind, option.reference()));
+            } else if option.name.value().starts_with("x-") {
+                definition.push_extension(option.reference());
+            } else {
+                definition.push_unknown(option.reference());
+            }
+        }
+        Some(definition)
     }
 
     fn source_column(&self, offset: usize) -> usize {
