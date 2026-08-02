@@ -105,3 +105,35 @@ Completed by [ADR 0014](decisions/0014-issue-derived-native-model-expansion.md),
 and typed, post-merge, compatibility, and platform-path tests. Provider pass-through for Podman's
 `userns_mode` values and `host-gateway` deliberately remains `unknown` until an exact conformance
 record exists; that evidence gap does not return these values to the untyped model.
+
+## Post-0.1 consumer-discovered work — completed for 0.1.1
+
+- [x] Add a syntax regression for an unquoted short-volume scalar containing comma-separated
+  options, such as `./data:/data:Z,ro`.
+- [x] Ensure the parser either accepts the complete valid scalar or emits a structured syntax
+  error; it must never return a silently truncated document.
+- [x] Prepare and validate the silent-loss fix for a ComposeLens patch release before BoxFerry
+  relies on the corrected behavior.
+- [x] Make the loss-aware syntax layer accept the complete valid unquoted comma-containing scalar,
+  or replace the private YAML backend if it cannot represent the form without loss.
+- [x] Define a source-aware typed view of the merged and profile-selected project that native
+  adapters can consume without interpreting `MergedValue` themselves.
+- [x] Preserve contributing multi-file provenance in that typed view; canonical render-and-reparse
+  is not an acceptable permanent bridge because it replaces original source locations.
+
+This case was discovered by the first `boxferry-compose` adapter fixture. The byte-preserving
+private parser adapter now accepts the unquoted scalar while original source text and byte spans
+remain authoritative. `compose.yaml.unparsed-input` remains the fail-safe for any future private
+backend omission. `build_project_view` exposes effective native values after merge and optional
+profile selection, with complete `MergeProvenance` instead of generated-output spans. Delivery is
+recorded by [ADR 0015](decisions/0015-byte-preserving-yaml-backend-compatibility.md),
+[ADR 0016](decisions/0016-native-merged-project-view.md), and the `comma-plain-scalar` and
+`typed-project-view` fixtures.
+
+## Maintainer-controlled 0.1.1 release operation — ready
+
+- [ ] Run the protected release workflow from the reviewed clean default-branch commit to publish
+  ComposeLens 0.1.1 to crates.io and create the matching tag and GitHub release.
+
+The credentialed publication is deliberately separate from completed implementation work. Its
+exact checks and recovery behavior are in the [release process](releasing.md).

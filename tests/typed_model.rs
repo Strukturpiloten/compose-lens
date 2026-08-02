@@ -21,6 +21,29 @@ const INVALID_PHASE_TWO_FORMS: &str = include_str!("../fixtures/typed-model/inva
 const POST_01_FORMS: &str = include_str!("../fixtures/typed-model/post-01-issue-backlog/compose.yaml");
 const POST_01_INVALID: &str = include_str!("../fixtures/typed-model/post-01-invalid/compose.yaml");
 const TRAILING_EMPTY_VALUE: &str = include_str!("../fixtures/roundtrip/canonical-merged/compose.yaml");
+const COMMA_PLAIN_SCALAR: &str = include_str!("../fixtures/syntax/comma-plain-scalar/compose.yaml");
+
+#[test]
+fn types_a_complete_unquoted_short_volume_with_comma_options() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(30), COMMA_PLAIN_SCALAR)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let service = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .ok_or("app service is missing")?;
+    let VolumeMount::Short(volume) = &service.volumes()[0] else {
+        return Err("short volume expected".into());
+    };
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(volume.raw().value(), "./data:/data:Z,ro");
+    assert_eq!(volume.source(), Some("./data"));
+    assert_eq!(volume.target(), Some("/data"));
+    assert_eq!(volume.options(), &["Z".to_owned(), "ro".to_owned()]);
+    assert_eq!(volume.selinux_relabel(), Some(SelinuxRelabel::Private));
+    Ok(())
+}
 
 #[test]
 fn retains_short_and_long_volume_forms_as_distinct_variants() -> Result<(), Box<dyn std::error::Error>> {

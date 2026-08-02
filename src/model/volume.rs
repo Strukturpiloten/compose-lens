@@ -92,7 +92,7 @@ pub enum MountType {
 }
 
 impl MountType {
-    pub(super) fn from_text(value: String) -> Self {
+    pub(crate) fn from_text(value: String) -> Self {
         match value.as_str() {
             "volume" => Self::Volume,
             "bind" => Self::Bind,
@@ -187,7 +187,7 @@ pub struct BindOptions {
 }
 
 impl BindOptions {
-    pub(super) fn new(span: SourceSpan) -> Self {
+    pub(crate) fn new(span: SourceSpan) -> Self {
         Self {
             span,
             propagation: None,
@@ -198,15 +198,15 @@ impl BindOptions {
         }
     }
 
-    pub(super) fn set_propagation(&mut self, value: Located<String>) {
+    pub(crate) fn set_propagation(&mut self, value: Located<String>) {
         self.propagation = Some(value);
     }
 
-    pub(super) fn set_create_host_path(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_create_host_path(&mut self, value: Located<BooleanValue>) {
         self.create_host_path = Some(value);
     }
 
-    pub(super) fn set_selinux(&mut self, value: Located<SelinuxRelabel>) {
+    pub(crate) fn set_selinux(&mut self, value: Located<SelinuxRelabel>) {
         self.selinux = Some(value);
     }
 
@@ -273,7 +273,7 @@ pub struct LongVolumeMount {
 }
 
 impl LongVolumeMount {
-    pub(super) fn new(span: SourceSpan) -> Self {
+    pub(crate) fn new(span: SourceSpan) -> Self {
         Self {
             span,
             mount_type: None,
@@ -287,24 +287,24 @@ impl LongVolumeMount {
         }
     }
 
-    pub(super) fn set_mount_type(&mut self, value: Located<MountType>) {
+    pub(crate) fn set_mount_type(&mut self, value: Located<MountType>) {
         self.mount_type = Some(value);
     }
 
-    pub(super) fn set_source(&mut self, value: Located<String>) {
+    pub(crate) fn set_source(&mut self, value: Located<String>) {
         self.source = Some(value);
     }
 
-    pub(super) fn set_target(&mut self, value: Located<String>) {
+    pub(crate) fn set_target(&mut self, value: Located<String>) {
         self.target_path = Some(Located::new(ContainerPath::parse(value.value.clone()), value.span));
         self.target = Some(value);
     }
 
-    pub(super) fn set_read_only(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_read_only(&mut self, value: Located<BooleanValue>) {
         self.read_only = Some(value);
     }
 
-    pub(super) fn set_bind(&mut self, value: BindOptions) {
+    pub(crate) fn set_bind(&mut self, value: BindOptions) {
         self.bind = Some(value);
     }
 

@@ -13,6 +13,9 @@ use yaml_edit::{
 /// A generic YAML syntax error not covered by a more specific code.
 pub const YAML_SYNTAX_ERROR: DiagnosticCode = DiagnosticCode::new("compose.yaml.syntax");
 
+/// The private YAML backend did not include the complete source in the YAML document root.
+pub const YAML_UNPARSED_INPUT: DiagnosticCode = DiagnosticCode::new("compose.yaml.unparsed-input");
+
 /// A flow sequence is missing its closing bracket.
 pub const YAML_UNCLOSED_FLOW_SEQUENCE: DiagnosticCode = DiagnosticCode::new("compose.yaml.unclosed-flow-sequence");
 
@@ -25,8 +28,8 @@ pub const YAML_UNTERMINATED_STRING: DiagnosticCode = DiagnosticCode::new("compos
 /// A loss-aware YAML document and its original source text.
 ///
 /// The underlying concrete syntax tree is intentionally private so `ComposeLens` can maintain a
-/// stable API independently of its parser dependency. Rendering this initial representation emits
-/// the concrete syntax tree without normalization, interpolation, or environment access.
+/// stable API independently of its parser dependency. Preservation rendering emits the original
+/// source without normalization, interpolation, or environment access.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyntaxDocument {
     source_id: SourceId,
@@ -54,12 +57,18 @@ impl SyntaxDocument {
             });
         }
 
-        let parse = YamlFile::parse(&source);
-        let diagnostics = parse
+        let parser_source = parser_compatible_source(&source);
+        let parse = YamlFile::parse(parser_source.as_deref().unwrap_or(&source));
+        let mut diagnostics: Vec<_> = parse
             .positioned_errors()
             .iter()
             .map(|error| syntax_diagnostic(source_id, source.len(), error))
             .collect();
+        if diagnostics.is_empty() {
+            if let Some(document_end) = unparsed_input_offset(&parse, &source) {
+                diagnostics.push(unparsed_input_diagnostic(source_id, source.len(), document_end));
+            }
+        }
 
         Ok(SyntaxParse {
             document: Self {
@@ -117,10 +126,10 @@ impl SyntaxDocument {
         self.parse.tree().comments().count()
     }
 
-    /// Renders the concrete syntax tree without semantic changes.
+    /// Returns the original source as preservation-oriented output.
     #[must_use]
     pub fn render_preserved(&self) -> String {
-        self.parse.tree().to_string()
+        self.source.to_string()
     }
 
     pub(crate) fn yaml_file(&self) -> YamlFile {
@@ -131,11 +140,11 @@ impl SyntaxDocument {
         let mut values = Vec::new();
         if let Some(document) = self.parse.tree().document() {
             if let Some(mapping) = document.as_mapping() {
-                collect_value_scalars(self.source_id, YamlNode::Mapping(mapping), &mut values);
+                collect_value_scalars(self.source_id, &self.source, YamlNode::Mapping(mapping), &mut values);
             } else if let Some(sequence) = document.as_sequence() {
-                collect_value_scalars(self.source_id, YamlNode::Sequence(sequence), &mut values);
+                collect_value_scalars(self.source_id, &self.source, YamlNode::Sequence(sequence), &mut values);
             } else if let Some(scalar) = document.as_scalar() {
-                collect_value_scalars(self.source_id, YamlNode::Scalar(scalar), &mut values);
+                collect_value_scalars(self.source_id, &self.source, YamlNode::Scalar(scalar), &mut values);
             }
         }
         values
@@ -145,11 +154,11 @@ impl SyntaxDocument {
         let mut values = Vec::new();
         if let Some(document) = self.parse.tree().document() {
             if let Some(mapping) = document.as_mapping() {
-                collect_editable_value_scalars(self.source_id, YamlNode::Mapping(mapping), &mut values);
+                collect_editable_value_scalars(self.source_id, &self.source, YamlNode::Mapping(mapping), &mut values);
             } else if let Some(sequence) = document.as_sequence() {
-                collect_editable_value_scalars(self.source_id, YamlNode::Sequence(sequence), &mut values);
+                collect_editable_value_scalars(self.source_id, &self.source, YamlNode::Sequence(sequence), &mut values);
             } else if let Some(scalar) = document.as_scalar() {
-                collect_editable_value_scalars(self.source_id, YamlNode::Scalar(scalar), &mut values);
+                collect_editable_value_scalars(self.source_id, &self.source, YamlNode::Scalar(scalar), &mut values);
             }
         }
         values
@@ -315,17 +324,217 @@ fn syntax_diagnostic(source_id: SourceId, source_len: usize, error: &yaml_edit::
     Diagnostic::new(code, Severity::Error, message).with_label(DiagnosticLabel::primary(span, "syntax error"))
 }
 
-fn collect_value_scalars(source_id: SourceId, node: YamlNode, values: &mut Vec<ValueScalar>) {
+fn unparsed_input_diagnostic(source_id: SourceId, source_len: usize, document_end: usize) -> Diagnostic {
+    let span = SourceSpan::from_valid_offsets(source_id, document_end.min(source_len), source_len);
+
+    Diagnostic::new(
+        YAML_UNPARSED_INPUT,
+        Severity::Error,
+        "YAML parser did not include the complete input in the document root",
+    )
+    .with_label(DiagnosticLabel::primary(span, "input omitted from YAML document"))
+    .with_note("the original source remains available, but typed processing must not continue silently")
+}
+
+fn unparsed_input_offset(parse: &Parse<YamlFile>, source: &str) -> Option<usize> {
+    let document_end = parse
+        .tree()
+        .document()
+        .and_then(|document| {
+            document
+                .as_node()
+                .map(|node| u32::from(node.text_range().end()) as usize)
+        })
+        .unwrap_or_default();
+    source
+        .as_bytes()
+        .get(document_end..)
+        .is_some_and(|suffix| suffix.iter().any(|byte| !byte.is_ascii_whitespace()))
+        .then_some(document_end)
+}
+
+/// Produces a same-length input for the private YAML backend when it would otherwise treat a
+/// comma in a block-style plain scalar as a collection delimiter. Commas remain structural in
+/// flow collections and remain untouched in quoted, commented, and block-scalar content.
+fn parser_compatible_source(source: &str) -> Option<String> {
+    let mut compatible = source.as_bytes().to_vec();
+    let mut changed = false;
+    let mut offset = 0;
+    let mut block_scalar_indent = None;
+    let mut state = ParserCompatibilityState::default();
+
+    for line in source.split_inclusive('\n') {
+        let content = line.trim_end_matches(['\r', '\n']);
+        let indent = content.bytes().take_while(|byte| *byte == b' ').count();
+        let blank = content[indent..].trim().is_empty();
+
+        if let Some(header_indent) = block_scalar_indent {
+            if blank || indent > header_indent {
+                offset += line.len();
+                continue;
+            }
+            block_scalar_indent = None;
+        }
+
+        let (line_changed, starts_block_scalar) = mask_block_plain_commas(content, offset, &mut compatible, &mut state);
+        changed |= line_changed;
+        if starts_block_scalar {
+            block_scalar_indent = Some(indent);
+        }
+        offset += line.len();
+    }
+
+    if changed {
+        String::from_utf8(compatible).ok()
+    } else {
+        None
+    }
+}
+
+#[derive(Debug, Default)]
+struct ParserCompatibilityState {
+    flow_depth: u32,
+    quote: Option<u8>,
+    escaped: bool,
+}
+
+fn mask_block_plain_commas(
+    content: &str,
+    offset: usize,
+    compatible: &mut [u8],
+    state: &mut ParserCompatibilityState,
+) -> (bool, bool) {
+    let bytes = content.as_bytes();
+    let mut index = 0;
+    let mut first_token = true;
+    let mut plain_started = false;
+    let mut eligible_plain_value = false;
+    let mut changed = false;
+
+    while index < bytes.len() {
+        let byte = bytes[index];
+
+        if let Some(delimiter) = state.quote {
+            if delimiter == b'"' && state.escaped {
+                state.escaped = false;
+            } else if delimiter == b'"' && byte == b'\\' {
+                state.escaped = true;
+            } else if byte == delimiter {
+                if delimiter == b'\'' && bytes.get(index + 1) == Some(&b'\'') {
+                    index += 1;
+                } else {
+                    state.quote = None;
+                }
+            }
+            index += 1;
+            continue;
+        }
+
+        if byte == b'#' && (index == 0 || bytes[index - 1].is_ascii_whitespace()) {
+            break;
+        }
+
+        if eligible_plain_value && !plain_started && matches!(byte, b'!' | b'&') {
+            index += 1;
+            while bytes.get(index).is_some_and(|byte| !byte.is_ascii_whitespace()) {
+                index += 1;
+            }
+            first_token = false;
+            continue;
+        }
+
+        if matches!(byte, b'\'' | b'"') && !plain_started {
+            state.quote = Some(byte);
+            first_token = false;
+            index += 1;
+            continue;
+        }
+
+        if state.flow_depth > 0 {
+            match byte {
+                b'[' | b'{' => state.flow_depth += 1,
+                b']' | b'}' => state.flow_depth -= 1,
+                _ => {}
+            }
+            index += 1;
+            continue;
+        }
+
+        let token_boundary = index == 0 || bytes[index - 1].is_ascii_whitespace();
+        if matches!(byte, b'[' | b'{') && (!plain_started || (eligible_plain_value && token_boundary)) {
+            state.flow_depth = 1;
+            first_token = false;
+            index += 1;
+            continue;
+        }
+
+        if byte.is_ascii_whitespace() {
+            index += 1;
+            continue;
+        }
+
+        if first_token && byte == b'-' && bytes.get(index + 1).is_none_or(u8::is_ascii_whitespace) {
+            eligible_plain_value = true;
+            plain_started = false;
+            first_token = false;
+            index += 1;
+            continue;
+        }
+
+        if byte == b':' && bytes.get(index + 1).is_none_or(u8::is_ascii_whitespace) {
+            eligible_plain_value = true;
+            plain_started = false;
+            first_token = false;
+            index += 1;
+            continue;
+        }
+
+        if eligible_plain_value && !plain_started && matches!(byte, b'|' | b'>') {
+            return (changed, true);
+        }
+
+        if eligible_plain_value && plain_started && byte == b',' {
+            compatible[offset + index] = b'_';
+            changed = true;
+        }
+
+        plain_started = true;
+        first_token = false;
+        index += 1;
+    }
+
+    state.escaped = false;
+    (changed, false)
+}
+
+pub(crate) fn scalar_raw_from_source(source: &str, scalar: &Scalar) -> String {
+    let range = scalar.byte_range();
+    source
+        .get(range.start as usize..range.end as usize)
+        .map_or_else(|| scalar.value(), str::to_owned)
+}
+
+pub(crate) fn scalar_string_from_source(source: &str, scalar: &Scalar) -> String {
+    let authored = scalar_raw_from_source(source, scalar);
+    if authored == scalar.value() {
+        scalar.as_string()
+    } else {
+        // The compatibility overlay only rewrites complete, single-line block plain scalars.
+        authored
+    }
+}
+
+fn collect_value_scalars(source_id: SourceId, source: &str, node: YamlNode, values: &mut Vec<ValueScalar>) {
     match node {
-        YamlNode::Scalar(scalar) => collect_scalar(source_id, &scalar, values),
+        YamlNode::Scalar(scalar) => collect_scalar(source_id, source, &scalar, values),
         YamlNode::Mapping(mapping) => {
             for value in mapping.entries().filter_map(|entry| entry.value_node()) {
-                collect_value_scalars(source_id, value, values);
+                collect_value_scalars(source_id, source, value, values);
             }
         }
         YamlNode::Sequence(sequence) => {
             for value in sequence.values() {
-                collect_value_scalars(source_id, value, values);
+                collect_value_scalars(source_id, source, value, values);
             }
         }
         YamlNode::TaggedNode(tagged) => {
@@ -333,29 +542,34 @@ fn collect_value_scalars(source_id: SourceId, node: YamlNode, values: &mut Vec<V
                 .as_node()
                 .and_then(|node| node.children().find_map(YamlNode::from_syntax))
             {
-                collect_value_scalars(source_id, node, values);
+                collect_value_scalars(source_id, source, node, values);
             }
         }
         YamlNode::Alias(_) => {}
     }
 }
 
-fn collect_editable_value_scalars(source_id: SourceId, node: YamlNode, values: &mut Vec<EditableValueScalar>) {
+fn collect_editable_value_scalars(
+    source_id: SourceId,
+    source: &str,
+    node: YamlNode,
+    values: &mut Vec<EditableValueScalar>,
+) {
     match node {
         YamlNode::Scalar(scalar) => {
             values.push(EditableValueScalar {
-                raw: scalar.value(),
+                raw: scalar_raw_from_source(source, &scalar),
                 span: position_span(source_id, scalar.byte_range()),
             });
         }
         YamlNode::Mapping(mapping) => {
             for value in mapping.entries().filter_map(|entry| entry.value_node()) {
-                collect_editable_value_scalars(source_id, value, values);
+                collect_editable_value_scalars(source_id, source, value, values);
             }
         }
         YamlNode::Sequence(sequence) => {
             for value in sequence.values() {
-                collect_editable_value_scalars(source_id, value, values);
+                collect_editable_value_scalars(source_id, source, value, values);
             }
         }
         YamlNode::TaggedNode(tagged) => {
@@ -363,7 +577,7 @@ fn collect_editable_value_scalars(source_id: SourceId, node: YamlNode, values: &
                 .as_node()
                 .and_then(|node| node.children().find_map(YamlNode::from_syntax))
             {
-                collect_editable_value_scalars(source_id, node, values);
+                collect_editable_value_scalars(source_id, source, node, values);
             }
         }
         YamlNode::Alias(_) => {}
@@ -378,7 +592,7 @@ fn extract_merge_value(
     aliases: &mut Vec<String>,
 ) -> MergeSyntaxValue {
     match node {
-        YamlNode::Scalar(scalar) => MergeSyntaxValue::Scalar(extract_merge_scalar(source_id, &scalar)),
+        YamlNode::Scalar(scalar) => MergeSyntaxValue::Scalar(extract_merge_scalar(source_id, source, &scalar)),
         YamlNode::Mapping(mapping) => extract_merge_mapping(source_id, source, &mapping, registry, aliases),
         YamlNode::Sequence(sequence) => {
             let span = position_span(source_id, sequence.byte_range());
@@ -431,7 +645,7 @@ fn extract_merge_mapping(
     aliases: &mut Vec<String>,
 ) -> MergeSyntaxValue {
     let span = position_span(source_id, mapping.byte_range());
-    let direct = flatten_merge_fields(source_id, source, raw_merge_fields(source_id, mapping));
+    let direct = flatten_merge_fields(source_id, source, raw_merge_fields(source_id, source, mapping));
     let mut entries = Vec::new();
     let mut direct_keys = Vec::new();
 
@@ -454,7 +668,10 @@ fn extract_merge_mapping(
     }
 
     for (key, value) in mapping.merged(registry).iter() {
-        let Some(key) = key.as_scalar().map(|scalar| extract_merge_scalar(source_id, scalar)) else {
+        let Some(key) = key
+            .as_scalar()
+            .map(|scalar| extract_merge_scalar(source_id, source, scalar))
+        else {
             continue;
         };
         if direct_keys.contains(&key.value) {
@@ -475,13 +692,13 @@ struct RawMergeField {
     value: Option<YamlNode>,
 }
 
-fn raw_merge_fields(source_id: SourceId, mapping: &Mapping) -> Vec<RawMergeField> {
+fn raw_merge_fields(source_id: SourceId, source: &str, mapping: &Mapping) -> Vec<RawMergeField> {
     mapping
         .entries()
         .filter_map(|entry| {
             let key = entry.key_node()?.as_scalar().cloned()?;
             Some(RawMergeField {
-                key: extract_merge_scalar(source_id, &key),
+                key: extract_merge_scalar(source_id, source, &key),
                 value: entry.value_node(),
             })
         })
@@ -522,7 +739,7 @@ fn recover_merge_fields(
             flattened.push(field);
         }
         if let Some(mapping) = nested_mapping.filter(|mapping| !is_flow_mapping(source, mapping)) {
-            let nested = raw_merge_fields(source_id, &mapping);
+            let nested = raw_merge_fields(source_id, source, &mapping);
             flattened.extend(recover_merge_fields(source_id, source, nested, target_column));
         }
     }
@@ -554,7 +771,7 @@ fn resolve_alias(node: YamlNode, registry: &AnchorRegistry) -> YamlNode {
         .unwrap_or(node)
 }
 
-fn extract_merge_scalar(source_id: SourceId, scalar: &Scalar) -> MergeSyntaxScalar {
+fn extract_merge_scalar(source_id: SourceId, source: &str, scalar: &Scalar) -> MergeSyntaxScalar {
     let kind = match ScalarValue::from_scalar(scalar).scalar_type() {
         ScalarType::Boolean => MergeScalarKind::Boolean,
         ScalarType::Integer | ScalarType::Float => MergeScalarKind::Number,
@@ -562,8 +779,8 @@ fn extract_merge_scalar(source_id: SourceId, scalar: &Scalar) -> MergeSyntaxScal
         ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => MergeScalarKind::String,
     };
     MergeSyntaxScalar {
-        raw: scalar.value(),
-        value: scalar.as_string(),
+        raw: scalar_raw_from_source(source, scalar),
+        value: scalar_string_from_source(source, scalar),
         kind,
         span: position_span(source_id, scalar.byte_range()),
     }
@@ -585,23 +802,24 @@ fn position_span(source_id: SourceId, position: yaml_edit::TextPosition) -> Sour
     SourceSpan::from_valid_offsets(source_id, position.start as usize, position.end as usize)
 }
 
-fn collect_scalar(source_id: SourceId, scalar: &Scalar, values: &mut Vec<ValueScalar>) {
-    let raw = scalar.value();
+fn collect_scalar(source_id: SourceId, source: &str, scalar: &Scalar, values: &mut Vec<ValueScalar>) {
+    let raw = scalar_raw_from_source(source, scalar);
     let eligible_style = !raw.starts_with('\'') && !raw.starts_with('|') && !raw.starts_with('>');
     if !eligible_style || !raw.contains('$') {
         return;
     }
     let position = scalar.byte_range();
     values.push(ValueScalar {
-        value: scalar.as_string(),
+        value: scalar_string_from_source(source, scalar),
         span: SourceSpan::from_valid_offsets(source_id, position.start as usize, position.end as usize),
     });
 }
 
 #[cfg(test)]
 mod tests {
-    use super::SyntaxDocument;
+    use super::{SyntaxDocument, unparsed_input_offset};
     use crate::source::SourceId;
+    use yaml_edit::YamlFile;
 
     fn assert_send_and_sync<T: Send + Sync>() {}
 
@@ -618,5 +836,14 @@ mod tests {
         assert_eq!(parsed.document().render_preserved(), source);
         assert!(parsed.is_valid());
         Ok(())
+    }
+
+    #[test]
+    fn complete_root_guard_detects_the_private_backends_raw_comma_omission() {
+        let source = "services:\n  app:\n    volumes:\n      - ./data:/data:Z,ro\n  later:\n    image: later\n";
+        let backend = YamlFile::parse(source);
+
+        assert!(backend.positioned_errors().is_empty());
+        assert!(unparsed_input_offset(&backend, source).is_some());
     }
 }

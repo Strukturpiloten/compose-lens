@@ -88,7 +88,7 @@ pub struct LongPort {
 }
 
 impl LongPort {
-    pub(super) fn new(span: SourceSpan) -> Self {
+    pub(crate) fn new(span: SourceSpan) -> Self {
         Self {
             span,
             target: None,
@@ -103,25 +103,25 @@ impl LongPort {
         }
     }
 
-    pub(super) fn set_target(&mut self, value: Located<String>) {
+    pub(crate) fn set_target(&mut self, value: Located<String>) {
         self.target = Some(value);
     }
-    pub(super) fn set_published(&mut self, value: Located<String>) {
+    pub(crate) fn set_published(&mut self, value: Located<String>) {
         self.published = Some(value);
     }
-    pub(super) fn set_host_ip(&mut self, value: Located<String>) {
+    pub(crate) fn set_host_ip(&mut self, value: Located<String>) {
         self.host_ip = Some(value);
     }
-    pub(super) fn set_protocol(&mut self, value: Located<String>) {
+    pub(crate) fn set_protocol(&mut self, value: Located<String>) {
         self.protocol = Some(value);
     }
-    pub(super) fn set_app_protocol(&mut self, value: Located<String>) {
+    pub(crate) fn set_app_protocol(&mut self, value: Located<String>) {
         self.app_protocol = Some(value);
     }
-    pub(super) fn set_mode(&mut self, value: Located<String>) {
+    pub(crate) fn set_mode(&mut self, value: Located<String>) {
         self.mode = Some(value);
     }
-    pub(super) fn set_name(&mut self, value: Located<String>) {
+    pub(crate) fn set_name(&mut self, value: Located<String>) {
         self.name = Some(value);
     }
     pub(super) fn push_extension(&mut self, value: FieldReference) {

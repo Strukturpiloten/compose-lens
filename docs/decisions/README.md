@@ -25,5 +25,7 @@
 | [0012](0012-repository-conformance-harness.md) | accepted | Exact-version repository conformance with reviewed retained evidence |
 | [0013](0013-versioned-public-api-and-release-contract.md) | accepted | Versioned pre-1.0 public API and auditable release contract |
 | [0014](0014-issue-derived-native-model-expansion.md) | accepted | Loss-aware issue-derived fields, container paths, and field-level build/deploy identities |
+| [0015](0015-byte-preserving-yaml-backend-compatibility.md) | accepted | Same-length private parser compatibility with original-source scalar recovery |
+| [0016](0016-native-merged-project-view.md) | accepted | Native profile-selected project values with complete merge provenance |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

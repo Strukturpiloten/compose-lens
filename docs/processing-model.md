@@ -25,6 +25,13 @@ transformation has run.
 
 Represents a chosen interpretation of the project for a particular implementation profile and processing context. It records which operations and defaults were applied.
 
+### Native project view
+
+Represents the effective first-conversion fields of a merged and optionally profile-selected
+project as native Compose values. `ProjectValue<T>` retains the complete merge operation, every
+contributing span, the effective source, and sensitivity state. It is a consumer boundary, not a
+replacement for the generic merged tree.
+
 ## Explicit operations
 
 ### Load
@@ -70,6 +77,24 @@ Command-line service targeting can activate a targeted service's profiles in Doc
 is runtime-command behavior, not an implicit part of this library operation; an application must
 model it as an explicit input if it needs that behavior. References do not silently activate a
 profile-disabled service.
+
+### Build the native project view
+
+`build_project_view` consumes a `MergedProject` directly and accepts an optional matching
+`ProfileSelection`. A matching selection filters inactive services; omitting it includes all
+services. A selection created from a different project returns the same stable mismatch diagnostic
+used by the other post-merge operations.
+
+The initial native view covers project name, services, images, commands, merged environment,
+ports, volume mounts, service networks, profiles, and top-level network, volume, config, and secret
+definitions. Environment values are keyed after field-specific Compose merging, while each entry
+retains whether its effective spelling came from mapping, `KEY=VALUE`, or key-only list syntax.
+Values and collection items retain complete multi-file provenance. Unmodeled fields retain their
+semantic path, all key locations, value provenance, extension classification, and sensitivity.
+
+This operation does not render or parse generated YAML. It also does not read files, consult an
+environment provider, apply defaults, validate an implementation, or perform conversion. Native
+coverage is documented in [ADR 0016](decisions/0016-native-merged-project-view.md).
 
 ### Resolve references and paths
 

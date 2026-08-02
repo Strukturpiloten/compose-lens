@@ -1,0 +1,22 @@
+schema = 1
+id = "typed-project-view"
+suite = "processing"
+description = "Protects direct native typing, profile selection, comma-containing plain scalars, and field-level provenance after multi-file merge."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "Two caller-supplied files are merged without interpolation; no profiles are activated."
+
+[expectations]
+summary = "The typed view contains only the active web service and retains both source IDs for replaced and recursively merged values."
+
+[extensions.processing]
+stage = "merge-select-type"
+rules = ["profile-selection", "native-project-view", "multi-file-provenance"]

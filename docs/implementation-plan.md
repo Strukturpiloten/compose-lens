@@ -19,7 +19,7 @@ The repository that owns a task is authoritative for its detailed status. Update
 | --- | --- | --- | --- |
 | T1 | All repositories | completed | Executable testing and fixture foundations |
 | T2 | ComposeLens | completed | Loss-aware YAML syntax and diagnostic kernel |
-| T3 | QuadletLens | in progress | Ordered Quadlet syntax and rendering kernel |
+| T3 | QuadletLens | completed | Ordered Quadlet syntax and rendering kernel |
 | T4 | BoxFerry | completed | Independent neutral model and conversion engine |
 | T5 | All repositories | in progress | Minimum native typed subsets for the first conversion |
 | T6 | BoxFerry, integrating both Lens libraries | planned | First Compose-to-Quadlet vertical slice |
@@ -55,9 +55,14 @@ Delivery evidence: [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md), the [pa
 
 ## T3: QuadletLens ordered syntax kernel
 
-Status: in progress. QuadletLens owns this task.
+Status: completed. QuadletLens owns this task.
 
-Implement ordered sections and entries, repeated keys, comments, continuations, unknown Quadlet keys, generic systemd sections, systemd specifiers such as `%h`, source locations, structured diagnostics, and deterministic rendering. Add malformed-input and parse/render fixtures. Then define the capability schema and Podman 5.4 evidence baseline with minimum/maximum versions, fallbacks, and known-bug ranges.
+QuadletLens now provides ordered loss-aware syntax, structured recovery, exact preservation,
+conservative canonical rendering, lexical path/specifier classification, a strict versioned
+capability schema, and Podman 5.4.0 as its support floor. Its digest-pinned generator harness
+verifies the first-conversion subset on all 20 patch releases through current 6.0.2, using official
+images through 5.8.2 and exact source builds thereafter. Untested capabilities remain explicit
+fail-closed evidence gaps.
 
 ## T4: BoxFerry independent conversion core
 
@@ -76,18 +81,44 @@ The component crates remain unpublished until their release contract is finalize
 Status: in progress. Each repository owns its native types; BoxFerry owns mappings.
 
 - ComposeLens (completed): services, images, commands, environment, ports, volumes, networks, profiles, configs, and secrets.
-- QuadletLens: `.container`, `.volume`, `.network`, and required generic systemd sections.
-- BoxFerry: mappings, path-policy differences, and Podman 5.4 fallback decisions.
+- QuadletLens (completed): `.container`, `.pod`, `.volume`, `.network`, required generic systemd sections, and exact document-set relationships.
+- BoxFerry (in progress): Compose-to-neutral mappings are implemented for the first subset;
+  Quadlet export, path policy, and Podman 5.4-to-current fallback decisions remain.
 
 Delivered ComposeLens slice: source-aware services and typed top-level resource definitions; tolerant image references; distinct command, environment, port, volume, service-network, config-grant, secret-grant, and label forms; deferred scalar expressions; field provenance; and retained extensions and unknown fields. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) prohibits implicit form normalization. The [Phase 2 typed-model document](typed-model.md) defines the completed boundary and evidence.
+
+Delivered QuadletLens slice: ordered source-aware `.container`, `.pod`, `.network`, and `.volume`
+documents; preserved generic systemd and unknown entries; native key enums;
+conservative path and unit-reference forms; separate syntax/model diagnostics; and exact
+document-set dependency resolution. BoxFerry now consumes ComposeLens 0.1 from crates.io through
+its independent `boxferry-compose` crate. The adapter maps images, commands, environment, single
+ports, named volumes, bind mounts, networks, explicit profiles, provenance, and short/long SELinux
+relabel intent into the neutral model. Source omissions are structured outcomes governed by
+`LossPolicy`, not warning-only side effects.
+
+ComposeLens now provides `build_project_view`, a native profile-selected consumer boundary over the
+merged project. Its `ProjectValue<T>` and collection items retain every contributing source span,
+so BoxFerry can migrate from one `ComposeDocument` without reparsing canonical output. Adopting
+this released API in `boxferry-compose` remains BoxFerry-owned T5 work.
 
 ComposeLens 0.1.0 is published on crates.io with a documented pre-1.0 compatibility contract.
 BoxFerry will consume released Lens crates through compatible crates.io requirements and commit its
 application lockfile. Commit-pinned Git dependencies remain an emergency-only fallback.
 
+The BoxFerry adapter fixture exposed a ComposeLens 0.1 YAML-backend defect: an unquoted short
+volume scalar with comma-separated options could truncate the document without a syntax diagnostic.
+The 0.1.1 release candidate accepts the complete valid scalar through a byte-preserving private
+parser adapter, restores authored scalar values from the original source, and keeps
+`compose.yaml.unparsed-input` as a general omission fail-safe.
+
+QuadletLens 0.1.0 now has a documented public API, consumer contract test, verified package, and
+trusted-publishing release workflow. Its one-time crates.io bootstrap and first GitHub release are
+the remaining external dependency gate for `boxferry-quadlet`.
+
 ## T6: First end-to-end milestone
 
-Status: planned. BoxFerry coordinates this task.
+Status: in progress. BoxFerry coordinates this task. Compose import is implemented; Quadlet export
+and the combined compatibility report remain.
 
 Deliver tested Compose-to-Quadlet conversion for images, commands, environment, ports, named volumes, bind mounts, networks, and explicit Compose profile selection. Every conversion emits compatibility and manual-action reports. After synthetic scenarios are stable, use `Strukturpiloten/typo3-container` as the first public real-world showcase and regression corpus.
 
@@ -97,8 +128,9 @@ after the adapter boundary is ready.
 
 ## T7: Expanded testing tiers
 
-Status: in progress. ComposeLens's Phase 5 repository work is completed; QuadletLens and BoxFerry
-retain their own T7 work.
+Status: in progress. ComposeLens's Phase 5 repository work is completed. QuadletLens has an exact
+Podman 5.4-to-current generator matrix, and BoxFerry has its first provenance-reviewed Compose
+adapter fixture; broader BoxFerry tiers remain.
 
 - Per pull request: unit, integration, golden, round-trip, and property tests.
 - Scheduled: Docker Compose, Podman Compose, and real Quadlet generator conformance.

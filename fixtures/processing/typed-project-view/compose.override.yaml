@@ -1,0 +1,19 @@
+services:
+  web:
+    image: example.invalid/web:2@sha256:abcdef
+    environment:
+      - SHARED=override
+      - OVERRIDE_ONLY=added
+    ports:
+      - target: 80
+        published: "8080"
+        protocol: tcp
+    volumes:
+      - ./cache:/cache:Z,ro
+    networks:
+      appnet:
+        aliases: [web-override]
+volumes:
+  data:
+    labels:
+      com.strukturpiloten.fixture: project-view

@@ -6,6 +6,22 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-02
+
+### Added
+
+- A source-aware native `project` view over merged and optionally profile-selected projects, with
+  complete field, collection, item, and key provenance for the first BoxFerry conversion boundary.
+- Recoverable project-view diagnostics, unmodeled-field references, and sensitive-value `Debug`
+  redaction.
+
+### Fixed
+
+- Accept complete valid unquoted block plain scalars containing commas, including short volume
+  options such as `./data:/data:Z,ro`, without changing the authored source or byte spans.
+- Detect and diagnose any remaining incomplete source retention by the private YAML backend instead
+  of allowing typed processing to continue over a silently truncated document.
+
 ## [0.1.0] - 2026-08-02
 
 ### Added
@@ -25,6 +41,3 @@ All notable changes to ComposeLens will be documented in this file. The project 
   subfields.
 - Evidence-backed compatibility findings for `host-gateway` and Podman user-namespace values,
   anchored to official Podman 5.4 documentation without claiming untested provider pass-through.
-
-The version remains unreleased until the maintainer performs the publication checklist in the
-[0.1.0 release notes](docs/releases/0.1.0.md).

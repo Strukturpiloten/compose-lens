@@ -479,3 +479,5 @@ rustc-ice-*.txt
 
 *.profraw
 *.profdata
+!docs/releases/
+!docs/releases/*.md

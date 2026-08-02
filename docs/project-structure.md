@@ -29,6 +29,7 @@ compose-lens/
 │   ├── merge/              # field-aware semantic composition and source provenance
 │   ├── interpolation/      # explicit providers, operators, provenance, and redacted diagnostics
 │   ├── profiles/           # explicit post-merge service profile selection
+│   ├── project.rs          # native selected-project values with multi-file provenance
 │   ├── resolution/         # host paths, cross-references, and default decisions
 │   ├── validation/         # exact versions, compatibility profiles, evidence, and findings
 │   ├── render/             # canonical rendering and atomic exact-span scalar editing
@@ -40,6 +41,7 @@ compose-lens/
 │   ├── roundtrip.rs        # parse/render/parse stability
 │   ├── typed_model.rs      # typed structure, short/long forms, and diagnostics
 │   ├── processing.rs       # interpolation, loading, merge, and later project operations
+│   ├── project_view.rs     # native merged/profile-selected values and provenance
 │   ├── rendering.rs        # canonical/custom output, stability, recovery, and redaction
 │   ├── preservation_editing.rs # atomic scalar edits and byte-preservation failures
 │   ├── compatibility.rs    # exact provider/runtime compatibility behavior
@@ -83,6 +85,7 @@ compose-lens/
 | Overlay semantics                      | `merge`         |
 | Variable expressions and substitution  | `interpolation` |
 | Compose service profiles               | `profiles`      |
+| Native merged-project consumer values  | `project`       |
 | Paths, references, and defaults        | `resolution`    |
 | Implementation support and correctness | `validation`    |
 | YAML output                            | `render`        |

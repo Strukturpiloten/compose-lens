@@ -23,6 +23,11 @@ diagnostics plus partial data. It does not:
 
 Those operations belong to Phase 3 processing and compatibility profiles.
 
+Multi-file consumers use `build_project_view` after merge and optional profile selection. That
+operation types effective values directly and wraps them in `ProjectValue<T>` with complete
+multi-file provenance. It never renders canonical YAML and reparses it as a single document. See
+[ADR 0016](decisions/0016-native-merged-project-view.md).
+
 Compose processing tags `!reset` and `!override` remain intact in the syntax document. The typed
 parser reads their inner value when it matches a typed field, allowing valid override documents to
 participate in loading without incorrectly reporting the wrapper as a field-type error. The merge

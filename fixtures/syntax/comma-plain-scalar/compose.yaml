@@ -1,0 +1,25 @@
+services:
+  app:
+    image: example.invalid/app:1
+    volumes:
+      - ./data:/data:Z,ro
+  later:
+    image: example.invalid/later:1
+x-parser-guards:
+  plain-mapping: alpha,beta
+  double-quoted: "alpha,beta"
+  single-quoted: 'alpha,beta'
+  flow-sequence: [alpha, beta]
+  tagged-flow: !example [alpha, beta]
+  tagged-quoted: !example "alpha,beta"
+  anchored-flow: &values [alpha, beta]
+  alias: *values
+  multiline-flow: {
+    alpha: one,
+    beta: two
+  }
+  multiline-quoted: "alpha:
+    beta,gamma"
+  comment: value # alpha,beta
+  block: |
+    alpha,beta

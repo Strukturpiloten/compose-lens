@@ -1,0 +1,31 @@
+name: project-view
+services:
+  web:
+    image: example.invalid/web:1
+    command: ["serve", "--foreground"]
+    environment:
+      BASE_ONLY: base
+      SHARED: base
+    ports:
+      - "8080:80"
+    volumes:
+      - data:/data
+    networks:
+      appnet:
+        aliases: [web-base]
+    restart: unless-stopped
+  worker:
+    image: example.invalid/worker:1
+    profiles: [workers]
+volumes:
+  data:
+    driver: local
+networks:
+  appnet:
+    driver: bridge
+configs:
+  settings:
+    file: ./settings.conf
+secrets:
+  password:
+    environment: APP_PASSWORD
