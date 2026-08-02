@@ -46,9 +46,9 @@ Crates.io cannot register a trusted publisher until the crate exists. For versio
 5. Open **Actions → Release → Run workflow** and select the default branch.
 
 The workflow re-runs quality checks, builds the locked crate archive, creates a SHA-256 checksum
-and provenance attestation, creates an annotated tag and draft GitHub release, publishes the
-crate, and then publishes the GitHub release. A failure before the final step leaves the GitHub
-release as a draft for inspection and retry.
+and provenance attestation, creates an annotated tag and workflow-owned draft GitHub release,
+publishes the crate, and then publishes the GitHub release. A failure before the final step leaves
+the GitHub release as a draft for inspection and retry.
 
 ## Switch to trusted publishing
 
@@ -71,8 +71,8 @@ For later versions, update only the workspace package version, changelog, and ma
 the release workflow from the default branch and approve the `release` environment deployment.
 
 Do not create the tag or GitHub release manually. If a run fails, inspect its draft release and
-rerun from the same commit; the workflow verifies an existing tag and skips a crate version that
-is already present on crates.io.
+rerun from the same commit; the workflow verifies an existing tag, replaces the workflow-owned
+draft and its generated assets, and skips a crate version that is already present on crates.io.
 
 ## Recovering a failed workflow
 
@@ -81,7 +81,11 @@ draft release. A failure at that probe is therefore safe to rerun after the exte
 recovers.
 
 If a later step fails after the tag and draft release exist, rerun from the same commit. The
-workflow verifies the tag, refreshes the draft notes, and replaces its crate and checksum assets.
+workflow verifies the tag, deletes only the matching draft release by its numeric release ID, and
+creates a fresh draft with the reviewed notes, crate, and checksum. Do not add manual assets or
+notes to this workflow-owned draft because a retry intentionally replaces it.
+
 If fixing the workflow itself requires a new commit, delete the unpublished remote tag first so
-the corrected workflow can bind the version to the new commit. An existing draft may remain; it
-will be refreshed. Never delete or replace a tag belonging to a published immutable release.
+the corrected workflow can bind the version to the new commit. An existing draft may remain; the
+workflow will replace it after verifying that it is still a draft. Never delete or replace a tag
+or release that has already been published.

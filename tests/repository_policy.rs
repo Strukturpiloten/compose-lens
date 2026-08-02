@@ -2,7 +2,7 @@
 
 mod support;
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 const FIXTURE_SUITES: &[&str] = &[
     "syntax",
@@ -21,6 +21,31 @@ fn github_actions_are_immutable_and_versioned() -> Result<(), String> {
 #[test]
 fn repository_supply_chain_has_single_sources_and_immutable_pins() -> Result<(), String> {
     support::validate_repository_supply_chain(&repository_root())
+}
+
+#[test]
+fn release_workflow_handles_drafts_by_release_id() -> Result<(), String> {
+    let workflow_path = repository_root().join(".github/workflows/release.yml");
+    let workflow = fs::read_to_string(&workflow_path)
+        .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
+
+    if workflow.contains("/releases/tags/") {
+        return Err("release workflow must not use the published-release-by-tag endpoint for drafts".to_owned());
+    }
+
+    for required in [
+        "gh release list --limit 1000 --json databaseId,isDraft,tagName",
+        "repos/${GITHUB_REPOSITORY}/releases/${release_id}",
+        "steps.release.outputs.release_id",
+    ] {
+        if !workflow.contains(required) {
+            return Err(format!(
+                "release workflow is missing the draft release-ID guard `{required}`"
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 #[test]
