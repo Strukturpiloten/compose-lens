@@ -306,44 +306,13 @@ jobs:
           upload_asset "${CRATE}" "application/gzip"
           upload_asset "${CRATE}.sha256" "text/plain"
 
-      - name: Select crates.io authentication
-        id: auth-mode
-        if: steps.registry.outputs.published != 'true'
-        shell: bash
-        env:
-          BOOTSTRAP_TOKEN: ${{ secrets.CRATES_IO_BOOTSTRAP_TOKEN }}
-          VERSION: ${{ steps.metadata.outputs.version }}
-        run: |
-          set -euo pipefail
-          if [[ -n "${BOOTSTRAP_TOKEN}" ]]; then
-            if [[ "${VERSION}" != "0.1.0" ]]; then
-              echo "The bootstrap token is restricted to the first 0.1.0 publication." >&2
-              exit 1
-            fi
-            echo "bootstrap=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "bootstrap=false" >> "${GITHUB_OUTPUT}"
-          fi
-
       - name: Authenticate to crates.io with trusted publishing
         id: crates-auth
-        if: >-
-          steps.registry.outputs.published != 'true' &&
-          steps.auth-mode.outputs.bootstrap != 'true'
+        if: steps.registry.outputs.published != 'true'
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
 
-      - name: Publish first crate with bootstrap token
-        if: >-
-          steps.registry.outputs.published != 'true' &&
-          steps.auth-mode.outputs.bootstrap == 'true'
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_BOOTSTRAP_TOKEN }}
-        run: cargo publish --locked
-
       - name: Publish crate with trusted publishing
-        if: >-
-          steps.registry.outputs.published != 'true' &&
-          steps.auth-mode.outputs.bootstrap != 'true'
+        if: steps.registry.outputs.published != 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
         run: cargo publish --locked

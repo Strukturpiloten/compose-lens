@@ -2,7 +2,7 @@
 
 This plan gives BoxFerry, ComposeLens, and QuadletLens one stable task numbering scheme. Repository roadmaps describe internal phases; this document describes delivery order across repositories.
 
-Last synchronized: 2026-07-31.
+Last synchronized: 2026-08-02.
 
 ## Status convention
 
@@ -19,8 +19,8 @@ The repository that owns a task is authoritative for its detailed status. Update
 | --- | --- | --- | --- |
 | T1 | All repositories | completed | Executable testing and fixture foundations |
 | T2 | ComposeLens | completed | Loss-aware YAML syntax and diagnostic kernel |
-| T3 | QuadletLens | planned | Ordered Quadlet syntax and rendering kernel |
-| T4 | BoxFerry | planned | Independent neutral model and conversion engine |
+| T3 | QuadletLens | in progress | Ordered Quadlet syntax and rendering kernel |
+| T4 | BoxFerry | completed | Independent neutral model and conversion engine |
 | T5 | All repositories | in progress | Minimum native typed subsets for the first conversion |
 | T6 | BoxFerry, integrating both Lens libraries | planned | First Compose-to-Quadlet vertical slice |
 | T7 | All repositories | in progress | Expanded conformance, runtime, and release testing tiers |
@@ -55,15 +55,21 @@ Delivery evidence: [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md), the [pa
 
 ## T3: QuadletLens ordered syntax kernel
 
-Status: planned. QuadletLens owns this task.
+Status: in progress. QuadletLens owns this task.
 
 Implement ordered sections and entries, repeated keys, comments, continuations, unknown Quadlet keys, generic systemd sections, systemd specifiers such as `%h`, source locations, structured diagnostics, and deterministic rendering. Add malformed-input and parse/render fixtures. Then define the capability schema and Podman 5.4 evidence baseline with minimum/maximum versions, fallbacks, and known-bug ranges.
 
 ## T4: BoxFerry independent conversion core
 
-Status: planned. BoxFerry owns this task.
+Status: completed. BoxFerry owns this task.
 
 Implement neutral application, service, volume, network, port, environment, and tolerant image-reference models; provenance and redacted diagnostics; exact, approximate, unsupported, and invalid outcomes; target version ranges; adapter contracts; and an in-memory adapter. This task does not depend on unfinished Lens APIs.
+
+BoxFerry has implemented the public library facade, neutral application graph, provenance,
+protected values, redacted structured diagnostics, version-bounded target profiles, validated
+fidelity outcomes, explicit loss authorization, adapter contracts, and in-memory adapter. Its
+stable and Rust 1.85.0 tests exercise the same orchestration available to external Rust projects.
+The component crates remain unpublished until their release contract is finalized.
 
 ## T5: Minimum native typed subsets
 
@@ -75,7 +81,9 @@ Status: in progress. Each repository owns its native types; BoxFerry owns mappin
 
 Delivered ComposeLens slice: source-aware services and typed top-level resource definitions; tolerant image references; distinct command, environment, port, volume, service-network, config-grant, secret-grant, and label forms; deferred scalar expressions; field provenance; and retained extensions and unknown fields. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) prohibits implicit form normalization. The [Phase 2 typed-model document](typed-model.md) defines the completed boundary and evidence.
 
-Before integration, document dependency and release mechanics. Prefer early pre-1.0 Lens releases; use commit-pinned Git dependencies only as a temporary fallback.
+ComposeLens 0.1.0 is published on crates.io with a documented pre-1.0 compatibility contract.
+BoxFerry will consume released Lens crates through compatible crates.io requirements and commit its
+application lockfile. Commit-pinned Git dependencies remain an emergency-only fallback.
 
 ## T6: First end-to-end milestone
 
@@ -100,6 +108,6 @@ Each harness becomes required only after its command, isolation model, version s
 
 ComposeLens delivery evidence includes 48 reviewed exact provider-config records, a 36-entry
 fail-closed runtime-effect matrix, two independently licensed real-world fixtures, narrowly scoped
-compatibility rules, a consumer-facing 0.1.x API contract, and a CI-verified release package. The
-runtime entries remain planned until suitable isolated SELinux hosts execute them. Credentialed
-crates.io and GitHub publication remains a maintainer-controlled release operation.
+compatibility rules, a consumer-facing 0.1.x API contract, and the published ComposeLens 0.1.0
+crate and GitHub release. The runtime entries remain planned until suitable isolated SELinux hosts
+execute them. Future crates.io releases use trusted publishing with short-lived OIDC credentials.

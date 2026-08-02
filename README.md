@@ -5,7 +5,8 @@ ComposeLens is a Rust library for reading, understanding, transforming, validati
 It is designed for tools that need more than strict deserialization: source-aware diagnostics, implementation extensions, optional interpolation, multi-file projects, profiles, and round-trip-safe transformations.
 
 > [!IMPORTANT]
-> ComposeLens is preparing its first pre-1.0 release. Its supported API covers loss-aware YAML
+> [ComposeLens 0.1.0](https://crates.io/crates/compose-lens/0.1.0) is the first supported pre-1.0
+> release. Its API covers loss-aware YAML
 > syntax, the source-aware native model, explicit project processing, version-aware compatibility
 > profiles, deterministic merged-project rendering, presentation-only formatting, and atomic
 > value-scalar editing. The typed boundary includes the first BoxFerry conversion fields plus
@@ -52,6 +53,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 
 ## Documentation
 
+- [Published Rust API documentation](https://docs.rs/compose-lens/0.1.0/compose_lens/)
 - [Documentation index](docs/README.md)
 - [Software architecture](docs/architecture.md)
 - [Target project structure](docs/project-structure.md)

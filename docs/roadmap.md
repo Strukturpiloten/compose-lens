@@ -62,7 +62,7 @@ not a Phase 2 exit criterion. See the [Phase 2 typed model](typed-model.md).
 - [x] Implement preservation-oriented edits where the syntax layer permits them.
 - [x] Define formatting options without coupling semantics to presentation.
 
-## Phase 5: ecosystem hardening — completed as a release candidate
+## Phase 5: ecosystem hardening — completed with 0.1.0
 
 - [x] Expand Docker Compose and Podman Compose version matrices.
   - [x] Define an exact-version provider-config matrix with explicit planned and observed states.
@@ -78,12 +78,12 @@ not a Phase 2 exit criterion. See the [Phase 2 typed model](typed-model.md).
 - [x] Stabilize and regression-test the supported pre-1.0 public crate API.
 - [x] Prepare and validate the 0.1.0 release package, release notes, and compatibility documentation.
 
-## Maintainer-controlled release operations
+## Maintainer-controlled release operations — completed
 
 These credentialed external actions are deliberately not represented as implementation work:
 
-- [ ] Publish ComposeLens 0.1.0 to crates.io from an approved clean release commit.
-- [ ] Create and push the `v0.1.0` tag and corresponding GitHub release.
+- [x] Publish ComposeLens 0.1.0 to crates.io from an approved clean release commit.
+- [x] Create and push the `v0.1.0` tag and corresponding GitHub release.
 
 The exact operational checklist is in the [release process](releasing.md).
 

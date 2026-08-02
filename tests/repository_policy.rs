@@ -69,6 +69,46 @@ fn release_workflow_uses_the_create_response_as_its_draft_identity() -> Result<(
 }
 
 #[test]
+fn release_workflow_uses_only_trusted_publishing() -> Result<(), String> {
+    let workflow_path = repository_root().join(".github/workflows/release.yml");
+    let workflow = fs::read_to_string(&workflow_path)
+        .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
+
+    for forbidden in [
+        "CRATES_IO_API_TOKEN",
+        "CRATES_IO_BOOTSTRAP_TOKEN",
+        "cargo login",
+        "--token",
+        "secrets.",
+    ] {
+        if workflow.contains(forbidden) {
+            return Err(format!(
+                "release workflow contains the forbidden long-lived credential path `{forbidden}`"
+            ));
+        }
+    }
+
+    for required in [
+        "id-token: write",
+        "rust-lang/crates-io-auth-action@",
+        "CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}",
+        "cargo publish --locked",
+    ] {
+        if !workflow.contains(required) {
+            return Err(format!(
+                "release workflow is missing the trusted-publishing guard `{required}`"
+            ));
+        }
+    }
+
+    if workflow.matches("cargo publish --locked").count() != 1 {
+        return Err("release workflow must contain exactly one publication command".to_owned());
+    }
+
+    Ok(())
+}
+
+#[test]
 fn fixture_manifests_follow_the_common_contract() -> Result<(), String> {
     support::validate_fixture_tree(&repository_root(), FIXTURE_SUITES)
 }
