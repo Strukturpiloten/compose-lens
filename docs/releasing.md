@@ -1,8 +1,8 @@
 # Release process
 
-ComposeLens is the only repository in the initial three-project set that is currently configured
-for crates.io publication. Releases are started manually through the protected GitHub Actions
-[release workflow](../.github/workflows/release.yml); the workflow has no version input.
+ComposeLens 0.1.0 is published on crates.io. Later releases are started manually through the
+protected GitHub Actions [release workflow](../.github/workflows/release.yml); the workflow has no
+version input and authenticates to crates.io only through trusted publishing.
 
 ## Version sources
 
@@ -27,42 +27,26 @@ In the ComposeLens repository settings:
    workflow to create release tags.
 6. Enable immutable releases under the repository's release settings.
 
-The workflow scopes registry credentials to publication steps; third-party actions never receive
-the bootstrap crates.io token.
+The workflow scopes its short-lived registry credential to the publication step. The GitHub
+environment stores no crates.io API token.
 
-## First crates.io publication
+## Trusted publishing
 
-Crates.io cannot register a trusted publisher until the crate exists. For version 0.1.0 only:
+The crates.io trusted publisher must match the release job exactly:
 
-1. Create a crates.io API token that is allowed to publish the new `compose-lens` crate.
-2. Add it as the `CRATES_IO_BOOTSTRAP_TOKEN` secret on the protected `release` environment,
-   not as a repository-wide variable.
-3. Prepare the release change:
-   - keep a fresh `[Unreleased]` section in `CHANGELOG.md`;
-   - move the release entries under `## [0.1.0] - YYYY-MM-DD`;
-   - review `docs/releases/0.1.0.md` as the public-facing GitHub release notes;
-   - update the workspace package version if it is not already correct.
-4. Merge the release change to the default branch and wait for CI.
-5. Open **Actions → Release → Run workflow** and select the default branch.
+- GitHub owner: `Strukturpiloten`
+- repository: `compose-lens`
+- workflow: `release.yml`
+- environment: `release`
 
-The workflow re-runs quality checks, builds the locked crate archive, creates a SHA-256 checksum
-and provenance attestation, creates an annotated tag and workflow-owned draft GitHub release,
-publishes the crate, and then publishes the GitHub release. A failure before the final step leaves
-the GitHub release as a draft for inspection and retry.
+Do not add a crates.io token as a GitHub secret or variable. The authentication action exchanges
+the job's GitHub OIDC identity for a short-lived crates.io token and revokes it when the job ends.
+`CARGO_REGISTRY_TOKEN` exists only in the `cargo publish` step and is populated from that temporary
+token. After a successful OIDC-authenticated release, crates.io may be configured to require
+trusted publishing for the crate.
 
-## Switch to trusted publishing
-
-Immediately after the first crate is visible on crates.io:
-
-1. Configure a trusted publisher for owner `Strukturpiloten`, repository `compose-lens`,
-   workflow `release.yml`, and environment `release`.
-2. Remove `CRATES_IO_BOOTSTRAP_TOKEN` from GitHub.
-3. Revoke the bootstrap API token on crates.io.
-4. After one successful OIDC-authenticated release, optionally require trusted publishing for the
-   crate on crates.io.
-
-Future versions intentionally fail if the bootstrap token is still present. The workflow obtains
-a short-lived crates.io token through OIDC and revokes it automatically after the job.
+The 0.1.0 bootstrap token was a one-time ownership-establishment credential. It has no supported
+path in the current workflow and must remain revoked.
 
 ## Routine release
 
@@ -73,6 +57,11 @@ the release workflow from the default branch and approve the `release` environme
 Do not create the tag or GitHub release manually. If a run fails, inspect its draft release and
 rerun from the same commit; the workflow verifies an existing tag, replaces the workflow-owned
 draft and its generated assets, and skips a crate version that is already present on crates.io.
+
+The workflow re-runs quality checks, builds the locked crate archive, creates a SHA-256 checksum
+and provenance attestation, creates an annotated tag and workflow-owned draft GitHub release,
+publishes the crate, and then publishes the GitHub release. A failure before the final step leaves
+the GitHub release as a draft for inspection and retry.
 
 ## Recovering a failed workflow
 
