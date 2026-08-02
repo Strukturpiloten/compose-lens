@@ -161,7 +161,8 @@ jobs:
               -f sha="${tag_object_sha}"
           fi
 
-      - name: Create or refresh draft GitHub release
+      - name: Create or replace draft GitHub release
+        id: release
         shell: bash
         env:
           CRATE: ${{ steps.metadata.outputs.crate }}
@@ -172,21 +173,47 @@ jobs:
         run: |
           set -euo pipefail
 
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            draft="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.draft')"
-            if [[ "${draft}" != "true" ]]; then
-              echo "${TAG} is already a published GitHub release." >&2
+          releases="$(
+            gh release list --limit 1000 --json databaseId,isDraft,tagName
+          )"
+          matches="$(
+            jq --arg tag "${TAG}" '[.[] | select(.tagName == $tag)]' <<< "${releases}"
+          )"
+          match_count="$(jq -r 'length' <<< "${matches}")"
+
+          case "${match_count}" in
+            0)
+              ;;
+            1)
+              draft="$(jq -r '.[0].isDraft' <<< "${matches}")"
+              release_id="$(jq -er '.[0].databaseId' <<< "${matches}")"
+              if [[ "${draft}" != "true" ]]; then
+                echo "${TAG} is already a published GitHub release." >&2
+                exit 1
+              fi
+              gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+              ;;
+            *)
+              echo "Found ${match_count} GitHub releases for ${TAG}; expected at most one." >&2
               exit 1
-            fi
-            gh release upload "${TAG}" "${CRATE}" "${CRATE}.sha256" --clobber
-            gh release edit "${TAG}" --title "ComposeLens ${VERSION}" --notes-file "${NOTES}"
-          else
-            gh release create "${TAG}" "${CRATE}" "${CRATE}.sha256" \
-              --draft \
-              --title "ComposeLens ${VERSION}" \
-              --notes-file "${NOTES}" \
-              --verify-tag
-          fi
+              ;;
+          esac
+
+          gh release create "${TAG}" "${CRATE}" "${CRATE}.sha256" \
+            --draft \
+            --title "ComposeLens ${VERSION}" \
+            --notes-file "${NOTES}" \
+            --verify-tag
+
+          release_id="$(
+            gh release list --limit 1000 --json databaseId,tagName |
+              jq -er --arg tag "${TAG}" \
+                '[.[] | select(.tagName == $tag)] |
+                 if length == 1 then .[0].databaseId
+                 else error("expected exactly one matching draft release") end'
+          )"
+          printf 'release_id=%s\n' "${release_id}" >> "${GITHUB_OUTPUT}"
 
       - name: Select crates.io authentication
         id: auth-mode
@@ -234,5 +261,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.metadata.outputs.tag }}
-        run: gh release edit "${TAG}" --draft=false --latest
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          gh api --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -F draft=false \
+            -f make_latest=true
