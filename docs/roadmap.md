@@ -85,7 +85,7 @@ These credentialed external actions are deliberately not represented as implemen
 - [ ] Publish ComposeLens 0.1.0 to crates.io from an approved clean release commit.
 - [ ] Create and push the `v0.1.0` tag and corresponding GitHub release.
 
-The exact operational checklist is in the [0.1.0 release-candidate notes](releases/0.1.0.md).
+The exact operational checklist is in the [release process](releasing.md).
 
 ## Post-0.1 issue-derived backlog
 

@@ -11,6 +11,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Render formatting](render-formatting.md) — indentation, line endings, document markers, and the semantic boundary
 - [Phase 2 typed model](typed-model.md) — implemented field boundary, fidelity rules, and diagnostics
 - [Testing strategy](testing.md) — parser, resolver, conformance, and round-trip tests
+- [Development environment](development-environment.md) — reproducible VS Code tooling and update policy
 - [Compose implementation conformance](conformance.md) — exact matrices, evidence lifecycle, and open runtime work
 - [Real-world fixture corpus](real-world-corpus.md) — admission, licensing, sanitization, and covered projects
 - [Fixture format](fixture-format.md) — shared metadata, provenance, and secrets contract
@@ -25,7 +26,8 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Canonical-rendering evidence](research/compose-canonical-rendering.md) — fixed output, explicit processing boundary, recovery, and redaction
 - [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
 - [API stability policy](api-stability.md) — pre-1.0 compatibility and public dependency boundaries
-- [0.1.0 release-candidate notes](releases/0.1.0.md) — capabilities, limits, and maintainer publication checklist
+- [0.1.0 release notes](releases/0.1.0.md) — public capabilities, compatibility evidence, and limits
+- [Release process](releasing.md) — Cargo versioning, crates.io authentication, and GitHub releases
 - [Changelog](../CHANGELOG.md) — release-facing behavior changes
 - [Implementation plan](implementation-plan.md) — synchronized cross-repository tasks T1–T7
 - [Roadmap](roadmap.md) — implementation order

@@ -7,6 +7,7 @@ demonstrated.
 
 ```text
 compose-lens/
+├── .devcontainer/         # digest-pinned VS Code environment and feature lock
 ├── Cargo.toml
 ├── Cargo.lock
 ├── rust-toolchain.toml
@@ -67,7 +68,8 @@ compose-lens/
 └── .github/
     ├── renovate.json
     └── workflows/
-        └── ci.yml
+        ├── ci.yml
+        └── release.yml
 ```
 
 ## Module placement rules

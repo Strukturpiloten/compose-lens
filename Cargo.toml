@@ -4,39 +4,40 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Loss-aware parsing, processing, validation, and rendering of Compose projects"
-authors = ['Martin "Becks" Beckert (TheRealBecks)']
+documentation = "https://docs.rs/compose-lens"
+readme = "README.md"
 homepage.workspace = true
 repository.workspace = true
-documentation = "https://docs.rs/compose-lens"
 license.workspace = true
-readme = "README.md"
 keywords = ["compose", "containers", "docker", "podman", "yaml"]
 categories = ["config", "parser-implementations"]
-publish = ["crates-io"]
 include = [
-    "/.cargo/**",
-    "/.github/**",
-    "/src/**",
-    "/tests/**",
-    "/fixtures/**",
-    "/conformance/**",
-    "/docs/**",
-    "/.editorconfig",
-    "/.markdownlint.json",
-    "/AGENTS.md",
-    "/Cargo.toml",
-    "/Cargo.lock",
-    "/README.md",
-    "/CHANGELOG.md",
-    "/LICENSE",
-    "/clippy.toml",
-    "/deny.toml",
-    "/rust-toolchain.toml",
-    "/rustfmt.toml",
+  "/.cargo/**",
+  "/.editorconfig",
+  "/.github/**",
+  "/.markdownlint.json",
+  "/AGENTS.md",
+  "/CHANGELOG.md",
+  "/Cargo.lock",
+  "/Cargo.toml",
+  "/LICENSE",
+  "/README.md",
+  "/clippy.toml",
+  "/conformance/**",
+  "/deny.toml",
+  "/docs/**",
+  "/fixtures/**",
+  "/rust-toolchain.toml",
+  "/rustfmt.toml",
+  "/src/**",
+  "/tests/**",
 ]
+publish = ["crates-io"]
 
 [package.metadata.strukturpiloten]
 company = "Strukturpiloten OHG"
+github = "https://github.com/TheRealBecks"
+maintainer = 'Martin "Becks" Beckert'
 website = "https://www.strukturpiloten.de/"
 
 [workspace]
@@ -72,8 +73,8 @@ unused_qualifications = "warn"
 yaml-edit = { version = "=0.2.3", default-features = false }
 
 [dev-dependencies]
-sha2 = { version = "=0.10.9", default-features = false }
-toml = "=1.1.4"
+sha2 = { version = "0.10.9", default-features = false }
+toml = "1.1.4"
 
 [lints]
 workspace = true

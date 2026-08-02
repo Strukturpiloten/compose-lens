@@ -19,6 +19,11 @@ fn github_actions_are_immutable_and_versioned() -> Result<(), String> {
 }
 
 #[test]
+fn repository_supply_chain_has_single_sources_and_immutable_pins() -> Result<(), String> {
+    support::validate_repository_supply_chain(&repository_root())
+}
+
+#[test]
 fn fixture_manifests_follow_the_common_contract() -> Result<(), String> {
     support::validate_fixture_tree(&repository_root(), FIXTURE_SUITES)
 }
