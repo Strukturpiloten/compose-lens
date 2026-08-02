@@ -16,6 +16,8 @@ jobs:
     environment: release
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      RELEASE_GITHUB_API_VERSION: "2026-03-10"
     permissions:
       artifact-metadata: write # Record artifact attestations for the packaged crate.
       attestations: write # Sign the packaged crate's provenance attestation.
@@ -150,6 +152,7 @@ jobs:
           else
             tag_object_sha="$(
               gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+                --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" \
                 -f tag="${TAG}" \
                 -f message="ComposeLens ${TAG}" \
                 -f object="${GITHUB_SHA}" \
@@ -157,6 +160,7 @@ jobs:
                 --jq '.sha'
             )"
             gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" \
               -f ref="refs/tags/${TAG}" \
               -f sha="${tag_object_sha}"
           fi
@@ -165,7 +169,6 @@ jobs:
         id: release
         shell: bash
         env:
-          CRATE: ${{ steps.metadata.outputs.crate }}
           GH_TOKEN: ${{ github.token }}
           NOTES: ${{ steps.metadata.outputs.notes }}
           TAG: ${{ steps.metadata.outputs.tag }}
@@ -173,48 +176,135 @@ jobs:
         run: |
           set -euo pipefail
 
-          matches="$(
+          release_name="ComposeLens ${VERSION}"
+          releases="$(
             gh api --paginate \
+              --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" \
               "repos/${GITHUB_REPOSITORY}/releases?per_page=100" |
-              jq --slurp --arg tag "${TAG}" \
-                '[.[][] | select(.tag_name == $tag)]'
+              jq --slurp '[.[][]]'
           )"
-          match_count="$(jq -r 'length' <<< "${matches}")"
+          published_count="$(
+            jq --raw-output --arg tag "${TAG}" \
+              '[.[] | select(.draft == false and .tag_name == $tag)] | length' \
+              <<< "${releases}"
+          )"
+          if [[ "${published_count}" != "0" ]]; then
+            echo "${TAG} is already associated with a published GitHub release." >&2
+            exit 1
+          fi
 
-          case "${match_count}" in
+          drafts="$(
+            jq --arg name "${release_name}" --arg tag "${TAG}" \
+              '[.[] |
+                select(
+                  .draft == true and
+                  (.tag_name == $tag or .name == $name)
+                )
+              ]' \
+              <<< "${releases}"
+          )"
+          draft_count="$(jq --raw-output 'length' <<< "${drafts}")"
+
+          case "${draft_count}" in
             0)
               ;;
             1)
-              draft="$(jq -r '.[0].draft' <<< "${matches}")"
-              release_id="$(jq -er '.[0].id' <<< "${matches}")"
-              if [[ "${draft}" != "true" ]]; then
-                echo "${TAG} is already a published GitHub release." >&2
-                exit 1
-              fi
+              previous_release_id="$(jq --exit-status --raw-output '.[0].id' <<< "${drafts}")"
               gh api --method DELETE \
-                "repos/${GITHUB_REPOSITORY}/releases/${release_id}"
+                --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" \
+                "repos/${GITHUB_REPOSITORY}/releases/${previous_release_id}"
               ;;
             *)
-              echo "Found ${match_count} GitHub releases for ${TAG}; expected at most one." >&2
+              echo "Found ${draft_count} possible workflow drafts for ${TAG}; refusing to choose one." >&2
               exit 1
               ;;
           esac
 
-          gh release create "${TAG}" "${CRATE}" "${CRATE}.sha256" \
-            --draft \
-            --title "ComposeLens ${VERSION}" \
-            --notes-file "${NOTES}" \
-            --verify-tag
-
-          release_id="$(
-            gh api --paginate \
-              "repos/${GITHUB_REPOSITORY}/releases?per_page=100" |
-              jq --slurp --exit-status --raw-output --arg tag "${TAG}" \
-                '[.[][] | select(.tag_name == $tag)] |
-                 if length == 1 then .[0].id
-                 else error("expected exactly one matching draft release") end'
+          release="$(
+            jq --null-input \
+              --rawfile body "${NOTES}" \
+              --arg name "${release_name}" \
+              --arg tag "${TAG}" \
+              --arg target "${GITHUB_SHA}" \
+              '{
+                tag_name: $tag,
+                target_commitish: $target,
+                name: $name,
+                body: $body,
+                draft: true,
+                prerelease: false
+              }' |
+              gh api --method POST \
+                --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" \
+                "repos/${GITHUB_REPOSITORY}/releases" \
+                --input -
           )"
+          release_id="$(jq --exit-status --raw-output '.id' <<< "${release}")"
+          upload_url="$(
+            jq --exit-status --raw-output \
+              '.upload_url | sub("\\{\\?name,label\\}$"; "")' \
+              <<< "${release}"
+          )"
+          expected_upload_url="https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets"
+          if [[ "${upload_url}" != "${expected_upload_url}" ]]; then
+            echo "GitHub returned an unexpected release asset upload URL." >&2
+            exit 1
+          fi
+
           printf 'release_id=%s\n' "${release_id}" >> "${GITHUB_OUTPUT}"
+          printf 'upload_url=%s\n' "${upload_url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload draft GitHub release assets
+        shell: bash
+        env:
+          CRATE: ${{ steps.metadata.outputs.crate }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          UPLOAD_URL: ${{ steps.release.outputs.upload_url }}
+        run: |
+          set -euo pipefail
+
+          upload_asset() {
+            local asset_path="$1"
+            local content_type="$2"
+            local asset_name="${asset_path##*/}"
+            local response
+
+            test -f "${asset_path}"
+            if [[ ! "${asset_name}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+              echo "Unsafe release asset name: ${asset_name}" >&2
+              return 1
+            fi
+
+            response="$(
+              curl --proto '=https' \
+                --tlsv1.2 \
+                --fail-with-body \
+                --silent \
+                --show-error \
+                --connect-timeout 10 \
+                --max-time 120 \
+                --request POST \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" \
+                --header "Content-Type: ${content_type}" \
+                --data-binary "@${asset_path}" \
+                "${UPLOAD_URL}?name=${asset_name}"
+            )"
+            jq --exit-status --arg name "${asset_name}" \
+              '.name == $name and .state == "uploaded" and (.id | type == "number")' \
+              <<< "${response}" >/dev/null
+          }
+
+          expected_upload_url="https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets"
+          if [[ "${UPLOAD_URL}" != "${expected_upload_url}" ]]; then
+            echo "Release asset upload URL does not match the created release." >&2
+            exit 1
+          fi
+
+          upload_asset "${CRATE}" "application/gzip"
+          upload_asset "${CRATE}.sha256" "text/plain"
 
       - name: Select crates.io authentication
         id: auth-mode
@@ -265,7 +355,10 @@ jobs:
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
         run: |
           set -euo pipefail
-          gh api --method PATCH \
-            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
-            -F draft=false \
-            -f make_latest=true
+          jq --null-input '{draft: false, make_latest: "true"}' |
+            gh api --method PATCH \
+              --header "X-GitHub-Api-Version: ${RELEASE_GITHUB_API_VERSION}" \
+              "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              --input - \
+              --jq 'if .draft == false then .html_url
+                    else error("GitHub release remained a draft") end'
