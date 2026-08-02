@@ -1,0 +1,24 @@
+name: canonical-demo
+x-note: "line\nvalue"
+services:
+  app:
+    image: example/app:1.0
+    command: ["base", "--mode=test"]
+    environment:
+      ZERO: "00"
+      ENABLED: TRUE
+      EMPTY:
+    ports:
+      - target: 80
+        published: "8080"
+    volumes:
+      - ./data:/data:Z
+    x-vendor: !vendor
+      enabled: true
+  debug:
+    image: example/debug
+    profiles: [debug]
+networks:
+  default: {}
+volumes:
+  data: {}

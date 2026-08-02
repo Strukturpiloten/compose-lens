@@ -1,0 +1,16 @@
+name: short-bind-selinux
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    networks:
+      default: null
+    volumes:
+      - type: bind
+        source: <repository>/fixtures/conformance/short-bind-selinux/shared
+        target: /srv/shared
+        bind:
+          selinux: z
+          create_host_path: true
+networks:
+  default:
+    name: short-bind-selinux_default

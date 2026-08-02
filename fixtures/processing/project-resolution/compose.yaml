@@ -1,0 +1,43 @@
+services:
+  app:
+    image: example/app
+    depends_on: [db, debug-helper, ghost]
+    network_mode: service:debug-helper
+    links: ["db:database"]
+    extends:
+      service: db
+    networks: [front, missing-network]
+    volumes:
+      - ./data:/srv/data:z
+      - named-data:/var/lib/data:ro
+      - missing-data:/var/lib/missing
+      - type: bind
+        source: ~/cache
+        target: /cache
+    configs:
+      - app-config
+      - source: missing-config
+        target: /etc/missing.conf
+    secrets: [app-secret]
+    ports:
+      - "127.0.0.1:8080:80"
+      - target: 443
+        protocol: udp
+  db:
+    image: example/db
+    restart: always
+  debug-helper:
+    image: example/debug
+    profiles: [debug]
+    volumes:
+      - ./debug:/debug
+networks:
+  front: {}
+volumes:
+  named-data: {}
+configs:
+  app-config:
+    file: ./config/app.conf
+secrets:
+  app-secret:
+    file: ./secrets/app.secret

@@ -1,0 +1,21 @@
+schema = 1
+id = "volume-syntax-fidelity"
+suite = "typed-model"
+description = "Protects distinct short and long service-volume forms, including SELinux relabel options, source spans, and retained extension fields."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation or runtime is used; the fixture records syntax representation only."
+
+[expectations]
+summary = "Short z/Z mounts and long bind.selinux remain distinct typed variants without structural diagnostics."
+
+[extensions.typed-model]
+expected_diagnostics = []

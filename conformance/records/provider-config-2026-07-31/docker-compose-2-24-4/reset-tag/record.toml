@@ -1,0 +1,51 @@
+artifact_sha256 = "b506272a7f34ea056e36ba23e83593c491fd8419b0ed30ecacc42fe2eee8c964"
+artifact_url = "https://github.com/docker/compose/releases/download/v2.24.4/docker-compose-linux-x86_64"
+execution = ["linux-x86_64-native"]
+fixture = "fixtures/conformance/reset-tag"
+fixture_files = [
+    "compose.yaml",
+    "compose.override.yaml",
+]
+fixture_sha256 = "08ba353851044f900021773cce056557b620174f078aaf24de8056a18d7502a1"
+launcher_file = "docker-compose-2.24.4"
+launcher_sha256 = "b506272a7f34ea056e36ba23e83593c491fd8419b0ed30ecacc42fe2eee8c964"
+observed_unix_seconds = 1785531464
+platform = "openSUSE-Tumbleweed-20260728_linux-7.1.4-1-default_x86_64_provider-config-only_runtime-not-invoked_selinux-unavailable"
+probe = "reset-tag"
+probe_arguments = [
+    "--file",
+    "compose.yaml",
+    "--file",
+    "compose.override.yaml",
+    "config",
+    "--no-interpolate",
+]
+probe_exit_code = 0
+probe_success = true
+provider = "docker-compose"
+provider_version = "2.24.4"
+release_url = "https://github.com/docker/compose/releases/tag/v2.24.4"
+review_status = "reviewed"
+reviewed = "2026-07-31"
+outcome = "supported"
+summary = "Provider config applied !reset and removed the base environment mapping."
+normalizations = ["Replaced the local repository root with <repository> in retained output.", "Replaced the temporary acquisition root with <acquisition> in retained output."]
+schema = 1
+target = "docker-compose-2-24-4"
+version_arguments = [
+    "version",
+    "--short",
+]
+version_exit_code = 0
+version_success = true
+working_directory = "fixtures/conformance/reset-tag"
+
+[environment]
+HOME = "<result>/home"
+LANG = "C"
+LC_ALL = "C"
+PATH = "/usr/bin:/bin"
+XDG_CACHE_HOME = "<result>/cache"
+XDG_CONFIG_HOME = "<result>/config"
+XDG_RUNTIME_DIR = "<result>/runtime"
+inherited = false

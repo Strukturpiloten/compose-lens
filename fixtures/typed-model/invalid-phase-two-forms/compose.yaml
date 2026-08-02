@@ -1,0 +1,28 @@
+services:
+  app:
+    command:
+      invalid: mapping
+    environment: invalid
+    ports:
+      - [nested, sequence]
+      - published: 8080
+    networks: invalid
+    profiles:
+      invalid: mapping
+    configs:
+      - [nested, sequence]
+      - target: /etc/app.conf
+    secrets:
+      - target: /run/secrets/token
+networks:
+  invalid: scalar
+  bad-ipam:
+    ipam:
+      config:
+        - scalar
+volumes:
+  invalid: []
+configs:
+  invalid: scalar
+secrets:
+  invalid: []

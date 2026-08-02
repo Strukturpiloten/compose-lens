@@ -1,0 +1,23 @@
+schema = 1
+id = "canonical-merged"
+suite = "roundtrip"
+description = "Protects deterministic canonical rendering of a merged project without erasing retained Compose syntax forms."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml", "expected.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation is used; base and override documents are merged in listed order and profiles are not filtered for the golden output."
+
+[expectations]
+summary = "Canonical output has fixed two-space indentation, quoted strings and keys, LF endings, retained order/forms/tags, and stable parse-render-parse output."
+
+[extensions.roundtrip]
+renderer = "compose-lens-canonical-v1"
+document_marker = false
+indent = 2

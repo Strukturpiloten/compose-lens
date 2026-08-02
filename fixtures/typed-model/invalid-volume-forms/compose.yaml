@@ -1,0 +1,13 @@
+services:
+  app:
+    volumes:
+      - [nested, sequence]
+      - type: bind
+        source: ./data
+        bind:
+          selinux: private
+          create_host_path: "false"
+      - source: cache
+        target: /cache
+  broken: image-string
+volumes: []

@@ -1,0 +1,16 @@
+name: long-bind-selinux
+networks:
+  default:
+    name: long-bind-selinux_default
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    networks:
+      default: null
+    volumes:
+      - bind:
+          create_host_path: false
+          selinux: Z
+        source: <repository>/fixtures/conformance/long-bind-selinux/private
+        target: /srv/private
+        type: bind

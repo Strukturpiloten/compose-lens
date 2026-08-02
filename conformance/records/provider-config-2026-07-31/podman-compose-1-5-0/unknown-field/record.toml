@@ -1,0 +1,51 @@
+artifact_sha256 = "f0b9d35f4da1b309172adf208a5cb7a882b532a834c2202666c1988b6f147546"
+artifact_url = "https://files.pythonhosted.org/packages/41/4b/75ab5c151b9d170fdae0048a6f6528535aff848140c007f408af9ac555d6/podman_compose-1.5.0-py3-none-any.whl"
+execution = [
+    "python=3.13.14",
+    "python-dotenv=1.2.2",
+    "PyYAML=6.0.3",
+]
+fixture = "fixtures/conformance/unknown-field"
+fixture_files = ["compose.yaml"]
+fixture_sha256 = "fba0dbf8a1189539c4283986ef90cdbb2e2f1630bb9f7eb19321cbdab87d2013"
+launcher_file = "podman-compose"
+launcher_sha256 = "20cf74bb29fa2dc974bcc757fe4d850255b2ff43a038ddc76d9f13cedfd6dae9"
+observed_unix_seconds = 1785531589
+platform = "openSUSE-Tumbleweed-20260728_linux-7.1.4-1-default_x86_64_provider-config-only_runtime-not-invoked_selinux-unavailable"
+probe = "unknown-field"
+probe_arguments = [
+    "--file",
+    "compose.yaml",
+    "--dry-run",
+    "config",
+]
+probe_exit_code = 0
+probe_success = true
+provider = "podman-compose"
+provider_version = "1.5.0"
+release_url = "https://github.com/containers/podman-compose/releases/tag/v1.5.0"
+review_status = "reviewed"
+reviewed = "2026-07-31"
+outcome = "unknown-field-retained"
+summary = "Provider config accepted and retained the unknown non-extension service field."
+normalizations = ["Replaced the local repository root with <repository> in retained output.", "Replaced the temporary acquisition root with <acquisition> in retained output."]
+schema = 1
+target = "podman-compose-1-5-0"
+version_arguments = [
+    "--dry-run",
+    "version",
+    "--short",
+]
+version_exit_code = 0
+version_success = true
+working_directory = "fixtures/conformance/unknown-field"
+
+[environment]
+HOME = "<result>/home"
+LANG = "C"
+LC_ALL = "C"
+PATH = "/usr/bin:/bin"
+XDG_CACHE_HOME = "<result>/cache"
+XDG_CONFIG_HOME = "<result>/config"
+XDG_RUNTIME_DIR = "<result>/runtime"
+inherited = false

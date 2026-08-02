@@ -1,0 +1,23 @@
+schema = 1
+id = "preservation-edits"
+suite = "roundtrip"
+description = "Protects atomic value-scalar edits while every unrelated source byte remains unchanged."
+secrets_reviewed = true
+files = ["compose.yaml", "expected.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No files, environment variables, providers, or runtimes are consulted."
+
+[expectations]
+summary = "Exact scalar spans change with safe style retention or deterministic quoting; comments, whitespace, ordering, unknown fields, and untouched scalar styles remain byte-identical."
+
+[extensions.roundtrip]
+renderer = "compose-lens-preservation-edit-v1"
+atomic = true
+target = "value-scalars"

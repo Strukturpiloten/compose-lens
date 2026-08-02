@@ -1,0 +1,7 @@
+name: composelens-extension-probe
+x-authored-extension:
+  retained: true
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    x-service-extension: retained

@@ -1,0 +1,8 @@
+# Scalar spellings are intentional.
+services:
+  api:
+    image: 'example/api:1.0'
+    environment:
+      ZERO: "00"
+      BOOLEAN_TEXT: 'true'
+      PLAIN_TEXT: true-ish

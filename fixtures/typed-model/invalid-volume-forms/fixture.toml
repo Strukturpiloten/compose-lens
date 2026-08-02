@@ -1,0 +1,28 @@
+schema = 1
+id = "invalid-volume-forms"
+suite = "typed-model"
+description = "Protects recoverable structural diagnostics for unsupported service-volume shapes and incomplete long syntax."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation or runtime is used."
+
+[expectations]
+summary = "Typed extraction returns partial data and stable source-spanned diagnostic codes."
+
+[extensions.typed-model]
+expected_diagnostics = [
+  "compose.volume.expected-short-or-long",
+  "compose.volume.long.missing-target",
+  "compose.volume.bind.invalid-selinux",
+  "compose.model.expected-boolean",
+  "compose.volume.long.missing-type",
+  "compose.model.expected-mapping",
+]

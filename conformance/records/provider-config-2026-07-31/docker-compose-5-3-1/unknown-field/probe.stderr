@@ -1,0 +1,1 @@
+validating <repository>/fixtures/conformance/unknown-field/compose.yaml: services.app additional properties 'future_service_option' not allowed

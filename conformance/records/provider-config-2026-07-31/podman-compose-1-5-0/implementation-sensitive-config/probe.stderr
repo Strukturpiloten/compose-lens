@@ -1,0 +1,32 @@
+Traceback (most recent call last):
+  File "<acquisition>/venv-1.5.0/bin/podman-compose", line 6, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "<acquisition>/venv-1.5.0/lib64/python3.13/site-packages/podman_compose.py", line 4256, in main
+    asyncio.run(async_main())
+    ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.13/asyncio/runners.py", line 196, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib64/python3.13/asyncio/runners.py", line 119, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib64/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "<acquisition>/venv-1.5.0/lib64/python3.13/site-packages/podman_compose.py", line 4252, in async_main
+    await podman_compose.run()
+  File "<acquisition>/venv-1.5.0/lib64/python3.13/site-packages/podman_compose.py", line 2070, in run
+    self._parse_compose_file()
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "<acquisition>/venv-1.5.0/lib64/python3.13/site-packages/podman_compose.py", line 2255, in _parse_compose_file
+    content = normalize(content)
+  File "<acquisition>/venv-1.5.0/lib64/python3.13/site-packages/podman_compose.py", line 1804, in normalize
+    normalize_service(service)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "<acquisition>/venv-1.5.0/lib64/python3.13/site-packages/podman_compose.py", line 1774, in normalize_service
+    service[key] = norm_as_dict(service[key])
+                   ~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "<acquisition>/venv-1.5.0/lib64/python3.13/site-packages/podman_compose.py", line 349, in norm_as_dict
+    raise ValueError("dictionary or iterable is expected")
+ValueError: dictionary or iterable is expected

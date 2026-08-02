@@ -1,0 +1,10 @@
+services:
+  app:
+    command: ["echo", "base"]
+    environment:
+      KEEP: base
+    ports:
+      - "8080:80"
+      - "9090:90"
+    volumes:
+      - old:/old

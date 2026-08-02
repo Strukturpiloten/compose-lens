@@ -1,0 +1,23 @@
+schema = 1
+id = "implementation-sensitive-config"
+suite = "conformance"
+description = "Provides an authored provider-config probe for implementation-sensitive Compose syntax without asserting provider support."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "Each exact provider result is recorded for review; acceptance, rejection, and normalized output are observations rather than predeclared support."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["image-tag-and-digest", "short-bind-selinux", "long-bind-selinux", "reset-tag", "override-tag", "extension-field", "unknown-field"]
+

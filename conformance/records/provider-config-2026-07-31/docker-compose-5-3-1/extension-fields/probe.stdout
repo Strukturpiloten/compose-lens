@@ -1,0 +1,12 @@
+name: composelens-extension-probe
+networks:
+  default:
+    name: composelens-extension-probe_default
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    networks:
+      default: null
+    x-service-extension: retained
+x-authored-extension:
+  retained: true

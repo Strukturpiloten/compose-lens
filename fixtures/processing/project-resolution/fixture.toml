@@ -1,0 +1,21 @@
+schema = 1
+id = "project-resolution"
+suite = "processing"
+description = "Protects selected-service path origins, cross-resource references, inactive-service references, and policy-owned defaults."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The project base is workspace/project, no profiles are active, and home expansion is supplied explicitly as /home/tester."
+
+[expectations]
+summary = "Only selected service paths are resolved; missing and inactive references are diagnosed; defaults are requested without mutating source."
+
+[extensions.processing]
+stage = "post-merge-resolution"

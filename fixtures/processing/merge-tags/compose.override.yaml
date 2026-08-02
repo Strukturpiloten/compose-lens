@@ -1,0 +1,6 @@
+services:
+  app:
+    command: !override ["echo", "override"]
+    environment: !reset {}
+    ports: !reset []
+    volumes: !override ["new:/new"]

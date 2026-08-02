@@ -1,0 +1,19 @@
+services:
+  app:
+    extra_hosts:
+      - missing-address
+      - valid=192.0.2.10
+    ulimits:
+      nofile: -2
+      nproc: 1024
+    healthcheck:
+      test: ["INVALID", "true"]
+      interval: forever
+      retries: -1
+    depends_on:
+      database:
+        condition: sometimes
+    build: []
+    deploy: invalid
+  database:
+    image: example/database

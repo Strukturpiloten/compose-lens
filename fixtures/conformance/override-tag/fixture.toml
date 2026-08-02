@@ -1,0 +1,22 @@
+schema = 1
+id = "override-tag"
+suite = "conformance"
+description = "Isolates provider multi-file config handling of the Compose override tag."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider either replaces the base port with the override port or returns a feature-specific rejection."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["override-tag"]

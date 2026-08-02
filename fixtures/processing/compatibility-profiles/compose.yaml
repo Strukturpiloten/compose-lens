@@ -1,0 +1,25 @@
+x-project-metadata:
+  owner: Strukturpiloten
+services:
+  app:
+    image: registry.example/app:1.2@sha256:abcdef
+    x-runtime-note: retained
+    environment:
+      KEEP: base
+    volumes:
+      - ./shared:/srv/shared:z
+      - type: bind
+        source: ./private
+        target: /srv/private
+        bind:
+          create_host_path: false
+          selinux: Z
+  debug:
+    image: example/debug
+    profiles: [debug]
+    volumes:
+      - type: bind
+        source: ./debug
+        target: /debug
+        bind:
+          selinux: Z

@@ -1,0 +1,21 @@
+schema = 1
+id = "multi-file-loading"
+suite = "processing"
+description = "Protects document ordering, explicit origins, first-file project-directory semantics, and per-file interpolation before merge."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "Both files are supplied in the listed order, have different explicit origin directories, and interpolate TAG=3.2."
+
+[expectations]
+summary = "Loading preserves order and every origin, chooses the first document directory as the project base, and produces separate interpolation overlays."
+
+[extensions.processing]
+stage = "load-before-merge"

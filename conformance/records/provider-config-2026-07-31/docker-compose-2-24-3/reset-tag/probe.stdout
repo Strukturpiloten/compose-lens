@@ -1,0 +1,9 @@
+name: reset-tag
+services:
+  app:
+    image: example.invalid/composelens/app:1
+    networks:
+      default: null
+networks:
+  default:
+    name: reset-tag_default

@@ -1,0 +1,21 @@
+schema = 1
+id = "profile-selection"
+suite = "processing"
+description = "Protects explicit Compose profile selection, all-profile selection, and reset-to-unprofiled merge behavior."
+secrets_reviewed = true
+files = ["compose.yaml", "compose.override.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No environment or implicit command-target profile activation is used."
+
+[expectations]
+summary = "Unprofiled services stay active, matching profiles activate restricted services, and a reset profile list removes the restriction."
+
+[extensions.processing]
+stage = "post-merge-profile-selection"

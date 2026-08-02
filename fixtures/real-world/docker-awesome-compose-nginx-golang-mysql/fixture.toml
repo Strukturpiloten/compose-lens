@@ -1,0 +1,25 @@
+schema = 1
+id = "docker-awesome-compose-nginx-golang-mysql"
+suite = "real-world"
+description = "Exercises Docker's three-service Go, NGINX, and MariaDB example with build configuration, health checks, dependencies, named volumes, bind mounts, and secrets."
+secrets_reviewed = true
+files = ["compose.yaml", "UPSTREAM_LICENSE"]
+
+[provenance]
+source = "external"
+url = "https://github.com/docker/awesome-compose/tree/30f4b7f6a6c3b0c0ecf4d4efb0de203c48d11562/nginx-golang-mysql"
+revision = "30f4b7f6a6c3b0c0ecf4d4efb0de203c48d11562"
+license = "CC0-1.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation values, provider, runtime, build context, or referenced secret file are accessed by the tests."
+
+[expectations]
+summary = "The source remains byte-preservable; three services, secret grants, the named volume, and long bind mount type-check; unknown service fields survive; references resolve; and canonical output reparses."
+
+[extensions.real-world]
+upstream_project = "docker/awesome-compose"
+upstream_sample = "nginx-golang-mysql"
+compose_sha256 = "140587eb0242569bd2466dfcaf7fbe86fbdbe55752ea36b47512385af8d3d95d"

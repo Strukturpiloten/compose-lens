@@ -1,0 +1,12 @@
+services:
+  probe:
+    image: ${COMPOSE_LENS_RUNTIME_IMAGE:?supply a preloaded digest-pinned image}
+    command: ["sh", "-c", "test -d /mnt/probe"]
+    network_mode: none
+    volumes:
+      - type: bind
+        source: ./host-source
+        target: /mnt/probe
+        bind:
+          create_host_path: false
+          selinux: Z

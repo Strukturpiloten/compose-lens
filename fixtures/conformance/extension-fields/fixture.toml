@@ -1,0 +1,22 @@
+schema = 1
+id = "extension-fields"
+suite = "conformance"
+description = "Isolates provider config handling of top-level and service Compose extension fields."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider accepts extension fields and reveals whether config output retains or removes them."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["extension-field"]

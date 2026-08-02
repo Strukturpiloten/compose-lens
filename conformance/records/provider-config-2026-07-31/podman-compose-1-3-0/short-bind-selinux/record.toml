@@ -1,0 +1,51 @@
+artifact_sha256 = "34599a9fd404bb80b587d5dda316d83928d7a33917e8a0adcd07f7aa6c52da4b"
+artifact_url = "https://files.pythonhosted.org/packages/e3/53/41ec4fcb57fe32a02c7616a2b4e05343ed4c0daaa76b1e04a2a0ccb5c7e6/podman_compose-1.3.0-py2.py3-none-any.whl"
+execution = [
+    "python=3.13.14",
+    "python-dotenv=1.2.2",
+    "PyYAML=6.0.3",
+]
+fixture = "fixtures/conformance/short-bind-selinux"
+fixture_files = ["compose.yaml"]
+fixture_sha256 = "d188daadfe5279011c8d5e6ce46de89b46effe2994faf3b921d0f6978066f016"
+launcher_file = "podman-compose"
+launcher_sha256 = "d703089cf5933a807711f5b17cee752128f2bf61539553813565ef411c560292"
+observed_unix_seconds = 1785531547
+platform = "openSUSE-Tumbleweed-20260728_linux-7.1.4-1-default_x86_64_provider-config-only_runtime-not-invoked_selinux-unavailable"
+probe = "short-bind-selinux"
+probe_arguments = [
+    "--file",
+    "compose.yaml",
+    "--dry-run",
+    "config",
+]
+probe_exit_code = 0
+probe_success = true
+provider = "podman-compose"
+provider_version = "1.3.0"
+release_url = "https://github.com/containers/podman-compose/releases/tag/v1.3.0"
+review_status = "reviewed"
+reviewed = "2026-07-31"
+outcome = "accepted-provider-only"
+summary = "Provider config accepted the short SELinux relabel form; runtime relabeling was not exercised."
+normalizations = ["Replaced the local repository root with <repository> in retained output.", "Replaced the temporary acquisition root with <acquisition> in retained output."]
+schema = 1
+target = "podman-compose-1-3-0"
+version_arguments = [
+    "--dry-run",
+    "version",
+    "--short",
+]
+version_exit_code = 0
+version_success = true
+working_directory = "fixtures/conformance/short-bind-selinux"
+
+[environment]
+HOME = "<result>/home"
+LANG = "C"
+LC_ALL = "C"
+PATH = "/usr/bin:/bin"
+XDG_CACHE_HOME = "<result>/cache"
+XDG_CONFIG_HOME = "<result>/config"
+XDG_RUNTIME_DIR = "<result>/runtime"
+inherited = false

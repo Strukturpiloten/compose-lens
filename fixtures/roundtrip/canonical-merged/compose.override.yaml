@@ -1,0 +1,6 @@
+services:
+  app:
+    command: ["override", "--quoted=a:b"]
+    environment:
+      ENABLED: false
+      NEW_VALUE: "line\nvalue"
