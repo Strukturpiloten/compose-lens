@@ -5,11 +5,12 @@ ComposeLens is a Rust library for reading, understanding, transforming, validati
 It is designed for tools that need more than strict deserialization: source-aware diagnostics, implementation extensions, optional interpolation, multi-file projects, profiles, and round-trip-safe transformations.
 
 > [!IMPORTANT]
-> [ComposeLens 0.1.0](https://crates.io/crates/compose-lens/0.1.0) is the first supported pre-1.0
-> release. Its API covers loss-aware YAML
+> [ComposeLens 0.1.x](https://crates.io/crates/compose-lens) is the first supported pre-1.0
+> release line. Its API covers loss-aware YAML
 > syntax, the source-aware native model, explicit project processing, version-aware compatibility
 > profiles, deterministic merged-project rendering, presentation-only formatting, and atomic
-> value-scalar editing. The typed boundary includes the first BoxFerry conversion fields plus
+> value-scalar editing. A native merged/profile-selected project view retains complete multi-file
+> provenance for adapters. The typed boundary includes the first BoxFerry conversion fields plus
 > issue-derived host mappings, identities, limits, health-gated dependencies, container paths, and
 > field-level build/deploy models. Structural editing, the complete Compose model, and reviewed
 > runtime-effect results are not yet available.
@@ -44,7 +45,8 @@ source text
   → loaded multi-file project
   → optional per-file interpolation
   → provenance-preserving merged project
-  → selected profiles, references, paths, and defaults
+  → optional profile selection and native project view
+  → references, paths, defaults, and compatibility
   → validated semantic view
   → rendered Compose document
 ```
@@ -53,7 +55,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 
 ## Documentation
 
-- [Published Rust API documentation](https://docs.rs/compose-lens/0.1.0/compose_lens/)
+- [Published Rust API documentation](https://docs.rs/compose-lens/latest/compose_lens/)
 - [Documentation index](docs/README.md)
 - [Software architecture](docs/architecture.md)
 - [Target project structure](docs/project-structure.md)
@@ -67,7 +69,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
-- [0.1.0 release notes](docs/releases/0.1.0.md)
+- [0.1.1 release notes](docs/releases/0.1.1.md)
 - [Release process](docs/releasing.md)
 - [Changelog](CHANGELOG.md)
 - [Roadmap](docs/roadmap.md)

@@ -18,7 +18,7 @@ pub struct VolumeDefinition {
 }
 
 impl VolumeDefinition {
-    pub(super) fn new(name: Located<String>, span: SourceSpan) -> Self {
+    pub(crate) fn new(name: Located<String>, span: SourceSpan) -> Self {
         Self {
             name,
             span,
@@ -31,25 +31,25 @@ impl VolumeDefinition {
             unknown_fields: Vec::new(),
         }
     }
-    pub(super) fn set_driver(&mut self, value: Located<String>) {
+    pub(crate) fn set_driver(&mut self, value: Located<String>) {
         self.driver = Some(value);
     }
-    pub(super) fn set_driver_opts(&mut self, value: Vec<KeyValueEntry>) {
+    pub(crate) fn set_driver_opts(&mut self, value: Vec<KeyValueEntry>) {
         self.driver_opts = value;
     }
-    pub(super) fn set_external(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_external(&mut self, value: Located<BooleanValue>) {
         self.external = Some(value);
     }
-    pub(super) fn set_labels(&mut self, value: Labels) {
+    pub(crate) fn set_labels(&mut self, value: Labels) {
         self.labels = Some(value);
     }
-    pub(super) fn set_custom_name(&mut self, value: Located<String>) {
+    pub(crate) fn set_custom_name(&mut self, value: Located<String>) {
         self.custom_name = Some(value);
     }
-    pub(super) fn push_extension(&mut self, value: FieldReference) {
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
     }
-    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
         self.unknown_fields.push(value);
     }
 
@@ -115,7 +115,7 @@ pub struct ConfigDefinition {
 }
 
 impl ConfigDefinition {
-    pub(super) fn new(name: Located<String>, span: SourceSpan) -> Self {
+    pub(crate) fn new(name: Located<String>, span: SourceSpan) -> Self {
         Self {
             name,
             span,
@@ -128,25 +128,25 @@ impl ConfigDefinition {
             unknown_fields: Vec::new(),
         }
     }
-    pub(super) fn set_file(&mut self, value: Located<String>) {
+    pub(crate) fn set_file(&mut self, value: Located<String>) {
         self.file = Some(value);
     }
-    pub(super) fn set_environment(&mut self, value: Located<String>) {
+    pub(crate) fn set_environment(&mut self, value: Located<String>) {
         self.environment = Some(value);
     }
-    pub(super) fn set_content(&mut self, value: Located<String>) {
+    pub(crate) fn set_content(&mut self, value: Located<String>) {
         self.content = Some(value);
     }
-    pub(super) fn set_external(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_external(&mut self, value: Located<BooleanValue>) {
         self.external = Some(value);
     }
-    pub(super) fn set_custom_name(&mut self, value: Located<String>) {
+    pub(crate) fn set_custom_name(&mut self, value: Located<String>) {
         self.custom_name = Some(value);
     }
-    pub(super) fn push_extension(&mut self, value: FieldReference) {
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
     }
-    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
         self.unknown_fields.push(value);
     }
 
@@ -211,7 +211,7 @@ pub struct SecretDefinition {
 }
 
 impl SecretDefinition {
-    pub(super) fn new(name: Located<String>, span: SourceSpan) -> Self {
+    pub(crate) fn new(name: Located<String>, span: SourceSpan) -> Self {
         Self {
             name,
             span,
@@ -223,22 +223,22 @@ impl SecretDefinition {
             unknown_fields: Vec::new(),
         }
     }
-    pub(super) fn set_file(&mut self, value: Located<String>) {
+    pub(crate) fn set_file(&mut self, value: Located<String>) {
         self.file = Some(value);
     }
-    pub(super) fn set_environment(&mut self, value: Located<String>) {
+    pub(crate) fn set_environment(&mut self, value: Located<String>) {
         self.environment = Some(value);
     }
-    pub(super) fn set_external(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_external(&mut self, value: Located<BooleanValue>) {
         self.external = Some(value);
     }
-    pub(super) fn set_custom_name(&mut self, value: Located<String>) {
+    pub(crate) fn set_custom_name(&mut self, value: Located<String>) {
         self.custom_name = Some(value);
     }
-    pub(super) fn push_extension(&mut self, value: FieldReference) {
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
     }
-    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
         self.unknown_fields.push(value);
     }
 
@@ -298,7 +298,7 @@ pub struct LongGrant {
 }
 
 impl LongGrant {
-    pub(super) fn new(span: SourceSpan) -> Self {
+    pub(crate) fn new(span: SourceSpan) -> Self {
         Self {
             span,
             source: None,
@@ -310,25 +310,25 @@ impl LongGrant {
             unknown_fields: Vec::new(),
         }
     }
-    pub(super) fn set_source(&mut self, value: Located<String>) {
+    pub(crate) fn set_source(&mut self, value: Located<String>) {
         self.source = Some(value);
     }
-    pub(super) fn set_target(&mut self, value: Located<String>) {
+    pub(crate) fn set_target(&mut self, value: Located<String>) {
         self.target = Some(value);
     }
-    pub(super) fn set_uid(&mut self, value: Located<String>) {
+    pub(crate) fn set_uid(&mut self, value: Located<String>) {
         self.uid = Some(value);
     }
-    pub(super) fn set_gid(&mut self, value: Located<String>) {
+    pub(crate) fn set_gid(&mut self, value: Located<String>) {
         self.gid = Some(value);
     }
-    pub(super) fn set_mode(&mut self, value: Located<String>) {
+    pub(crate) fn set_mode(&mut self, value: Located<String>) {
         self.mode = Some(value);
     }
-    pub(super) fn push_extension(&mut self, value: FieldReference) {
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
     }
-    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
         self.unknown_fields.push(value);
     }
 

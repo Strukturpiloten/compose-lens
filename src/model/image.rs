@@ -35,7 +35,7 @@ pub struct ImageReference {
 }
 
 impl ImageReference {
-    pub(super) fn parse(raw: String) -> Self {
+    pub(crate) fn parse(raw: String) -> Self {
         let (name_and_tag, digest) = raw.split_once('@').map_or((raw.as_str(), None), |(left, right)| {
             let (algorithm, value) = right
                 .split_once(':')

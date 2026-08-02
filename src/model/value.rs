@@ -34,7 +34,7 @@ pub struct KeyValueEntry {
 }
 
 impl KeyValueEntry {
-    pub(super) const fn new(key: Located<String>, value: Located<ComposeScalar>, span: SourceSpan) -> Self {
+    pub(crate) const fn new(key: Located<String>, value: Located<ComposeScalar>, span: SourceSpan) -> Self {
         Self { key, value, span }
     }
 

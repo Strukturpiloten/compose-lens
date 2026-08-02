@@ -38,7 +38,7 @@ pub use volume::{
 
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::source::{SourceId, SourceSpan};
-use crate::syntax::SyntaxDocument;
+use crate::syntax::{SyntaxDocument, scalar_string_from_source};
 use std::collections::BTreeMap;
 use yaml_edit::{AsYaml, Mapping, ScalarType, ScalarValue, YamlNode};
 
@@ -792,7 +792,10 @@ impl Parser {
                 if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null {
                     Some(Command::Null(span))
                 } else {
-                    Some(Command::String(Located::new(scalar.as_string(), span)))
+                    Some(Command::String(Located::new(
+                        scalar_string_from_source(&self.source, scalar),
+                        span,
+                    )))
                 }
             }
             Some(YamlNode::Sequence(sequence)) => {
@@ -1236,7 +1239,10 @@ impl Parser {
             match value {
                 YamlNode::Scalar(scalar) => {
                     let span = span_from_position(self.source_id, scalar.byte_range());
-                    ports.push(Port::Short(ShortPort::parse(Located::new(scalar.as_string(), span))));
+                    ports.push(Port::Short(ShortPort::parse(Located::new(
+                        scalar_string_from_source(&self.source, &scalar),
+                        span,
+                    ))));
                 }
                 YamlNode::Mapping(mapping) => {
                     ports.push(Port::Long(Box::new(self.parse_long_port(&mapping))));
@@ -1421,7 +1427,10 @@ impl Parser {
             match value {
                 YamlNode::Scalar(scalar) => {
                     let span = span_from_position(self.source_id, scalar.byte_range());
-                    grants.push(ParsedGrant::Short(Located::new(scalar.as_string(), span)));
+                    grants.push(ParsedGrant::Short(Located::new(
+                        scalar_string_from_source(&self.source, &scalar),
+                        span,
+                    )));
                 }
                 YamlNode::Mapping(mapping) => {
                     grants.push(ParsedGrant::Long(Box::new(self.parse_long_grant(&mapping))));
@@ -1486,7 +1495,7 @@ impl Parser {
             .filter_map(|value| match value {
                 YamlNode::Scalar(scalar) => {
                     let span = span_from_position(self.source_id, scalar.byte_range());
-                    let raw = Located::new(scalar.as_string(), span);
+                    let raw = Located::new(scalar_string_from_source(&self.source, &scalar), span);
                     Some(VolumeMount::Short(ShortVolumeMount::new(raw)))
                 }
                 YamlNode::Mapping(mapping) => Some(VolumeMount::Long(Box::new(self.parse_long_volume(&mapping)))),
@@ -1949,7 +1958,7 @@ impl Parser {
             return None;
         }
         Some(Located::new(
-            scalar.as_string(),
+            scalar_string_from_source(&self.source, scalar),
             span_from_position(self.source_id, scalar.byte_range()),
         ))
     }
@@ -1964,7 +1973,7 @@ impl Parser {
         if let Some(value) = scalar_value.to_bool() {
             return Some(Located::new(BooleanValue::Literal(value), span));
         }
-        let value = scalar.as_string();
+        let value = scalar_string_from_source(&self.source, scalar);
         if value.contains('$') {
             return Some(Located::new(BooleanValue::Expression(value), span));
         }
@@ -2010,7 +2019,7 @@ impl Parser {
                 continue;
             }
             let span = span_from_position(self.source_id, scalar.byte_range());
-            values.push(Located::new(scalar.as_string(), span));
+            values.push(Located::new(scalar_string_from_source(&self.source, &scalar), span));
         }
         values
     }
@@ -2050,8 +2059,12 @@ impl Parser {
         let typed = match value.scalar_type() {
             ScalarType::Null => ComposeScalar::Null,
             ScalarType::Boolean => ComposeScalar::Boolean(value.to_bool().unwrap_or(false)),
-            ScalarType::Integer | ScalarType::Float => ComposeScalar::Number(scalar.as_string()),
-            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => ComposeScalar::String(scalar.as_string()),
+            ScalarType::Integer | ScalarType::Float => {
+                ComposeScalar::Number(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                ComposeScalar::String(scalar_string_from_source(&self.source, scalar))
+            }
         };
         Some(Located::new(typed, span))
     }
@@ -2124,7 +2137,7 @@ impl Parser {
                 let value = authored_value.map(unwrap_processing_tag);
                 let span = value_span.map_or(name_span, |value_span| union(name_span, value_span));
                 Some(ParsedField {
-                    name: Located::new(scalar.as_string(), name_span),
+                    name: Located::new(scalar_string_from_source(&self.source, scalar), name_span),
                     value,
                     value_span,
                     span,

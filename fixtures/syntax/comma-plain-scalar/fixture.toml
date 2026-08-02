@@ -1,0 +1,21 @@
+schema = 1
+id = "comma-plain-scalar"
+suite = "syntax"
+description = "Protects complete parsing and typed decoding of an unquoted short volume with comma-separated options while leaving quoted, flow, comment, and block-scalar commas untouched."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment or external implementation is used."
+
+[expectations]
+summary = "The original source, complete document, authored comma-separated mount options, and non-plain comma contexts are retained without diagnostics."
+
+[extensions.syntax]
+expected_diagnostics = []

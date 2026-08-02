@@ -2,9 +2,14 @@
 
 use compose_lens::source::SourceId;
 use compose_lens::syntax::{SyntaxDocument, YAML_UNCLOSED_FLOW_SEQUENCE};
+use compose_lens::{
+    loader::{DocumentInput, DocumentOrigin, LoadedProject},
+    merge::{MergedScalar, MergedValue, merge_project},
+};
 
 const LOSSLESS_COMPOSE: &str = include_str!("../fixtures/syntax/lossless-compose/compose.yaml");
 const MALFORMED_FLOW: &str = include_str!("../fixtures/syntax/malformed-flow/compose.yaml");
+const COMMA_PLAIN_SCALAR: &str = include_str!("../fixtures/syntax/comma-plain-scalar/compose.yaml");
 
 #[test]
 fn preserves_compose_shaped_yaml_without_normalization() -> Result<(), Box<dyn std::error::Error>> {
@@ -60,5 +65,36 @@ fn preserves_unicode_and_crlf_while_reporting_byte_locations() -> Result<(), Box
             .map(|position| (position.line(), position.column())),
         Some((2, 1))
     );
+    Ok(())
+}
+
+#[test]
+fn accepts_and_preserves_a_comma_in_a_block_plain_scalar() -> Result<(), Box<dyn std::error::Error>> {
+    let parsed = SyntaxDocument::parse(SourceId::new(23), COMMA_PLAIN_SCALAR)?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(parsed.document().source_text(), COMMA_PLAIN_SCALAR);
+    assert_eq!(parsed.document().render_preserved(), COMMA_PLAIN_SCALAR);
+    assert_eq!(parsed.document().document_count(), 1);
+    Ok(())
+}
+
+#[test]
+fn restores_authored_commas_before_semantic_merge_processing() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(24),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        COMMA_PLAIN_SCALAR,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let value = merged
+        .project()
+        .and_then(|project| project.value(&["x-parser-guards", "plain-mapping"]))
+        .and_then(MergedValue::as_scalar)
+        .map(MergedScalar::value);
+
+    assert!(loaded.is_valid(), "{:#?}", loaded.diagnostics());
+    assert!(merged.is_valid(), "{:#?}", merged.diagnostics());
+    assert_eq!(value, Some("alpha,beta"));
     Ok(())
 }

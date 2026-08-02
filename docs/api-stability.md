@@ -30,13 +30,15 @@ The 0.1 consumer contract covers these explicit stages:
 | Source and diagnostics | `source`, `diagnostic`, `syntax` |
 | Native Compose types | `model` |
 | Caller-owned environment and project inputs | `interpolation`, `loader` |
-| Merge and post-merge views | `merge`, `profiles`, `resolution` |
+| Merge and post-merge views | `merge`, `profiles`, `project`, `resolution` |
 | Versioned compatibility reports | `validation` |
 | Canonical output and scalar preservation edits | `render` |
 
 The compile-and-behavior contract in `tests/public_api.rs` exercises this path as an external crate
-consumer would. The modules remain separate deliberately; 0.1 does not add a convenience function
-that hides file access, interpolation, merging, profile selection, validation, or rendering.
+consumer would. The additive `project` module provides native values without hiding loading,
+interpolation, merging, or profile selection. The modules remain separate deliberately; 0.1 does
+not add a convenience function that hides file access, interpolation, merging, profile selection,
+validation, or rendering.
 
 ## Changes before 1.0
 

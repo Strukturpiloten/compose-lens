@@ -22,7 +22,7 @@ pub struct ServiceNetwork {
 }
 
 impl ServiceNetwork {
-    pub(super) fn new(name: Located<String>, span: SourceSpan) -> Self {
+    pub(crate) fn new(name: Located<String>, span: SourceSpan) -> Self {
         Self {
             name,
             span,
@@ -40,37 +40,37 @@ impl ServiceNetwork {
         }
     }
 
-    pub(super) fn set_aliases(&mut self, value: Vec<Located<String>>) {
+    pub(crate) fn set_aliases(&mut self, value: Vec<Located<String>>) {
         self.aliases = value;
     }
-    pub(super) fn set_interface_name(&mut self, value: Located<String>) {
+    pub(crate) fn set_interface_name(&mut self, value: Located<String>) {
         self.interface_name = Some(value);
     }
-    pub(super) fn set_ipv4_address(&mut self, value: Located<String>) {
+    pub(crate) fn set_ipv4_address(&mut self, value: Located<String>) {
         self.ipv4_address = Some(value);
     }
-    pub(super) fn set_ipv6_address(&mut self, value: Located<String>) {
+    pub(crate) fn set_ipv6_address(&mut self, value: Located<String>) {
         self.ipv6_address = Some(value);
     }
-    pub(super) fn set_link_local_ips(&mut self, value: Vec<Located<String>>) {
+    pub(crate) fn set_link_local_ips(&mut self, value: Vec<Located<String>>) {
         self.link_local_ips = value;
     }
-    pub(super) fn set_mac_address(&mut self, value: Located<String>) {
+    pub(crate) fn set_mac_address(&mut self, value: Located<String>) {
         self.mac_address = Some(value);
     }
-    pub(super) fn set_driver_opts(&mut self, value: Vec<KeyValueEntry>) {
+    pub(crate) fn set_driver_opts(&mut self, value: Vec<KeyValueEntry>) {
         self.driver_opts = value;
     }
-    pub(super) fn set_gw_priority(&mut self, value: Located<String>) {
+    pub(crate) fn set_gw_priority(&mut self, value: Located<String>) {
         self.gw_priority = Some(value);
     }
-    pub(super) fn set_priority(&mut self, value: Located<String>) {
+    pub(crate) fn set_priority(&mut self, value: Located<String>) {
         self.priority = Some(value);
     }
-    pub(super) fn push_extension(&mut self, value: FieldReference) {
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
     }
-    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
         self.unknown_fields.push(value);
     }
 
@@ -183,7 +183,7 @@ pub struct IpamConfig {
 }
 
 impl IpamConfig {
-    pub(super) fn new(span: SourceSpan) -> Self {
+    pub(crate) fn new(span: SourceSpan) -> Self {
         Self {
             span,
             subnet: None,
@@ -194,22 +194,22 @@ impl IpamConfig {
             unknown_fields: Vec::new(),
         }
     }
-    pub(super) fn set_subnet(&mut self, value: Located<String>) {
+    pub(crate) fn set_subnet(&mut self, value: Located<String>) {
         self.subnet = Some(value);
     }
-    pub(super) fn set_ip_range(&mut self, value: Located<String>) {
+    pub(crate) fn set_ip_range(&mut self, value: Located<String>) {
         self.ip_range = Some(value);
     }
-    pub(super) fn set_gateway(&mut self, value: Located<String>) {
+    pub(crate) fn set_gateway(&mut self, value: Located<String>) {
         self.gateway = Some(value);
     }
-    pub(super) fn set_aux_addresses(&mut self, value: Vec<KeyValueEntry>) {
+    pub(crate) fn set_aux_addresses(&mut self, value: Vec<KeyValueEntry>) {
         self.aux_addresses = value;
     }
-    pub(super) fn push_extension(&mut self, value: FieldReference) {
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
     }
-    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
         self.unknown_fields.push(value);
     }
 
@@ -262,7 +262,7 @@ pub struct Ipam {
 }
 
 impl Ipam {
-    pub(super) fn new(span: SourceSpan) -> Self {
+    pub(crate) fn new(span: SourceSpan) -> Self {
         Self {
             span,
             driver: None,
@@ -272,19 +272,19 @@ impl Ipam {
             unknown_fields: Vec::new(),
         }
     }
-    pub(super) fn set_driver(&mut self, value: Located<String>) {
+    pub(crate) fn set_driver(&mut self, value: Located<String>) {
         self.driver = Some(value);
     }
-    pub(super) fn set_config(&mut self, value: Vec<IpamConfig>) {
+    pub(crate) fn set_config(&mut self, value: Vec<IpamConfig>) {
         self.config = value;
     }
-    pub(super) fn set_options(&mut self, value: Vec<KeyValueEntry>) {
+    pub(crate) fn set_options(&mut self, value: Vec<KeyValueEntry>) {
         self.options = value;
     }
-    pub(super) fn push_extension(&mut self, value: FieldReference) {
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
     }
-    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
         self.unknown_fields.push(value);
     }
 
@@ -340,7 +340,7 @@ pub struct NetworkDefinition {
 }
 
 impl NetworkDefinition {
-    pub(super) fn new(name: Located<String>, span: SourceSpan) -> Self {
+    pub(crate) fn new(name: Located<String>, span: SourceSpan) -> Self {
         Self {
             name,
             span,
@@ -358,40 +358,40 @@ impl NetworkDefinition {
             unknown_fields: Vec::new(),
         }
     }
-    pub(super) fn set_driver(&mut self, value: Located<String>) {
+    pub(crate) fn set_driver(&mut self, value: Located<String>) {
         self.driver = Some(value);
     }
-    pub(super) fn set_driver_opts(&mut self, value: Vec<KeyValueEntry>) {
+    pub(crate) fn set_driver_opts(&mut self, value: Vec<KeyValueEntry>) {
         self.driver_opts = value;
     }
-    pub(super) fn set_attachable(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_attachable(&mut self, value: Located<BooleanValue>) {
         self.attachable = Some(value);
     }
-    pub(super) fn set_enable_ipv4(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_enable_ipv4(&mut self, value: Located<BooleanValue>) {
         self.enable_ipv4 = Some(value);
     }
-    pub(super) fn set_enable_ipv6(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_enable_ipv6(&mut self, value: Located<BooleanValue>) {
         self.enable_ipv6 = Some(value);
     }
-    pub(super) fn set_external(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_external(&mut self, value: Located<BooleanValue>) {
         self.external = Some(value);
     }
-    pub(super) fn set_internal(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_internal(&mut self, value: Located<BooleanValue>) {
         self.internal = Some(value);
     }
-    pub(super) fn set_ipam(&mut self, value: Ipam) {
+    pub(crate) fn set_ipam(&mut self, value: Ipam) {
         self.ipam = Some(value);
     }
-    pub(super) fn set_labels(&mut self, value: Labels) {
+    pub(crate) fn set_labels(&mut self, value: Labels) {
         self.labels = Some(value);
     }
-    pub(super) fn set_custom_name(&mut self, value: Located<String>) {
+    pub(crate) fn set_custom_name(&mut self, value: Located<String>) {
         self.custom_name = Some(value);
     }
-    pub(super) fn push_extension(&mut self, value: FieldReference) {
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
     }
-    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
         self.unknown_fields.push(value);
     }
 

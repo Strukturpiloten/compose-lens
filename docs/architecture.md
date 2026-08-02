@@ -10,13 +10,13 @@ ComposeLens provides a source-aware, tolerant, and typed representation of Compo
 bytes or text
      │
      ▼
-syntax document ──▶ typed document ──▶ loaded project ──▶ semantic view
-     │                    │                  │                  │
-     ├──▶ source map      ├──▶ extensions    ├──▶ overlays      ├──▶ validation
-     │                    │                  ├──▶ profiles      ├──▶ normalization
-     │                    │                  ├──▶ interpolation │
-     │                    │                  │                  │
-     └────────────────────┴──────────────────┴──────────────────┴──▶ renderer
+syntax document ──▶ typed document ──▶ loaded project ──▶ merged project ──▶ native project view
+     │                    │                  │                  │                    │
+     ├──▶ source map      ├──▶ extensions    ├──▶ interpolation├──▶ profiles          ├──▶ adapters
+     │                    │                  └──▶ origins       ├──▶ validation        └──▶ diagnostics
+     │                    │                                     ├──▶ resolution
+     │                    │                                     │
+     └────────────────────┴─────────────────────────────────────┴──────────────────────▶ renderer
 ```
 
 ### Source and syntax layer
@@ -25,7 +25,7 @@ The syntax layer owns YAML representation, comments where supported, scalar spel
 
 It must represent syntactically valid input even when the typed Compose model does not recognize every field.
 
-The initial implementation stores an immutable loss-aware concrete syntax tree plus the original source. [`yaml-edit`](https://docs.rs/yaml-edit/0.2.3/yaml_edit/) is private behind ComposeLens-owned APIs as decided in [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md). Recoverable malformed input produces both a renderable syntax document and structured diagnostics.
+The initial implementation stores an immutable loss-aware concrete syntax tree plus the original source. [`yaml-edit`](https://docs.rs/yaml-edit/0.2.3/yaml_edit/) is private behind ComposeLens-owned APIs as decided in [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md). Recoverable malformed input produces both a renderable syntax document and structured diagnostics. A constrained same-byte-length private parser adapter accepts valid comma-containing block plain values while all public spelling, decoding, ranges, editing, and rendering continue to use the authored source. The complete-root guard remains the fail-safe for any backend omission. [ADR 0015](decisions/0015-byte-preserving-yaml-backend-compatibility.md) defines that boundary.
 
 ### Typed document model
 
@@ -67,6 +67,14 @@ nodes. It recursively merges mappings, applies field-specific sequence rules and
 tags, resolves same-document YAML aliases and merge keys, and records every contributing span plus
 the effective merge operation. The original syntax and per-document typed models remain available.
 ADR 0006 records the [merge-view decision](decisions/0006-provenance-preserving-compose-merge.md).
+
+The `project` module builds a native consumer view directly from a merged project and an optional
+matching profile selection. It exposes the first conversion fields through native Compose types,
+wraps effective values and collection items in complete `MergeProvenance`, retains all authored key
+locations, and reports unmodeled fields without exposing parser nodes. Sensitive values redact
+their contents from `Debug`. Canonical render-and-reparse is deliberately absent because generated
+spans cannot replace original multi-file evidence. [ADR 0016](decisions/0016-native-merged-project-view.md)
+defines the boundary.
 
 Post-merge processing remains a set of independent views. Profile selection records active and
 inactive services without deleting either. Path resolution uses retained origins plus explicit
@@ -129,7 +137,8 @@ the [presentation-only formatting boundary](decisions/0011-presentation-only-ren
 
 - Syntax knows nothing about the typed model.
 - The typed model may refer to syntax locations but not parser internals.
-- Project processing depends on typed documents and caller-provided I/O abstractions.
+- Project processing depends on typed documents and caller-provided inputs, not ambient I/O.
+- Native project views depend on merged values and profile selections, not on rendering or BoxFerry.
 - Validation depends on models and profiles, not on BoxFerry.
 - Rendering depends on syntax or typed models according to the selected mode.
 

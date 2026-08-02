@@ -5,6 +5,7 @@ use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
 use compose_lens::model::ComposeDocument;
 use compose_lens::profiles::{ProfileRequest, select_profiles};
+use compose_lens::project::build_project_view;
 use compose_lens::render::{ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical};
 use compose_lens::resolution::validate_references;
 use compose_lens::source::SourceId;
@@ -42,6 +43,7 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     let merge = merge_project(&loaded, Some(&interpolation));
     let project = merge.project().ok_or("merged public API project expected")?;
     let selection = select_profiles(project, &ProfileRequest::new());
+    let project_view = build_project_view(project, Some(&selection));
     let references = validate_references(project, Some(&selection));
     let compatibility = validate_compatibility(
         project,
@@ -54,6 +56,15 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     assert!(interpolation.is_valid(), "{:#?}", interpolation.diagnostics());
     assert!(merge.is_valid(), "{:#?}", merge.diagnostics());
     assert!(selection.is_valid(), "{:#?}", selection.diagnostics());
+    assert!(project_view.is_valid(), "{:#?}", project_view.diagnostics());
+    assert_eq!(
+        project_view
+            .view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::image)
+            .map(|image| image.value().raw()),
+        Some("example.invalid/app:1.2.3@sha256:abcdef")
+    );
     assert!(references.is_valid(), "{:#?}", references.diagnostics());
     assert!(compatibility.is_valid(), "{:#?}", compatibility.diagnostics());
     assert!(
