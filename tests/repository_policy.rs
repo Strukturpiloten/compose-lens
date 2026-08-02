@@ -32,9 +32,14 @@ fn release_workflow_handles_drafts_by_release_id() -> Result<(), String> {
     if workflow.contains("/releases/tags/") {
         return Err("release workflow must not use the published-release-by-tag endpoint for drafts".to_owned());
     }
+    if workflow.contains("databaseId") {
+        return Err("release workflow must use stable REST release fields instead of CLI JSON fields".to_owned());
+    }
 
     for required in [
-        "gh release list --limit 1000 --json databaseId,isDraft,tagName",
+        "repos/${GITHUB_REPOSITORY}/releases?per_page=100",
+        "select(.tag_name == $tag)",
+        ".[0].id",
         "repos/${GITHUB_REPOSITORY}/releases/${release_id}",
         "steps.release.outputs.release_id",
     ] {

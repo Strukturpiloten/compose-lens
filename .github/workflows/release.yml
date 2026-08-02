@@ -173,11 +173,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          releases="$(
-            gh release list --limit 1000 --json databaseId,isDraft,tagName
-          )"
           matches="$(
-            jq --arg tag "${TAG}" '[.[] | select(.tagName == $tag)]' <<< "${releases}"
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/releases?per_page=100" |
+              jq --slurp --arg tag "${TAG}" \
+                '[.[][] | select(.tag_name == $tag)]'
           )"
           match_count="$(jq -r 'length' <<< "${matches}")"
 
@@ -185,8 +185,8 @@ jobs:
             0)
               ;;
             1)
-              draft="$(jq -r '.[0].isDraft' <<< "${matches}")"
-              release_id="$(jq -er '.[0].databaseId' <<< "${matches}")"
+              draft="$(jq -r '.[0].draft' <<< "${matches}")"
+              release_id="$(jq -er '.[0].id' <<< "${matches}")"
               if [[ "${draft}" != "true" ]]; then
                 echo "${TAG} is already a published GitHub release." >&2
                 exit 1
@@ -207,10 +207,11 @@ jobs:
             --verify-tag
 
           release_id="$(
-            gh release list --limit 1000 --json databaseId,tagName |
-              jq -er --arg tag "${TAG}" \
-                '[.[] | select(.tagName == $tag)] |
-                 if length == 1 then .[0].databaseId
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/releases?per_page=100" |
+              jq --slurp --exit-status --raw-output --arg tag "${TAG}" \
+                '[.[][] | select(.tag_name == $tag)] |
+                 if length == 1 then .[0].id
                  else error("expected exactly one matching draft release") end'
           )"
           printf 'release_id=%s\n' "${release_id}" >> "${GITHUB_OUTPUT}"
