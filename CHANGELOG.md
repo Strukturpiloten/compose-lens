@@ -6,6 +6,8 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-02
+
 ### Added
 
 - Release-candidate implementation for ComposeLens 0.1.0.
