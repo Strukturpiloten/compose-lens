@@ -86,6 +86,38 @@ jobs:
           command: check
           arguments: --all-features
 
+      - name: Check crates.io publication state
+        id: registry
+        shell: bash
+        env:
+          CRATES_IO_USER_AGENT: ComposeLens release workflow (+https://github.com/Strukturpiloten/compose-lens)
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+          status="$(
+            curl --silent --show-error \
+              --user-agent "${CRATES_IO_USER_AGENT}" \
+              --retry 3 \
+              --retry-all-errors \
+              --connect-timeout 10 \
+              --max-time 60 \
+              --output /dev/null \
+              --write-out '%{http_code}' \
+              "https://crates.io/api/v1/crates/compose-lens/${VERSION}"
+          )"
+          case "${status}" in
+            200)
+              echo "published=true" >> "${GITHUB_OUTPUT}"
+              ;;
+            404)
+              echo "published=false" >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "Unexpected crates.io response: HTTP ${status}." >&2
+              exit 1
+              ;;
+          esac
+
       - name: Build release package and checksum
         shell: bash
         env:
@@ -155,30 +187,6 @@ jobs:
               --notes-file "${NOTES}" \
               --verify-tag
           fi
-
-      - name: Check crates.io publication state
-        id: registry
-        shell: bash
-        env:
-          VERSION: ${{ steps.metadata.outputs.version }}
-        run: |
-          set -euo pipefail
-          status="$(
-            curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-              "https://crates.io/api/v1/crates/compose-lens/${VERSION}"
-          )"
-          case "${status}" in
-            200)
-              echo "published=true" >> "${GITHUB_OUTPUT}"
-              ;;
-            404)
-              echo "published=false" >> "${GITHUB_OUTPUT}"
-              ;;
-            *)
-              echo "Unexpected crates.io response: HTTP ${status}." >&2
-              exit 1
-              ;;
-          esac
 
       - name: Select crates.io authentication
         id: auth-mode

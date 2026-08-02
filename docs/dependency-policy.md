@@ -16,6 +16,10 @@ Dependencies are design decisions, not incidental implementation details. Prefer
 
 `deny.toml` is the machine-readable source of truth. The initial allowlist is deliberately narrow: Apache-2.0, Apache-2.0 with LLVM exception, BSD-2-Clause, BSD-3-Clause, ISC, MIT, MPL-2.0, Unicode-3.0, Unicode-DFS-2016, and Zlib.
 
+The allowlist records licenses that Strukturpiloten has accepted as policy, not only licenses in
+the current dependency graph. Consequently, `unused-allowed-license` is set to `allow`; an
+unlisted license still fails the audit and requires explicit review.
+
 Adding a license is a compatibility and distribution decision. Review its obligations before changing the allowlist. This policy records project intent and is not legal advice.
 
 ## Exceptions

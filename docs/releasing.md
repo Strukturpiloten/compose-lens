@@ -73,3 +73,15 @@ the release workflow from the default branch and approve the `release` environme
 Do not create the tag or GitHub release manually. If a run fails, inspect its draft release and
 rerun from the same commit; the workflow verifies an existing tag and skips a crate version that
 is already present on crates.io.
+
+## Recovering a failed workflow
+
+The crates.io publication-state probe runs before the workflow creates a tag, attestation, or
+draft release. A failure at that probe is therefore safe to rerun after the external service
+recovers.
+
+If a later step fails after the tag and draft release exist, rerun from the same commit. The
+workflow verifies the tag, refreshes the draft notes, and replaces its crate and checksum assets.
+If fixing the workflow itself requires a new commit, delete the unpublished remote tag first so
+the corrected workflow can bind the version to the new commit. An existing draft may remain; it
+will be refreshed. Never delete or replace a tag belonging to a published immutable release.
