@@ -24,7 +24,7 @@ fn repository_supply_chain_has_single_sources_and_immutable_pins() -> Result<(),
 }
 
 #[test]
-fn release_workflow_handles_drafts_by_release_id() -> Result<(), String> {
+fn release_workflow_uses_the_create_response_as_its_draft_identity() -> Result<(), String> {
     let workflow_path = repository_root().join(".github/workflows/release.yml");
     let workflow = fs::read_to_string(&workflow_path)
         .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
@@ -35,12 +35,20 @@ fn release_workflow_handles_drafts_by_release_id() -> Result<(), String> {
     if workflow.contains("databaseId") {
         return Err("release workflow must use stable REST release fields instead of CLI JSON fields".to_owned());
     }
+    if workflow.contains("gh release create") || workflow.contains("gh release list") {
+        return Err(
+            "release workflow must not rediscover a newly created draft through high-level CLI commands".to_owned(),
+        );
+    }
 
     for required in [
+        "RELEASE_GITHUB_API_VERSION: \"2026-03-10\"",
         "repos/${GITHUB_REPOSITORY}/releases?per_page=100",
-        "select(.tag_name == $tag)",
-        ".[0].id",
-        "repos/${GITHUB_REPOSITORY}/releases/${release_id}",
+        "gh api --method POST",
+        "target_commitish: $target",
+        "'.upload_url | sub(",
+        "steps.release.outputs.upload_url",
+        "--data-binary \"@${asset_path}\"",
         "steps.release.outputs.release_id",
     ] {
         if !workflow.contains(required) {
@@ -48,6 +56,13 @@ fn release_workflow_handles_drafts_by_release_id() -> Result<(), String> {
                 "release workflow is missing the draft release-ID guard `{required}`"
             ));
         }
+    }
+
+    let release_list_endpoint = "repos/${GITHUB_REPOSITORY}/releases?per_page=100";
+    if workflow.matches(release_list_endpoint).count() != 1 {
+        return Err(
+            "release workflow must list releases only before creation and never rediscover the new draft".to_owned(),
+        );
     }
 
     Ok(())

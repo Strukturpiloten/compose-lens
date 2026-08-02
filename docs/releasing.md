@@ -85,7 +85,18 @@ workflow verifies the tag, deletes only the matching draft release by its numeri
 creates a fresh draft with the reviewed notes, crate, and checksum. Do not add manual assets or
 notes to this workflow-owned draft because a retry intentionally replaces it.
 
+The workflow manages draft lifecycle through GitHub's low-level Releases API. It takes the numeric
+release ID and asset upload URL directly from the create response and uses them for every later
+operation. Do not replace this with an immediate lookup through `gh release view`, `gh release
+list`, or the published-release-by-tag endpoint: draft URLs use an `untagged-*` slug, CLI JSON
+fields vary by installed version, and a newly created draft must not need to become list-visible
+before the workflow can continue. See GitHub's [create-release API][github-create-release] and
+[release-asset API][github-upload-release-asset].
+
 If fixing the workflow itself requires a new commit, delete the unpublished remote tag first so
 the corrected workflow can bind the version to the new commit. An existing draft may remain; the
 workflow will replace it after verifying that it is still a draft. Never delete or replace a tag
 or release that has already been published.
+
+[github-create-release]: https://docs.github.com/en/rest/releases/releases#create-a-release
+[github-upload-release-asset]: https://docs.github.com/en/rest/releases/assets#upload-a-release-asset
