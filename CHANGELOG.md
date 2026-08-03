@@ -6,6 +6,14 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-03
+
+### Added
+
+- A source-aware merged-project `healthcheck` view with field-level provenance for command,
+  interval, timeout, retries, start period, start interval, and explicit disabling.
+- Multi-file, disabled-check, malformed-form, and public-consumer coverage for the additive API.
+
 ## [0.1.2] - 2026-08-03
 
 ### Added
