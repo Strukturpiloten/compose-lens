@@ -5,10 +5,10 @@ use crate::merge::{
     EntrySyntax, MergeProvenance, MergedEntry, MergedProject, MergedScalarKind, MergedValue, MergedValueKind,
 };
 use crate::model::{
-    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, HostAddress, ImageReference, Ipam, IpamConfig,
-    KeyValueEntry, Labels, Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, SecretDefinition,
-    SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, VolumeDefinition,
-    VolumeMount,
+    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, HealthcheckDuration, HealthcheckRetries,
+    HealthcheckTest, HealthcheckTestKind, HostAddress, ImageReference, Ipam, IpamConfig, KeyValueEntry, Labels,
+    Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, SecretDefinition, SelinuxRelabel,
+    ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, VolumeDefinition, VolumeMount,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -254,6 +254,81 @@ impl ProjectEnvironment {
     }
 }
 
+/// One effective service health check with field-level merge provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectHealthcheck {
+    test: Option<ProjectValue<HealthcheckTest>>,
+    interval: Option<ProjectValue<HealthcheckDuration>>,
+    timeout: Option<ProjectValue<HealthcheckDuration>>,
+    retries: Option<ProjectValue<HealthcheckRetries>>,
+    start_period: Option<ProjectValue<HealthcheckDuration>>,
+    start_interval: Option<ProjectValue<HealthcheckDuration>>,
+    disable: Option<ProjectValue<BooleanValue>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectHealthcheck {
+    /// Returns the effective health command without collapsing scalar and list forms.
+    #[must_use]
+    pub const fn test(&self) -> Option<&ProjectValue<HealthcheckTest>> {
+        self.test.as_ref()
+    }
+
+    /// Returns the effective regular-check interval.
+    #[must_use]
+    pub const fn interval(&self) -> Option<&ProjectValue<HealthcheckDuration>> {
+        self.interval.as_ref()
+    }
+
+    /// Returns the effective per-check timeout.
+    #[must_use]
+    pub const fn timeout(&self) -> Option<&ProjectValue<HealthcheckDuration>> {
+        self.timeout.as_ref()
+    }
+
+    /// Returns the effective unhealthy retry count.
+    #[must_use]
+    pub const fn retries(&self) -> Option<&ProjectValue<HealthcheckRetries>> {
+        self.retries.as_ref()
+    }
+
+    /// Returns the effective startup grace period.
+    #[must_use]
+    pub const fn start_period(&self) -> Option<&ProjectValue<HealthcheckDuration>> {
+        self.start_period.as_ref()
+    }
+
+    /// Returns the effective interval used during the startup grace period.
+    #[must_use]
+    pub const fn start_interval(&self) -> Option<&ProjectValue<HealthcheckDuration>> {
+        self.start_interval.as_ref()
+    }
+
+    /// Returns whether the image health check is explicitly disabled.
+    #[must_use]
+    pub const fn disable(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.disable.as_ref()
+    }
+
+    /// Reports whether the effective definition explicitly disables health checks.
+    #[must_use]
+    pub fn is_disabled(&self) -> bool {
+        matches!(
+            self.disable.as_ref().map(ProjectValue::value),
+            Some(BooleanValue::Literal(true))
+        ) || matches!(
+            self.test.as_ref().and_then(|test| test.value().kind()),
+            Some(HealthcheckTestKind::None)
+        )
+    }
+
+    /// Returns retained health-check fields outside the typed project-view boundary.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
 /// One selected service with the native fields needed by the first conversion boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectService {
@@ -263,6 +338,7 @@ pub struct ProjectService {
     command: Option<ProjectValue<Command>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
     extra_hosts: Option<ProjectValue<ProjectExtraHosts>>,
+    healthcheck: Option<ProjectValue<ProjectHealthcheck>>,
     ports: Option<ProjectValue<Vec<ProjectValue<Port>>>>,
     volumes: Option<ProjectValue<Vec<ProjectValue<VolumeMount>>>>,
     networks: Option<ProjectValue<ServiceNetworks>>,
@@ -305,6 +381,12 @@ impl ProjectService {
     #[must_use]
     pub const fn extra_hosts(&self) -> Option<&ProjectValue<ProjectExtraHosts>> {
         self.extra_hosts.as_ref()
+    }
+
+    /// Returns the effective health check with per-field merge provenance.
+    #[must_use]
+    pub const fn healthcheck(&self) -> Option<&ProjectValue<ProjectHealthcheck>> {
+        self.healthcheck.as_ref()
     }
 
     /// Returns the effective port collection and per-item provenance.
@@ -582,6 +664,7 @@ impl<'a> Builder<'a> {
             command: None,
             environment: None,
             extra_hosts: None,
+            healthcheck: None,
             ports: None,
             volumes: None,
             networks: None,
@@ -604,6 +687,7 @@ impl<'a> Builder<'a> {
                 "command" => service.command = self.command(field.value()),
                 "environment" => service.environment = self.environment(field.value()),
                 "extra_hosts" => service.extra_hosts = self.extra_hosts(field.value()),
+                "healthcheck" => service.healthcheck = self.healthcheck(field.value(), &path),
                 "ports" => service.ports = self.ports(field.value(), &path),
                 "volumes" => service.volumes = self.volumes(field.value(), &path),
                 "networks" => service.networks = self.service_networks(field.value(), &path),
@@ -682,6 +766,95 @@ impl<'a> Builder<'a> {
             }
         }
         Some(ProjectValue::new(ProjectEnvironment { entries }, value))
+    }
+
+    fn healthcheck(&mut self, value: &MergedValue, parent_path: &[String]) -> Option<ProjectValue<ProjectHealthcheck>> {
+        let fields = self.mapping(value, "healthcheck must be a mapping")?;
+        let mut healthcheck = ProjectHealthcheck {
+            test: None,
+            interval: None,
+            timeout: None,
+            retries: None,
+            start_period: None,
+            start_interval: None,
+            disable: None,
+            unmodeled_fields: Vec::new(),
+        };
+        let mut path = parent_path.to_vec();
+        path.push("healthcheck".to_owned());
+        for field in fields {
+            match field.key() {
+                "test" => healthcheck.test = self.healthcheck_test(field.value()),
+                "interval" => {
+                    healthcheck.interval =
+                        self.healthcheck_duration(field.value(), "healthcheck interval must be a scalar");
+                }
+                "timeout" => {
+                    healthcheck.timeout =
+                        self.healthcheck_duration(field.value(), "healthcheck timeout must be a scalar");
+                }
+                "retries" => healthcheck.retries = self.healthcheck_retries(field.value()),
+                "start_period" => {
+                    healthcheck.start_period =
+                        self.healthcheck_duration(field.value(), "healthcheck start_period must be a scalar");
+                }
+                "start_interval" => {
+                    healthcheck.start_interval =
+                        self.healthcheck_duration(field.value(), "healthcheck start_interval must be a scalar");
+                }
+                "disable" => {
+                    healthcheck.disable = self
+                        .located_boolean(field.value(), "healthcheck disable must be a boolean")
+                        .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                }
+                _ => healthcheck.unmodeled_fields.push(field_reference(&path, field)),
+            }
+        }
+        Some(ProjectValue::new(healthcheck, value))
+    }
+
+    fn healthcheck_test(&mut self, value: &MergedValue) -> Option<ProjectValue<HealthcheckTest>> {
+        let span = effective_span(value);
+        let test = match value.kind() {
+            MergedValueKind::Scalar(scalar) => HealthcheckTest::String(Located::new(scalar.value().to_owned(), span)),
+            MergedValueKind::Sequence(values) => {
+                let mut items = Vec::new();
+                for value in values {
+                    items.push(self.located_string(value, "healthcheck test item must be a scalar")?);
+                }
+                let kind = items.first().map(|item| HealthcheckTestKind::parse(item.value()));
+                HealthcheckTest::List {
+                    span,
+                    kind,
+                    values: items,
+                }
+            }
+            _ => {
+                self.expected(value, "healthcheck test must be a scalar or sequence");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(test, value))
+    }
+
+    fn healthcheck_duration(
+        &mut self,
+        value: &MergedValue,
+        message: &str,
+    ) -> Option<ProjectValue<HealthcheckDuration>> {
+        let scalar = self.scalar(value, message)?;
+        Some(ProjectValue::new(
+            HealthcheckDuration::parse(scalar.value().to_owned()),
+            value,
+        ))
+    }
+
+    fn healthcheck_retries(&mut self, value: &MergedValue) -> Option<ProjectValue<HealthcheckRetries>> {
+        let scalar = self.scalar(value, "healthcheck retries must be a scalar")?;
+        Some(ProjectValue::new(
+            HealthcheckRetries::parse(scalar.value().to_owned()),
+            value,
+        ))
     }
 
     fn extra_hosts(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectExtraHosts>> {

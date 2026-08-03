@@ -3,7 +3,7 @@
 use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
-use compose_lens::model::{ComposeDocument, HostAddressKind};
+use compose_lens::model::{ComposeDocument, HealthcheckDuration, HostAddressKind};
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::build_project_view;
 use compose_lens::render::{ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical};
@@ -22,6 +22,9 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
         "    image: example.invalid/app:old\n",
         "    extra_hosts:\n",
         "      - host.docker.internal=host-gateway\n",
+        "    healthcheck:\n",
+        "      test: [CMD, /usr/bin/true]\n",
+        "      interval: 30s\n",
         "    volumes:\n",
         "      - ./data:/data:z\n",
     );
@@ -82,6 +85,18 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     assert_eq!(gateway.hostname().value(), "host.docker.internal");
     assert_eq!(gateway.address().value().raw(), "host-gateway");
     assert_eq!(gateway.address().value().kind(), HostAddressKind::HostGateway);
+    let healthcheck = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::healthcheck)
+        .ok_or("native project healthcheck expected")?;
+    assert!(matches!(
+        healthcheck
+            .value()
+            .interval()
+            .map(compose_lens::project::ProjectValue::value),
+        Some(HealthcheckDuration::Value(value)) if value == "30s"
+    ));
     assert!(references.is_valid(), "{:#?}", references.diagnostics());
     assert!(compatibility.is_valid(), "{:#?}", compatibility.diagnostics());
     assert!(

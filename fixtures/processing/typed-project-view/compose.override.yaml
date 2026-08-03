@@ -6,6 +6,9 @@ services:
       - OVERRIDE_ONLY=added
     extra_hosts:
       - database=192.0.2.10
+    healthcheck:
+      interval: 10s
+      retries: 5
     ports:
       - target: 80
         published: "8080"

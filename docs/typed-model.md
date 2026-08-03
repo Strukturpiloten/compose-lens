@@ -33,6 +33,10 @@ entry retains its hostname key sources, address provenance, authored collection 
 IPv6 spelling, and a distinct `host-gateway` classification. This is additive to the
 single-document `ExtraHosts` model and lets adapters preserve explicit runtime mappings.
 
+The merged-project view also exposes `healthcheck` without collapsing scalar/list command forms.
+Every effective timing, retry, disable, and command field has its own merge provenance. Compose
+`start_interval` remains distinct from provider-specific startup-healthcheck features.
+
 Compose processing tags `!reset` and `!override` remain intact in the syntax document. The typed
 parser reads their inner value when it matches a typed field, allowing valid override documents to
 participate in loading without incorrectly reporting the wrapper as a field-type error. The merge

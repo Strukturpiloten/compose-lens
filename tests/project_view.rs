@@ -4,7 +4,8 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, merge_project};
 use compose_lens::model::{
-    Command, ComposeScalar, HostAddressKind, Port, SelinuxRelabel, ServiceNetworks, VolumeMount,
+    Command, ComposeScalar, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
+    HostAddressKind, Port, SelinuxRelabel, ServiceNetworks, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{PROJECT_EXPECTED_FORM, ProjectService, ProjectValue, ProjectView, build_project_view};
@@ -73,6 +74,8 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
         &[SourceId::new(602)],
     );
 
+    assert_healthcheck(web)?;
+
     let ports = web.ports().ok_or("ports expected")?;
     assert_source_ids(ports.provenance().sources(), &[SourceId::new(601), SourceId::new(602)]);
     assert!(ports.value().iter().any(|port| matches!(port.value(), Port::Long(_))));
@@ -106,6 +109,49 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
             .map(|profile| profile.value().as_str()),
         Some("workers")
     );
+    Ok(())
+}
+
+fn assert_healthcheck(web: &ProjectService) -> Result<(), Box<dyn std::error::Error>> {
+    let healthcheck = web.healthcheck().ok_or("healthcheck expected")?;
+    assert_source_ids(
+        healthcheck.provenance().sources(),
+        &[SourceId::new(601), SourceId::new(602)],
+    );
+    assert!(matches!(
+        healthcheck.value().test().map(ProjectValue::value),
+        Some(HealthcheckTest::List {
+            kind: Some(HealthcheckTestKind::CmdShell),
+            values,
+            ..
+        }) if values.len() == 2
+    ));
+    assert!(matches!(
+        healthcheck.value().interval().map(ProjectValue::value),
+        Some(HealthcheckDuration::Value(value)) if value == "10s"
+    ));
+    assert_source_ids(
+        healthcheck
+            .value()
+            .interval()
+            .ok_or("health interval expected")?
+            .provenance()
+            .sources(),
+        &[SourceId::new(601), SourceId::new(602)],
+    );
+    assert!(matches!(
+        healthcheck.value().retries().map(ProjectValue::value),
+        Some(HealthcheckRetries::Count(value)) if value == "5"
+    ));
+    assert_eq!(
+        healthcheck
+            .value()
+            .start_interval()
+            .map(ProjectValue::value)
+            .map(HealthcheckDuration::raw),
+        Some("2s")
+    );
+    assert!(!healthcheck.value().is_disabled());
     Ok(())
 }
 
@@ -253,6 +299,46 @@ fn exposes_mapping_extra_hosts_without_losing_address_spelling() -> Result<(), B
     assert_source_ids(
         hosts.value().entries()[2].address().provenance().sources(),
         &[SourceId::new(635)],
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_disabled_healthcheck_and_reports_malformed_fields() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  disabled:\n",
+        "    image: example.invalid/disabled:1\n",
+        "    healthcheck:\n",
+        "      test: [NONE]\n",
+        "  malformed:\n",
+        "    image: example.invalid/malformed:1\n",
+        "    healthcheck:\n",
+        "      test: {command: true}\n",
+        "      retries: []\n",
+    );
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(637),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("project expected")?;
+    let result = build_project_view(project, None);
+    let disabled = result
+        .view()
+        .and_then(|view| view.service("disabled"))
+        .and_then(ProjectService::healthcheck)
+        .ok_or("disabled healthcheck expected")?;
+
+    assert!(disabled.value().is_disabled());
+    assert!(!result.is_valid());
+    assert_eq!(result.diagnostics().len(), 2);
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
     );
     Ok(())
 }

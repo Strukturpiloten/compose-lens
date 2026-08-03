@@ -162,7 +162,7 @@ pub enum HealthcheckDuration {
 }
 
 impl HealthcheckDuration {
-    pub(super) fn parse(value: String) -> Self {
+    pub(crate) fn parse(value: String) -> Self {
         if value.contains('$') {
             Self::Expression(value)
         } else if valid_duration(&value) {
@@ -199,7 +199,7 @@ pub enum HealthcheckRetries {
 }
 
 impl HealthcheckRetries {
-    pub(super) fn parse(value: String) -> Self {
+    pub(crate) fn parse(value: String) -> Self {
         if value.contains('$') {
             Self::Expression(value)
         } else if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -414,7 +414,7 @@ pub enum HealthcheckTestKind {
 }
 
 impl HealthcheckTestKind {
-    pub(super) fn parse(value: &str) -> Self {
+    pub(crate) fn parse(value: &str) -> Self {
         match value {
             "NONE" => Self::None,
             "CMD" => Self::Cmd,
