@@ -144,12 +144,26 @@ pub enum EntrySyntax {
 }
 
 /// One mapping entry in a merged semantic view.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct MergedEntry {
     key: String,
     key_sources: Vec<SourceSpan>,
+    key_sensitive: bool,
     syntax: EntrySyntax,
     value: MergedValue,
+}
+
+impl fmt::Debug for MergedEntry {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MergedEntry")
+            .field("key", &if self.key_sensitive { "<redacted>" } else { &self.key })
+            .field("key_sources", &self.key_sources)
+            .field("key_sensitive", &self.key_sensitive)
+            .field("syntax", &self.syntax)
+            .field("value", &self.value)
+            .finish()
+    }
 }
 
 impl MergedEntry {
@@ -163,6 +177,12 @@ impl MergedEntry {
     #[must_use]
     pub fn key_sources(&self) -> &[SourceSpan] {
         &self.key_sources
+    }
+
+    /// Reports whether a sensitive interpolated scalar produced this semantic key.
+    #[must_use]
+    pub const fn is_key_sensitive(&self) -> bool {
+        self.key_sensitive
     }
 
     /// Returns the most recent authored syntax form for this entry.
@@ -464,6 +484,7 @@ fn convert_entry(
     MergedEntry {
         key: entry.key.value,
         key_sources: vec![entry.key.span],
+        key_sensitive: false,
         syntax: EntrySyntax::Mapping,
         value: convert_value(entry.value, interpolation, diagnostics),
     }
@@ -604,6 +625,7 @@ fn merge_mappings(
             let existing = &mut base_entries[index];
             existing.value = merge_value(existing.value.clone(), incoming_entry.value, &child_path, diagnostics);
             extend_sources(&mut existing.key_sources, &incoming_entry.key_sources);
+            existing.key_sensitive |= incoming_entry.key_sensitive;
             existing.syntax = incoming_entry.syntax;
         } else {
             let mut incoming_entry = incoming_entry;
@@ -779,6 +801,7 @@ fn normalize_keyed(value: MergedValue) -> Option<MergedValue> {
                 entries.push(MergedEntry {
                     key,
                     key_sources: vec![key_source],
+                    key_sensitive: scalar.sensitive,
                     syntax,
                     value: entry_value,
                 });

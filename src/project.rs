@@ -5,10 +5,11 @@ use crate::merge::{
     EntrySyntax, MergeProvenance, MergedEntry, MergedProject, MergedScalarKind, MergedValue, MergedValueKind,
 };
 use crate::model::{
-    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, HealthcheckDuration, HealthcheckRetries,
-    HealthcheckTest, HealthcheckTestKind, HostAddress, ImageReference, Ipam, IpamConfig, KeyValueEntry, Labels,
-    Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, SecretDefinition, SelinuxRelabel,
-    ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, VolumeDefinition, VolumeMount,
+    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, DependencyCondition, HealthcheckDuration,
+    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddress, ImageReference, Ipam, IpamConfig,
+    KeyValueEntry, Labels, Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, SecretDefinition,
+    SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, VolumeDefinition,
+    VolumeMount,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -89,10 +90,22 @@ impl<T> ProjectValue<T> {
 }
 
 /// A merged mapping key and every location at which that key was authored.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ProjectKey {
     value: String,
     sources: Vec<SourceSpan>,
+    sensitive: bool,
+}
+
+impl fmt::Debug for ProjectKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProjectKey")
+            .field("value", &if self.sensitive { "<redacted>" } else { &self.value })
+            .field("sources", &self.sources)
+            .field("sensitive", &self.sensitive)
+            .finish()
+    }
 }
 
 impl ProjectKey {
@@ -100,6 +113,15 @@ impl ProjectKey {
         Self {
             value: entry.key().to_owned(),
             sources: entry.key_sources().to_vec(),
+            sensitive: entry.is_key_sensitive(),
+        }
+    }
+
+    fn from_value(value: String, source: &MergedValue) -> Self {
+        Self {
+            value,
+            sources: source.provenance().sources().to_vec(),
+            sensitive: source.is_sensitive(),
         }
     }
 
@@ -119,6 +141,79 @@ impl ProjectKey {
     #[must_use]
     pub fn effective_source(&self) -> Option<SourceSpan> {
         self.sources.last().copied()
+    }
+
+    /// Reports whether interpolation inserted sensitive content into this semantic key.
+    #[must_use]
+    pub const fn is_sensitive(&self) -> bool {
+        self.sensitive
+    }
+}
+
+/// One effective service dependency with source-aware long-form options.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectServiceDependency {
+    service: ProjectKey,
+    condition: Option<ProjectValue<DependencyCondition>>,
+    restart: Option<ProjectValue<BooleanValue>>,
+    required: Option<ProjectValue<BooleanValue>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectServiceDependency {
+    /// Returns the referenced service name and all contributing name locations.
+    #[must_use]
+    pub const fn service(&self) -> &ProjectKey {
+        &self.service
+    }
+
+    /// Returns the explicitly authored readiness condition.
+    #[must_use]
+    pub const fn condition(&self) -> Option<&ProjectValue<DependencyCondition>> {
+        self.condition.as_ref()
+    }
+
+    /// Returns whether Compose-controlled dependency updates restart this service.
+    #[must_use]
+    pub const fn restart(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.restart.as_ref()
+    }
+
+    /// Returns whether the dependency is required.
+    #[must_use]
+    pub const fn required(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.required.as_ref()
+    }
+
+    /// Returns retained long-form fields outside the typed dependency boundary.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective service dependencies with the short or long Compose form retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectDependsOn {
+    /// A sequence of service names using Compose defaults.
+    Short(Vec<ProjectValue<ProjectServiceDependency>>),
+    /// A mapping of service names to dependency options.
+    Long(Vec<ProjectValue<ProjectServiceDependency>>),
+}
+
+impl ProjectDependsOn {
+    /// Returns dependencies in effective merge order.
+    #[must_use]
+    pub fn services(&self) -> &[ProjectValue<ProjectServiceDependency>] {
+        match self {
+            Self::Short(services) | Self::Long(services) => services,
+        }
+    }
+
+    /// Reports whether the effective field uses long mapping syntax.
+    #[must_use]
+    pub const fn is_long(&self) -> bool {
+        matches!(self, Self::Long(_))
     }
 }
 
@@ -339,6 +434,7 @@ pub struct ProjectService {
     environment: Option<ProjectValue<ProjectEnvironment>>,
     extra_hosts: Option<ProjectValue<ProjectExtraHosts>>,
     healthcheck: Option<ProjectValue<ProjectHealthcheck>>,
+    depends_on: Option<ProjectValue<ProjectDependsOn>>,
     ports: Option<ProjectValue<Vec<ProjectValue<Port>>>>,
     volumes: Option<ProjectValue<Vec<ProjectValue<VolumeMount>>>>,
     networks: Option<ProjectValue<ServiceNetworks>>,
@@ -387,6 +483,12 @@ impl ProjectService {
     #[must_use]
     pub const fn healthcheck(&self) -> Option<&ProjectValue<ProjectHealthcheck>> {
         self.healthcheck.as_ref()
+    }
+
+    /// Returns effective service dependencies with authored form and field-level provenance.
+    #[must_use]
+    pub const fn depends_on(&self) -> Option<&ProjectValue<ProjectDependsOn>> {
+        self.depends_on.as_ref()
     }
 
     /// Returns the effective port collection and per-item provenance.
@@ -665,6 +767,7 @@ impl<'a> Builder<'a> {
             environment: None,
             extra_hosts: None,
             healthcheck: None,
+            depends_on: None,
             ports: None,
             volumes: None,
             networks: None,
@@ -688,6 +791,7 @@ impl<'a> Builder<'a> {
                 "environment" => service.environment = self.environment(field.value()),
                 "extra_hosts" => service.extra_hosts = self.extra_hosts(field.value()),
                 "healthcheck" => service.healthcheck = self.healthcheck(field.value(), &path),
+                "depends_on" => service.depends_on = self.depends_on(field.value(), &path),
                 "ports" => service.ports = self.ports(field.value(), &path),
                 "volumes" => service.volumes = self.volumes(field.value(), &path),
                 "networks" => service.networks = self.service_networks(field.value(), &path),
@@ -754,6 +858,7 @@ impl<'a> Builder<'a> {
                         name: ProjectKey {
                             value: name,
                             sources: item.provenance().sources().to_vec(),
+                            sensitive: item.is_sensitive(),
                         },
                         value: ProjectValue::new(scalar, item),
                         syntax,
@@ -811,6 +916,93 @@ impl<'a> Builder<'a> {
             }
         }
         Some(ProjectValue::new(healthcheck, value))
+    }
+
+    fn depends_on(&mut self, value: &MergedValue, parent_path: &[String]) -> Option<ProjectValue<ProjectDependsOn>> {
+        let dependencies = match value.kind() {
+            MergedValueKind::Sequence(values) => {
+                let mut dependencies = Vec::new();
+                for value in values {
+                    let Some(service) = self.project_string(value, "dependency service name") else {
+                        continue;
+                    };
+                    let dependency = ProjectServiceDependency {
+                        service: ProjectKey::from_value(service.value, value),
+                        condition: None,
+                        restart: None,
+                        required: None,
+                        unmodeled_fields: Vec::new(),
+                    };
+                    dependencies.push(ProjectValue::new(dependency, value));
+                }
+                ProjectDependsOn::Short(dependencies)
+            }
+            MergedValueKind::Mapping(entries) => {
+                let mut dependencies = Vec::new();
+                let mut path = parent_path.to_vec();
+                path.push("depends_on".to_owned());
+                for entry in entries {
+                    let mut dependency = ProjectServiceDependency {
+                        service: ProjectKey::from_entry(entry),
+                        condition: None,
+                        restart: None,
+                        required: None,
+                        unmodeled_fields: Vec::new(),
+                    };
+                    let fields = match entry.value().kind() {
+                        MergedValueKind::Null(_) => &[][..],
+                        MergedValueKind::Mapping(fields) => fields.as_slice(),
+                        _ => {
+                            self.expected(entry.value(), "long dependency options must be a mapping or null");
+                            continue;
+                        }
+                    };
+                    let mut dependency_path = path.clone();
+                    dependency_path.push(entry.key().to_owned());
+                    for field in fields {
+                        match field.key() {
+                            "condition" => {
+                                let Some(condition) = self.project_string(field.value(), "dependency condition") else {
+                                    continue;
+                                };
+                                let parsed = DependencyCondition::parse(condition.value);
+                                if !parsed.is_known() {
+                                    self.invalid(
+                                        effective_span(field.value()),
+                                        "dependency condition is not defined by Compose",
+                                    );
+                                }
+                                dependency.condition = Some(ProjectValue {
+                                    value: parsed,
+                                    provenance: condition.provenance,
+                                    sensitive: condition.sensitive,
+                                });
+                            }
+                            "restart" => {
+                                dependency.restart = self
+                                    .located_boolean(field.value(), "dependency restart must be a boolean")
+                                    .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                            }
+                            "required" => {
+                                dependency.required = self
+                                    .located_boolean(field.value(), "dependency required must be a boolean")
+                                    .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                            }
+                            _ => dependency
+                                .unmodeled_fields
+                                .push(field_reference(&dependency_path, field)),
+                        }
+                    }
+                    dependencies.push(ProjectValue::new(dependency, entry.value()));
+                }
+                ProjectDependsOn::Long(dependencies)
+            }
+            _ => {
+                self.expected(value, "depends_on must be a sequence or mapping");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(dependencies, value))
     }
 
     fn healthcheck_test(&mut self, value: &MergedValue) -> Option<ProjectValue<HealthcheckTest>> {
@@ -885,6 +1077,7 @@ impl<'a> Builder<'a> {
                         hostname: ProjectKey {
                             value: hostname.to_owned(),
                             sources: item.provenance().sources().to_vec(),
+                            sensitive: item.is_sensitive(),
                         },
                         address: ProjectValue::new(address.clone(), item),
                         syntax: EntrySyntax::ListKeyValue,

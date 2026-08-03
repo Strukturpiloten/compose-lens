@@ -4,11 +4,14 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, merge_project};
 use compose_lens::model::{
-    Command, ComposeScalar, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
-    HostAddressKind, Port, SelinuxRelabel, ServiceNetworks, VolumeMount,
+    BooleanValue, Command, ComposeScalar, DependencyCondition, HealthcheckDuration, HealthcheckRetries,
+    HealthcheckTest, HealthcheckTestKind, HostAddressKind, Port, SelinuxRelabel, ServiceNetworks, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
-use compose_lens::project::{PROJECT_EXPECTED_FORM, ProjectService, ProjectValue, ProjectView, build_project_view};
+use compose_lens::project::{
+    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, ProjectDependsOn, ProjectService, ProjectValue, ProjectView,
+    build_project_view,
+};
 use compose_lens::resolution::SELECTION_PROJECT_MISMATCH;
 use compose_lens::source::SourceId;
 
@@ -344,8 +347,214 @@ fn exposes_disabled_healthcheck_and_reports_malformed_fields() -> Result<(), Box
 }
 
 #[test]
+fn exposes_merged_long_dependencies_with_nested_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:1\n",
+        "    depends_on:\n",
+        "      database:\n",
+        "        condition: service_started\n",
+        "        required: true\n",
+        "  database:\n",
+        "    image: example.invalid/database:1\n",
+        "  cache:\n",
+        "    image: example.invalid/cache:1\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    depends_on:\n",
+        "      database:\n",
+        "        condition: service_healthy\n",
+        "        restart: true\n",
+        "        x-note: retained\n",
+        "      cache:\n",
+        "        required: false\n",
+    );
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(638),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            base,
+        ),
+        DocumentInput::new(
+            SourceId::new(639),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            override_source,
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let dependencies = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::depends_on)
+        .ok_or("depends_on expected")?;
+
+    assert!(result.is_valid(), "{:#?}", result.diagnostics());
+    assert_source_ids(
+        dependencies.provenance().sources(),
+        &[SourceId::new(638), SourceId::new(639)],
+    );
+    let ProjectDependsOn::Long(services) = dependencies.value() else {
+        return Err("long dependency form expected".into());
+    };
+    assert_eq!(services.len(), 2);
+    let database = &services[0];
+    assert_eq!(database.value().service().value(), "database");
+    assert_source_ids(
+        database.value().service().sources(),
+        &[SourceId::new(638), SourceId::new(639)],
+    );
+    assert!(matches!(
+        database.value().condition().map(ProjectValue::value),
+        Some(DependencyCondition::ServiceHealthy)
+    ));
+    assert_source_ids(
+        database
+            .value()
+            .condition()
+            .ok_or("condition expected")?
+            .provenance()
+            .sources(),
+        &[SourceId::new(638), SourceId::new(639)],
+    );
+    assert!(matches!(
+        database.value().restart().map(ProjectValue::value),
+        Some(BooleanValue::Literal(true))
+    ));
+    assert!(matches!(
+        database.value().required().map(ProjectValue::value),
+        Some(BooleanValue::Literal(true))
+    ));
+    assert_eq!(
+        database.value().unmodeled_fields()[0].path(),
+        ["services", "app", "depends_on", "database", "x-note"]
+    );
+    assert_eq!(services[1].value().service().value(), "cache");
+    assert!(matches!(
+        services[1].value().required().map(ProjectValue::value),
+        Some(BooleanValue::Literal(false))
+    ));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("app"))
+            .is_some_and(|service| !service
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path().last().is_some_and(|name| name == "depends_on")))
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_short_dependencies_and_reports_invalid_long_options() -> Result<(), Box<dyn std::error::Error>> {
+    let short_source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:1\n",
+        "    depends_on: [database, cache]\n",
+        "  database:\n",
+        "    image: example.invalid/database:1\n",
+        "  cache:\n",
+        "    image: example.invalid/cache:1\n",
+    );
+    let short_loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(645),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        short_source,
+    )])?;
+    let short_merge = merge_project(&short_loaded, None);
+    let short_result = build_project_view(short_merge.project().ok_or("short project expected")?, None);
+    let short = short_result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::depends_on)
+        .ok_or("short dependencies expected")?;
+    let ProjectDependsOn::Short(services) = short.value() else {
+        return Err("short dependency form expected".into());
+    };
+    assert!(short_result.is_valid(), "{:#?}", short_result.diagnostics());
+    assert_eq!(
+        services
+            .iter()
+            .map(|dependency| dependency.value().service().value())
+            .collect::<Vec<_>>(),
+        ["database", "cache"]
+    );
+    assert!(services.iter().all(|dependency| {
+        dependency.value().condition().is_none()
+            && dependency.value().restart().is_none()
+            && dependency.value().required().is_none()
+    }));
+
+    let malformed_source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:1\n",
+        "    depends_on:\n",
+        "      invalid-options: service_started\n",
+        "      invalid-condition:\n",
+        "        condition: provider_ready\n",
+        "      invalid-condition-form:\n",
+        "        condition: []\n",
+        "      invalid-required:\n",
+        "        required: yes\n",
+    );
+    let malformed_loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(646),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        malformed_source,
+    )])?;
+    let malformed_merge = merge_project(&malformed_loaded, None);
+    let malformed_result = build_project_view(malformed_merge.project().ok_or("malformed project expected")?, None);
+
+    assert!(!malformed_result.is_valid());
+    assert_eq!(
+        malformed_result
+            .diagnostics()
+            .iter()
+            .map(compose_lens::diagnostic::Diagnostic::code)
+            .collect::<Vec<_>>(),
+        [
+            PROJECT_EXPECTED_FORM,
+            PROJECT_INVALID_VALUE,
+            PROJECT_EXPECTED_FORM,
+            PROJECT_INVALID_VALUE
+        ]
+    );
+    let malformed_dependencies = malformed_result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::depends_on)
+        .ok_or("partial dependency view expected")?;
+    assert_eq!(malformed_dependencies.value().services().len(), 3);
+    assert!(matches!(
+        malformed_dependencies.value().services()[0]
+            .value()
+            .condition()
+            .map(ProjectValue::value),
+        Some(DependencyCondition::Other(value)) if value == "provider_ready"
+    ));
+    assert!(
+        malformed_dependencies.value().services()[1]
+            .value()
+            .condition()
+            .is_none()
+    );
+    Ok(())
+}
+
+#[test]
 fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<dyn std::error::Error>> {
-    let source = "services:\n  app:\n    image: example.invalid/app:${TOKEN}\n";
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:${TOKEN}\n",
+        "    depends_on: [\"${DEPENDENCY}\"]\n",
+    );
     let loaded = LoadedProject::load([DocumentInput::new(
         SourceId::new(641),
         DocumentOrigin::new("compose.yaml", "workspace/project"),
@@ -353,6 +562,7 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
     )])?;
     let mut environment = MapEnvironment::new();
     let _ = environment.insert_sensitive("TOKEN", "private-tag");
+    let _ = environment.insert_sensitive("DEPENDENCY", "private-service");
     let interpolation = loaded.interpolate(&environment);
     let merged = merge_project(&loaded, Some(&interpolation));
     let project = merged.project().ok_or("project expected")?;
@@ -368,6 +578,63 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
     assert!(image.is_sensitive());
     assert!(!debug.contains("private-tag"));
     assert!(debug.contains("<redacted>"));
+    let dependency = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::depends_on)
+        .and_then(|dependencies| dependencies.value().services().first())
+        .ok_or("dependency expected")?;
+    let dependency_name = dependency.value().service();
+    assert!(dependency_name.is_sensitive());
+    assert!(!format!("{dependency_name:?}").contains("private-service"));
+    assert!(format!("{dependency_name:?}").contains("<redacted>"));
+    Ok(())
+}
+
+#[test]
+fn redacts_sensitive_semantic_keys_across_keyed_merges() -> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:1\n",
+        "    environment:\n",
+        "      - \"${SECRET_NAME}=base\"\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    environment:\n",
+        "      private-name: override\n",
+    );
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(647),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            base,
+        ),
+        DocumentInput::new(
+            SourceId::new(648),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            override_source,
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("SECRET_NAME", "private-name");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let name = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::environment)
+        .and_then(|environment| environment.value().get("private-name"))
+        .map(compose_lens::project::ProjectEnvironmentEntry::name)
+        .ok_or("merged environment key expected")?;
+
+    assert!(result.is_valid(), "{:#?}", result.diagnostics());
+    assert!(name.is_sensitive());
+    assert!(!format!("{name:?}").contains("private-name"));
+    assert!(!format!("{merged:?}").contains("private-name"));
     Ok(())
 }
 
