@@ -30,7 +30,6 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Release process](releasing.md) — Cargo versioning, crates.io authentication, and GitHub releases
 - [Changelog](../CHANGELOG.md) — release-facing behavior changes
 - [Implementation plan](implementation-plan.md) — synchronized cross-repository tasks T1–T7
-- [Roadmap](roadmap.md) — implementation order
 - [Architecture decisions](decisions/README.md) — durable design choices
 
 ## Documentation rules
