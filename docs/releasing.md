@@ -58,10 +58,12 @@ Do not create the tag or GitHub release manually. If a run fails, inspect its dr
 rerun from the same commit; the workflow verifies an existing tag, replaces the workflow-owned
 draft and its generated assets, and skips a crate version that is already present on crates.io.
 
-The workflow re-runs quality checks, builds the locked crate archive, creates a SHA-256 checksum
-and provenance attestation, creates an annotated tag and workflow-owned draft GitHub release,
-publishes the crate, and then publishes the GitHub release. A failure before the final step leaves
-the GitHub release as a draft for inspection and retry.
+The workflow re-runs quality checks, including a patch-level public-API comparison with the latest
+normal crates.io release, builds the locked crate archive, creates a SHA-256 checksum and
+provenance attestation, creates an annotated tag and workflow-owned draft GitHub release,
+publishes the crate, and then publishes the GitHub release. The semver action is pinned by full
+commit and exact release tag; Renovate maintains both. A failure before the final step leaves the
+GitHub release as a draft for inspection and retry.
 
 ## Recovering a failed workflow
 

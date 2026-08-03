@@ -21,9 +21,9 @@ provenance.
 
 | Coverage | Service fields |
 | --- | --- |
-| Document model and project view | `image`, `command`, `environment`, `extra_hosts`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles` |
-| Document model only | `build`, `user`, `userns_mode`, `ulimits`, `deploy`, service `configs`, service `secrets` |
-| Preserved, not typed | `annotations`, `attach`, `blkio_config`, CPU controls, `cap_add`, `cap_drop`, `cgroup`, `cgroup_parent`, `container_name`, `credential_spec`, `develop`, `device_cgroup_rules`, `devices`, `dns`, `dns_opt`, `dns_search`, `domainname`, service `driver_opts`, `entrypoint`, `env_file`, `expose`, `extends`, `external_links`, `gpus`, `group_add`, `hostname`, `init`, `ipc`, `isolation`, service `labels`, `label_file`, `links`, `logging`, `mac_address`, memory controls, `models`, `network_mode`, OOM controls, `pid`, `pids_limit`, `platform`, lifecycle hooks, `privileged`, `provider`, `pull_policy`, `read_only`, `restart`, `runtime`, `scale`, `security_opt`, `shm_size`, `stdin_open`, `stop_grace_period`, `stop_signal`, `storage_opt`, `sysctls`, `tmpfs`, `tty`, `use_api_socket`, `uts`, `volumes_from`, `working_dir` |
+| Document model and project view | `image`, `command`, `environment`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles` |
+| Document model only | `build`, `ulimits`, `deploy`, service `configs`, service `secrets` |
+| Preserved, not typed | `annotations`, `attach`, `blkio_config`, CPU controls, `cap_add`, `cap_drop`, `cgroup`, `cgroup_parent`, `container_name`, `credential_spec`, `develop`, `device_cgroup_rules`, `devices`, `dns`, `dns_opt`, `dns_search`, `domainname`, service `driver_opts`, `entrypoint`, `env_file`, `expose`, `extends`, `external_links`, `gpus`, `hostname`, `init`, `ipc`, `isolation`, service `labels`, `label_file`, `links`, `logging`, `mac_address`, memory controls, `models`, `network_mode`, OOM controls, `pid`, `pids_limit`, `platform`, lifecycle hooks, `privileged`, `provider`, `pull_policy`, `restart`, `runtime`, `scale`, `security_opt`, `shm_size`, `stdin_open`, `stop_grace_period`, `stop_signal`, `storage_opt`, `sysctls`, `tmpfs`, `tty`, `use_api_socket`, `uts`, `volumes_from` |
 
 The preserved row follows the current Docker documentation grouping. Provider-specific additions
 remain preserved even when they are not part of the compose-spec repository.
@@ -37,13 +37,12 @@ and appear as typed field references where the current boundary supports them.
 
 ## Next promotion
 
-Dependencies now have a project view that retains effective short or long syntax, ordered service
-edges, nested condition/restart/required values, unmodeled option fields, and complete merge
-provenance. It deliberately does not collapse `service_started`, `service_healthy`, and
-`service_completed_successfully` because target lifecycle mechanisms differ.
+Execution identity now exposes effective `user`, `userns_mode`, ordered `group_add`, `working_dir`,
+and `read_only` values with complete merge provenance. Values remain raw and source-aware:
+ComposeLens classifies user components and known namespace modes but never resolves operating-system
+accounts, supplementary groups, paths, or runtime namespace state.
 
-Identity, restart policy, entrypoint/working-directory behavior, and resource limits are the next
-high-value promotion groups.
+Restart policy, entrypoint behavior, and resource limits are the next high-value promotion groups.
 
 ## Promotion checklist
 

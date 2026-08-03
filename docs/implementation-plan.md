@@ -120,7 +120,7 @@ neutral model, and QuadletLens's capability-evidenced `AddHost` keys. Separate c
 service scope. Single-pod grouping requires identical ordered mappings and moves them to pod scope;
 conflicts reject the explicit grouping request.
 
-### Coverage guardrail, completed health slice, and dependency release gate
+### Coverage guardrail and completed health/dependency slices
 
 The three repositories now document syntax preservation, native typing, effective project views,
 neutral representation, target capabilities, and end-to-end conversion as separate coverage
@@ -133,19 +133,26 @@ ComposeLens 0.1.3 and QuadletLens 0.1.3 are published and consumed by BoxFerry. 
 model and adapters preserve regular health-check intent and report Compose `start_interval` as an
 unsupported non-equivalent target behavior.
 
-ComposeLens 0.1.4 is prepared with a source-aware merged `depends_on` view. QuadletLens 0.1.4 is
-prepared with `Notify=healthy`, typed `Requires`/`Wants`/`After` construction, and real-generator
-evidence across all 20 recorded Podman patches from 5.4.0 through 6.0.2. BoxFerry remains on the
-released 0.1.3 dependencies until both candidates are published; neutral dependency edges and
-policy-controlled mappings follow that release gate.
+ComposeLens 0.1.4 and QuadletLens 0.1.4 are published and consumed by BoxFerry. Ordered neutral
+dependency edges retain condition, requirement, restart, and merge provenance. Required and
+optional startup edges map to `Requires`/`Wants` plus `After`; healthy edges select
+`Notify=healthy` only for explicit encodable target health commands. Unsupported restart and
+completion semantics remain policy-controlled losses, while missing required services and cycles
+are invalid. Golden tests cover separate containers and explicitly grouped pods.
+
+ComposeLens 0.1.5 is a release candidate for execution identity and container context. The
+document model and native merged-project view expose `user`, `userns_mode`, ordered `group_add`,
+`working_dir`, and `read_only` with complete multi-file provenance. BoxFerry integration remains
+gated on publication of compatible ComposeLens and QuadletLens releases.
 
 ## T6: First end-to-end milestone
 
 Status: in progress. BoxFerry coordinates this task. Compose import, the first Quadlet export,
-their combined compatibility report, path policies, pod grouping, and explicit host mappings are
+their combined compatibility report, path policies, pod grouping, explicit host mappings, health
+checks, and dependencies are
 implemented. Broader value encoders and the TYPO3 showcase remain.
 
-Deliver tested Compose-to-Quadlet conversion for images, commands, environment, extra hosts,
+Deliver tested Compose-to-Quadlet conversion for images, commands, health checks, dependencies, environment, extra hosts,
 ports, named volumes, bind mounts, networks, and explicit Compose profile selection. Every
 conversion emits compatibility and manual-action reports. After synthetic scenarios are stable,
 use `Strukturpiloten/typo3-container` as the first public real-world showcase and regression corpus.

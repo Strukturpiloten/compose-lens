@@ -1,6 +1,11 @@
 services:
   web:
     image: example.invalid/web:2@sha256:abcdef
+    user: "1001:1002"
+    userns_mode: keep-id
+    group_add: [video]
+    working_dir: /srv/app
+    read_only: true
     environment:
       - SHARED=override
       - OVERRIDE_ONLY=added

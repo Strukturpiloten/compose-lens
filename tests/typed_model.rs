@@ -488,14 +488,7 @@ fn types_issue_derived_runtime_values_without_erasing_authored_forms() -> Result
     );
     assert!(app.extra_hosts().is_some_and(ExtraHosts::contains_host_gateway));
 
-    let user = app.user().ok_or("typed user expected")?;
-    assert_eq!(user.raw().value(), "${UID:-1000}:${GID:-1000}");
-    assert!(matches!(user.user(), IdentityComponent::Expression(value) if value == "${UID:-1000}"));
-    assert!(matches!(user.group(), Some(IdentityComponent::Expression(value)) if value == "${GID:-1000}"));
-    assert_eq!(
-        app.userns_mode().map(compose_lens::model::UserNamespaceMode::kind),
-        Some(UserNamespaceModeKind::PodmanKeepId)
-    );
+    assert_execution_identity(app)?;
     let numeric = document
         .service("numeric-user")
         .and_then(compose_lens::model::Service::user)
@@ -564,6 +557,34 @@ fn types_issue_derived_runtime_values_without_erasing_authored_forms() -> Result
         diagnostic.code() == DEPENDENCY_MISSING_SERVICE
             && diagnostic.severity() == compose_lens::diagnostic::Severity::Warning
     }));
+    Ok(())
+}
+
+fn assert_execution_identity(service: &compose_lens::model::Service) -> Result<(), &'static str> {
+    let user = service.user().ok_or("typed user expected")?;
+    assert_eq!(user.raw().value(), "${UID:-1000}:${GID:-1000}");
+    assert!(matches!(user.user(), IdentityComponent::Expression(value) if value == "${UID:-1000}"));
+    assert!(matches!(user.group(), Some(IdentityComponent::Expression(value)) if value == "${GID:-1000}"));
+    assert_eq!(
+        service.userns_mode().map(compose_lens::model::UserNamespaceMode::kind),
+        Some(UserNamespaceModeKind::PodmanKeepId)
+    );
+    assert_eq!(
+        service
+            .group_add()
+            .iter()
+            .map(|group| group.value().as_str())
+            .collect::<Vec<_>>(),
+        ["audio", "44"]
+    );
+    assert_eq!(
+        service.working_dir().map(Located::value).map(String::as_str),
+        Some("/srv/app")
+    );
+    assert_eq!(
+        service.read_only().map(Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
     Ok(())
 }
 

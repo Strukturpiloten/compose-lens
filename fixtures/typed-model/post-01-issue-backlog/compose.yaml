@@ -4,6 +4,9 @@ services:
     image: example/app
     user: "${UID:-1000}:${GID:-1000}"
     userns_mode: "keep-id:uid=1000,gid=1000"
+    group_add: [audio, "44"]
+    working_dir: /srv/app
+    read_only: true
     extra_hosts:
       - "api=192.0.2.10"
       - "legacy:192.0.2.11"

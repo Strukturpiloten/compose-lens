@@ -3,6 +3,11 @@ services:
   web:
     image: example.invalid/web:1
     command: ["serve", "--foreground"]
+    user: "1000:1000"
+    userns_mode: host
+    group_add: [audio]
+    working_dir: /app
+    read_only: false
     environment:
       BASE_ONLY: base
       SHARED: base

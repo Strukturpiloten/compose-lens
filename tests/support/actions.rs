@@ -293,10 +293,13 @@ fn is_exact_version(version: &str) -> bool {
     let core = version.split_once('-').map_or(version, |(core, _prerelease)| core);
     let core = core.split_once('+').map_or(core, |(core, _build)| core);
     let mut components = core.split('.');
+    let major = components.next();
+    let minor = components.next();
+    let patch = components.next();
 
-    matches!(components.next(), Some(value) if is_ascii_number(value))
-        && matches!(components.next(), Some(value) if is_ascii_number(value))
-        && matches!(components.next(), Some(value) if is_ascii_number(value))
+    matches!(major, Some(value) if is_ascii_number(value))
+        && matches!(minor, Some(value) if is_ascii_number(value))
+        && patch.is_none_or(is_ascii_number)
         && components.next().is_none()
 }
 
@@ -320,6 +323,9 @@ mod tests {
     fn accepts_a_full_sha_with_an_exact_version() {
         assert!(is_immutable_versioned_action(
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
+        ));
+        assert!(is_immutable_versioned_action(
+            "obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9"
         ));
     }
 
