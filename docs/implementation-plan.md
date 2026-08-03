@@ -90,7 +90,7 @@ Delivered ComposeLens slice: source-aware services and typed top-level resource 
 Delivered QuadletLens slice: ordered source-aware `.container`, `.pod`, `.network`, and `.volume`
 documents; preserved generic systemd and unknown entries; native key enums;
 conservative path and unit-reference forms; separate syntax/model diagnostics; and exact
-document-set dependency resolution. BoxFerry now consumes ComposeLens 0.1 from crates.io through
+document-set dependency resolution. BoxFerry now consumes ComposeLens 0.1.1 from crates.io through
 its independent `boxferry-compose` crate. The adapter maps images, commands, environment, single
 ports, named volumes, bind mounts, networks, explicit profiles, provenance, and short/long SELinux
 relabel intent into the neutral model. Source omissions are structured outcomes governed by
@@ -98,16 +98,16 @@ relabel intent into the neutral model. Source omissions are structured outcomes 
 
 ComposeLens now provides `build_project_view`, a native profile-selected consumer boundary over the
 merged project. Its `ProjectValue<T>` and collection items retain every contributing source span,
-so BoxFerry can migrate from one `ComposeDocument` without reparsing canonical output. Adopting
-this released API in `boxferry-compose` remains BoxFerry-owned T5 work.
+and BoxFerry now consumes that released boundary without reparsing canonical output. Its multi-file
+adapter regression retains all contributing origins and the unquoted comma-containing volume form.
 
-ComposeLens 0.1.0 is published on crates.io with a documented pre-1.0 compatibility contract.
+ComposeLens 0.1.1 is published on crates.io with a documented pre-1.0 compatibility contract.
 BoxFerry will consume released Lens crates through compatible crates.io requirements and commit its
 application lockfile. Commit-pinned Git dependencies remain an emergency-only fallback.
 
 The BoxFerry adapter fixture exposed a ComposeLens 0.1 YAML-backend defect: an unquoted short
 volume scalar with comma-separated options could truncate the document without a syntax diagnostic.
-The 0.1.1 release candidate accepts the complete valid scalar through a byte-preserving private
+The published 0.1.1 release accepts the complete valid scalar through a byte-preserving private
 parser adapter, restores authored scalar values from the original source, and keeps
 `compose.yaml.unparsed-input` as a general omission fail-safe.
 
@@ -140,6 +140,6 @@ Each harness becomes required only after its command, isolation model, version s
 
 ComposeLens delivery evidence includes 48 reviewed exact provider-config records, a 36-entry
 fail-closed runtime-effect matrix, two independently licensed real-world fixtures, narrowly scoped
-compatibility rules, a consumer-facing 0.1.x API contract, and the published ComposeLens 0.1.0
+compatibility rules, a consumer-facing 0.1.x API contract, and the published ComposeLens 0.1.1
 crate and GitHub release. The runtime entries remain planned until suitable isolated SELinux hosts
 execute them. Future crates.io releases use trusted publishing with short-lived OIDC credentials.
