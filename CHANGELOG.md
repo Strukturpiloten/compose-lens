@@ -6,6 +6,18 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-03
+
+### Added
+
+- A source-aware merged-project `depends_on` view that retains effective short and long syntax,
+  ordered service edges, nested condition/restart/required values, unknown fields, and complete
+  multi-file provenance.
+- Sensitive interpolated semantic keys report their sensitivity and redact their values from
+  `Debug` output.
+- Recoverable malformed-form coverage and a public-consumer dependency contract for downstream
+  conversion engines.
+
 ## [0.1.3] - 2026-08-03
 
 ### Added

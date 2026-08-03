@@ -134,7 +134,7 @@ pub enum DependencyCondition {
 }
 
 impl DependencyCondition {
-    pub(super) fn parse(value: String) -> Self {
+    pub(crate) fn parse(value: String) -> Self {
         match value.as_str() {
             "service_started" => Self::ServiceStarted,
             "service_healthy" => Self::ServiceHealthy,

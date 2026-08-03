@@ -3,7 +3,7 @@
 use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
-use compose_lens::model::{ComposeDocument, HealthcheckDuration, HostAddressKind};
+use compose_lens::model::{ComposeDocument, DependencyCondition, HealthcheckDuration, HostAddressKind};
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::build_project_view;
 use compose_lens::render::{ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical};
@@ -25,8 +25,13 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
         "    healthcheck:\n",
         "      test: [CMD, /usr/bin/true]\n",
         "      interval: 30s\n",
+        "    depends_on:\n",
+        "      database:\n",
+        "        condition: service_healthy\n",
         "    volumes:\n",
         "      - ./data:/data:z\n",
+        "  database:\n",
+        "    image: example.invalid/database:1\n",
     );
     let syntax = SyntaxDocument::parse(SourceId::new(501), source)?;
     let typed = ComposeDocument::parse(syntax.document());
@@ -97,6 +102,7 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
             .map(compose_lens::project::ProjectValue::value),
         Some(HealthcheckDuration::Value(value)) if value == "30s"
     ));
+    assert_dependency(&project_view)?;
     assert!(references.is_valid(), "{:#?}", references.diagnostics());
     assert!(compatibility.is_valid(), "{:#?}", compatibility.diagnostics());
     assert!(
@@ -107,5 +113,23 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     );
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
     assert!(rendered.output().contains("example.invalid/app:1.2.3@sha256:abcdef"));
+    Ok(())
+}
+
+fn assert_dependency(project_view: &compose_lens::project::ProjectViewResult) -> Result<(), &'static str> {
+    let dependency = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::depends_on)
+        .and_then(|dependencies| dependencies.value().services().first())
+        .ok_or("native project dependency expected")?;
+    assert_eq!(dependency.value().service().value(), "database");
+    assert!(matches!(
+        dependency
+            .value()
+            .condition()
+            .map(compose_lens::project::ProjectValue::value),
+        Some(DependencyCondition::ServiceHealthy)
+    ));
     Ok(())
 }
