@@ -28,6 +28,11 @@ operation types effective values directly and wraps them in `ProjectValue<T>` wi
 multi-file provenance. It never renders canonical YAML and reparses it as a single document. See
 [ADR 0016](decisions/0016-native-merged-project-view.md).
 
+The merged-project view exposes `extra_hosts` in both sequence and mapping form. Each effective
+entry retains its hostname key sources, address provenance, authored collection form, raw IPv4 or
+IPv6 spelling, and a distinct `host-gateway` classification. This is additive to the
+single-document `ExtraHosts` model and lets adapters preserve explicit runtime mappings.
+
 Compose processing tags `!reset` and `!override` remain intact in the syntax document. The typed
 parser reads their inner value when it matches a typed field, allowing valid override documents to
 participate in loading without incorrectly reporting the wrapper as a field-type error. The merge

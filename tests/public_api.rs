@@ -3,7 +3,7 @@
 use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
-use compose_lens::model::ComposeDocument;
+use compose_lens::model::{ComposeDocument, HostAddressKind};
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::build_project_view;
 use compose_lens::render::{ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical};
@@ -16,7 +16,15 @@ use compose_lens::validation::{
 
 #[test]
 fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<(), Box<dyn std::error::Error>> {
-    let source = "services:\n  app:\n    image: example.invalid/app:old\n    volumes:\n      - ./data:/data:z\n";
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:old\n",
+        "    extra_hosts:\n",
+        "      - host.docker.internal=host-gateway\n",
+        "    volumes:\n",
+        "      - ./data:/data:z\n",
+    );
     let syntax = SyntaxDocument::parse(SourceId::new(501), source)?;
     let typed = ComposeDocument::parse(syntax.document());
     let image_span = typed
@@ -65,6 +73,15 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
             .map(|image| image.value().raw()),
         Some("example.invalid/app:1.2.3@sha256:abcdef")
     );
+    let gateway = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::extra_hosts)
+        .and_then(|hosts| hosts.value().entries().first())
+        .ok_or("native project extra host expected")?;
+    assert_eq!(gateway.hostname().value(), "host.docker.internal");
+    assert_eq!(gateway.address().value().raw(), "host-gateway");
+    assert_eq!(gateway.address().value().kind(), HostAddressKind::HostGateway);
     assert!(references.is_valid(), "{:#?}", references.diagnostics());
     assert!(compatibility.is_valid(), "{:#?}", compatibility.diagnostics());
     assert!(

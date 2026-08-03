@@ -4,6 +4,8 @@ services:
     environment:
       - SHARED=override
       - OVERRIDE_ONLY=added
+    extra_hosts:
+      - database=192.0.2.10
     ports:
       - target: 80
         published: "8080"

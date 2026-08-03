@@ -5,9 +5,10 @@ use crate::merge::{
     EntrySyntax, MergeProvenance, MergedEntry, MergedProject, MergedScalarKind, MergedValue, MergedValueKind,
 };
 use crate::model::{
-    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, ImageReference, Ipam, IpamConfig,
+    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, HostAddress, ImageReference, Ipam, IpamConfig,
     KeyValueEntry, Labels, Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, SecretDefinition,
-    SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortPort, ShortVolumeMount, VolumeDefinition, VolumeMount,
+    SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, VolumeDefinition,
+    VolumeMount,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -197,6 +198,48 @@ pub struct ProjectEnvironment {
     entries: Vec<ProjectEnvironmentEntry>,
 }
 
+/// One effective hostname-to-address mapping after field-specific project merging.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectExtraHost {
+    hostname: ProjectKey,
+    address: ProjectValue<HostAddress>,
+    syntax: EntrySyntax,
+}
+
+impl ProjectExtraHost {
+    /// Returns the hostname and every contributing source location.
+    #[must_use]
+    pub const fn hostname(&self) -> &ProjectKey {
+        &self.hostname
+    }
+
+    /// Returns the raw-preserving IP address or implementation token.
+    #[must_use]
+    pub const fn address(&self) -> &ProjectValue<HostAddress> {
+        &self.address
+    }
+
+    /// Returns the most recent mapping or list syntax contributing this entry.
+    #[must_use]
+    pub const fn syntax(&self) -> EntrySyntax {
+        self.syntax
+    }
+}
+
+/// Ordered effective `extra_hosts` entries with field and item provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectExtraHosts {
+    entries: Vec<ProjectExtraHost>,
+}
+
+impl ProjectExtraHosts {
+    /// Returns host mappings in effective merge order.
+    #[must_use]
+    pub fn entries(&self) -> &[ProjectExtraHost] {
+        &self.entries
+    }
+}
+
 impl ProjectEnvironment {
     /// Returns environment variables in effective merge order.
     #[must_use]
@@ -219,6 +262,7 @@ pub struct ProjectService {
     image: Option<ProjectValue<ImageReference>>,
     command: Option<ProjectValue<Command>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
+    extra_hosts: Option<ProjectValue<ProjectExtraHosts>>,
     ports: Option<ProjectValue<Vec<ProjectValue<Port>>>>,
     volumes: Option<ProjectValue<Vec<ProjectValue<VolumeMount>>>>,
     networks: Option<ProjectValue<ServiceNetworks>>,
@@ -255,6 +299,12 @@ impl ProjectService {
     #[must_use]
     pub const fn environment(&self) -> Option<&ProjectValue<ProjectEnvironment>> {
         self.environment.as_ref()
+    }
+
+    /// Returns effective service host mappings with per-entry provenance and syntax.
+    #[must_use]
+    pub const fn extra_hosts(&self) -> Option<&ProjectValue<ProjectExtraHosts>> {
+        self.extra_hosts.as_ref()
     }
 
     /// Returns the effective port collection and per-item provenance.
@@ -531,6 +581,7 @@ impl<'a> Builder<'a> {
             image: None,
             command: None,
             environment: None,
+            extra_hosts: None,
             ports: None,
             volumes: None,
             networks: None,
@@ -552,6 +603,7 @@ impl<'a> Builder<'a> {
                 }
                 "command" => service.command = self.command(field.value()),
                 "environment" => service.environment = self.environment(field.value()),
+                "extra_hosts" => service.extra_hosts = self.extra_hosts(field.value()),
                 "ports" => service.ports = self.ports(field.value(), &path),
                 "volumes" => service.volumes = self.volumes(field.value(), &path),
                 "networks" => service.networks = self.service_networks(field.value(), &path),
@@ -630,6 +682,48 @@ impl<'a> Builder<'a> {
             }
         }
         Some(ProjectValue::new(ProjectEnvironment { entries }, value))
+    }
+
+    fn extra_hosts(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectExtraHosts>> {
+        let mut entries = Vec::new();
+        match value.kind() {
+            MergedValueKind::Mapping(values) => {
+                for entry in values {
+                    let scalar = self.scalar(entry.value(), "extra_hosts address must be a scalar")?;
+                    entries.push(ProjectExtraHost {
+                        hostname: ProjectKey::from_entry(entry),
+                        address: ProjectValue::new(HostAddress::parse(scalar.value().to_owned()), entry.value()),
+                        syntax: EntrySyntax::Mapping,
+                    });
+                }
+            }
+            MergedValueKind::Sequence(values) => {
+                for item in values {
+                    let raw = self.located_string(item, "extra_hosts list item must be a scalar")?;
+                    let parsed = ShortExtraHost::parse(raw);
+                    let (Some(hostname), Some(address)) = (parsed.hostname(), parsed.address()) else {
+                        self.invalid(
+                            effective_span(item),
+                            "extra_hosts entry must contain a hostname and address",
+                        );
+                        continue;
+                    };
+                    entries.push(ProjectExtraHost {
+                        hostname: ProjectKey {
+                            value: hostname.to_owned(),
+                            sources: item.provenance().sources().to_vec(),
+                        },
+                        address: ProjectValue::new(address.clone(), item),
+                        syntax: EntrySyntax::ListKeyValue,
+                    });
+                }
+            }
+            _ => {
+                self.expected(value, "extra_hosts must be a mapping or sequence");
+                return None;
+            }
+        }
+        Some(ProjectValue::new(ProjectExtraHosts { entries }, value))
     }
 
     fn project_string(&mut self, value: &MergedValue, description: &str) -> Option<ProjectValue<String>> {

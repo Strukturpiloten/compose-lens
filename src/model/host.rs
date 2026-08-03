@@ -155,7 +155,7 @@ pub struct HostAddress {
 }
 
 impl HostAddress {
-    pub(super) fn parse(raw: String) -> Self {
+    pub(crate) fn parse(raw: String) -> Self {
         let unbracketed = raw
             .strip_prefix('[')
             .and_then(|value| value.strip_suffix(']'))

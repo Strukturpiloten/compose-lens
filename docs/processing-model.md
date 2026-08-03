@@ -85,12 +85,14 @@ profile-disabled service.
 services. A selection created from a different project returns the same stable mismatch diagnostic
 used by the other post-merge operations.
 
-The initial native view covers project name, services, images, commands, merged environment,
-ports, volume mounts, service networks, profiles, and top-level network, volume, config, and secret
-definitions. Environment values are keyed after field-specific Compose merging, while each entry
-retains whether its effective spelling came from mapping, `KEY=VALUE`, or key-only list syntax.
-Values and collection items retain complete multi-file provenance. Unmodeled fields retain their
-semantic path, all key locations, value provenance, extension classification, and sensitivity.
+The native view covers project name, services, images, commands, merged environment, extra host
+mappings, ports, volume mounts, service networks, profiles, and top-level network, volume, config,
+and secret definitions. Environment values are keyed after field-specific Compose merging, while
+each entry retains whether its effective spelling came from mapping, `KEY=VALUE`, or key-only list
+syntax. Extra-host entries retain sequence or mapping syntax, raw address spelling, lexical address
+classification, and the `host-gateway` implementation token. Values and collection items retain
+complete multi-file provenance. Unmodeled fields retain their semantic path, all key locations,
+value provenance, extension classification, and sensitivity.
 
 This operation does not render or parse generated YAML. It also does not read files, consult an
 environment provider, apply defaults, validate an implementation, or perform conversion. Native

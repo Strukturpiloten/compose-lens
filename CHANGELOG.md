@@ -6,6 +6,14 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-03
+
+### Added
+
+- Source-aware `extra_hosts` entries in the native merged-project view for both sequence and
+  mapping syntax, including per-entry provenance and raw-preserving IPv4, IPv6, deferred-value,
+  and `host-gateway` classification.
+
 ## [0.1.1] - 2026-08-02
 
 ### Added
