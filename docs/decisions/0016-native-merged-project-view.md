@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-02
+- Additive amendment: 2026-08-03
 
 ## Context
 
@@ -27,7 +28,7 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
    service. A selection from another project returns the existing stable mismatch diagnostic and
    no view.
 3. The initial view exposes native effective values for the BoxFerry conversion boundary:
-   project name; services; images; commands; environment; ports; volume mounts; network
+   project name; services; images; commands; environment; extra hosts; ports; volume mounts; network
    attachments; profiles; and top-level network, volume, config, and secret definitions.
 4. `ProjectValue<T>` wraps every exposed effective value with the complete `MergeProvenance`, the
    effective source, and sensitivity state. Collections also retain per-item provenance.
@@ -39,6 +40,9 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
 7. Sensitive project values redact their contents from `Debug` output.
 8. Invalid effective forms return stable source-spanned diagnostics and as much partial native data
    as can be represented.
+9. Effective `extra_hosts` entries retain hostname key sources, address provenance, sequence or
+   mapping syntax, and raw-preserving address classification. `host-gateway` remains an explicit
+   implementation token instead of being forced into an IP-address grammar.
 
 The generic `MergedProject` remains public for advanced analysis, validation, rendering, and future
 native-boundary expansion. The new view is additive within the 0.1.x compatibility line.

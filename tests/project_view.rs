@@ -3,7 +3,9 @@
 use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, merge_project};
-use compose_lens::model::{Command, ComposeScalar, Port, SelinuxRelabel, ServiceNetworks, VolumeMount};
+use compose_lens::model::{
+    Command, ComposeScalar, HostAddressKind, Port, SelinuxRelabel, ServiceNetworks, VolumeMount,
+};
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{PROJECT_EXPECTED_FORM, ProjectService, ProjectValue, ProjectView, build_project_view};
 use compose_lens::resolution::SELECTION_PROJECT_MISMATCH;
@@ -51,6 +53,25 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
     );
     assert!(environment.value().get("BASE_ONLY").is_some());
     assert!(environment.value().get("OVERRIDE_ONLY").is_some());
+
+    let extra_hosts = web.extra_hosts().ok_or("extra_hosts expected")?;
+    assert_source_ids(
+        extra_hosts.provenance().sources(),
+        &[SourceId::new(601), SourceId::new(602)],
+    );
+    assert_eq!(extra_hosts.value().entries().len(), 3);
+    let gateway = &extra_hosts.value().entries()[0];
+    assert_eq!(gateway.hostname().value(), "host.docker.internal");
+    assert_eq!(gateway.address().value().kind(), HostAddressKind::HostGateway);
+    assert_eq!(gateway.syntax(), EntrySyntax::ListKeyValue);
+    assert_source_ids(gateway.address().provenance().sources(), &[SourceId::new(601)]);
+    let ipv6 = &extra_hosts.value().entries()[1];
+    assert_eq!(ipv6.address().value().kind(), HostAddressKind::Ipv6 { bracketed: true });
+    assert_eq!(extra_hosts.value().entries()[2].hostname().value(), "database");
+    assert_source_ids(
+        extra_hosts.value().entries()[2].address().provenance().sources(),
+        &[SourceId::new(602)],
+    );
 
     let ports = web.ports().ok_or("ports expected")?;
     assert_source_ids(ports.provenance().sources(), &[SourceId::new(601), SourceId::new(602)]);
@@ -190,6 +211,49 @@ fn malformed_native_forms_return_a_partial_view_and_stable_diagnostics() -> Resu
             .iter()
             .all(|label| label.span().source_id() == SourceId::new(631) && label.span().end() <= source.len())
     }));
+    Ok(())
+}
+
+#[test]
+fn exposes_mapping_extra_hosts_without_losing_address_spelling() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:1\n",
+        "    extra_hosts:\n",
+        "      database: 192.0.2.10\n",
+        "      ipv6: \"[::1]\"\n",
+        "      host.docker.internal: host-gateway\n",
+    );
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(635),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("project expected")?;
+    let result = build_project_view(project, None);
+    let hosts = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::extra_hosts)
+        .ok_or("extra_hosts expected")?;
+
+    assert!(result.is_valid(), "{:#?}", result.diagnostics());
+    assert_eq!(hosts.value().entries().len(), 3);
+    assert!(
+        hosts
+            .value()
+            .entries()
+            .iter()
+            .all(|entry| entry.syntax() == EntrySyntax::Mapping)
+    );
+    assert_eq!(hosts.value().entries()[1].address().value().raw(), "[::1]");
+    assert!(hosts.value().entries()[2].address().value().is_host_gateway());
+    assert_source_ids(
+        hosts.value().entries()[2].address().provenance().sources(),
+        &[SourceId::new(635)],
+    );
     Ok(())
 }
 

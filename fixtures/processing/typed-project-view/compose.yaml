@@ -6,6 +6,9 @@ services:
     environment:
       BASE_ONLY: base
       SHARED: base
+    extra_hosts:
+      - host.docker.internal=host-gateway
+      - ipv6=[::1]
     ports:
       - "8080:80"
     volumes:
