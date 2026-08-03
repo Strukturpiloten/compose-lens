@@ -49,6 +49,9 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
     source-addressable. The view exposes authored intent; it does not claim that another lifecycle
     manager has equivalent startup, health, completion, restart-propagation, or optionality
     semantics.
+11. Effective execution identity exposes raw-preserving `user` and `userns_mode`, ordered
+    `group_add`, `working_dir`, and `read_only` values. The view classifies only lexical forms and
+    known namespace modes; it does not resolve host accounts, groups, paths, or runtime state.
 
 The generic `MergedProject` remains public for advanced analysis, validation, rendering, and future
 native-boundary expansion. The new view is additive within the 0.1.x compatibility line.

@@ -8,8 +8,8 @@ use crate::model::{
     BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, DependencyCondition, HealthcheckDuration,
     HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddress, ImageReference, Ipam, IpamConfig,
     KeyValueEntry, Labels, Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, SecretDefinition,
-    SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, VolumeDefinition,
-    VolumeMount,
+    SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, UserNamespaceMode,
+    UserSpec, VolumeDefinition, VolumeMount,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -433,6 +433,11 @@ pub struct ProjectService {
     command: Option<ProjectValue<Command>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
     extra_hosts: Option<ProjectValue<ProjectExtraHosts>>,
+    user: Option<ProjectValue<UserSpec>>,
+    userns_mode: Option<ProjectValue<UserNamespaceMode>>,
+    group_add: Option<ProjectValue<Vec<ProjectValue<String>>>>,
+    working_dir: Option<ProjectValue<String>>,
+    read_only: Option<ProjectValue<BooleanValue>>,
     healthcheck: Option<ProjectValue<ProjectHealthcheck>>,
     depends_on: Option<ProjectValue<ProjectDependsOn>>,
     ports: Option<ProjectValue<Vec<ProjectValue<Port>>>>,
@@ -477,6 +482,36 @@ impl ProjectService {
     #[must_use]
     pub const fn extra_hosts(&self) -> Option<&ProjectValue<ProjectExtraHosts>> {
         self.extra_hosts.as_ref()
+    }
+
+    /// Returns the effective container user and optional group spelling.
+    #[must_use]
+    pub const fn user(&self) -> Option<&ProjectValue<UserSpec>> {
+        self.user.as_ref()
+    }
+
+    /// Returns the effective user-namespace mode.
+    #[must_use]
+    pub const fn userns_mode(&self) -> Option<&ProjectValue<UserNamespaceMode>> {
+        self.userns_mode.as_ref()
+    }
+
+    /// Returns supplementary groups in effective merge order.
+    #[must_use]
+    pub const fn group_add(&self) -> Option<&ProjectValue<Vec<ProjectValue<String>>>> {
+        self.group_add.as_ref()
+    }
+
+    /// Returns the effective container working-directory override.
+    #[must_use]
+    pub const fn working_dir(&self) -> Option<&ProjectValue<String>> {
+        self.working_dir.as_ref()
+    }
+
+    /// Returns the effective read-only root-filesystem choice.
+    #[must_use]
+    pub const fn read_only(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.read_only.as_ref()
     }
 
     /// Returns the effective health check with per-field merge provenance.
@@ -766,6 +801,11 @@ impl<'a> Builder<'a> {
             command: None,
             environment: None,
             extra_hosts: None,
+            user: None,
+            userns_mode: None,
+            group_add: None,
+            working_dir: None,
+            read_only: None,
             healthcheck: None,
             depends_on: None,
             ports: None,
@@ -790,6 +830,19 @@ impl<'a> Builder<'a> {
                 "command" => service.command = self.command(field.value()),
                 "environment" => service.environment = self.environment(field.value()),
                 "extra_hosts" => service.extra_hosts = self.extra_hosts(field.value()),
+                "user" => service.user = self.user(field.value()),
+                "userns_mode" => service.userns_mode = self.userns_mode(field.value()),
+                "group_add" => {
+                    service.group_add = self.string_collection(field.value(), "group_add must be a sequence");
+                }
+                "working_dir" => {
+                    service.working_dir = self.project_string(field.value(), "service working directory");
+                }
+                "read_only" => {
+                    service.read_only = self
+                        .located_boolean(field.value(), "service read_only must be a boolean")
+                        .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                }
                 "healthcheck" => service.healthcheck = self.healthcheck(field.value(), &path),
                 "depends_on" => service.depends_on = self.depends_on(field.value(), &path),
                 "ports" => service.ports = self.ports(field.value(), &path),
@@ -826,6 +879,24 @@ impl<'a> Builder<'a> {
             }
         };
         Some(ProjectValue::new(command, value))
+    }
+
+    fn user(&mut self, value: &MergedValue) -> Option<ProjectValue<UserSpec>> {
+        let raw = self.project_string(value, "service user")?;
+        Some(ProjectValue {
+            value: UserSpec::parse(Located::new(raw.value, effective_span(value))),
+            provenance: raw.provenance,
+            sensitive: raw.sensitive,
+        })
+    }
+
+    fn userns_mode(&mut self, value: &MergedValue) -> Option<ProjectValue<UserNamespaceMode>> {
+        let raw = self.project_string(value, "service user namespace mode")?;
+        Some(ProjectValue {
+            value: UserNamespaceMode::parse(Located::new(raw.value, effective_span(value))),
+            provenance: raw.provenance,
+            sensitive: raw.sensitive,
+        })
     }
 
     fn environment(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectEnvironment>> {

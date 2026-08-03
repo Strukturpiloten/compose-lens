@@ -6,6 +6,17 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-08-03
+
+### Added
+
+- Native document and merged-project support for service `group_add`, `working_dir`, and
+  `read_only` values.
+- Effective `user` and `userns_mode` values in the merged-project view, completing the first
+  execution-identity consumer boundary.
+- Multi-file field/item provenance, malformed-form recovery, and public-consumer coverage for the
+  additive identity API.
+
 ## [0.1.4] - 2026-08-03
 
 ### Added

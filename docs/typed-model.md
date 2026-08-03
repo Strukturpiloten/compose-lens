@@ -37,6 +37,11 @@ The merged-project view also exposes `healthcheck` without collapsing scalar/lis
 Every effective timing, retry, disable, and command field has its own merge provenance. Compose
 `start_interval` remains distinct from provider-specific startup-healthcheck features.
 
+Execution identity and context are native at both document and merged-project layers. Effective
+`user`, `userns_mode`, `group_add`, `working_dir`, and `read_only` values retain raw spelling,
+field provenance, and, for supplementary groups, per-item provenance. No account, group, path, or
+namespace lookup is performed.
+
 Compose processing tags `!reset` and `!override` remain intact in the syntax document. The typed
 parser reads their inner value when it matches a typed field, allowing valid override documents to
 participate in loading without incorrectly reporting the wrapper as a field-type error. The merge
@@ -47,7 +52,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `image`, `build`, `command`, `environment`, `extra_hosts`, `user`, `userns_mode`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `image`, `build`, `command`, `environment`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |

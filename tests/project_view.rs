@@ -5,7 +5,8 @@ use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, merge_project};
 use compose_lens::model::{
     BooleanValue, Command, ComposeScalar, DependencyCondition, HealthcheckDuration, HealthcheckRetries,
-    HealthcheckTest, HealthcheckTestKind, HostAddressKind, Port, SelinuxRelabel, ServiceNetworks, VolumeMount,
+    HealthcheckTest, HealthcheckTestKind, HostAddressKind, IdentityComponent, Port, SelinuxRelabel, ServiceNetworks,
+    UserNamespaceModeKind, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
@@ -46,6 +47,8 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
     assert_eq!(image.value().raw(), "example.invalid/web:2@sha256:abcdef");
     assert_eq!(image.provenance().operation(), MergeOperation::Replaced);
     assert_source_ids(image.provenance().sources(), &[SourceId::new(601), SourceId::new(602)]);
+
+    assert_execution_identity(web)?;
 
     let environment = web.environment().ok_or("environment expected")?;
     let shared = environment.value().get("SHARED").ok_or("SHARED expected")?;
@@ -112,6 +115,55 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
             .map(|profile| profile.value().as_str()),
         Some("workers")
     );
+    Ok(())
+}
+
+fn assert_execution_identity(web: &ProjectService) -> Result<(), Box<dyn std::error::Error>> {
+    let user = web.user().ok_or("user expected")?;
+    assert_eq!(user.value().raw().value(), "1001:1002");
+    assert!(matches!(user.value().user(), IdentityComponent::Numeric(value) if value == "1001"));
+    assert!(matches!(user.value().group(), Some(IdentityComponent::Numeric(value)) if value == "1002"));
+    assert_source_ids(user.provenance().sources(), &[SourceId::new(601), SourceId::new(602)]);
+
+    let userns = web.userns_mode().ok_or("user namespace mode expected")?;
+    assert_eq!(userns.value().kind(), UserNamespaceModeKind::PodmanKeepId);
+    assert_source_ids(userns.provenance().sources(), &[SourceId::new(601), SourceId::new(602)]);
+
+    let groups = web.group_add().ok_or("supplementary groups expected")?;
+    assert_eq!(
+        groups
+            .value()
+            .iter()
+            .map(|group| group.value().as_str())
+            .collect::<Vec<_>>(),
+        ["audio", "video"]
+    );
+    assert_source_ids(groups.provenance().sources(), &[SourceId::new(601), SourceId::new(602)]);
+    assert_source_ids(groups.value()[0].provenance().sources(), &[SourceId::new(601)]);
+    assert_source_ids(groups.value()[1].provenance().sources(), &[SourceId::new(602)]);
+
+    let working_dir = web.working_dir().ok_or("working directory expected")?;
+    assert_eq!(working_dir.value(), "/srv/app");
+    assert_source_ids(
+        working_dir.provenance().sources(),
+        &[SourceId::new(601), SourceId::new(602)],
+    );
+
+    let read_only = web.read_only().ok_or("read-only value expected")?;
+    assert_eq!(read_only.value(), &BooleanValue::Literal(true));
+    assert_source_ids(
+        read_only.provenance().sources(),
+        &[SourceId::new(601), SourceId::new(602)],
+    );
+
+    for field in ["user", "userns_mode", "group_add", "working_dir", "read_only"] {
+        assert!(
+            !web.unmodeled_fields()
+                .iter()
+                .any(|reference| reference.path().last().is_some_and(|name| name == field)),
+            "{field} must be native in the project view"
+        );
+    }
     Ok(())
 }
 
@@ -236,7 +288,16 @@ fn rejects_a_profile_selection_from_another_merged_project() -> Result<(), Box<d
 
 #[test]
 fn malformed_native_forms_return_a_partial_view_and_stable_diagnostics() -> Result<(), Box<dyn std::error::Error>> {
-    let source = "services:\n  app:\n    image: []\n    ports: wrong\n  broken: true\n";
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: []\n",
+        "    group_add: wrong\n",
+        "    working_dir: []\n",
+        "    read_only: sometimes\n",
+        "    ports: wrong\n",
+        "  broken: true\n",
+    );
     let loaded = LoadedProject::load([DocumentInput::new(
         SourceId::new(631),
         DocumentOrigin::new("compose.yaml", "workspace/project"),
@@ -252,7 +313,7 @@ fn malformed_native_forms_return_a_partial_view_and_stable_diagnostics() -> Resu
         result
             .diagnostics()
             .iter()
-            .all(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+            .all(|diagnostic| matches!(diagnostic.code(), PROJECT_EXPECTED_FORM | PROJECT_INVALID_VALUE))
     );
     assert!(result.diagnostics().iter().all(|diagnostic| {
         diagnostic

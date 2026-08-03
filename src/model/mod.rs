@@ -195,6 +195,9 @@ pub struct Service {
     extra_hosts: Option<ExtraHosts>,
     user: Option<UserSpec>,
     userns_mode: Option<UserNamespaceMode>,
+    group_add: Vec<Located<String>>,
+    working_dir: Option<Located<String>>,
+    read_only: Option<Located<BooleanValue>>,
     ulimits: Option<Ulimits>,
     depends_on: Option<DependsOn>,
     healthcheck: Option<Healthcheck>,
@@ -211,6 +214,35 @@ pub struct Service {
 }
 
 impl Service {
+    fn new(name: Located<String>, span: SourceSpan) -> Self {
+        Self {
+            name,
+            span,
+            image: None,
+            command: None,
+            environment: None,
+            extra_hosts: None,
+            user: None,
+            userns_mode: None,
+            group_add: Vec::new(),
+            working_dir: None,
+            read_only: None,
+            ulimits: None,
+            depends_on: None,
+            healthcheck: None,
+            build: None,
+            deploy: None,
+            ports: Vec::new(),
+            volumes: Vec::new(),
+            networks: None,
+            profiles: Vec::new(),
+            configs: Vec::new(),
+            secrets: Vec::new(),
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+
     /// Returns the service name.
     #[must_use]
     pub const fn name(&self) -> &Located<String> {
@@ -257,6 +289,24 @@ impl Service {
     #[must_use]
     pub const fn userns_mode(&self) -> Option<&UserNamespaceMode> {
         self.userns_mode.as_ref()
+    }
+
+    /// Returns supplementary groups in authored order without resolving names or IDs.
+    #[must_use]
+    pub fn group_add(&self) -> &[Located<String>] {
+        &self.group_add
+    }
+
+    /// Returns the container working-directory override.
+    #[must_use]
+    pub const fn working_dir(&self) -> Option<&Located<String>> {
+        self.working_dir.as_ref()
+    }
+
+    /// Returns the explicit read-only root-filesystem choice.
+    #[must_use]
+    pub const fn read_only(&self) -> Option<&Located<BooleanValue>> {
+        self.read_only.as_ref()
     }
 
     /// Returns explicitly authored service resource limits.
@@ -693,29 +743,7 @@ impl Parser {
     }
 
     fn parse_service(&mut self, field: &ParsedField, mapping: &Mapping) -> Service {
-        let mut service = Service {
-            name: field.name.clone(),
-            span: field.span,
-            image: None,
-            command: None,
-            environment: None,
-            extra_hosts: None,
-            user: None,
-            userns_mode: None,
-            ulimits: None,
-            depends_on: None,
-            healthcheck: None,
-            build: None,
-            deploy: None,
-            ports: Vec::new(),
-            volumes: Vec::new(),
-            networks: None,
-            profiles: Vec::new(),
-            configs: Vec::new(),
-            secrets: Vec::new(),
-            extension_fields: Vec::new(),
-            unknown_fields: Vec::new(),
-        };
+        let mut service = Service::new(field.name.clone(), field.span);
         let mut seen = BTreeMap::new();
         for service_field in self.fields(mapping) {
             let duplicate = self.record_duplicate(&mut seen, &service_field);
@@ -741,6 +769,15 @@ impl Parser {
                     service.userns_mode = self
                         .parse_string(&service_field, "service user namespace mode")
                         .map(UserNamespaceMode::parse);
+                }
+                "group_add" if !duplicate => {
+                    service.group_add = self.parse_string_sequence(&service_field, "service supplementary groups");
+                }
+                "working_dir" if !duplicate => {
+                    service.working_dir = self.parse_string(&service_field, "service working directory");
+                }
+                "read_only" if !duplicate => {
+                    service.read_only = self.parse_boolean(&service_field, "service read_only");
                 }
                 "ulimits" if !duplicate => {
                     service.ulimits = self.parse_ulimits(&service_field);
