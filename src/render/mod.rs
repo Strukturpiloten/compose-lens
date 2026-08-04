@@ -1,6 +1,13 @@
 //! Deterministic rendering and preservation-oriented editing of ComposeLens-owned documents.
 
+mod generated;
 mod preserved;
+
+pub use generated::{
+    ComposeDocumentBuilder, GeneratedCommand, GeneratedComposeDocument, GeneratedEnvironment, GeneratedExtraHost,
+    GeneratedMount, GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource, GeneratedSelinux,
+    GeneratedService, GeneratedString, GenerationError,
+};
 
 pub use preserved::{
     EDIT_INVALID_NUMBER, EDIT_OVERLAP, EDIT_SOURCE_MISMATCH, EDIT_TARGET_NOT_SCALAR, EDIT_UNSUPPORTED_SCALAR_STYLE,

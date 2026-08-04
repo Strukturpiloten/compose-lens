@@ -13,6 +13,7 @@ It is designed for tools that need more than strict deserialization: source-awar
 - Support multi-file project loading, merging, profile selection, and configurable interpolation.
 - Model behavior found in real Docker Compose and Podman Compose projects.
 - Render deterministic Compose documents.
+- Construct new deterministic Compose documents through Compose-owned, parse-back-validated values.
 - Allow callers to choose strict, implementation-specific, or tolerant validation profiles.
 
 ## Non-goals
@@ -51,6 +52,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Processing model](docs/processing-model.md)
 - [Preservation-oriented editing](docs/preservation-editing.md)
 - [Render formatting](docs/render-formatting.md)
+- [Generated documents](docs/generated-rendering.md)
 - [Phase 2 typed model](docs/typed-model.md)
 - [Native coverage](docs/coverage.md)
 - [Testing strategy](docs/testing.md)
@@ -59,7 +61,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
-- [0.1.6 release notes](docs/releases/0.1.6.md)
+- [0.1.7 release notes](docs/releases/0.1.7.md)
 - [Release process](docs/releasing.md)
 - [Changelog](CHANGELOG.md)
 - [Architecture decisions](docs/decisions/README.md)

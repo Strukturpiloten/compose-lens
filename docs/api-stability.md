@@ -32,13 +32,16 @@ The 0.1 consumer contract covers these explicit stages:
 | Caller-owned environment and project inputs | `interpolation`, `loader` |
 | Merge and post-merge views | `merge`, `profiles`, `project`, `resolution` |
 | Versioned compatibility reports | `validation` |
-| Canonical output and scalar preservation edits | `render` |
+| Canonical/generated output and scalar preservation edits | `render` |
 
-The compile-and-behavior contract in `tests/public_api.rs` exercises this path as an external crate
+The compile-and-behavior contract in `tests/public_api.rs` exercises these paths as an external crate
 consumer would. The additive `project` module provides native values without hiding loading,
 interpolation, merging, or profile selection. The modules remain separate deliberately; 0.1 does
 not add a convenience function that hides file access, interpolation, merging, profile selection,
 validation, or rendering.
+
+The additive generated-document path accepts only explicit Compose-owned values and performs no
+processing or I/O. Successful output is parse-back validated through the syntax and native model.
 
 ## Changes before 1.0
 

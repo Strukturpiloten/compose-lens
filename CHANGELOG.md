@@ -6,6 +6,16 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-08-04
+
+### Added
+
+- Typed deterministic construction for new Compose documents covering the first runtime-migration
+  service, network, and volume subset.
+- Parse-back validation through the loss-aware syntax and native typed-document layers.
+- Deliberate short syntax for `SELinux` relabel binds, duplicate/ambiguity rejection, and sensitive
+  generated-output redaction.
+
 ## [0.1.6] - 2026-08-03
 
 ### Added

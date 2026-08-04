@@ -30,6 +30,13 @@ tags, unresolved-alias recovery, and sensitive-output redaction. A regression fi
 empty environment value immediately before later service fields so parser recovery cannot silently
 reparent ports, volumes, or extensions into the environment mapping.
 
+Generated-rendering tests construct the runtime-migration subset through public Compose-owned
+types, compare exact deterministic bytes, and inspect the parse-back native model. They protect
+ordered duplicate-capable environment syntax, spec-shaped long TCP/UDP ports, short SCTP ports,
+ordinary mounts, deliberate short `SELinux` bind syntax, network aliases,
+application/external resource lifecycle, duplicate
+rejection, ambiguous short-form failures, and sensitive debug redaction.
+
 Preservation-editing tests compare exact authored and expected files after changing typed scalar
 spans. They prove that comments, whitespace, ordering, unknown fields, extensions, flow syntax, and
 untouched quoting stay byte-identical. Failure tests cover foreign sources, key and non-scalar
@@ -115,6 +122,7 @@ cargo test --locked --test conformance
 cargo test --locked --test runtime_conformance
 cargo test --locked --test real_world
 cargo test --locked --test public_api
+cargo test --locked --test generated_rendering
 cargo package --locked
 ```
 

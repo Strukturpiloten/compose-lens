@@ -11,6 +11,7 @@ Suites are introduced with the behavior they verify:
 - `compatibility` — exact implementation versions, provider/runtime profiles, evidence, and findings
 - `roundtrip` — preservation and deterministic canonical rendering
 - `rendering` — canonical/custom output, formatting boundaries, profile filtering, recovery, stability, and redaction
+- `generated-rendering` — typed new-document construction, syntax selection, exact bytes, parse-back validation, and redaction
 - `preservation-editing` — atomic exact-span scalar changes and byte-preservation failures
 - `conformance` — exact provider/probe matrix policy plus an explicitly invoked observation runner
 - `runtime-conformance` — exact planned runtime contexts, fixture hashes, and fail-closed isolation policy
