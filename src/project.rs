@@ -362,6 +362,64 @@ pub struct ProjectHealthcheck {
     unmodeled_fields: Vec<ProjectFieldReference>,
 }
 
+/// Effective long-form service config or secret grant with field-level merge provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLongGrant {
+    source: Option<ProjectValue<String>>,
+    target: Option<ProjectValue<String>>,
+    uid: Option<ProjectValue<String>>,
+    gid: Option<ProjectValue<String>>,
+    mode: Option<ProjectValue<String>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectLongGrant {
+    /// Returns the referenced top-level resource name.
+    #[must_use]
+    pub const fn source(&self) -> Option<&ProjectValue<String>> {
+        self.source.as_ref()
+    }
+
+    /// Returns the requested container path or name.
+    #[must_use]
+    pub const fn target(&self) -> Option<&ProjectValue<String>> {
+        self.target.as_ref()
+    }
+
+    /// Returns the requested container user-ID spelling.
+    #[must_use]
+    pub const fn uid(&self) -> Option<&ProjectValue<String>> {
+        self.uid.as_ref()
+    }
+
+    /// Returns the requested container group-ID spelling.
+    #[must_use]
+    pub const fn gid(&self) -> Option<&ProjectValue<String>> {
+        self.gid.as_ref()
+    }
+
+    /// Returns the requested permission-mode spelling.
+    #[must_use]
+    pub const fn mode(&self) -> Option<&ProjectValue<String>> {
+        self.mode.as_ref()
+    }
+
+    /// Returns retained long-form fields outside the typed project-view boundary.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// One effective service config or secret grant with its Compose syntax form retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectGrant {
+    /// Resource-name short syntax.
+    Short(String),
+    /// Mapping-based long syntax.
+    Long(Box<ProjectLongGrant>),
+}
+
 impl ProjectHealthcheck {
     /// Returns the effective health command without collapsing scalar and list forms.
     #[must_use]
@@ -442,6 +500,8 @@ pub struct ProjectService {
     depends_on: Option<ProjectValue<ProjectDependsOn>>,
     ports: Option<ProjectValue<Vec<ProjectValue<Port>>>>,
     volumes: Option<ProjectValue<Vec<ProjectValue<VolumeMount>>>>,
+    configs: Option<ProjectValue<Vec<ProjectValue<ProjectGrant>>>>,
+    secrets: Option<ProjectValue<Vec<ProjectValue<ProjectGrant>>>>,
     networks: Option<ProjectValue<ServiceNetworks>>,
     profiles: Option<ProjectValue<Vec<ProjectValue<String>>>>,
     unmodeled_fields: Vec<ProjectFieldReference>,
@@ -536,6 +596,18 @@ impl ProjectService {
     #[must_use]
     pub const fn volumes(&self) -> Option<&ProjectValue<Vec<ProjectValue<VolumeMount>>>> {
         self.volumes.as_ref()
+    }
+
+    /// Returns effective service config grants with syntax and field-level provenance retained.
+    #[must_use]
+    pub const fn configs(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectGrant>>>> {
+        self.configs.as_ref()
+    }
+
+    /// Returns effective service secret grants with syntax and field-level provenance retained.
+    #[must_use]
+    pub const fn secrets(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectGrant>>>> {
+        self.secrets.as_ref()
     }
 
     /// Returns effective network attachments with short and long forms retained.
@@ -810,6 +882,8 @@ impl<'a> Builder<'a> {
             depends_on: None,
             ports: None,
             volumes: None,
+            configs: None,
+            secrets: None,
             networks: None,
             profiles: None,
             unmodeled_fields: Vec::new(),
@@ -847,6 +921,8 @@ impl<'a> Builder<'a> {
                 "depends_on" => service.depends_on = self.depends_on(field.value(), &path),
                 "ports" => service.ports = self.ports(field.value(), &path),
                 "volumes" => service.volumes = self.volumes(field.value(), &path),
+                "configs" => service.configs = self.grants(field.value(), &path, "config"),
+                "secrets" => service.secrets = self.grants(field.value(), &path, "secret"),
                 "networks" => service.networks = self.service_networks(field.value(), &path),
                 "profiles" => service.profiles = self.string_collection(field.value(), "profiles must be a sequence"),
                 _ => service.unmodeled_fields.push(field_reference(&path, field)),
@@ -1403,6 +1479,81 @@ impl Builder<'_> {
             self.missing(value, "long-syntax volume is missing `target`");
         }
         mount
+    }
+
+    fn grants(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+        kind: &str,
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectGrant>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, &format!("service {kind}s must be a sequence"));
+            return None;
+        };
+        let mut grants = Vec::new();
+        for (index, item) in values.iter().enumerate() {
+            let mut path = service_path.to_vec();
+            path.push(format!("{kind}s"));
+            path.push(index.to_string());
+            let grant = match item.kind() {
+                MergedValueKind::Scalar(scalar) => ProjectGrant::Short(scalar.value().to_owned()),
+                MergedValueKind::Mapping(fields) => {
+                    ProjectGrant::Long(Box::new(self.long_grant(item, fields, &path, kind)))
+                }
+                _ => {
+                    self.expected(
+                        item,
+                        &format!("service {kind} must use scalar short syntax or mapping long syntax"),
+                    );
+                    continue;
+                }
+            };
+            grants.push(ProjectValue::new(grant, item));
+        }
+        Some(ProjectValue::new(grants, value))
+    }
+
+    fn long_grant(
+        &mut self,
+        value: &MergedValue,
+        fields: &[MergedEntry],
+        path: &[String],
+        kind: &str,
+    ) -> ProjectLongGrant {
+        let mut grant = ProjectLongGrant {
+            source: None,
+            target: None,
+            uid: None,
+            gid: None,
+            mode: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            let parsed = match field.key() {
+                "source" => self.project_string(field.value(), &format!("{kind} source")),
+                "target" => self.project_string(field.value(), &format!("{kind} target")),
+                "uid" => self.project_string(field.value(), &format!("{kind} uid")),
+                "gid" => self.project_string(field.value(), &format!("{kind} gid")),
+                "mode" => self.project_string(field.value(), &format!("{kind} mode")),
+                _ => {
+                    grant.unmodeled_fields.push(field_reference(path, field));
+                    continue;
+                }
+            };
+            match field.key() {
+                "source" => grant.source = parsed,
+                "target" => grant.target = parsed,
+                "uid" => grant.uid = parsed,
+                "gid" => grant.gid = parsed,
+                "mode" => grant.mode = parsed,
+                _ => unreachable!("unrecognized grant fields continue before assignment"),
+            }
+        }
+        if grant.source.is_none() {
+            self.missing(value, &format!("long-syntax {kind} is missing `source`"));
+        }
+        grant
     }
 
     fn bind_options(&mut self, value: &MergedValue, parent_path: &[String]) -> Option<BindOptions> {

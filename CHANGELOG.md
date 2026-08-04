@@ -6,6 +6,16 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-08-03
+
+### Added
+
+- Effective service `configs` and `secrets` in the native merged-project view.
+- Short/long grant fidelity, field-level provenance, retained unknown options, and recoverable
+  malformed-form diagnostics for downstream conversion adapters.
+- Multi-file regressions for Compose's unique-by-target grant merging, including nested fields
+  retained from earlier files.
+
 ## [0.1.5] - 2026-08-03
 
 ### Added

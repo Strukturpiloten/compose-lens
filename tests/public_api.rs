@@ -8,7 +8,7 @@ use compose_lens::model::{
     UserNamespaceModeKind,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
-use compose_lens::project::build_project_view;
+use compose_lens::project::{ProjectGrant, build_project_view};
 use compose_lens::render::{ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical};
 use compose_lens::resolution::validate_references;
 use compose_lens::source::SourceId;
@@ -38,8 +38,19 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
         "        condition: service_healthy\n",
         "    volumes:\n",
         "      - ./data:/data:z\n",
+        "    configs: [app-config]\n",
+        "    secrets:\n",
+        "      - source: app-secret\n",
+        "        target: password\n",
+        "        mode: \"0440\"\n",
         "  database:\n",
         "    image: example.invalid/database:1\n",
+        "configs:\n",
+        "  app-config:\n",
+        "    file: ./app.conf\n",
+        "secrets:\n",
+        "  app-secret:\n",
+        "    external: true\n",
     );
     let syntax = SyntaxDocument::parse(SourceId::new(501), source)?;
     let typed = ComposeDocument::parse(syntax.document());
@@ -92,6 +103,7 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     assert_host_and_health(&project_view)?;
     assert_dependency(&project_view)?;
     assert_execution_identity(&project_view)?;
+    assert_resource_grants(&project_view)?;
     assert!(references.is_valid(), "{:#?}", references.diagnostics());
     assert!(compatibility.is_valid(), "{:#?}", compatibility.diagnostics());
     assert!(
@@ -102,6 +114,49 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     );
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
     assert!(rendered.output().contains("example.invalid/app:1.2.3@sha256:abcdef"));
+    Ok(())
+}
+
+fn assert_resource_grants(project_view: &compose_lens::project::ProjectViewResult) -> Result<(), &'static str> {
+    let service = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .ok_or("native project service expected")?;
+    assert!(matches!(
+        service
+            .configs()
+            .and_then(|grants| grants.value().first())
+            .map(compose_lens::project::ProjectValue::value),
+        Some(ProjectGrant::Short(source)) if source == "app-config"
+    ));
+    let Some(ProjectGrant::Long(secret)) = service
+        .secrets()
+        .and_then(|grants| grants.value().first())
+        .map(compose_lens::project::ProjectValue::value)
+    else {
+        return Err("long secret grant expected");
+    };
+    assert_eq!(
+        secret
+            .source()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("app-secret")
+    );
+    assert_eq!(
+        secret
+            .target()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("password")
+    );
+    assert_eq!(
+        secret
+            .mode()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("0440")
+    );
     Ok(())
 }
 
