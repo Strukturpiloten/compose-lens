@@ -110,6 +110,8 @@ is never promoted to support merely because a tolerant profile was selected. ADR
 The renderer has two deliberately separate paths:
 
 - deterministic canonical output from a merged project, which is implemented; and
+- deterministic generated output from caller-constructed Compose-native values, which is
+  implemented for the first runtime-migration subset; and
 - preservation-oriented editing from a syntax document, which is implemented for exact value
   scalars.
 
@@ -133,6 +135,13 @@ emission, and final-line-ending emission. Its default remains byte-identical can
 cannot reorder data, normalize Compose forms, or activate any processing stage. ADR 0011 records
 the [presentation-only formatting boundary](decisions/0011-presentation-only-render-formatting.md).
 
+Generated rendering owns typed construction for documents without authored source provenance. It
+uses the same private quoted-string encoder, retains insertion order, selects short or long syntax
+per field, and reparses every successful result through the syntax and typed-document layers.
+Sensitive generated values redact the complete result from `Debug`. It does not construct a fake
+merged project or run compatibility validation. ADR 0017 records the
+[generated-document boundary](decisions/0017-parse-back-validated-compose-generation.md).
+
 ## Dependency direction
 
 - Syntax knows nothing about the typed model.
@@ -140,7 +149,8 @@ the [presentation-only formatting boundary](decisions/0011-presentation-only-ren
 - Project processing depends on typed documents and caller-provided inputs, not ambient I/O.
 - Native project views depend on merged values and profile selections, not on rendering or BoxFerry.
 - Validation depends on models and profiles, not on BoxFerry.
-- Rendering depends on syntax or typed models according to the selected mode.
+- Rendering depends on syntax, merged projects, or explicit generated Compose values according to
+  the selected mode.
 
 ## Side-effect boundaries
 
@@ -151,6 +161,7 @@ the [presentation-only formatting boundary](decisions/0011-presentation-only-ren
 - Default resolution is pure when supplied an immutable default provider.
 - Compatibility validation is pure and never invokes a Compose provider or container runtime.
 - Canonical rendering is pure and consumes only a merged project plus an optional matching profile selection.
+- Generated rendering is pure and consumes only caller-constructed Compose-native values.
 - Custom rendering additionally consumes an explicit presentation-only `CanonicalFormatting` value.
 - Preservation editing is pure and consumes only a syntax document plus caller-supplied exact-span edits.
 - ComposeLens never contacts Docker, Podman, or Kubernetes.

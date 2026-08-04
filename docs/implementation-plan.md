@@ -2,7 +2,7 @@
 
 This plan gives BoxFerry, ComposeLens, and QuadletLens one stable task numbering scheme. Repository roadmaps describe internal phases; this document describes delivery order across repositories.
 
-Last synchronized: 2026-08-02.
+Last synchronized: 2026-08-04.
 
 ## Status convention
 
@@ -22,7 +22,7 @@ The repository that owns a task is authoritative for its detailed status. Update
 | T3 | QuadletLens | completed | Ordered Quadlet syntax and rendering kernel |
 | T4 | BoxFerry | completed | Independent neutral model and conversion engine |
 | T5 | All repositories | in progress | Minimum native typed subsets for the first conversion |
-| T6 | BoxFerry, integrating both Lens libraries | planned | First Compose-to-Quadlet vertical slice |
+| T6 | BoxFerry, integrating both Lens libraries | in progress | First Compose-to-Quadlet vertical slice |
 | T7 | All repositories | in progress | Expanded conformance, runtime, and release testing tiers |
 
 ## T1: Testing foundations
@@ -93,7 +93,7 @@ Delivered ComposeLens slice: source-aware services and typed top-level resource 
 Delivered QuadletLens slice: ordered source-aware `.container`, `.pod`, `.network`, and `.volume`
 documents; preserved generic systemd and unknown entries; native key enums;
 conservative path and unit-reference forms; separate syntax/model diagnostics; and exact
-document-set dependency resolution. BoxFerry consumes ComposeLens 0.1.2 and QuadletLens 0.1.2 from
+document-set dependency resolution. BoxFerry consumes ComposeLens 0.1.6 and QuadletLens 0.1.6 from
 crates.io through independent adapter crates. It maps images, commands, environment, extra hosts,
 single ports, named volumes, bind mounts, networks, explicit profiles, provenance, and short/long
 SELinux relabel intent into the neutral model, then generates validated separate-container or
@@ -105,7 +105,7 @@ merged project. Its `ProjectValue<T>` and collection items retain every contribu
 and BoxFerry now consumes that released boundary without reparsing canonical output. Its multi-file
 adapter regression retains all contributing origins and the unquoted comma-containing volume form.
 
-ComposeLens 0.1.2 and QuadletLens 0.1.2 are published on crates.io with documented pre-1.0
+ComposeLens 0.1.6 and QuadletLens 0.1.6 are published on crates.io with documented pre-1.0
 compatibility contracts. BoxFerry consumes both through compatible crates.io requirements and
 commits its application lockfile. Commit-pinned Git dependencies remain an emergency-only fallback.
 
@@ -140,12 +140,9 @@ optional startup edges map to `Requires`/`Wants` plus `After`; healthy edges sel
 completion semantics remain policy-controlled losses, while missing required services and cycles
 are invalid. Golden tests cover separate containers and explicitly grouped pods.
 
-ComposeLens and QuadletLens 0.1.5 are published and consumed by BoxFerry for execution identity
-and container context. ComposeLens 0.1.6 is the tested candidate that additionally exposes
-effective service config and secret grants with short/long form and field-level multi-file
-provenance. QuadletLens 0.1.6 is the coordinated candidate with repeatable container `Secret` and
-pod `UserNS`, evidenced across Podman 5.4.0 through 6.0.2. BoxFerry integration remains gated on
-publication of both releases.
+ComposeLens and QuadletLens 0.1.6 are published and consumed by BoxFerry. They cover execution
+identity and container context plus effective config/secret grants, repeatable container `Secret`,
+and pod `UserNS`, with Quadlet evidence across Podman 5.4.0 through 6.0.2.
 
 ## T6: First end-to-end milestone
 
@@ -177,6 +174,13 @@ Each harness becomes required only after its command, isolation model, version s
 
 ComposeLens delivery evidence includes 48 reviewed exact provider-config records, a 36-entry
 fail-closed runtime-effect matrix, two independently licensed real-world fixtures, narrowly scoped
-compatibility rules, a consumer-facing 0.1.x API contract, and the published ComposeLens 0.1.2
+compatibility rules, a consumer-facing 0.1.x API contract, and the published ComposeLens 0.1.6
 crate and GitHub release. The runtime entries remain planned until suitable isolated SELinux hosts
 execute them. Future crates.io releases use trusted publishing with short-lived OIDC credentials.
+
+ComposeLens 0.1.7 is the validated release candidate for runtime-to-Compose output. It adds pure,
+deterministic, parse-back-validated document construction for the current BoxFerry observation
+subset. Field-specific syntax selection retains short SELinux bind behavior, emits SCTP through
+the platform-protocol-capable short port form, and keeps optional exact platform names distinct
+from network/volume lifecycle ownership. BoxFerry consumption remains gated on the crates.io
+release; sibling path dependencies are not used.

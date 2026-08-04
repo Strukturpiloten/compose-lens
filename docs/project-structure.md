@@ -32,7 +32,7 @@ compose-lens/
 │   ├── project.rs          # native selected-project values with multi-file provenance
 │   ├── resolution/         # host paths, cross-references, and default decisions
 │   ├── validation/         # exact versions, compatibility profiles, evidence, and findings
-│   ├── render/             # canonical rendering and atomic exact-span scalar editing
+│   ├── render/             # canonical/generated rendering and atomic exact-span scalar editing
 │   └── diagnostic/         # stable codes, severities, labels, and notes
 ├── tests/
 │   ├── README.md           # suite ownership and introduction rules
@@ -43,6 +43,7 @@ compose-lens/
 │   ├── processing.rs       # interpolation, loading, merge, and later project operations
 │   ├── project_view.rs     # native merged/profile-selected values and provenance
 │   ├── rendering.rs        # canonical/custom output, stability, recovery, and redaction
+│   ├── generated_rendering.rs # typed new-document construction, exact bytes, and parse-back validation
 │   ├── preservation_editing.rs # atomic scalar edits and byte-preservation failures
 │   ├── compatibility.rs    # exact provider/runtime compatibility behavior
 │   ├── conformance.rs      # provider matrix policy and ignored capture runner
@@ -88,7 +89,7 @@ compose-lens/
 | Native merged-project consumer values  | `project`       |
 | Paths, references, and defaults        | `resolution`    |
 | Implementation support and correctness | `validation`    |
-| YAML output                            | `render`        |
+| YAML output and new-document builders  | `render`        |
 | Stable diagnostic codes                | `diagnostic`    |
 
 Do not place file access in syntax parsing, automatic interpolation in deserialization, or BoxFerry conversion types in the native model. Application adapters perform file access and pass explicit text and origins to the loader.

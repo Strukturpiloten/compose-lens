@@ -9,7 +9,10 @@ use compose_lens::model::{
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{ProjectGrant, build_project_view};
-use compose_lens::render::{ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical};
+use compose_lens::render::{
+    ComposeDocumentBuilder, GeneratedService, GeneratedString, ReplacementScalar, ScalarEdit, apply_preservation_edits,
+    render_canonical,
+};
 use compose_lens::resolution::validate_references;
 use compose_lens::source::SourceId;
 use compose_lens::syntax::SyntaxDocument;
@@ -114,6 +117,30 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     );
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
     assert!(rendered.output().contains("example.invalid/app:1.2.3@sha256:abcdef"));
+    Ok(())
+}
+
+#[test]
+fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(), Box<dyn std::error::Error>> {
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(GeneratedString::plain("example.invalid/app:1")?)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.set_name("example")?;
+    builder.add_service(service)?;
+
+    let generated = builder.build(SourceId::new(503))?;
+    assert_eq!(
+        generated
+            .document()
+            .service("app")
+            .and_then(compose_lens::model::Service::image)
+            .map(|image| image.value().raw()),
+        Some("example.invalid/app:1")
+    );
+    assert_eq!(
+        generated.text(),
+        "name: \"example\"\nservices:\n  \"app\":\n    image: \"example.invalid/app:1\"\n"
+    );
     Ok(())
 }
 
