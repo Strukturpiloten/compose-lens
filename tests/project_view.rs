@@ -10,8 +10,8 @@ use compose_lens::model::{
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
-    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, ProjectDependsOn, ProjectService, ProjectValue, ProjectView,
-    build_project_view,
+    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, PROJECT_MISSING_FIELD, ProjectDependsOn, ProjectGrant,
+    ProjectService, ProjectValue, ProjectView, build_project_view,
 };
 use compose_lens::resolution::SELECTION_PROJECT_MISMATCH;
 use compose_lens::source::SourceId;
@@ -609,12 +609,178 @@ fn retains_short_dependencies_and_reports_invalid_long_options() -> Result<(), B
 }
 
 #[test]
+fn exposes_merged_config_and_secret_grants_with_nested_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:1\n",
+        "    configs:\n",
+        "      - source: base-config\n",
+        "        target: /etc/app.conf\n",
+        "        mode: \"0444\"\n",
+        "    secrets:\n",
+        "      - app-secret\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    configs:\n",
+        "      - source: override-config\n",
+        "        target: /etc/app.conf\n",
+        "        uid: \"1000\"\n",
+        "        x-owner: retained\n",
+        "    secrets:\n",
+        "      - source: replacement-secret\n",
+        "        target: app-secret\n",
+        "        gid: \"2000\"\n",
+        "        mode: \"0440\"\n",
+    );
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(647),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            base,
+        ),
+        DocumentInput::new(
+            SourceId::new(648),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            override_source,
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let service = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .ok_or("app service expected")?;
+
+    assert!(result.is_valid(), "{:#?}", result.diagnostics());
+    assert_merged_config_grant(service)?;
+    assert_merged_secret_grant(service)?;
+    assert!(
+        service
+            .unmodeled_fields()
+            .iter()
+            .all(|field| { !matches!(field.path().last().map(String::as_str), Some("configs" | "secrets")) })
+    );
+    Ok(())
+}
+
+fn assert_merged_config_grant(service: &ProjectService) -> Result<(), Box<dyn std::error::Error>> {
+    let configs = service.configs().ok_or("configs expected")?;
+    assert_source_ids(
+        configs.provenance().sources(),
+        &[SourceId::new(647), SourceId::new(648)],
+    );
+    assert_eq!(configs.value().len(), 1);
+    assert_source_ids(
+        configs.value()[0].provenance().sources(),
+        &[SourceId::new(647), SourceId::new(648)],
+    );
+    let ProjectGrant::Long(config) = configs.value()[0].value() else {
+        return Err("long config grant expected".into());
+    };
+    assert_eq!(
+        config.source().map(ProjectValue::value).map(String::as_str),
+        Some("override-config")
+    );
+    assert_eq!(
+        config.target().map(ProjectValue::value).map(String::as_str),
+        Some("/etc/app.conf")
+    );
+    assert_eq!(config.uid().map(ProjectValue::value).map(String::as_str), Some("1000"));
+    assert_eq!(config.mode().map(ProjectValue::value).map(String::as_str), Some("0444"));
+    assert_source_ids(
+        config
+            .mode()
+            .ok_or("retained config mode expected")?
+            .provenance()
+            .sources(),
+        &[SourceId::new(647)],
+    );
+    assert_source_ids(
+        config.source().ok_or("config source expected")?.provenance().sources(),
+        &[SourceId::new(647), SourceId::new(648)],
+    );
+    assert_eq!(
+        config.unmodeled_fields()[0].path(),
+        ["services", "app", "configs", "0", "x-owner"]
+    );
+    Ok(())
+}
+
+fn assert_merged_secret_grant(service: &ProjectService) -> Result<(), Box<dyn std::error::Error>> {
+    let secrets = service.secrets().ok_or("secrets expected")?;
+    assert_eq!(secrets.value().len(), 1);
+    assert_source_ids(
+        secrets.value()[0].provenance().sources(),
+        &[SourceId::new(647), SourceId::new(648)],
+    );
+    let ProjectGrant::Long(secret) = secrets.value()[0].value() else {
+        return Err("long secret grant expected".into());
+    };
+    assert_eq!(
+        secret.source().map(ProjectValue::value).map(String::as_str),
+        Some("replacement-secret")
+    );
+    assert_eq!(
+        secret.target().map(ProjectValue::value).map(String::as_str),
+        Some("app-secret")
+    );
+    assert_eq!(secret.gid().map(ProjectValue::value).map(String::as_str), Some("2000"));
+    assert_eq!(secret.mode().map(ProjectValue::value).map(String::as_str), Some("0440"));
+    Ok(())
+}
+
+#[test]
+fn reports_malformed_service_config_and_secret_grants_without_erasing_other_items()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app:1\n",
+        "    configs:\n",
+        "      - valid-config\n",
+        "      - target: /etc/missing-source.conf\n",
+        "      - [invalid]\n",
+        "    secrets:\n",
+        "      - source: valid-secret\n",
+        "        uid: []\n",
+    );
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(649),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let service = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .ok_or("app service expected")?;
+
+    assert!(!result.is_valid());
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .map(compose_lens::diagnostic::Diagnostic::code)
+            .collect::<Vec<_>>(),
+        [PROJECT_MISSING_FIELD, PROJECT_EXPECTED_FORM, PROJECT_EXPECTED_FORM]
+    );
+    assert_eq!(service.configs().ok_or("partial configs expected")?.value().len(), 2);
+    assert_eq!(service.secrets().ok_or("partial secrets expected")?.value().len(), 1);
+    Ok(())
+}
+
+#[test]
 fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<dyn std::error::Error>> {
     let source = concat!(
         "services:\n",
         "  app:\n",
         "    image: example.invalid/app:${TOKEN}\n",
         "    depends_on: [\"${DEPENDENCY}\"]\n",
+        "    secrets: [\"${SECRET_GRANT}\"]\n",
     );
     let loaded = LoadedProject::load([DocumentInput::new(
         SourceId::new(641),
@@ -624,6 +790,7 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
     let mut environment = MapEnvironment::new();
     let _ = environment.insert_sensitive("TOKEN", "private-tag");
     let _ = environment.insert_sensitive("DEPENDENCY", "private-service");
+    let _ = environment.insert_sensitive("SECRET_GRANT", "private-secret");
     let interpolation = loaded.interpolate(&environment);
     let merged = merge_project(&loaded, Some(&interpolation));
     let project = merged.project().ok_or("project expected")?;
@@ -649,6 +816,14 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
     assert!(dependency_name.is_sensitive());
     assert!(!format!("{dependency_name:?}").contains("private-service"));
     assert!(format!("{dependency_name:?}").contains("<redacted>"));
+    let secrets = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::secrets)
+        .ok_or("secret grants expected")?;
+    assert!(secrets.is_sensitive());
+    assert!(!format!("{secrets:?}").contains("private-secret"));
+    assert!(format!("{secrets:?}").contains("<redacted>"));
     Ok(())
 }
 

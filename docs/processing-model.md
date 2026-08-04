@@ -86,15 +86,16 @@ services. A selection created from a different project returns the same stable m
 used by the other post-merge operations.
 
 The native view covers project name, services, images, commands, merged environment, extra host
-mappings, health checks, service dependencies, ports, volume mounts, service networks, profiles,
-and top-level network, volume, config, and secret definitions. Environment values are keyed after field-specific Compose merging, while
-each entry retains whether its effective spelling came from mapping, `KEY=VALUE`, or key-only list
-syntax. Extra-host entries retain sequence or mapping syntax, raw address spelling, lexical address
-classification, and the `host-gateway` implementation token. Values and collection items retain
-complete multi-file provenance. Dependencies retain effective short or long syntax and nested
-condition, restart, required, and unknown-option provenance without applying target lifecycle
-defaults. Unmodeled fields retain their semantic path, all key locations, value provenance,
-extension classification, and sensitivity.
+mappings, health checks, service dependencies, ports, volume mounts, service config and secret
+grants, service networks, profiles, and top-level network, volume, config, and secret definitions.
+Environment values are keyed after field-specific Compose merging, while each entry retains
+whether its effective spelling came from mapping, `KEY=VALUE`, or key-only list syntax. Extra-host
+entries retain sequence or mapping syntax, raw address spelling, lexical address classification,
+and the `host-gateway` implementation token. Values and collection items retain complete
+multi-file provenance. Dependencies and grants retain effective short or long syntax and nested
+field/unknown-option provenance without applying target lifecycle defaults. Unmodeled fields
+retain their semantic path, all key locations, value provenance, extension classification, and
+sensitivity.
 
 This operation does not render or parse generated YAML. It also does not read files, consult an
 environment provider, apply defaults, validate an implementation, or perform conversion. Native

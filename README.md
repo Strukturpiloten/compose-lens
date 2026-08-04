@@ -59,7 +59,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
-- [0.1.5 release notes](docs/releases/0.1.5.md)
+- [0.1.6 release notes](docs/releases/0.1.6.md)
 - [Release process](docs/releasing.md)
 - [Changelog](CHANGELOG.md)
 - [Architecture decisions](docs/decisions/README.md)

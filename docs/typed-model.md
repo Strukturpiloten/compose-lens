@@ -42,6 +42,11 @@ Execution identity and context are native at both document and merged-project la
 field provenance, and, for supplementary groups, per-item provenance. No account, group, path, or
 namespace lookup is performed.
 
+Service config and secret grants are native at both layers. The merged-project view retains short
+versus long syntax, collection/item provenance, and separate provenance for long-form `source`,
+`target`, `uid`, `gid`, and `mode`. This preserves Compose's unique-by-target merge behavior,
+including nested values inherited from an earlier file.
+
 Compose processing tags `!reset` and `!override` remain intact in the syntax document. The typed
 parser reads their inner value when it matches a typed field, allowing valid override documents to
 participate in loading without incorrectly reporting the wrapper as a field-type error. The merge

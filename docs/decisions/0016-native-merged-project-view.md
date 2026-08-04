@@ -52,6 +52,9 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
 11. Effective execution identity exposes raw-preserving `user` and `userns_mode`, ordered
     `group_add`, `working_dir`, and `read_only` values. The view classifies only lexical forms and
     known namespace modes; it does not resolve host accounts, groups, paths, or runtime state.
+12. Effective service config and secret grants retain short versus long syntax, item provenance,
+    and field-level provenance for `source`, `target`, `uid`, `gid`, and `mode`. Unknown options
+    remain source-addressable, and unique-by-target merging is not flattened into replacement.
 
 The generic `MergedProject` remains public for advanced analysis, validation, rendering, and future
 native-boundary expansion. The new view is additive within the 0.1.x compatibility line.

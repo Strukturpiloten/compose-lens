@@ -27,7 +27,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Canonical-rendering evidence](research/compose-canonical-rendering.md) — fixed output, explicit processing boundary, recovery, and redaction
 - [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
 - [API stability policy](api-stability.md) — pre-1.0 compatibility and public dependency boundaries
-- [0.1.5 release notes](releases/0.1.5.md) — execution identity and container context
+- [0.1.6 release notes](releases/0.1.6.md) — effective service config and secret grants
 - [Release process](releasing.md) — Cargo versioning, crates.io authentication, and GitHub releases
 - [Changelog](../CHANGELOG.md) — release-facing behavior changes
 - [Implementation plan](implementation-plan.md) — synchronized cross-repository tasks T1–T7
