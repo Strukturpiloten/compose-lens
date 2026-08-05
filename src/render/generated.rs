@@ -141,6 +141,40 @@ pub struct GeneratedEnvironment {
     value: Option<GeneratedString>,
 }
 
+/// One generated service metadata label.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedLabel {
+    name: String,
+    value: GeneratedString,
+}
+
+impl GeneratedLabel {
+    /// Creates a label with an explicit string value, including an empty value.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty or NUL-bearing label name. Values are already validated by
+    /// [`GeneratedString`].
+    pub fn new(name: impl Into<String>, value: GeneratedString) -> Result<Self, GenerationError> {
+        Ok(Self {
+            name: required("label name", name.into())?,
+            value,
+        })
+    }
+
+    /// Returns the label name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the label value through its explicit sensitivity boundary.
+    #[must_use]
+    pub const fn value(&self) -> &GeneratedString {
+        &self.value
+    }
+}
+
 impl GeneratedEnvironment {
     /// Creates a literal `NAME=value` entry.
     ///
@@ -523,6 +557,7 @@ pub struct GeneratedService {
     image: Option<GeneratedString>,
     command: Option<GeneratedCommand>,
     environment: Vec<GeneratedEnvironment>,
+    labels: Vec<GeneratedLabel>,
     user: Option<GeneratedString>,
     userns_mode: Option<GeneratedString>,
     group_add: Vec<GeneratedString>,
@@ -546,6 +581,7 @@ impl GeneratedService {
             image: None,
             command: None,
             environment: Vec::new(),
+            labels: Vec::new(),
             user: None,
             userns_mode: None,
             group_add: Vec::new(),
@@ -587,6 +623,22 @@ impl GeneratedService {
     /// Adds one ordered environment entry.
     pub fn add_environment(&mut self, environment: GeneratedEnvironment) {
         self.environment.push(environment);
+    }
+
+    /// Adds one uniquely named service metadata label.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateName`] when the service already defines the label.
+    pub fn add_label(&mut self, label: GeneratedLabel) -> Result<(), GenerationError> {
+        if self.labels.iter().any(|candidate| candidate.name == label.name) {
+            return Err(GenerationError::DuplicateName {
+                kind: "service label",
+                name: label.name,
+            });
+        }
+        self.labels.push(label);
+        Ok(())
     }
 
     /// Sets the combined Compose `user[:group]` value exactly once.
@@ -679,6 +731,7 @@ impl GeneratedService {
                 .iter()
                 .filter_map(GeneratedEnvironment::value)
                 .any(GeneratedString::is_sensitive)
+            || self.labels.iter().any(|label| label.value.is_sensitive())
             || [self.user.as_ref(), self.userns_mode.as_ref(), self.working_dir.as_ref()]
                 .into_iter()
                 .flatten()
@@ -842,6 +895,7 @@ fn render_service(output: &mut String, service: &GeneratedService) {
         render_command(output, command);
     }
     render_environment(output, &service.environment);
+    render_labels(output, &service.labels);
     render_optional_string(output, "user", service.user.as_ref());
     render_optional_string(output, "userns_mode", service.userns_mode.as_ref());
     render_string_sequence(output, "group_add", &service.group_add);
@@ -885,6 +939,20 @@ fn render_environment(output: &mut String, environment: &[GeneratedEnvironment])
             |value| format!("{}={}", variable.name, value.expose()),
         );
         write_quoted(output, &value);
+        output.push('\n');
+    }
+}
+
+fn render_labels(output: &mut String, labels: &[GeneratedLabel]) {
+    if labels.is_empty() {
+        return;
+    }
+    output.push_str("    labels:\n");
+    for label in labels {
+        output.push_str("      ");
+        write_quoted(output, &label.name);
+        output.push_str(": ");
+        write_quoted(output, label.value.expose());
         output.push('\n');
     }
 }

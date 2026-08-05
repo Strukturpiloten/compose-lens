@@ -1,0 +1,21 @@
+schema = 1
+id = "service-label-forms"
+suite = "typed-model"
+description = "Protects distinct mapping and sequence service-label forms, explicit and key-only empty values, embedded equals signs, and source spans."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation, provider, or runtime is used."
+
+[expectations]
+summary = "Service labels are typed without normalizing their authored collection form or truncating values at later equals signs."
+
+[extensions.typed-model]
+expected_diagnostics = []

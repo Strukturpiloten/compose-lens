@@ -1,0 +1,21 @@
+schema = 1
+id = "invalid-service-label-forms"
+suite = "typed-model"
+description = "Protects recoverable diagnostics for scalar label collections and non-scalar sequence or mapping entries."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation, provider, or runtime is used."
+
+[expectations]
+summary = "Invalid service-label forms produce source-spanned typed-model diagnostics while unaffected service data remains available."
+
+[extensions.typed-model]
+expected_diagnostics = ["compose.model.expected-field-form", "compose.model.expected-scalar"]

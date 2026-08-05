@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-02
-- Additive amendments: 2026-08-03
+- Additive amendments: 2026-08-03, 2026-08-05
 
 ## Context
 
@@ -55,6 +55,10 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
 12. Effective service config and secret grants retain short versus long syntax, item provenance,
     and field-level provenance for `source`, `target`, `uid`, `gid`, and `mode`. Unknown options
     remain source-addressable, and unique-by-target merging is not flattened into replacement.
+13. Effective service labels are normalized by semantic key after Compose field-specific merging.
+    Each entry retains mapping, `KEY=VALUE`, or key-only list syntax plus complete key and value
+    provenance. Key-only labels expose an empty string rather than inheriting environment-variable
+    host-resolution semantics.
 
 The generic `MergedProject` remains public for advanced analysis, validation, rendering, and future
 native-boundary expansion. The new view is additive within the 0.1.x compatibility line.

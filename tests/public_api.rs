@@ -10,8 +10,8 @@ use compose_lens::model::{
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{ProjectGrant, build_project_view};
 use compose_lens::render::{
-    ComposeDocumentBuilder, GeneratedService, GeneratedString, ReplacementScalar, ScalarEdit, apply_preservation_edits,
-    render_canonical,
+    ComposeDocumentBuilder, GeneratedLabel, GeneratedService, GeneratedString, ReplacementScalar, ScalarEdit,
+    apply_preservation_edits, render_canonical,
 };
 use compose_lens::resolution::validate_references;
 use compose_lens::source::SourceId;
@@ -31,6 +31,8 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
         "    group_add: [audio, '44']\n",
         "    working_dir: /srv/app\n",
         "    read_only: true\n",
+        "    labels:\n",
+        "      com.example.owner: strukturpiloten\n",
         "    extra_hosts:\n",
         "      - host.docker.internal=host-gateway\n",
         "    healthcheck:\n",
@@ -107,6 +109,7 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     assert_dependency(&project_view)?;
     assert_execution_identity(&project_view)?;
     assert_resource_grants(&project_view)?;
+    assert_labels(&project_view);
     assert!(references.is_valid(), "{:#?}", references.diagnostics());
     assert!(compatibility.is_valid(), "{:#?}", compatibility.diagnostics());
     assert!(
@@ -120,10 +123,29 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     Ok(())
 }
 
+fn assert_labels(project_view: &compose_lens::project::ProjectViewResult) {
+    assert_eq!(
+        project_view
+            .view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::labels)
+            .and_then(|labels| labels.value().get("com.example.owner"))
+            .and_then(|label| match label.value().value() {
+                compose_lens::model::ComposeScalar::String(value) => Some(value.as_str()),
+                _ => None,
+            }),
+        Some("strukturpiloten")
+    );
+}
+
 #[test]
 fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(), Box<dyn std::error::Error>> {
     let mut service = GeneratedService::new("app")?;
     service.set_image(GeneratedString::plain("example.invalid/app:1")?)?;
+    service.add_label(GeneratedLabel::new(
+        "com.example.owner",
+        GeneratedString::plain("strukturpiloten")?,
+    )?)?;
     let mut builder = ComposeDocumentBuilder::new();
     builder.set_name("example")?;
     builder.add_service(service)?;
@@ -137,9 +159,23 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             .map(|image| image.value().raw()),
         Some("example.invalid/app:1")
     );
+    assert!(
+        generated
+            .document()
+            .service("app")
+            .and_then(compose_lens::model::Service::labels)
+            .is_some()
+    );
     assert_eq!(
         generated.text(),
-        "name: \"example\"\nservices:\n  \"app\":\n    image: \"example.invalid/app:1\"\n"
+        concat!(
+            "name: \"example\"\n",
+            "services:\n",
+            "  \"app\":\n",
+            "    image: \"example.invalid/app:1\"\n",
+            "    labels:\n",
+            "      \"com.example.owner\": \"strukturpiloten\"\n",
+        )
     );
     Ok(())
 }

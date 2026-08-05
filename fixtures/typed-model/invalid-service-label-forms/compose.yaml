@@ -1,0 +1,13 @@
+services:
+  scalar:
+    image: example.invalid/scalar:1
+    labels: com.example.invalid=value
+  invalid-sequence-item:
+    image: example.invalid/sequence:1
+    labels:
+      - nested: value
+  invalid-mapping-value:
+    image: example.invalid/mapping:1
+    labels:
+      com.example.invalid:
+        nested: value

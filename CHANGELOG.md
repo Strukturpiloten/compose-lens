@@ -6,6 +6,15 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-08-05
+
+### Added
+
+- Native service labels in the source-aware document and merged project view, retaining mapping,
+  `KEY=VALUE`, and key-only list syntax with full merge provenance.
+- Deterministic generated service-label mappings with explicit empty values, duplicate-name
+  rejection, parse-back validation, and sensitive-value redaction.
+
 ## [0.1.7] - 2026-08-04
 
 ### Added
