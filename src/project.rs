@@ -5,11 +5,12 @@ use crate::merge::{
     EntrySyntax, MergeProvenance, MergedEntry, MergedProject, MergedScalarKind, MergedValue, MergedValueKind,
 };
 use crate::model::{
-    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, DependencyCondition, HealthcheckDuration,
-    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddress, ImageReference, Ipam, IpamConfig,
-    KeyValueEntry, Labels, Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, RestartPolicy,
-    SecretDefinition, SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount,
-    UserNamespaceMode, UserSpec, VolumeDefinition, VolumeMount,
+    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, DependencyCondition, EnvironmentFileFormat,
+    EnvironmentFileFormatKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
+    HostAddress, ImageReference, Ipam, IpamConfig, KeyValueEntry, Labels, Located, LongPort, LongVolumeMount,
+    MountType, NetworkDefinition, Port, RestartPolicy, SecretDefinition, SelinuxRelabel, ServiceNetwork,
+    ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, UserNamespaceMode, UserSpec, VolumeDefinition,
+    VolumeMount,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -293,6 +294,50 @@ pub struct ProjectEnvironment {
     entries: Vec<ProjectEnvironmentEntry>,
 }
 
+/// One effective service environment-file entry with syntax and item provenance retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectEnvironmentFile {
+    /// Scalar path syntax.
+    Short(String),
+    /// Mapping syntax with field-level provenance.
+    Long(Box<ProjectLongEnvironmentFile>),
+}
+
+/// Effective long-syntax service environment-file options.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLongEnvironmentFile {
+    path: Option<ProjectValue<String>>,
+    required: Option<ProjectValue<BooleanValue>>,
+    format: Option<ProjectValue<EnvironmentFileFormat>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectLongEnvironmentFile {
+    /// Returns the required environment-file path.
+    #[must_use]
+    pub const fn path(&self) -> Option<&ProjectValue<String>> {
+        self.path.as_ref()
+    }
+
+    /// Returns the explicit required-file choice; absence means Compose's default `true`.
+    #[must_use]
+    pub const fn required(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.required.as_ref()
+    }
+
+    /// Returns the explicit parser format; absence means Compose's default format.
+    #[must_use]
+    pub const fn format(&self) -> Option<&ProjectValue<EnvironmentFileFormat>> {
+        self.format.as_ref()
+    }
+
+    /// Returns retained long-form fields outside the typed project-view boundary.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
 /// One effective service metadata label after field-specific multi-file merging.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectLabelEntry {
@@ -542,6 +587,7 @@ pub struct ProjectService {
     image: Option<ProjectValue<ImageReference>>,
     command: Option<ProjectValue<Command>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
+    environment_files: Option<ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>>,
     labels: Option<ProjectValue<ProjectLabels>>,
     extra_hosts: Option<ProjectValue<ProjectExtraHosts>>,
     user: Option<ProjectValue<UserSpec>>,
@@ -596,6 +642,12 @@ impl ProjectService {
     #[must_use]
     pub const fn environment(&self) -> Option<&ProjectValue<ProjectEnvironment>> {
         self.environment.as_ref()
+    }
+
+    /// Returns effective service environment files in merge order with per-item provenance.
+    #[must_use]
+    pub const fn environment_files(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>> {
+        self.environment_files.as_ref()
     }
 
     /// Returns effective service labels normalized by key with entry syntax retained.
@@ -945,6 +997,7 @@ impl<'a> Builder<'a> {
             image: None,
             command: None,
             environment: None,
+            environment_files: None,
             labels: None,
             extra_hosts: None,
             user: None,
@@ -981,6 +1034,7 @@ impl<'a> Builder<'a> {
                 }
                 "command" => service.command = self.command(field.value()),
                 "environment" => service.environment = self.environment(field.value()),
+                "env_file" => service.environment_files = self.environment_files(field.value(), &path),
                 "labels" => service.labels = self.service_labels(field.value()),
                 "extra_hosts" => service.extra_hosts = self.extra_hosts(field.value()),
                 "user" => service.user = self.user(field.value()),
@@ -1109,6 +1163,95 @@ impl<'a> Builder<'a> {
             }
         }
         Some(ProjectValue::new(ProjectEnvironment { entries }, value))
+    }
+
+    fn environment_files(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>> {
+        let values = match value.kind() {
+            MergedValueKind::Scalar(_) => std::slice::from_ref(value),
+            MergedValueKind::Sequence(values) => values,
+            _ => {
+                self.expected(
+                    value,
+                    "env_file must be a scalar path or sequence of short/long entries",
+                );
+                return None;
+            }
+        };
+        let mut environment_files = Vec::new();
+        for (index, item) in values.iter().enumerate() {
+            let mut path = service_path.to_vec();
+            path.push("env_file".to_owned());
+            path.push(index.to_string());
+            let environment_file = match item.kind() {
+                MergedValueKind::Scalar(scalar) => ProjectEnvironmentFile::Short(scalar.value().to_owned()),
+                MergedValueKind::Mapping(fields) => {
+                    ProjectEnvironmentFile::Long(Box::new(self.long_environment_file(item, fields, &path)))
+                }
+                _ => {
+                    self.expected(
+                        item,
+                        "env_file item must use scalar short syntax or mapping long syntax",
+                    );
+                    continue;
+                }
+            };
+            environment_files.push(ProjectValue::new(environment_file, item));
+        }
+        Some(ProjectValue::new(environment_files, value))
+    }
+
+    fn long_environment_file(
+        &mut self,
+        value: &MergedValue,
+        fields: &[MergedEntry],
+        path: &[String],
+    ) -> ProjectLongEnvironmentFile {
+        let mut environment_file = ProjectLongEnvironmentFile {
+            path: None,
+            required: None,
+            format: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            match field.key() {
+                "path" => {
+                    environment_file.path = self.project_string(field.value(), "environment-file path");
+                }
+                "required" => {
+                    environment_file.required = self
+                        .located_boolean(field.value(), "environment-file required option must be a boolean")
+                        .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                }
+                "format" => {
+                    environment_file.format = self.environment_file_format(field.value());
+                }
+                _ => environment_file.unmodeled_fields.push(field_reference(path, field)),
+            }
+        }
+        if environment_file.path.is_none() {
+            self.missing(value, "long-syntax environment file is missing `path`");
+        }
+        environment_file
+    }
+
+    fn environment_file_format(&mut self, value: &MergedValue) -> Option<ProjectValue<EnvironmentFileFormat>> {
+        let raw = self.project_string(value, "environment-file format")?;
+        let format = EnvironmentFileFormat::parse(Located::new(raw.value, effective_span(value)));
+        if matches!(format.kind(), EnvironmentFileFormatKind::Other) {
+            self.invalid(
+                effective_span(value),
+                "environment-file format must be `raw` or interpolation",
+            );
+        }
+        Some(ProjectValue {
+            value: format,
+            provenance: raw.provenance,
+            sensitive: raw.sensitive,
+        })
     }
 
     fn service_labels(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectLabels>> {

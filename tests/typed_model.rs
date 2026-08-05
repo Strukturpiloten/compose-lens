@@ -3,14 +3,15 @@
 use compose_lens::model::{
     BooleanValue, Build, BuildFieldKind, Command, ComposeDocument, ComposeScalar, ConfigGrant, ContainerPathKind,
     DEPENDENCY_HEALTHCHECK_UNVERIFIED, DEPENDENCY_INVALID_CONDITION, DEPENDENCY_MISSING_HEALTHCHECK,
-    DEPENDENCY_MISSING_SERVICE, DependencyCondition, DeployFieldKind, EXPECTED_BOOLEAN, EXPECTED_FIELD_FORM,
-    EXPECTED_MAPPING, EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Environment, ExtraHostSeparator, ExtraHosts,
-    GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE, HEALTHCHECK_INVALID_DURATION, HEALTHCHECK_INVALID_RETRIES,
-    HEALTHCHECK_INVALID_TEST, HealthcheckTestKind, HostAddressKind, IdentityComponent, Labels, LimitValue, Located,
-    MountType, PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY,
-    RestartPolicyKind, SecretGrant, SelinuxRelabel, ServiceNetworks, ULIMIT_INVALID_VALUE, UlimitValue,
-    UserNamespaceModeKind, VOLUME_EXPECTED_FORM, VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE,
-    VolumeMount, VolumeSyntax,
+    DEPENDENCY_MISSING_SERVICE, DependencyCondition, DeployFieldKind, ENVIRONMENT_FILE_EXPECTED_FORM,
+    ENVIRONMENT_FILE_INVALID_FORMAT, ENVIRONMENT_FILE_MISSING_PATH, EXPECTED_BOOLEAN, EXPECTED_FIELD_FORM,
+    EXPECTED_MAPPING, EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Environment, EnvironmentFile,
+    EnvironmentFileFormatKind, ExtraHostSeparator, ExtraHosts, GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE,
+    HEALTHCHECK_INVALID_DURATION, HEALTHCHECK_INVALID_RETRIES, HEALTHCHECK_INVALID_TEST, HealthcheckTestKind,
+    HostAddressKind, IdentityComponent, Labels, LimitValue, Located, MountType, PORT_EXPECTED_FORM,
+    PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY, RestartPolicyKind, SecretGrant,
+    SelinuxRelabel, ServiceNetworks, ULIMIT_INVALID_VALUE, UlimitValue, UserNamespaceModeKind, VOLUME_EXPECTED_FORM,
+    VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE, VolumeMount, VolumeSyntax,
 };
 use compose_lens::source::SourceId;
 use compose_lens::syntax::SyntaxDocument;
@@ -65,6 +66,108 @@ fn reports_a_non_scalar_container_name_without_losing_the_service() -> Result<()
                 .iter()
                 .all(|label| label.span().source_id() == SourceId::new(32))
     }));
+    Ok(())
+}
+
+#[test]
+fn retains_short_and_long_environment_files_with_source_options() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  scalar:\n",
+        "    env_file: scalar.env\n",
+        "  list:\n",
+        "    env_file:\n",
+        "      - base.env\n",
+        "      - path: optional.env\n",
+        "        required: false\n",
+        "        x-owner: application\n",
+        "      - path: raw.env\n",
+        "        format: raw\n",
+        "        vendor-option: retained\n",
+        "      - path: expression.env\n",
+        "        required: ${ENV_FILE_REQUIRED:-true}\n",
+        "        format: ${ENV_FILE_FORMAT:-raw}\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(34), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+    let scalar = document.service("scalar").ok_or("scalar service expected")?;
+    let list = document.service("list").ok_or("list service expected")?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert!(matches!(
+        scalar.environment_files(),
+        [EnvironmentFile::Short(path)] if path.value() == "scalar.env"
+    ));
+    assert_eq!(list.environment_files().len(), 4);
+    assert!(matches!(
+        &list.environment_files()[0],
+        EnvironmentFile::Short(path) if path.value() == "base.env"
+    ));
+    let EnvironmentFile::Long(optional) = &list.environment_files()[1] else {
+        return Err("optional long environment file expected".into());
+    };
+    assert_eq!(
+        optional.path().map(Located::value).map(String::as_str),
+        Some("optional.env")
+    );
+    assert_eq!(
+        optional.required().map(Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(optional.extension_fields().len(), 1);
+    let EnvironmentFile::Long(raw) = &list.environment_files()[2] else {
+        return Err("raw long environment file expected".into());
+    };
+    assert_eq!(
+        raw.format().map(compose_lens::model::EnvironmentFileFormat::kind),
+        Some(EnvironmentFileFormatKind::Raw)
+    );
+    assert_eq!(raw.unknown_fields().len(), 1);
+    let EnvironmentFile::Long(expression) = &list.environment_files()[3] else {
+        return Err("expression long environment file expected".into());
+    };
+    assert!(matches!(
+        expression.required().map(Located::value),
+        Some(BooleanValue::Expression(value)) if value == "${ENV_FILE_REQUIRED:-true}"
+    ));
+    assert_eq!(
+        expression
+            .format()
+            .map(compose_lens::model::EnvironmentFileFormat::kind),
+        Some(EnvironmentFileFormatKind::Expression)
+    );
+    Ok(())
+}
+
+#[test]
+fn reports_malformed_environment_files_without_erasing_valid_items() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    env_file:\n",
+        "      - good.env\n",
+        "      - required: true\n",
+        "      - path: unsupported.env\n",
+        "        format: dotenv\n",
+        "      - [invalid]\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(35), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let service = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .ok_or("partial app service expected")?;
+
+    assert!(!parsed.is_valid());
+    assert_eq!(service.environment_files().len(), 3);
+    for code in [
+        ENVIRONMENT_FILE_MISSING_PATH,
+        ENVIRONMENT_FILE_INVALID_FORMAT,
+        ENVIRONMENT_FILE_EXPECTED_FORM,
+    ] {
+        assert!(parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
     Ok(())
 }
 
