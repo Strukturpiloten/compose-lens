@@ -12,9 +12,9 @@ Cover scalars, mappings, sequences, anchors, aliases, comments where supported, 
 
 Cover every field in the documented [typed boundary](typed-model.md), all supported syntax variants,
 unknown fields, extensions, image references, ports, volumes, host/container path separation,
-environment values, service-label forms, commands, extra hosts, raw identities, ulimits, health checks, dependency
-conditions, field-level build/deploy identities, networks, profiles, configs, secrets, top-level
-resources, and discriminated unions.
+environment values, service-label forms, commands, extra hosts, raw identities, service-level restart policies,
+ulimits, health checks, dependency conditions, field-level build/deploy identities, networks,
+profiles, configs, secrets, top-level resources, and discriminated unions.
 
 ### Processing tests
 
@@ -35,6 +35,7 @@ types, compare exact deterministic bytes, and inspect the parse-back native mode
 ordered duplicate-capable environment syntax, ordered unique service-label mappings, spec-shaped
 long TCP/UDP ports, short SCTP ports,
 ordinary mounts, deliberate short `SELinux` bind syntax, network aliases,
+all service-level restart-policy forms and optional maximum retries,
 application/external resource lifecycle, duplicate
 rejection, label duplicate rejection, empty and embedded-equals label values, ambiguous short-form
 failures, and sensitive debug redaction.
@@ -95,7 +96,8 @@ promoted into a built-in rule only with an exact command, provider version, runt
 platform assumptions, and reviewed retained result.
 
 The issue-derived regression tier adds authored fixtures for both valid and malformed
-`extra_hosts`, user/group interpolation, unlimited ulimits, health checks, dependency conditions,
+`extra_hosts`, user/group interpolation, unlimited ulimits, service-level restart policies and
+maximum retries, health checks, dependency conditions,
 anonymous Linux container paths, and independently identified build/deploy fields. The licensed
 TYPO3 fixture demonstrates the Podman `keep-id` consumer. Compatibility tests detect
 `host-gateway` and Podman user-namespace modes and require official Podman 5.4 evidence while

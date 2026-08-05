@@ -7,9 +7,10 @@ use compose_lens::model::{
     EXPECTED_MAPPING, EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Environment, ExtraHostSeparator, ExtraHosts,
     GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE, HEALTHCHECK_INVALID_DURATION, HEALTHCHECK_INVALID_RETRIES,
     HEALTHCHECK_INVALID_TEST, HealthcheckTestKind, HostAddressKind, IdentityComponent, Labels, LimitValue, Located,
-    MountType, PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, SecretGrant, SelinuxRelabel,
-    ServiceNetworks, ULIMIT_INVALID_VALUE, UlimitValue, UserNamespaceModeKind, VOLUME_EXPECTED_FORM,
-    VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE, VolumeMount, VolumeSyntax,
+    MountType, PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY,
+    RestartPolicyKind, SecretGrant, SelinuxRelabel, ServiceNetworks, ULIMIT_INVALID_VALUE, UlimitValue,
+    UserNamespaceModeKind, VOLUME_EXPECTED_FORM, VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE,
+    VolumeMount, VolumeSyntax,
 };
 use compose_lens::source::SourceId;
 use compose_lens::syntax::SyntaxDocument;
@@ -64,6 +65,97 @@ fn reports_a_non_scalar_container_name_without_losing_the_service() -> Result<()
                 .iter()
                 .all(|label| label.span().source_id() == SourceId::new(32))
     }));
+    Ok(())
+}
+
+#[test]
+fn classifies_restart_policies_without_losing_authored_spelling() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  disabled:\n",
+        "    restart: \"no\"\n",
+        "  always:\n",
+        "    restart: always\n",
+        "  failure:\n",
+        "    restart: on-failure\n",
+        "  limited:\n",
+        "    restart: on-failure:003\n",
+        "  stopped:\n",
+        "    restart: unless-stopped\n",
+        "  deferred:\n",
+        "    restart: ${RESTART_POLICY:-always}\n",
+        "  invalid:\n",
+        "    restart: sometimes\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(33), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial typed document expected")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(!parsed.is_valid());
+    assert!(matches!(
+        document
+            .service("disabled")
+            .and_then(compose_lens::model::Service::restart)
+            .map(compose_lens::model::RestartPolicy::kind),
+        Some(RestartPolicyKind::No)
+    ));
+    assert!(matches!(
+        document
+            .service("always")
+            .and_then(compose_lens::model::Service::restart)
+            .map(compose_lens::model::RestartPolicy::kind),
+        Some(RestartPolicyKind::Always)
+    ));
+    assert!(matches!(
+        document
+            .service("failure")
+            .and_then(compose_lens::model::Service::restart)
+            .map(compose_lens::model::RestartPolicy::kind),
+        Some(RestartPolicyKind::OnFailure { maximum_retries: None })
+    ));
+    let limited = document
+        .service("limited")
+        .and_then(compose_lens::model::Service::restart)
+        .ok_or("limited restart policy expected")?;
+    assert_eq!(limited.raw().value(), "on-failure:003");
+    assert!(matches!(
+        limited.kind(),
+        RestartPolicyKind::OnFailure { maximum_retries: Some(value) } if value == "003"
+    ));
+    assert!(matches!(
+        document
+            .service("stopped")
+            .and_then(compose_lens::model::Service::restart)
+            .map(compose_lens::model::RestartPolicy::kind),
+        Some(RestartPolicyKind::UnlessStopped)
+    ));
+    assert!(matches!(
+        document
+            .service("deferred")
+            .and_then(compose_lens::model::Service::restart)
+            .map(compose_lens::model::RestartPolicy::kind),
+        Some(RestartPolicyKind::Expression)
+    ));
+    assert!(matches!(
+        document
+            .service("invalid")
+            .and_then(compose_lens::model::Service::restart)
+            .map(compose_lens::model::RestartPolicy::kind),
+        Some(RestartPolicyKind::Other)
+    ));
+    assert!(
+        parsed
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == RESTART_INVALID_POLICY)
+    );
+    assert!(
+        document
+            .services()
+            .iter()
+            .all(|service| service.unknown_fields().is_empty())
+    );
     Ok(())
 }
 

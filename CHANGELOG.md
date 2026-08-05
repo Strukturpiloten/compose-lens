@@ -6,6 +6,16 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-08-05
+
+### Added
+
+- Raw-preserving service-level `restart` policies in the source-aware document and effective
+  multi-file project view, including deferred interpolation, replacement provenance, retry-count
+  spelling, and recoverable invalid-value diagnostics.
+- Deterministic `GeneratedRestartPolicy` output for `no`, `always`, `on-failure[:max-retries]`, and
+  `unless-stopped`, with duplicate-singleton rejection and typed parse-back validation.
+
 ## [0.1.10] - 2026-08-05
 
 ### Added

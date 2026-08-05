@@ -148,8 +148,11 @@ evidence-aware treatment. Build and deploy top-level subfields now have independ
 identities and source references, so a converter can evaluate them separately without pretending
 that every nested value has one support outcome.
 
-Mount `chown`, restart `max-retries`, and CDI devices remain loss-aware but untyped until a concrete
-consumer and compatibility evidence justify their native representation.
+Service-level restart policy and `max-retries` are now typed in the document and effective project
+views because BoxFerry already has a neutral restart-policy consumer. Authored retry spelling and
+interpolation remain intact, while generated policies select only defined Compose forms. Mount
+`chown` and CDI devices remain loss-aware but untyped until a concrete consumer and compatibility
+evidence justify their native representation.
 
 ## Fixture coverage and remaining candidates
 

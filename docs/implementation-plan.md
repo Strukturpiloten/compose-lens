@@ -185,9 +185,12 @@ subset. Field-specific syntax selection retains short SELinux bind behavior, emi
 the platform-protocol-capable short port form, and keeps optional exact platform names distinct
 from network/volume lifecycle ownership.
 
-ComposeLens 0.1.8 and 0.1.9 are published with service-label support and the real-world YAML
-backend corrections. ComposeLens 0.1.10 is the additive source-side candidate for explicit
-`container_name` values across the document, merged-project, and generated-document boundaries.
-The coordinated QuadletLens 0.1.9 candidate types and generator-verifies `ContainerName=`. BoxFerry
-will consume both published releases before promoting the field into its neutral model; sibling
-path dependencies are not used.
+ComposeLens 0.1.8 through 0.1.10 and QuadletLens 0.1.9 are published. BoxFerry consumes their
+crates.io boundaries and now carries explicit runtime container names end to end; sibling path
+dependencies are not used.
+
+ComposeLens 0.1.11 is the additive source-side candidate for service-level `restart` values across
+the document, merged-project, and generated-document boundaries. It distinguishes runtime restart
+policy from dependency-update `restart` and deploy policy, retains optional maximum-retry spelling,
+and recovers invalid values with diagnostics. After publication, BoxFerry can map this policy into
+its existing neutral restart model and Quadlet/systemd output without a QuadletLens release.

@@ -5,13 +5,13 @@ use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
     BooleanValue, ComposeDocument, DependencyCondition, HealthcheckDuration, HostAddressKind, IdentityComponent,
-    UserNamespaceModeKind,
+    RestartPolicyKind, UserNamespaceModeKind,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{ProjectGrant, build_project_view};
 use compose_lens::render::{
-    ComposeDocumentBuilder, GeneratedLabel, GeneratedService, GeneratedString, ReplacementScalar, ScalarEdit,
-    apply_preservation_edits, render_canonical,
+    ComposeDocumentBuilder, GeneratedLabel, GeneratedRestartPolicy, GeneratedService, GeneratedString,
+    ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
 use compose_lens::resolution::validate_references;
 use compose_lens::source::SourceId;
@@ -143,6 +143,7 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
     let mut service = GeneratedService::new("app")?;
     service.set_container_name(GeneratedString::plain("example-app")?)?;
     service.set_image(GeneratedString::plain("example.invalid/app:1")?)?;
+    service.set_restart(GeneratedRestartPolicy::UnlessStopped)?;
     service.add_label(GeneratedLabel::new(
         "com.example.owner",
         GeneratedString::plain("strukturpiloten")?,
@@ -175,6 +176,14 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             .and_then(compose_lens::model::Service::labels)
             .is_some()
     );
+    assert!(matches!(
+        generated
+            .document()
+            .service("app")
+            .and_then(compose_lens::model::Service::restart)
+            .map(compose_lens::model::RestartPolicy::kind),
+        Some(RestartPolicyKind::UnlessStopped)
+    ));
     assert_eq!(
         generated.text(),
         concat!(
@@ -185,6 +194,7 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             "    image: \"example.invalid/app:1\"\n",
             "    labels:\n",
             "      \"com.example.owner\": \"strukturpiloten\"\n",
+            "    restart: \"unless-stopped\"\n",
         )
     );
     Ok(())
