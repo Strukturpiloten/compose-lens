@@ -1,5 +1,6 @@
 services:
   web:
+    container_name: project-view-web-override
     image: example.invalid/web:2@sha256:abcdef
     user: "1001:1002"
     userns_mode: keep-id

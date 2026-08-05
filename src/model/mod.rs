@@ -189,6 +189,7 @@ impl FieldReference {
 pub struct Service {
     name: Located<String>,
     span: SourceSpan,
+    container_name: Option<Located<String>>,
     image: Option<Located<ImageReference>>,
     command: Option<Command>,
     environment: Option<Environment>,
@@ -219,6 +220,7 @@ impl Service {
         Self {
             name,
             span,
+            container_name: None,
             image: None,
             command: None,
             environment: None,
@@ -255,6 +257,12 @@ impl Service {
     #[must_use]
     pub const fn span(&self) -> SourceSpan {
         self.span
+    }
+
+    /// Returns the explicitly authored runtime container name.
+    #[must_use]
+    pub const fn container_name(&self) -> Option<&Located<String>> {
+        self.container_name.as_ref()
     }
 
     /// Returns the explicitly authored image reference.
@@ -762,6 +770,9 @@ impl Parser {
         for service_field in self.fields(mapping) {
             let duplicate = self.record_duplicate(&mut seen, &service_field);
             match service_field.name.value.as_str() {
+                "container_name" if !duplicate => {
+                    service.container_name = self.parse_string(&service_field, "service container name");
+                }
                 "image" if !duplicate => {
                     service.image = self
                         .parse_string(&service_field, "service image")

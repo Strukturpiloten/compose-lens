@@ -1,6 +1,7 @@
 name: project-view
 services:
   web:
+    container_name: project-view-web
     image: example.invalid/web:1
     command: ["serve", "--foreground"]
     user: "1000:1000"

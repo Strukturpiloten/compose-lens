@@ -6,6 +6,15 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-05
+
+### Added
+
+- Source-aware `container_name` support in the single-document model and effective multi-file
+  project view, including replacement provenance and malformed-value recovery.
+- Deterministic `GeneratedService::set_container_name` output with Compose name-grammar and
+  duplicate-singleton validation.
+
 ## [0.1.9] - 2026-08-05
 
 ### Fixed

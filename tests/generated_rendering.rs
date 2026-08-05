@@ -27,6 +27,10 @@ fn generates_the_runtime_migration_subset_deterministically() -> Result<(), Box<
         .service("web")
         .ok_or("generated service expected")?;
     assert_eq!(
+        service.container_name().map(|name| name.value().as_str()),
+        Some("application-web")
+    );
+    assert_eq!(
         service.image().map(|image| image.value().raw()),
         Some("example.invalid/web:1@sha256:abcd")
     );
@@ -139,10 +143,15 @@ fn rejects_ambiguous_or_duplicate_generation_requests() -> Result<(), Box<dyn st
     assert_eq!(empty.build(SourceId::new(710)), Err(GenerationError::MissingService));
 
     let mut service = GeneratedService::new("web")?;
+    service.set_container_name(plain("application-web")?)?;
     service.set_image(plain("example.invalid/web:1")?)?;
     assert_eq!(
         service.set_image(plain("example.invalid/web:2")?),
         Err(GenerationError::DuplicateField("image"))
+    );
+    assert_eq!(
+        service.set_container_name(plain("replacement-web")?),
+        Err(GenerationError::DuplicateField("container_name"))
     );
     assert_eq!(
         GeneratedEnvironment::literal("INVALID=NAME", plain("value")?),
@@ -153,6 +162,14 @@ fn rejects_ambiguous_or_duplicate_generation_requests() -> Result<(), Box<dyn st
         Err(GenerationError::EmptyValue("label name"))
     );
     let mut invalid_service = GeneratedService::new("invalid")?;
+    assert_eq!(
+        invalid_service.set_container_name(plain("invalid name")?),
+        Err(GenerationError::InvalidContainerName)
+    );
+    assert_eq!(
+        invalid_service.set_container_name(plain("a")?),
+        Err(GenerationError::InvalidContainerName)
+    );
     assert_eq!(
         invalid_service.set_image(plain("")?),
         Err(GenerationError::EmptyValue("service image"))
@@ -216,6 +233,7 @@ fn non_sensitive_output_remains_reviewable_in_debug() -> Result<(), Box<dyn std:
 
 fn complete_project() -> Result<ComposeDocumentBuilder, Box<dyn std::error::Error>> {
     let mut service = GeneratedService::new("web")?;
+    service.set_container_name(plain("application-web")?)?;
     service.set_image(plain("example.invalid/web:1@sha256:abcd")?)?;
     service.set_command(GeneratedCommand::Exec(vec![plain("server")?, plain("--foreground")?]))?;
     service.add_environment(GeneratedEnvironment::literal(
@@ -279,6 +297,7 @@ fn expected_document() -> &'static str {
         "name: \"example\"\n",
         "services:\n",
         "  \"web\":\n",
+        "    container_name: \"application-web\"\n",
         "    image: \"example.invalid/web:1@sha256:abcd\"\n",
         "    command:\n",
         "      - \"server\"\n",

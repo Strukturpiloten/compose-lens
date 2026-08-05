@@ -39,6 +39,13 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
     assert!(view.service("worker").is_none());
 
     let web = view.service("web").ok_or("active web service expected")?;
+    let container_name = web.container_name().ok_or("container_name expected")?;
+    assert_eq!(container_name.value(), "project-view-web-override");
+    assert_eq!(container_name.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(
+        container_name.provenance().sources(),
+        &[SourceId::new(601), SourceId::new(602)],
+    );
     assert!(matches!(
         web.command().map(ProjectValue::value),
         Some(Command::List { values, .. }) if values.len() == 2

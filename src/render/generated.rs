@@ -16,6 +16,8 @@ pub enum GenerationError {
     ContainsNul(&'static str),
     /// An environment name contains Compose list-form's `=` separator.
     InvalidEnvironmentName,
+    /// A custom container name does not satisfy Compose's portable name grammar.
+    InvalidContainerName,
     /// A short-form component contains its reserved separator.
     InvalidShortComponent(&'static str),
     /// A short bind spelling needed for `SELinux` cannot be encoded unambiguously.
@@ -45,6 +47,9 @@ impl fmt::Display for GenerationError {
             Self::EmptyValue(kind) => write!(formatter, "generated {kind} must not be empty"),
             Self::ContainsNul(kind) => write!(formatter, "generated {kind} must not contain a NUL byte"),
             Self::InvalidEnvironmentName => formatter.write_str("generated environment name must not contain `=`"),
+            Self::InvalidContainerName => {
+                formatter.write_str("generated container name must match `[a-zA-Z0-9][a-zA-Z0-9_.-]+`")
+            }
             Self::InvalidShortComponent(kind) => {
                 write!(formatter, "generated {kind} contains its reserved short-form separator")
             }
@@ -554,6 +559,7 @@ impl GeneratedResource {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedService {
     name: String,
+    container_name: Option<GeneratedString>,
     image: Option<GeneratedString>,
     command: Option<GeneratedCommand>,
     environment: Vec<GeneratedEnvironment>,
@@ -578,6 +584,7 @@ impl GeneratedService {
     pub fn new(name: impl Into<String>) -> Result<Self, GenerationError> {
         Ok(Self {
             name: required("service name", name.into())?,
+            container_name: None,
             image: None,
             command: None,
             environment: Vec::new(),
@@ -598,6 +605,20 @@ impl GeneratedService {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Sets the custom runtime container name exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::InvalidContainerName`] when the value does not match Compose's
+    /// portable container-name grammar or [`GenerationError::DuplicateField`] when already
+    /// configured.
+    pub fn set_container_name(&mut self, name: GeneratedString) -> Result<(), GenerationError> {
+        if !valid_container_name(name.expose()) {
+            return Err(GenerationError::InvalidContainerName);
+        }
+        set_once(&mut self.container_name, name, "container_name")
     }
 
     /// Sets the service image exactly once.
@@ -890,6 +911,7 @@ fn render_document(project: &ComposeDocumentBuilder) -> String {
 }
 
 fn render_service(output: &mut String, service: &GeneratedService) {
+    render_optional_string(output, "container_name", service.container_name.as_ref());
     render_optional_string(output, "image", service.image.as_ref());
     if let Some(command) = &service.command {
         render_command(output, command);
@@ -1166,6 +1188,15 @@ fn environment_name(value: String) -> Result<String, GenerationError> {
         return Err(GenerationError::InvalidEnvironmentName);
     }
     Ok(value)
+}
+
+fn valid_container_name(value: &str) -> bool {
+    let mut bytes = value.bytes();
+    bytes.next().is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && bytes
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
+        && bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
 }
 
 fn short_component(kind: &'static str, value: String, separator: char) -> Result<String, GenerationError> {
