@@ -6,6 +6,17 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-05
+
+### Fixed
+
+- Accept valid hyphenated YAML anchor and alias names, including scalar, sequence, and mapping
+  values, while retaining original source bytes and guarding normalized-name collisions.
+- Keep unquoted `--option` block-sequence items scalar, including values containing commas.
+- Accept an indented mapping value after one or more blank lines without losing its parent key.
+- Resolve direct aliases only after structural parser recovery so an anchored mapping cannot leak
+  fields into an unrelated parent mapping.
+
 ## [0.1.8] - 2026-08-05
 
 ### Added

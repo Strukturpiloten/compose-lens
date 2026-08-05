@@ -2,6 +2,7 @@
 
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::source::{LineColumn, SourceId, SourceSpan, line_column};
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
@@ -353,12 +354,14 @@ fn unparsed_input_offset(parse: &Parse<YamlFile>, source: &str) -> Option<usize>
         .then_some(document_end)
 }
 
-/// Produces a same-length input for the private YAML backend when it would otherwise treat a
-/// comma in a block-style plain scalar as a collection delimiter. Commas remain structural in
-/// flow collections and remain untouched in quoted, commented, and block-scalar content.
+/// Produces a same-length input for private YAML backend limitations. It masks safe, non-colliding
+/// hyphens in anchor and alias names, leading option dashes, and commas in block-style plain
+/// scalars. Original source text remains authoritative for every exposed scalar and preservation
+/// operation.
 fn parser_compatible_source(source: &str) -> Option<String> {
     let mut compatible = source.as_bytes().to_vec();
-    let mut changed = false;
+    let mut changed = mask_blank_lines_after_mapping_keys(source, &mut compatible);
+    changed |= mask_non_colliding_anchor_hyphens(source, &mut compatible);
     let mut offset = 0;
     let mut block_scalar_indent = None;
     let mut state = ParserCompatibilityState::default();
@@ -389,6 +392,137 @@ fn parser_compatible_source(source: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+fn mask_blank_lines_after_mapping_keys(source: &str, compatible: &mut [u8]) -> bool {
+    let bytes = source.as_bytes();
+    let mut line_starts = vec![0];
+    line_starts.extend(
+        bytes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, byte)| (*byte == b'\n').then_some(index + 1)),
+    );
+    let mut changed = false;
+
+    for line_index in 0..line_starts.len().saturating_sub(2) {
+        let start = line_starts[line_index];
+        let end = line_starts.get(line_index + 1).copied().unwrap_or(bytes.len());
+        let content_end = line_content_end(bytes, start, end);
+        let content = &source[start..content_end];
+        let trimmed = content.trim();
+        if trimmed.starts_with('#') || !trimmed.ends_with(':') {
+            continue;
+        }
+
+        let mut next_line = line_index + 1;
+        while next_line < line_starts.len() {
+            let next_start = line_starts[next_line];
+            let next_end = line_starts.get(next_line + 1).copied().unwrap_or(bytes.len());
+            let next_content_end = line_content_end(bytes, next_start, next_end);
+            if !source[next_start..next_content_end].trim().is_empty() {
+                break;
+            }
+            next_line += 1;
+        }
+        if next_line == line_index + 1 || next_line >= line_starts.len() {
+            continue;
+        }
+
+        let key_indent = content.bytes().take_while(|byte| *byte == b' ').count();
+        let value_start = line_starts[next_line];
+        let value_indent = source[value_start..].bytes().take_while(|byte| *byte == b' ').count();
+        if value_indent <= key_indent {
+            continue;
+        }
+
+        // Keep the final blank line's line ending and turn the preceding separators into trailing
+        // spaces. This removes the backend-only blank-line ambiguity without changing byte spans.
+        let final_blank_start = line_starts[next_line - 1];
+        compatible[content_end..final_blank_start].fill(b' ');
+        changed = true;
+    }
+    changed
+}
+
+fn line_content_end(bytes: &[u8], start: usize, end: usize) -> usize {
+    let mut content_end = end;
+    if content_end > start && bytes[content_end - 1] == b'\n' {
+        content_end -= 1;
+    }
+    if content_end > start && bytes[content_end - 1] == b'\r' {
+        content_end -= 1;
+    }
+    content_end
+}
+
+fn mask_non_colliding_anchor_hyphens(source: &str, compatible: &mut [u8]) -> bool {
+    let bytes = source.as_bytes();
+    let mut occurrences = Vec::new();
+    let mut originals_by_normalized = BTreeMap::<Vec<u8>, BTreeSet<Vec<u8>>>::new();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if !matches!(bytes[index], b'&' | b'*') {
+            index += 1;
+            continue;
+        }
+        let line_start = bytes[..index]
+            .iter()
+            .rposition(|byte| *byte == b'\n')
+            .map_or(0, |position| position + 1);
+        let preceding = bytes[line_start..index]
+            .iter()
+            .rfind(|byte| !byte.is_ascii_whitespace())
+            .copied();
+        if preceding.is_some_and(|byte| !matches!(byte, b':' | b'-' | b'[' | b'{' | b',' | b'?')) {
+            index += 1;
+            continue;
+        }
+        let start = index + 1;
+        let mut end = start;
+        while bytes.get(end).is_some_and(|byte| !anchor_name_delimiter(*byte)) {
+            end += 1;
+        }
+        if start == end {
+            index += 1;
+            continue;
+        }
+
+        let original = bytes[start..end].to_vec();
+        let normalized = original
+            .iter()
+            .map(|byte| if *byte == b'-' { b'_' } else { *byte })
+            .collect::<Vec<_>>();
+        originals_by_normalized
+            .entry(normalized.clone())
+            .or_default()
+            .insert(original.clone());
+        occurrences.push((start, end, original, normalized));
+        index = end;
+    }
+
+    let mut changed = false;
+    for (start, end, original, normalized) in occurrences {
+        if !original.contains(&b'-')
+            || originals_by_normalized
+                .get(&normalized)
+                .is_none_or(|originals| originals.len() != 1)
+        {
+            continue;
+        }
+        for byte in &mut compatible[start..end] {
+            if *byte == b'-' {
+                *byte = b'_';
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
+const fn anchor_name_delimiter(byte: u8) -> bool {
+    byte.is_ascii_whitespace() || matches!(byte, b'[' | b']' | b'{' | b'}' | b',')
 }
 
 #[derive(Debug, Default)]
@@ -491,6 +625,14 @@ fn mask_block_plain_commas(
 
         if eligible_plain_value && !plain_started && matches!(byte, b'|' | b'>') {
             return (changed, true);
+        }
+
+        // yaml-edit currently treats the first dash in an unquoted `- --option` item as another
+        // block-sequence indicator. Masking one dash in the private, same-length parser input keeps
+        // the item scalar while scalar extraction still reads the authored source.
+        if eligible_plain_value && !plain_started && byte == b'-' && bytes.get(index + 1) == Some(&b'-') {
+            compatible[offset + index] = b'_';
+            changed = true;
         }
 
         if eligible_plain_value && plain_started && byte == b',' {
@@ -606,7 +748,10 @@ fn extract_merge_value(
             let name = alias.name();
             let span = yaml_node_span(source_id, &YamlNode::Alias(alias.clone()));
             if aliases.contains(&name) || aliases.len() >= 64 {
-                return MergeSyntaxValue::Alias { name, span };
+                return MergeSyntaxValue::Alias {
+                    name: original_alias_name(source, span).unwrap_or(name),
+                    span,
+                };
             }
             if let Some(target) = registry.resolve(&name).and_then(|node| {
                 YamlNode::from_syntax(node.clone()).or_else(|| node.children().find_map(YamlNode::from_syntax))
@@ -616,7 +761,10 @@ fn extract_merge_value(
                 let _ = aliases.pop();
                 value
             } else {
-                MergeSyntaxValue::Alias { name, span }
+                MergeSyntaxValue::Alias {
+                    name: original_alias_name(source, span).unwrap_or(name),
+                    span,
+                }
             }
         }
         YamlNode::TaggedNode(tagged) => {
@@ -635,6 +783,10 @@ fn extract_merge_value(
             }
         }
     }
+}
+
+fn original_alias_name(source: &str, span: SourceSpan) -> Option<String> {
+    source.get(span.range())?.strip_prefix('*').map(ToOwned::to_owned)
 }
 
 fn extract_merge_mapping(
@@ -817,7 +969,7 @@ fn collect_scalar(source_id: SourceId, source: &str, scalar: &Scalar, values: &m
 
 #[cfg(test)]
 mod tests {
-    use super::{SyntaxDocument, unparsed_input_offset};
+    use super::{SyntaxDocument, parser_compatible_source, unparsed_input_offset};
     use crate::source::SourceId;
     use yaml_edit::YamlFile;
 
@@ -845,5 +997,19 @@ mod tests {
 
         assert!(backend.positioned_errors().is_empty());
         assert!(unparsed_input_offset(&backend, source).is_some());
+    }
+
+    #[test]
+    fn anchor_compatibility_does_not_merge_colliding_names() {
+        let source = "first: &shared-name one\nsecond: &shared_name two\n";
+
+        assert_eq!(parser_compatible_source(source), None);
+    }
+
+    #[test]
+    fn anchor_compatibility_ignores_scalar_and_comment_content() {
+        let source = "quoted: \"*not-an-alias\"\nplain: echo &not-an-anchor\n# *also-not-an-alias\n";
+
+        assert_eq!(parser_compatible_source(source), None);
     }
 }
