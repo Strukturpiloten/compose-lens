@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-02
+- Updated: 2026-08-05
 
 ## Context
 
@@ -16,21 +17,34 @@ quoted workaround for valid real-world Compose source. Replacing or forking the 
 backend for a patch release would introduce substantially more parser risk than the isolated
 defect warrants.
 
+The first pinned BoxFerry application corpus later exposed three more backend boundaries in valid
+files: hyphens in anchor names, an unquoted block-sequence scalar beginning with `--`, and a blank
+line between a mapping key and its indented mapping value. Direct aliases also had to be resolved
+after structural recovery; resolving an aliased mapping earlier made its source indentation look
+like fields belonging to the alias consumer.
+
 ## Decision
 
 ComposeLens keeps `yaml-edit` private and adds a constrained, same-byte-length compatibility input
 for the backend:
 
-1. Commas in single-line block-style plain values are replaced only in the private parse input.
-2. Flow collections, quoted scalars, comments, and literal or folded block scalars are not changed.
-3. Replacement is one ASCII byte for one ASCII byte, so concrete-tree byte ranges remain aligned
+1. Commas and a leading option dash in affected single-line block-style plain values are replaced
+   only in the private parse input.
+2. Safe non-colliding hyphens in actual anchor and alias tokens are replaced in that private input;
+   scalar and comment content is excluded, and a normalization collision fails closed.
+3. Line endings before blank lines that separate an empty mapping key from a more-indented value
+   become private trailing spaces while the final separating line ending remains.
+4. Flow collections, quoted scalars, comments, and literal or folded block scalars are not changed.
+5. Replacement is one ASCII byte for one ASCII byte, so concrete-tree byte ranges remain aligned
    with the caller's source.
-4. The public `SyntaxDocument`, preservation rendering, editing, interpolation, native parsing, and
+6. The public `SyntaxDocument`, preservation rendering, editing, interpolation, native parsing, and
    merging use the original source text for authored scalar spelling and semantic recovery.
-5. The complete-root guard remains mandatory. Any future backend omission that the compatibility
+7. Direct alias values are resolved for typed interpretation only after indentation recovery.
+8. The complete-root guard remains mandatory. Any future backend omission that the compatibility
    path does not cover still produces `compose.yaml.unparsed-input` rather than partial success.
-6. Authored regressions exercise syntax validity, exact preservation, native short-volume options,
-   downstream merge behavior, quotes, flow collections, comments, and block scalars.
+9. Authored regressions exercise syntax validity, exact preservation, native short-volume options,
+   anchored scalar/sequence/mapping values, collision safety, option-like command items, blank-line
+   separation, downstream merge behavior, quotes, flow collections, comments, and block scalars.
 
 The compatibility layer is an internal parser adapter, not a Compose normalization rule. No
 public parser-dependency type or transformed text is exposed.
@@ -38,6 +52,8 @@ public parser-dependency type or transformed text is exposed.
 ## Consequences
 
 - Valid unquoted comma-separated short-volume options work without changing their spelling.
+- Real-world Superset, Appwrite, and Mailcow syntax reaches typed processing without source
+  normalization.
 - Source spans remain byte-accurate and preservation rendering remains byte-identical.
 - The 0.1.x parser dependency can remain stable while ComposeLens owns the defect boundary.
 - Every future compatibility rule must be constrained, source-preserving, independently tested,

@@ -34,6 +34,99 @@ fn preserves_compose_shaped_yaml_without_normalization() -> Result<(), Box<dyn s
 }
 
 #[test]
+fn preserves_top_level_anchored_blocks_with_hyphenated_names() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "x-user: &superset-user root\nx-volumes: &superset-volumes\n  # shared mounts\n  - ./data:/data\nx-build: &common-build\n  context: .\n  target: dev\n  args:\n    DEVELOPMENT: \"true\"\nservices:\n  app:\n    image: example\n    user: *superset-user\n    volumes: *superset-volumes\n    build: *common-build\n";
+    let source_id = SourceId::new(8);
+    let parsed = SyntaxDocument::parse(source_id, source)?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(parsed.document().render_preserved(), source);
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        source_id,
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project expected")?;
+    let user = project
+        .value(&["services", "app", "user"])
+        .and_then(MergedValue::as_scalar)
+        .map(MergedScalar::value);
+    let volume = project
+        .value(&["services", "app", "volumes"])
+        .and_then(MergedValue::as_sequence)
+        .and_then(|values| values.first())
+        .and_then(MergedValue::as_scalar)
+        .map(MergedScalar::value);
+    let build_context = project
+        .value(&["services", "app", "build", "context"])
+        .and_then(MergedValue::as_scalar)
+        .map(MergedScalar::value);
+
+    assert!(loaded.is_valid(), "{:#?}", loaded.diagnostics());
+    assert!(merged.is_valid(), "{:#?}", merged.diagnostics());
+    assert_eq!(user, Some("root"));
+    assert_eq!(volume, Some("./data:/data"));
+    assert_eq!(build_context, Some("."));
+    Ok(())
+}
+
+#[test]
+fn preserves_unquoted_double_dash_sequence_items() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    image: example\n    command:\n      - --connect\n      - --constraints=Label(`stack`,`example`)\n";
+    let source_id = SourceId::new(9);
+    let parsed = SyntaxDocument::parse(source_id, source)?;
+    let loaded = LoadedProject::load([DocumentInput::new(
+        source_id,
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let command = merged
+        .project()
+        .and_then(|project| project.value(&["services", "app", "command"]))
+        .and_then(MergedValue::as_sequence)
+        .ok_or("command sequence expected")?
+        .iter()
+        .filter_map(MergedValue::as_scalar)
+        .map(MergedScalar::value)
+        .collect::<Vec<_>>();
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(parsed.document().render_preserved(), source);
+    assert!(loaded.is_valid(), "{:#?}", loaded.diagnostics());
+    assert!(merged.is_valid(), "{:#?}", merged.diagnostics());
+    assert_eq!(command, ["--connect", "--constraints=Label(`stack`,`example`)"]);
+    Ok(())
+}
+
+#[test]
+fn accepts_a_blank_line_before_an_indented_mapping_value() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n\n    app:\n      image: example\n";
+    let source_id = SourceId::new(10);
+    let parsed = SyntaxDocument::parse(source_id, source)?;
+    let loaded = LoadedProject::load([DocumentInput::new(
+        source_id,
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        source,
+    )])?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(parsed.document().render_preserved(), source);
+    assert!(loaded.is_valid(), "{:#?}", loaded.diagnostics());
+    assert!(
+        loaded
+            .documents()
+            .first()
+            .and_then(|document| document.model().document())
+            .and_then(|document| document.service("app"))
+            .is_some()
+    );
+    Ok(())
+}
+
+#[test]
 fn malformed_yaml_returns_a_spanned_diagnostic_and_a_document() -> Result<(), Box<dyn std::error::Error>> {
     let source_id = SourceId::new(11);
     let parsed = SyntaxDocument::parse(source_id, MALFORMED_FLOW)?;

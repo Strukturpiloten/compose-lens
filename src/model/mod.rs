@@ -39,8 +39,8 @@ pub use volume::{
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::source::{SourceId, SourceSpan};
 use crate::syntax::{SyntaxDocument, scalar_string_from_source};
-use std::collections::BTreeMap;
-use yaml_edit::{AsYaml, Mapping, ScalarType, ScalarValue, YamlNode};
+use std::collections::{BTreeMap, BTreeSet};
+use yaml_edit::{AnchorRegistry, AsYaml, Mapping, ScalarType, ScalarValue, YamlNode};
 
 /// A Compose document root must be a mapping.
 pub const DOCUMENT_ROOT_TYPE: DiagnosticCode = DiagnosticCode::new("compose.document.expected-mapping");
@@ -623,16 +623,22 @@ struct Parser {
     source_span: SourceSpan,
     source: String,
     tree: yaml_edit::YamlFile,
+    anchors: AnchorRegistry,
     diagnostics: Vec<Diagnostic>,
 }
 
 impl Parser {
     fn new(syntax: &SyntaxDocument) -> Self {
+        let tree = syntax.yaml_file();
+        let anchors = tree
+            .document()
+            .map_or_else(AnchorRegistry::new, |document| AnchorRegistry::from_document(&document));
         Self {
             source_id: syntax.source_id(),
             source_span: syntax.source_span(),
             source: syntax.source_text().to_owned(),
-            tree: syntax.yaml_file(),
+            tree,
+            anchors,
             diagnostics: Vec::new(),
         }
     }
@@ -2160,7 +2166,11 @@ impl Parser {
 
     fn fields(&mut self, mapping: &Mapping) -> Vec<ParsedField> {
         let fields = self.raw_fields(mapping);
-        self.flatten_empty_value_continuations(fields)
+        let mut fields = self.flatten_empty_value_continuations(fields);
+        for field in &mut fields {
+            field.value = field.value.take().map(|value| self.resolve_alias(value));
+        }
+        fields
     }
 
     fn raw_fields(&mut self, mapping: &Mapping) -> Vec<ParsedField> {
@@ -2192,6 +2202,26 @@ impl Parser {
                 })
             })
             .collect()
+    }
+
+    fn resolve_alias(&self, node: YamlNode) -> YamlNode {
+        let mut node = node;
+        let mut visited = BTreeSet::new();
+        for _ in 0..64 {
+            let YamlNode::Alias(alias) = &node else {
+                return node;
+            };
+            if !visited.insert(alias.name()) {
+                return node;
+            }
+            let Some(target) = self.anchors.resolve(&alias.name()).and_then(|target| {
+                YamlNode::from_syntax(target.clone()).or_else(|| target.children().find_map(YamlNode::from_syntax))
+            }) else {
+                return node;
+            };
+            node = target;
+        }
+        node
     }
 
     fn flatten_empty_value_continuations(&mut self, fields: Vec<ParsedField>) -> Vec<ParsedField> {
