@@ -21,9 +21,9 @@ provenance.
 
 | Coverage | Service fields |
 | --- | --- |
-| Document model and project view | `container_name`, `image`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Document model and project view | `container_name`, `image`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Document model only | `build`, `ulimits`, `deploy` |
-| Preserved, not typed | `annotations`, `attach`, `blkio_config`, CPU controls, `cap_add`, `cap_drop`, `cgroup`, `cgroup_parent`, `credential_spec`, `develop`, `device_cgroup_rules`, `devices`, `dns`, `dns_opt`, `dns_search`, `domainname`, service `driver_opts`, `entrypoint`, `env_file`, `expose`, `extends`, `external_links`, `gpus`, `hostname`, `init`, `ipc`, `isolation`, `label_file`, `links`, `logging`, `mac_address`, memory controls, `models`, `network_mode`, OOM controls, `pid`, `pids_limit`, `platform`, lifecycle hooks, `privileged`, `provider`, `pull_policy`, `restart`, `runtime`, `scale`, `security_opt`, `shm_size`, `stdin_open`, `stop_grace_period`, `stop_signal`, `storage_opt`, `sysctls`, `tmpfs`, `tty`, `use_api_socket`, `uts`, `volumes_from` |
+| Preserved, not typed | `annotations`, `attach`, `blkio_config`, CPU controls, `cap_add`, `cap_drop`, `cgroup`, `cgroup_parent`, `credential_spec`, `develop`, `device_cgroup_rules`, `devices`, `dns`, `dns_opt`, `dns_search`, `domainname`, service `driver_opts`, `entrypoint`, `env_file`, `expose`, `extends`, `external_links`, `gpus`, `hostname`, `init`, `ipc`, `isolation`, `label_file`, `links`, `logging`, `mac_address`, memory controls, `models`, `network_mode`, OOM controls, `pid`, `pids_limit`, `platform`, lifecycle hooks, `privileged`, `provider`, `pull_policy`, `runtime`, `scale`, `security_opt`, `shm_size`, `stdin_open`, `stop_grace_period`, `stop_signal`, `storage_opt`, `sysctls`, `tmpfs`, `tty`, `use_api_socket`, `uts`, `volumes_from` |
 
 The preserved row follows the current Docker documentation grouping. Provider-specific additions
 remain preserved even when they are not part of the compose-spec repository.
@@ -55,7 +55,11 @@ Explicit `container_name` values now travel through the document model, effectiv
 and generated-document boundary. Generation enforces the documented portable Compose name grammar;
 authored parsing retains the scalar and leaves provider/runtime acceptance to compatibility policy.
 
-Restart policy, entrypoint behavior, and resource limits are the next high-value promotion groups.
+Service-level `restart` now travels through the same three boundaries. Authored input retains
+retry-count spelling and interpolation; generated input uses a typed policy that cannot emit an
+unknown value. Dependency-update `restart` and deploy restart policy remain separate concepts.
+
+Entrypoint behavior and resource limits are the next high-value promotion groups.
 
 ## Promotion checklist
 

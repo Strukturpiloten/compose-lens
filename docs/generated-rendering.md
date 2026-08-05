@@ -23,6 +23,7 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - ordered service metadata labels with explicit, potentially empty string values;
 - combined `user[:group]`, user namespace, supplementary groups, working directory, and explicit
   read-only-root state;
+- service-level `no`, `always`, `on-failure[:max-retries]`, and `unless-stopped` restart policies;
 - ordered short-form host mappings;
 - protocol-aware target/published/host-address ports;
 - named, anonymous, and bind mounts;
@@ -34,6 +35,11 @@ Generated collections retain insertion order and reject duplicate names where Co
 syntax would otherwise overwrite intent. Singleton service fields reject a second assignment.
 Strings are always double-quoted by the private renderer, so YAML scalar inference cannot change
 their type.
+
+`GeneratedRestartPolicy` cannot represent deferred or provider-specific values because generated
+documents require a reviewed semantic choice. `GeneratedService::set_restart` rejects a second
+assignment instead of overwriting the first policy. The renderer quotes every policy, including
+`no`, and the parse-back model must recover the same policy family and retry count.
 
 `GeneratedResource::set_custom_name` emits Compose's top-level `name:` field. Runtime migration
 uses it when an application-owned observed network or volume must keep its exact platform name;

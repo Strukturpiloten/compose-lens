@@ -5,7 +5,7 @@ use compose_lens::{
     render::{
         ComposeDocumentBuilder, GeneratedCommand, GeneratedEnvironment, GeneratedExtraHost, GeneratedLabel,
         GeneratedMount, GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource,
-        GeneratedSelinux, GeneratedService, GeneratedString, GenerationError,
+        GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedString, GenerationError,
     },
     source::SourceId,
 };
@@ -30,6 +30,12 @@ fn generates_the_runtime_migration_subset_deterministically() -> Result<(), Box<
         service.container_name().map(|name| name.value().as_str()),
         Some("application-web")
     );
+    assert!(matches!(
+        service.restart().map(compose_lens::model::RestartPolicy::kind),
+        Some(compose_lens::model::RestartPolicyKind::OnFailure {
+            maximum_retries: Some(value),
+        }) if value == "3"
+    ));
     assert_eq!(
         service.image().map(|image| image.value().raw()),
         Some("example.invalid/web:1@sha256:abcd")
@@ -138,6 +144,64 @@ fn retains_empty_shell_protocol_and_shared_selinux_variants() -> Result<(), Box<
 }
 
 #[test]
+fn generates_every_service_restart_policy_form() -> Result<(), Box<dyn std::error::Error>> {
+    let policies = [
+        ("disabled", GeneratedRestartPolicy::No, "no"),
+        ("always", GeneratedRestartPolicy::Always, "always"),
+        (
+            "failure",
+            GeneratedRestartPolicy::OnFailure { maximum_retries: None },
+            "on-failure",
+        ),
+        (
+            "limited",
+            GeneratedRestartPolicy::OnFailure {
+                maximum_retries: Some(3),
+            },
+            "on-failure:3",
+        ),
+        ("stopped", GeneratedRestartPolicy::UnlessStopped, "unless-stopped"),
+    ];
+    let mut project = ComposeDocumentBuilder::new();
+    for (name, policy, _) in policies {
+        let mut service = GeneratedService::new(name)?;
+        service.set_restart(policy)?;
+        project.add_service(service)?;
+    }
+
+    let generated = project.build(SourceId::new(703))?;
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"disabled\":\n",
+            "    restart: \"no\"\n",
+            "  \"always\":\n",
+            "    restart: \"always\"\n",
+            "  \"failure\":\n",
+            "    restart: \"on-failure\"\n",
+            "  \"limited\":\n",
+            "    restart: \"on-failure:3\"\n",
+            "  \"stopped\":\n",
+            "    restart: \"unless-stopped\"\n",
+        )
+    );
+    for (name, _, expected) in policies {
+        assert_eq!(
+            generated
+                .document()
+                .service(name)
+                .and_then(compose_lens::model::Service::restart)
+                .map(compose_lens::model::RestartPolicy::raw)
+                .map(compose_lens::model::Located::value)
+                .map(String::as_str),
+            Some(expected)
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn rejects_ambiguous_or_duplicate_generation_requests() -> Result<(), Box<dyn std::error::Error>> {
     let empty = ComposeDocumentBuilder::new();
     assert_eq!(empty.build(SourceId::new(710)), Err(GenerationError::MissingService));
@@ -152,6 +216,11 @@ fn rejects_ambiguous_or_duplicate_generation_requests() -> Result<(), Box<dyn st
     assert_eq!(
         service.set_container_name(plain("replacement-web")?),
         Err(GenerationError::DuplicateField("container_name"))
+    );
+    service.set_restart(GeneratedRestartPolicy::Always)?;
+    assert_eq!(
+        service.set_restart(GeneratedRestartPolicy::No),
+        Err(GenerationError::DuplicateField("restart"))
     );
     assert_eq!(
         GeneratedEnvironment::literal("INVALID=NAME", plain("value")?),
@@ -254,6 +323,9 @@ fn complete_project() -> Result<ComposeDocumentBuilder, Box<dyn std::error::Erro
     service.add_supplementary_group(plain("44")?)?;
     service.set_working_dir(plain("/srv/app")?)?;
     service.set_read_only(true)?;
+    service.set_restart(GeneratedRestartPolicy::OnFailure {
+        maximum_retries: Some(3),
+    })?;
     service.add_extra_host(GeneratedExtraHost::new("host.docker.internal", "host-gateway")?);
     service.add_extra_host(GeneratedExtraHost::new("ipv6", "::1")?);
     service.add_port(GeneratedPort::new(
@@ -317,6 +389,7 @@ fn expected_document() -> &'static str {
         "      - \"44\"\n",
         "    working_dir: \"/srv/app\"\n",
         "    read_only: true\n",
+        "    restart: \"on-failure:3\"\n",
         "    extra_hosts:\n",
         "      - \"host.docker.internal=host-gateway\"\n",
         "      - \"ipv6=::1\"\n",

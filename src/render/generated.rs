@@ -139,6 +139,23 @@ pub enum GeneratedCommand {
     Empty,
 }
 
+/// A valid service-level Compose restart policy selected for generated output.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedRestartPolicy {
+    /// Never restart the container automatically.
+    No,
+    /// Always restart the container until it is removed.
+    Always,
+    /// Restart after an error, optionally with a maximum retry count.
+    OnFailure {
+        /// Maximum retries, or `None` for no explicit limit.
+        maximum_retries: Option<u64>,
+    },
+    /// Restart except after an explicit stop or removal.
+    UnlessStopped,
+}
+
 /// One ordered Compose environment entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedEnvironment {
@@ -569,6 +586,7 @@ pub struct GeneratedService {
     group_add: Vec<GeneratedString>,
     working_dir: Option<GeneratedString>,
     read_only: Option<bool>,
+    restart: Option<GeneratedRestartPolicy>,
     extra_hosts: Vec<GeneratedExtraHost>,
     ports: Vec<GeneratedPort>,
     mounts: Vec<GeneratedMount>,
@@ -594,6 +612,7 @@ impl GeneratedService {
             group_add: Vec::new(),
             working_dir: None,
             read_only: None,
+            restart: None,
             extra_hosts: Vec::new(),
             ports: Vec::new(),
             mounts: Vec::new(),
@@ -711,6 +730,15 @@ impl GeneratedService {
     /// Returns [`GenerationError::DuplicateField`] when already configured.
     pub fn set_read_only(&mut self, read_only: bool) -> Result<(), GenerationError> {
         set_once(&mut self.read_only, read_only, "read_only")
+    }
+
+    /// Sets the service-level restart policy exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_restart(&mut self, restart: GeneratedRestartPolicy) -> Result<(), GenerationError> {
+        set_once(&mut self.restart, restart, "restart")
     }
 
     /// Adds one ordered host mapping.
@@ -926,10 +954,28 @@ fn render_service(output: &mut String, service: &GeneratedService) {
         write_field(output, 2, "read_only");
         output.push_str(if read_only { "true\n" } else { "false\n" });
     }
+    if let Some(restart) = service.restart {
+        render_restart(output, restart);
+    }
     render_extra_hosts(output, &service.extra_hosts);
     render_ports(output, &service.ports);
     render_mounts(output, &service.mounts);
     render_networks(output, &service.networks);
+}
+
+fn render_restart(output: &mut String, restart: GeneratedRestartPolicy) {
+    write_field(output, 2, "restart");
+    let value = match restart {
+        GeneratedRestartPolicy::No => "no".to_owned(),
+        GeneratedRestartPolicy::Always => "always".to_owned(),
+        GeneratedRestartPolicy::OnFailure { maximum_retries: None } => "on-failure".to_owned(),
+        GeneratedRestartPolicy::OnFailure {
+            maximum_retries: Some(maximum_retries),
+        } => format!("on-failure:{maximum_retries}"),
+        GeneratedRestartPolicy::UnlessStopped => "unless-stopped".to_owned(),
+    };
+    write_quoted(output, &value);
+    output.push('\n');
 }
 
 fn render_optional_string(output: &mut String, key: &str, value: Option<&GeneratedString>) {

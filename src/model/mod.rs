@@ -9,6 +9,7 @@ mod image;
 mod network;
 mod port;
 mod resource;
+mod restart;
 mod sections;
 mod ulimit;
 mod value;
@@ -26,6 +27,7 @@ pub use image::{ImageDigest, ImageReference};
 pub use network::{Ipam, IpamConfig, NetworkDefinition, ServiceNetwork, ServiceNetworks};
 pub use port::{LongPort, Port, ShortPort};
 pub use resource::{ConfigDefinition, ConfigGrant, LongGrant, SecretDefinition, SecretGrant, VolumeDefinition};
+pub use restart::{RestartPolicy, RestartPolicyKind};
 pub use sections::{
     Build, BuildDefinition, BuildField, BuildFieldKind, DeployDefinition, DeployField, DeployFieldKind,
 };
@@ -107,6 +109,9 @@ pub const HEALTHCHECK_INVALID_DURATION: DiagnosticCode = DiagnosticCode::new("co
 
 /// A health-check retry count is not a non-negative integer or deferred expression.
 pub const HEALTHCHECK_INVALID_RETRIES: DiagnosticCode = DiagnosticCode::new("compose.healthcheck.invalid-retries");
+
+/// A service-level restart policy is not one of the Compose-defined forms or an expression.
+pub const RESTART_INVALID_POLICY: DiagnosticCode = DiagnosticCode::new("compose.restart.invalid-policy");
 
 /// A long dependency uses an unrecognized condition.
 pub const DEPENDENCY_INVALID_CONDITION: DiagnosticCode = DiagnosticCode::new("compose.dependencies.invalid-condition");
@@ -200,6 +205,7 @@ pub struct Service {
     group_add: Vec<Located<String>>,
     working_dir: Option<Located<String>>,
     read_only: Option<Located<BooleanValue>>,
+    restart: Option<RestartPolicy>,
     ulimits: Option<Ulimits>,
     depends_on: Option<DependsOn>,
     healthcheck: Option<Healthcheck>,
@@ -231,6 +237,7 @@ impl Service {
             group_add: Vec::new(),
             working_dir: None,
             read_only: None,
+            restart: None,
             ulimits: None,
             depends_on: None,
             healthcheck: None,
@@ -323,6 +330,12 @@ impl Service {
     #[must_use]
     pub const fn read_only(&self) -> Option<&Located<BooleanValue>> {
         self.read_only.as_ref()
+    }
+
+    /// Returns the service-level container restart policy.
+    #[must_use]
+    pub const fn restart(&self) -> Option<&RestartPolicy> {
+        self.restart.as_ref()
     }
 
     /// Returns explicitly authored service resource limits.
@@ -807,6 +820,9 @@ impl Parser {
                 "read_only" if !duplicate => {
                     service.read_only = self.parse_boolean(&service_field, "service read_only");
                 }
+                "restart" if !duplicate => {
+                    service.restart = self.parse_restart_policy(&service_field);
+                }
                 "ulimits" if !duplicate => {
                     service.ulimits = self.parse_ulimits(&service_field);
                 }
@@ -848,6 +864,25 @@ impl Parser {
             }
         }
         service
+    }
+
+    fn parse_restart_policy(&mut self, field: &ParsedField) -> Option<RestartPolicy> {
+        let value = self.parse_string(field, "service restart policy")?;
+        let policy = RestartPolicy::parse(value);
+        if !policy.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    RESTART_INVALID_POLICY,
+                    Severity::Error,
+                    "restart must be `no`, `always`, `on-failure[:max-retries]`, `unless-stopped`, or interpolation",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    policy.raw().span(),
+                    "invalid service restart policy",
+                )),
+            );
+        }
+        Some(policy)
     }
 
     fn parse_command(&mut self, field: &ParsedField) -> Option<Command> {

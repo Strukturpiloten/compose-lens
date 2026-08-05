@@ -7,9 +7,9 @@ use crate::merge::{
 use crate::model::{
     BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, DependencyCondition, HealthcheckDuration,
     HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddress, ImageReference, Ipam, IpamConfig,
-    KeyValueEntry, Labels, Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, SecretDefinition,
-    SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, UserNamespaceMode,
-    UserSpec, VolumeDefinition, VolumeMount,
+    KeyValueEntry, Labels, Located, LongPort, LongVolumeMount, MountType, NetworkDefinition, Port, RestartPolicy,
+    SecretDefinition, SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount,
+    UserNamespaceMode, UserSpec, VolumeDefinition, VolumeMount,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -549,6 +549,7 @@ pub struct ProjectService {
     group_add: Option<ProjectValue<Vec<ProjectValue<String>>>>,
     working_dir: Option<ProjectValue<String>>,
     read_only: Option<ProjectValue<BooleanValue>>,
+    restart: Option<ProjectValue<RestartPolicy>>,
     healthcheck: Option<ProjectValue<ProjectHealthcheck>>,
     depends_on: Option<ProjectValue<ProjectDependsOn>>,
     ports: Option<ProjectValue<Vec<ProjectValue<Port>>>>,
@@ -637,6 +638,12 @@ impl ProjectService {
     #[must_use]
     pub const fn read_only(&self) -> Option<&ProjectValue<BooleanValue>> {
         self.read_only.as_ref()
+    }
+
+    /// Returns the effective service-level container restart policy.
+    #[must_use]
+    pub const fn restart(&self) -> Option<&ProjectValue<RestartPolicy>> {
+        self.restart.as_ref()
     }
 
     /// Returns the effective health check with per-field merge provenance.
@@ -945,6 +952,7 @@ impl<'a> Builder<'a> {
             group_add: None,
             working_dir: None,
             read_only: None,
+            restart: None,
             healthcheck: None,
             depends_on: None,
             ports: None,
@@ -988,6 +996,7 @@ impl<'a> Builder<'a> {
                         .located_boolean(field.value(), "service read_only must be a boolean")
                         .map(|value| ProjectValue::new(value.into_value(), field.value()));
                 }
+                "restart" => service.restart = self.restart_policy(field.value()),
                 "healthcheck" => service.healthcheck = self.healthcheck(field.value(), &path),
                 "depends_on" => service.depends_on = self.depends_on(field.value(), &path),
                 "ports" => service.ports = self.ports(field.value(), &path),
@@ -1003,6 +1012,17 @@ impl<'a> Builder<'a> {
             .unmodeled_fields
             .extend(self.pending_unmodeled.drain(pending_start..));
         Some(service)
+    }
+
+    fn restart_policy(&mut self, value: &MergedValue) -> Option<ProjectValue<RestartPolicy>> {
+        let policy = RestartPolicy::parse(self.located_string(value, "restart must be a non-null scalar")?);
+        if !policy.is_valid() {
+            self.invalid(
+                effective_span(value),
+                "restart must be `no`, `always`, `on-failure[:max-retries]`, or `unless-stopped`",
+            );
+        }
+        Some(ProjectValue::new(policy, value))
     }
 
     fn command(&mut self, value: &MergedValue) -> Option<ProjectValue<Command>> {

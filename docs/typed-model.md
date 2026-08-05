@@ -46,6 +46,13 @@ An explicit `container_name` is a source-aware scalar at both layers. The effect
 retains ordinary Compose scalar replacement provenance across files. The parser does not confuse
 the custom runtime name with the service key or infer one when the field is absent.
 
+Service-level `restart` is raw-preserving at both layers. Known policies are classified as `no`,
+`always`, `on-failure[:max-retries]`, and `unless-stopped`; a deferred interpolation remains
+distinct, and invalid/provider-specific values remain available with diagnostics. The optional
+decimal retry spelling is not normalized, so an authored `on-failure:003` remains exact.
+This field is separate from `depends_on.<service>.restart`, which describes an explicit
+Compose-controlled dependency update, and from `deploy.restart_policy`.
+
 Service config and secret grants are native at both layers. The merged-project view retains short
 versus long syntax, collection/item provenance, and separate provenance for long-form `source`,
 `target`, `uid`, `gid`, and `mode`. This preserves Compose's unique-by-target merge behavior,
@@ -61,7 +68,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `container_name`, `image`, `build`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `container_name`, `image`, `build`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -83,6 +90,8 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 - extra hosts: hostname/address sequence or mapping, retaining delimiters and IPv6 brackets;
 - dependencies: service-name sequence or condition/options mapping;
 - health-check tests: shell-command scalar or tokenized list;
+- restart policy: a known literal, optional raw-preserving `on-failure` retry count, deferred
+  expression, or retained invalid/provider-specific scalar;
 - ulimits: one scalar or separate soft/hard values;
 - build: scalar context or a mapping of independently identified specification fields;
 - service and resource labels: list or mapping. Service-label list entries retain the complete

@@ -5,8 +5,8 @@ use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, merge_project};
 use compose_lens::model::{
     BooleanValue, Command, ComposeScalar, DependencyCondition, HealthcheckDuration, HealthcheckRetries,
-    HealthcheckTest, HealthcheckTestKind, HostAddressKind, IdentityComponent, Port, SelinuxRelabel, ServiceNetworks,
-    UserNamespaceModeKind, VolumeMount,
+    HealthcheckTest, HealthcheckTestKind, HostAddressKind, IdentityComponent, Port, RestartPolicyKind, SelinuxRelabel,
+    ServiceNetworks, UserNamespaceModeKind, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
@@ -107,9 +107,9 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
     assert_eq!(comma_mount.options(), &["Z".to_owned(), "ro".to_owned()]);
     assert_eq!(comma_mount.selinux_relabel(), Some(SelinuxRelabel::Private));
 
-    assert!(web.unmodeled_fields().iter().any(|field| {
-        field.path() == ["services", "web", "restart"] && field.key().sources()[0].source_id() == SourceId::new(601)
-    }));
+    let restart = web.restart().ok_or("restart policy expected")?;
+    assert!(matches!(restart.value().kind(), RestartPolicyKind::UnlessStopped));
+    assert_source_ids(restart.provenance().sources(), &[SourceId::new(601)]);
     assert_networks_and_resources(view, web)?;
 
     let unselected = build_project_view(project, None);
@@ -123,6 +123,71 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
             .and_then(|profiles| profiles.value().first())
             .map(|profile| profile.value().as_str()),
         Some("workers")
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_restart_policy_and_complete_replacement_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base = "services:\n  app:\n    image: example.invalid/app:1\n    restart: always\n";
+    let override_source = "services:\n  app:\n    restart: on-failure:003\n";
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(651),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            base,
+        ),
+        DocumentInput::new(
+            SourceId::new(652),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            override_source,
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let restart = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::restart)
+        .ok_or("effective restart policy expected")?;
+
+    assert!(result.is_valid(), "{:#?}", result.diagnostics());
+    assert_eq!(restart.value().raw().value(), "on-failure:003");
+    assert!(matches!(
+        restart.value().kind(),
+        RestartPolicyKind::OnFailure { maximum_retries: Some(value) } if value == "003"
+    ));
+    assert_eq!(restart.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(
+        restart.provenance().sources(),
+        &[SourceId::new(651), SourceId::new(652)],
+    );
+    Ok(())
+}
+
+#[test]
+fn reports_an_invalid_effective_restart_policy_without_dropping_it() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    image: example.invalid/app:1\n    restart: sometimes\n";
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(653),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let restart = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::restart)
+        .ok_or("retained invalid restart policy expected")?;
+
+    assert!(!result.is_valid());
+    assert!(matches!(restart.value().kind(), RestartPolicyKind::Other));
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_INVALID_VALUE)
     );
     Ok(())
 }
