@@ -57,7 +57,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `image`, `build`, `command`, `environment`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `image`, `build`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -81,7 +81,8 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 - health-check tests: shell-command scalar or tokenized list;
 - ulimits: one scalar or separate soft/hard values;
 - build: scalar context or a mapping of independently identified specification fields;
-- labels: list or mapping.
+- service and resource labels: list or mapping. Service-label list entries retain the complete
+  scalar so values containing additional `=` characters are not truncated.
 
 The raw short volume and port strings remain authoritative. Conservative helper parsing must not
 turn platform-dependent path or address grammars into false certainty. ADR 0003 defines the full

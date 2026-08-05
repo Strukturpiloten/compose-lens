@@ -12,7 +12,7 @@ Cover scalars, mappings, sequences, anchors, aliases, comments where supported, 
 
 Cover every field in the documented [typed boundary](typed-model.md), all supported syntax variants,
 unknown fields, extensions, image references, ports, volumes, host/container path separation,
-environment values, commands, extra hosts, raw identities, ulimits, health checks, dependency
+environment values, service-label forms, commands, extra hosts, raw identities, ulimits, health checks, dependency
 conditions, field-level build/deploy identities, networks, profiles, configs, secrets, top-level
 resources, and discriminated unions.
 
@@ -32,10 +32,12 @@ reparent ports, volumes, or extensions into the environment mapping.
 
 Generated-rendering tests construct the runtime-migration subset through public Compose-owned
 types, compare exact deterministic bytes, and inspect the parse-back native model. They protect
-ordered duplicate-capable environment syntax, spec-shaped long TCP/UDP ports, short SCTP ports,
+ordered duplicate-capable environment syntax, ordered unique service-label mappings, spec-shaped
+long TCP/UDP ports, short SCTP ports,
 ordinary mounts, deliberate short `SELinux` bind syntax, network aliases,
 application/external resource lifecycle, duplicate
-rejection, ambiguous short-form failures, and sensitive debug redaction.
+rejection, label duplicate rejection, empty and embedded-equals label values, ambiguous short-form
+failures, and sensitive debug redaction.
 
 Preservation-editing tests compare exact authored and expected files after changing typed scalar
 spans. They prove that comments, whitespace, ordering, unknown fields, extensions, flow syntax, and

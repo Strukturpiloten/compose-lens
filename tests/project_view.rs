@@ -61,6 +61,8 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
     assert!(environment.value().get("BASE_ONLY").is_some());
     assert!(environment.value().get("OVERRIDE_ONLY").is_some());
 
+    assert_labels(web)?;
+
     let extra_hosts = web.extra_hosts().ok_or("extra_hosts expected")?;
     assert_source_ids(
         extra_hosts.provenance().sources(),
@@ -115,6 +117,33 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
             .map(|profile| profile.value().as_str()),
         Some("workers")
     );
+    Ok(())
+}
+
+fn assert_labels(web: &ProjectService) -> Result<(), Box<dyn std::error::Error>> {
+    let labels = web.labels().ok_or("labels expected")?;
+    assert_source_ids(labels.provenance().sources(), &[SourceId::new(601), SourceId::new(602)]);
+    let shared_label = labels
+        .value()
+        .get("com.example.shared")
+        .ok_or("shared label expected")?;
+    assert_eq!(
+        shared_label.value().value(),
+        &ComposeScalar::String("override".to_owned())
+    );
+    assert_eq!(shared_label.syntax(), EntrySyntax::Mapping);
+    assert_source_ids(
+        shared_label.value().provenance().sources(),
+        &[SourceId::new(601), SourceId::new(602)],
+    );
+    let empty_label = labels
+        .value()
+        .get("com.example.empty")
+        .ok_or("key-only label expected")?;
+    assert_eq!(empty_label.value().value(), &ComposeScalar::String(String::new()));
+    assert_eq!(empty_label.syntax(), EntrySyntax::ListKeyOnly);
+    assert!(labels.value().get("com.example.base").is_some());
+    assert!(labels.value().get("com.example.override").is_some());
     Ok(())
 }
 
@@ -779,6 +808,7 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
         "services:\n",
         "  app:\n",
         "    image: example.invalid/app:${TOKEN}\n",
+        "    labels: [\"com.example.${LABEL_NAME}=${LABEL_VALUE}\"]\n",
         "    depends_on: [\"${DEPENDENCY}\"]\n",
         "    secrets: [\"${SECRET_GRANT}\"]\n",
     );
@@ -789,6 +819,8 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
     )])?;
     let mut environment = MapEnvironment::new();
     let _ = environment.insert_sensitive("TOKEN", "private-tag");
+    let _ = environment.insert_sensitive("LABEL_NAME", "private-name");
+    let _ = environment.insert_sensitive("LABEL_VALUE", "private-label");
     let _ = environment.insert_sensitive("DEPENDENCY", "private-service");
     let _ = environment.insert_sensitive("SECRET_GRANT", "private-secret");
     let interpolation = loaded.interpolate(&environment);
@@ -806,6 +838,18 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
     assert!(image.is_sensitive());
     assert!(!debug.contains("private-tag"));
     assert!(debug.contains("<redacted>"));
+    let label = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::labels)
+        .and_then(|labels| labels.value().entries().first())
+        .ok_or("label expected")?;
+    assert!(label.name().is_sensitive());
+    assert!(label.value().is_sensitive());
+    let label_debug = format!("{label:?}");
+    assert!(!label_debug.contains("private-name"));
+    assert!(!label_debug.contains("private-label"));
+    assert!(label_debug.contains("<redacted>"));
     let dependency = result
         .view()
         .and_then(|view| view.service("app"))

@@ -9,6 +9,9 @@ services:
     environment:
       - SHARED=override
       - OVERRIDE_ONLY=added
+    labels:
+      com.example.shared: override
+      com.example.override: added
     extra_hosts:
       - database=192.0.2.10
     healthcheck:

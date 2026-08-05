@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-04
+- Additive amendment: 2026-08-05
 
 ## Context
 
@@ -38,6 +39,9 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
    accessor and sensitive debug output is redacted.
 9. Generation is pure. It does not perform interpolation, merging, profile selection, default
    resolution, compatibility validation, file access, or provider execution.
+10. Generated service labels use ordered mapping syntax and explicit quoted string values. Empty
+    values and embedded `=` characters remain unambiguous, duplicate names are rejected, and
+    caller-marked value sensitivity propagates to the generated document.
 
 ## Consequences
 

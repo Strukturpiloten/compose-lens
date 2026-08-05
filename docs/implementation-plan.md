@@ -2,7 +2,7 @@
 
 This plan gives BoxFerry, ComposeLens, and QuadletLens one stable task numbering scheme. Repository roadmaps describe internal phases; this document describes delivery order across repositories.
 
-Last synchronized: 2026-08-04.
+Last synchronized: 2026-08-05.
 
 ## Status convention
 
@@ -80,10 +80,11 @@ The component crates remain unpublished until their release contract is finalize
 
 Status: in progress. Each repository owns its native types; BoxFerry owns mappings.
 
-- ComposeLens (completed): services, images, commands, environment, extra hosts, ports, volumes,
+- ComposeLens (completed): services, images, commands, environment, service labels, extra hosts, ports, volumes,
   networks, profiles, configs, and secrets.
 - QuadletLens (completed): `.container`, `.pod`, `.volume`, `.network`, required generic systemd
-  sections, repeatable container/pod host mappings, and exact document-set relationships.
+  sections, repeatable container/pod host mappings, repeatable container labels, and exact
+  document-set relationships.
 - BoxFerry (in progress): Compose-to-neutral and first neutral-to-Quadlet mappings, path policy,
   explicit pod grouping, and end-to-end host mappings are implemented; broader value encoders
   remain.
@@ -178,9 +179,18 @@ compatibility rules, a consumer-facing 0.1.x API contract, and the published Com
 crate and GitHub release. The runtime entries remain planned until suitable isolated SELinux hosts
 execute them. Future crates.io releases use trusted publishing with short-lived OIDC credentials.
 
-ComposeLens 0.1.7 is the validated release candidate for runtime-to-Compose output. It adds pure,
+ComposeLens 0.1.7 is published for runtime-to-Compose output. It adds pure,
 deterministic, parse-back-validated document construction for the current BoxFerry observation
 subset. Field-specific syntax selection retains short SELinux bind behavior, emits SCTP through
 the platform-protocol-capable short port form, and keeps optional exact platform names distinct
-from network/volume lifecycle ownership. BoxFerry consumption remains gated on the crates.io
-release; sibling path dependencies are not used.
+from network/volume lifecycle ownership.
+
+ComposeLens 0.1.8 is the validated release candidate that promotes service labels through the
+source-aware document,
+effective merged-project, and generated-document boundaries. Mapping and list syntax, key-only
+empty values, multi-file provenance, deterministic output, duplicate rejection, and sensitive
+value redaction are covered without adding `label_file` I/O or runtime validation. QuadletLens
+0.1.7 is the coordinated target-side release candidate with repeatable native `Label=` entries and
+exact ordinary, empty, and quote-bearing generator evidence across Podman 5.4.0 through 6.0.2.
+BoxFerry consumption remains gated on both crates.io releases; sibling path dependencies are not
+used.

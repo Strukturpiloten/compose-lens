@@ -85,11 +85,13 @@ profile-disabled service.
 services. A selection created from a different project returns the same stable mismatch diagnostic
 used by the other post-merge operations.
 
-The native view covers project name, services, images, commands, merged environment, extra host
+The native view covers project name, services, images, commands, merged environment, service labels, extra host
 mappings, health checks, service dependencies, ports, volume mounts, service config and secret
 grants, service networks, profiles, and top-level network, volume, config, and secret definitions.
-Environment values are keyed after field-specific Compose merging, while each entry retains
-whether its effective spelling came from mapping, `KEY=VALUE`, or key-only list syntax. Extra-host
+Environment and service-label values are keyed after field-specific Compose merging, while each
+entry retains whether its effective spelling came from mapping, `KEY=VALUE`, or key-only list
+syntax. A key-only label means an empty value; a key-only environment entry retains its distinct
+host-resolution meaning. Extra-host
 entries retain sequence or mapping syntax, raw address spelling, lexical address classification,
 and the `host-gateway` implementation token. Values and collection items retain complete
 multi-file provenance. Dependencies and grants retain effective short or long syntax and nested

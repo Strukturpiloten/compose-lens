@@ -20,8 +20,74 @@ const PHASE_TWO_FORMS: &str = include_str!("../fixtures/typed-model/phase-two-fi
 const INVALID_PHASE_TWO_FORMS: &str = include_str!("../fixtures/typed-model/invalid-phase-two-forms/compose.yaml");
 const POST_01_FORMS: &str = include_str!("../fixtures/typed-model/post-01-issue-backlog/compose.yaml");
 const POST_01_INVALID: &str = include_str!("../fixtures/typed-model/post-01-invalid/compose.yaml");
+const SERVICE_LABEL_FORMS: &str = include_str!("../fixtures/typed-model/service-label-forms/compose.yaml");
+const INVALID_SERVICE_LABEL_FORMS: &str =
+    include_str!("../fixtures/typed-model/invalid-service-label-forms/compose.yaml");
 const TRAILING_EMPTY_VALUE: &str = include_str!("../fixtures/roundtrip/canonical-merged/compose.yaml");
 const COMMA_PLAIN_SCALAR: &str = include_str!("../fixtures/syntax/comma-plain-scalar/compose.yaml");
+
+#[test]
+fn retains_service_label_mapping_and_sequence_forms() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(29), SERVICE_LABEL_FORMS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+    let mapping = document.service("mapping").ok_or("mapping service expected")?;
+    let sequence = document.service("sequence").ok_or("sequence service expected")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    let Some(Labels::Map { entries, .. }) = mapping.labels() else {
+        return Err("mapping service labels expected".into());
+    };
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].key().value(), "com.example.description");
+    assert_eq!(
+        entries[0].value().value(),
+        &ComposeScalar::String("mapping form".to_owned())
+    );
+    assert_eq!(entries[1].value().value(), &ComposeScalar::String(String::new()));
+
+    let Some(Labels::List { values, .. }) = sequence.labels() else {
+        return Err("sequence service labels expected".into());
+    };
+    assert_eq!(
+        values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>(),
+        [
+            "com.example.description=sequence form",
+            "com.example.empty",
+            "com.example.equals=left=right",
+        ]
+    );
+    assert!(mapping.unknown_fields().is_empty());
+    assert!(sequence.unknown_fields().is_empty());
+    Ok(())
+}
+
+#[test]
+fn reports_invalid_service_label_forms_without_losing_services() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(28), INVALID_SERVICE_LABEL_FORMS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial typed document expected")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(!parsed.is_valid());
+    assert_eq!(document.services().len(), 3);
+    assert!(parsed.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == EXPECTED_FIELD_FORM
+            && diagnostic
+                .labels()
+                .iter()
+                .all(|label| label.span().source_id() == SourceId::new(28))
+    }));
+    assert!(parsed.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == compose_lens::model::EXPECTED_SCALAR
+            && diagnostic
+                .labels()
+                .iter()
+                .all(|label| label.span().source_id() == SourceId::new(28))
+    }));
+    Ok(())
+}
 
 #[test]
 fn types_a_complete_unquoted_short_volume_with_comma_options() -> Result<(), Box<dyn std::error::Error>> {

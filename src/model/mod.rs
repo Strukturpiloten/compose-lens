@@ -192,6 +192,7 @@ pub struct Service {
     image: Option<Located<ImageReference>>,
     command: Option<Command>,
     environment: Option<Environment>,
+    labels: Option<Labels>,
     extra_hosts: Option<ExtraHosts>,
     user: Option<UserSpec>,
     userns_mode: Option<UserNamespaceMode>,
@@ -221,6 +222,7 @@ impl Service {
             image: None,
             command: None,
             environment: None,
+            labels: None,
             extra_hosts: None,
             user: None,
             userns_mode: None,
@@ -271,6 +273,12 @@ impl Service {
     #[must_use]
     pub const fn environment(&self) -> Option<&Environment> {
         self.environment.as_ref()
+    }
+
+    /// Returns service metadata labels with list and mapping forms kept distinct.
+    #[must_use]
+    pub const fn labels(&self) -> Option<&Labels> {
+        self.labels.as_ref()
     }
 
     /// Returns additional host mappings with short and long forms retained.
@@ -758,6 +766,9 @@ impl Parser {
                 }
                 "environment" if !duplicate => {
                     service.environment = self.parse_environment(&service_field);
+                }
+                "labels" if !duplicate => {
+                    service.labels = self.parse_labels(&service_field);
                 }
                 "extra_hosts" if !duplicate => {
                     service.extra_hosts = self.parse_extra_hosts(&service_field);

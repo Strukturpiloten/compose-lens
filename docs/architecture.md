@@ -35,8 +35,8 @@ Typed nodes retain source references and unknown fields. Parsing into typed data
 
 Short and long syntax remain distinct field-specific variants. They are not normalized merely because they describe similar concepts: defaults, available options, and runtime behavior can differ. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) defines the representation-fidelity rule.
 
-The completed native boundary types images, build field identities, commands, environment, extra
-hosts, raw user and user-namespace values, ulimits, health checks, dependencies, deploy field
+The completed native boundary types images, build field identities, commands, environment, service
+labels, extra hosts, raw user and user-namespace values, ulimits, health checks, dependencies, deploy field
 identities, ports, volumes, service networks, profiles, config and secret grants, and the
 corresponding top-level network, volume, config, and secret definitions. Deferred interpolation
 expressions, empty values, extensions, and unknown fields remain distinguishable. Container paths
@@ -75,6 +75,11 @@ locations, and reports unmodeled fields without exposing parser nodes. Sensitive
 their contents from `Debug`. Canonical render-and-reparse is deliberately absent because generated
 spans cannot replace original multi-file evidence. [ADR 0016](decisions/0016-native-merged-project-view.md)
 defines the boundary.
+
+Service labels are normalized by semantic key only in this effective view. Each label retains its
+mapping, `KEY=VALUE`, or key-only list syntax and all contributing spans. A key-only list label has
+an explicit empty-string semantic value; this differs from a key-only environment variable, which
+requests host-environment resolution.
 
 Post-merge processing remains a set of independent views. Profile selection records active and
 inactive services without deleting either. Path resolution uses retained origins plus explicit
@@ -141,6 +146,10 @@ per field, and reparses every successful result through the syntax and typed-doc
 Sensitive generated values redact the complete result from `Debug`. It does not construct a fake
 merged project or run compatibility validation. ADR 0017 records the
 [generated-document boundary](decisions/0017-parse-back-validated-compose-generation.md).
+
+Generated service labels use ordered mapping syntax with explicit quoted string values. This keeps
+empty values and values containing `=` unambiguous, rejects duplicate names, and propagates
+caller-marked value sensitivity to the complete generated document.
 
 ## Dependency direction
 

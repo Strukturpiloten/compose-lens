@@ -5,8 +5,8 @@ mod preserved;
 
 pub use generated::{
     ComposeDocumentBuilder, GeneratedCommand, GeneratedComposeDocument, GeneratedEnvironment, GeneratedExtraHost,
-    GeneratedMount, GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource, GeneratedSelinux,
-    GeneratedService, GeneratedString, GenerationError,
+    GeneratedLabel, GeneratedMount, GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource,
+    GeneratedSelinux, GeneratedService, GeneratedString, GenerationError,
 };
 
 pub use preserved::{

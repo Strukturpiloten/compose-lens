@@ -19,6 +19,7 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - image references, including `name:tag@digest` spellings;
 - exec, shell, and explicitly empty commands;
 - ordered literal and host-resolved environment entries;
+- ordered service metadata labels with explicit, potentially empty string values;
 - combined `user[:group]`, user namespace, supplementary groups, working directory, and explicit
   read-only-root state;
 - ordered short-form host mappings;
@@ -53,6 +54,8 @@ relabel request or silently switch forms.
 
 Environment and `extra_hosts` use quoted sequence short forms. That preserves insertion order and
 allows repeated effective environment names without constructing a duplicate-key YAML mapping.
+Labels use quoted mapping syntax because label names must be unique and explicit mapping values
+represent empty strings and embedded `=` characters without short-form ambiguity.
 
 ## Sensitivity and explicit output access
 
@@ -60,6 +63,10 @@ allows repeated effective environment names without constructing a duplicate-key
 propagates through the service, builder, and final document. `GeneratedComposeDocument::text` is
 the explicit access boundary for deployable bytes. The parse-back model is also hidden from the
 final document's debug representation when any generated value is sensitive.
+
+Generated label values use this same sensitivity boundary. Label names remain visible identifiers;
+the builder rejects empty/NUL-bearing names and duplicate names but does not enforce Docker's
+non-binding reverse-DNS naming recommendations.
 
 ## Validation boundary
 

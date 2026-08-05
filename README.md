@@ -14,6 +14,8 @@ It is designed for tools that need more than strict deserialization: source-awar
 - Model behavior found in real Docker Compose and Podman Compose projects.
 - Render deterministic Compose documents.
 - Construct new deterministic Compose documents through Compose-owned, parse-back-validated values.
+- Preserve, merge, inspect, and generate service metadata labels without exposing sensitive values
+  through debug output.
 - Allow callers to choose strict, implementation-specific, or tolerant validation profiles.
 
 ## Non-goals
@@ -61,7 +63,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
-- [0.1.7 release notes](docs/releases/0.1.7.md)
+- [0.1.8 release notes](docs/releases/0.1.8.md)
 - [Release process](docs/releasing.md)
 - [Changelog](CHANGELOG.md)
 - [Architecture decisions](docs/decisions/README.md)

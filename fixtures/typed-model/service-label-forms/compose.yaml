@@ -1,0 +1,12 @@
+services:
+  mapping:
+    image: example.invalid/mapping:1
+    labels:
+      com.example.description: "mapping form"
+      com.example.empty: ""
+  sequence:
+    image: example.invalid/sequence:1
+    labels:
+      - "com.example.description=sequence form"
+      - "com.example.empty"
+      - "com.example.equals=left=right"

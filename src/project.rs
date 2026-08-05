@@ -293,6 +293,57 @@ pub struct ProjectEnvironment {
     entries: Vec<ProjectEnvironmentEntry>,
 }
 
+/// One effective service metadata label after field-specific multi-file merging.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLabelEntry {
+    name: ProjectKey,
+    value: ProjectValue<ComposeScalar>,
+    syntax: EntrySyntax,
+}
+
+impl ProjectLabelEntry {
+    /// Returns the label name and its contributing key spans.
+    #[must_use]
+    pub const fn name(&self) -> &ProjectKey {
+        &self.name
+    }
+
+    /// Returns the effective label scalar.
+    ///
+    /// A key-only list entry has an explicit empty-string value while retaining
+    /// [`EntrySyntax::ListKeyOnly`] as its authored form.
+    #[must_use]
+    pub const fn value(&self) -> &ProjectValue<ComposeScalar> {
+        &self.value
+    }
+
+    /// Returns the most recent mapping or list syntax contributing this entry.
+    #[must_use]
+    pub const fn syntax(&self) -> EntrySyntax {
+        self.syntax
+    }
+}
+
+/// A normalized-by-key service-label view retaining each entry's effective syntax.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLabels {
+    entries: Vec<ProjectLabelEntry>,
+}
+
+impl ProjectLabels {
+    /// Returns labels in effective merge order.
+    #[must_use]
+    pub fn entries(&self) -> &[ProjectLabelEntry] {
+        &self.entries
+    }
+
+    /// Finds an effective label by name.
+    #[must_use]
+    pub fn get(&self, name: &str) -> Option<&ProjectLabelEntry> {
+        self.entries.iter().find(|entry| entry.name.value == name)
+    }
+}
+
 /// One effective hostname-to-address mapping after field-specific project merging.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectExtraHost {
@@ -490,6 +541,7 @@ pub struct ProjectService {
     image: Option<ProjectValue<ImageReference>>,
     command: Option<ProjectValue<Command>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
+    labels: Option<ProjectValue<ProjectLabels>>,
     extra_hosts: Option<ProjectValue<ProjectExtraHosts>>,
     user: Option<ProjectValue<UserSpec>>,
     userns_mode: Option<ProjectValue<UserNamespaceMode>>,
@@ -536,6 +588,12 @@ impl ProjectService {
     #[must_use]
     pub const fn environment(&self) -> Option<&ProjectValue<ProjectEnvironment>> {
         self.environment.as_ref()
+    }
+
+    /// Returns effective service labels normalized by key with entry syntax retained.
+    #[must_use]
+    pub const fn labels(&self) -> Option<&ProjectValue<ProjectLabels>> {
+        self.labels.as_ref()
     }
 
     /// Returns effective service host mappings with per-entry provenance and syntax.
@@ -872,6 +930,7 @@ impl<'a> Builder<'a> {
             image: None,
             command: None,
             environment: None,
+            labels: None,
             extra_hosts: None,
             user: None,
             userns_mode: None,
@@ -903,6 +962,7 @@ impl<'a> Builder<'a> {
                 }
                 "command" => service.command = self.command(field.value()),
                 "environment" => service.environment = self.environment(field.value()),
+                "labels" => service.labels = self.service_labels(field.value()),
                 "extra_hosts" => service.extra_hosts = self.extra_hosts(field.value()),
                 "user" => service.user = self.user(field.value()),
                 "userns_mode" => service.userns_mode = self.userns_mode(field.value()),
@@ -1018,6 +1078,45 @@ impl<'a> Builder<'a> {
             }
         }
         Some(ProjectValue::new(ProjectEnvironment { entries }, value))
+    }
+
+    fn service_labels(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectLabels>> {
+        let mut entries = Vec::new();
+        match value.kind() {
+            MergedValueKind::Mapping(values) => {
+                for entry in values {
+                    let scalar = if entry.syntax() == EntrySyntax::ListKeyOnly {
+                        ComposeScalar::String(String::new())
+                    } else {
+                        self.compose_scalar(entry.value(), "label value must be a scalar or null")?
+                    };
+                    entries.push(ProjectLabelEntry {
+                        name: ProjectKey::from_entry(entry),
+                        value: ProjectValue::new(scalar, entry.value()),
+                        syntax: entry.syntax(),
+                    });
+                }
+            }
+            MergedValueKind::Sequence(values) => {
+                for item in values {
+                    let raw = self.located_string(item, "label list item must be a scalar")?;
+                    let (name, value, syntax) = raw.value().split_once('=').map_or_else(
+                        || (raw.value().clone(), String::new(), EntrySyntax::ListKeyOnly),
+                        |(name, value)| (name.to_owned(), value.to_owned(), EntrySyntax::ListKeyValue),
+                    );
+                    entries.push(ProjectLabelEntry {
+                        name: ProjectKey::from_value(name, item),
+                        value: ProjectValue::new(ComposeScalar::String(value), item),
+                        syntax,
+                    });
+                }
+            }
+            _ => {
+                self.expected(value, "labels must be a mapping or sequence");
+                return None;
+            }
+        }
+        Some(ProjectValue::new(ProjectLabels { entries }, value))
     }
 
     fn healthcheck(&mut self, value: &MergedValue, parent_path: &[String]) -> Option<ProjectValue<ProjectHealthcheck>> {

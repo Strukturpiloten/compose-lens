@@ -1,11 +1,11 @@
 //! Deterministic generated-document construction and parse-back validation.
 
 use compose_lens::{
-    model::{Command, Environment, ExtraHosts, Port, ServiceNetworks, VolumeMount},
+    model::{Command, Environment, ExtraHosts, Labels, Port, ServiceNetworks, VolumeMount},
     render::{
-        ComposeDocumentBuilder, GeneratedCommand, GeneratedEnvironment, GeneratedExtraHost, GeneratedMount,
-        GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource, GeneratedSelinux,
-        GeneratedService, GeneratedString, GenerationError,
+        ComposeDocumentBuilder, GeneratedCommand, GeneratedEnvironment, GeneratedExtraHost, GeneratedLabel,
+        GeneratedMount, GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource,
+        GeneratedSelinux, GeneratedService, GeneratedString, GenerationError,
     },
     source::SourceId,
 };
@@ -32,6 +32,7 @@ fn generates_the_runtime_migration_subset_deterministically() -> Result<(), Box<
     );
     assert!(matches!(service.command(), Some(Command::List { values, .. }) if values.len() == 2));
     assert!(matches!(service.environment(), Some(Environment::List { entries, .. }) if entries.len() == 3));
+    assert!(matches!(service.labels(), Some(Labels::Map { entries, .. }) if entries.len() == 3));
     assert!(matches!(service.extra_hosts(), Some(ExtraHosts::Short { entries, .. }) if entries.len() == 2));
     assert_eq!(service.ports().len(), 1);
     assert_eq!(service.volumes().len(), 4);
@@ -55,6 +56,7 @@ fn generates_the_runtime_migration_subset_deterministically() -> Result<(), Box<
     let debug = format!("{generated:?}");
     assert!(debug.contains("<redacted>"));
     assert!(!debug.contains("production-secret"));
+    assert!(!debug.contains("private-label-value"));
     assert!(!debug.contains("1001:1002"));
     Ok(())
 }
@@ -146,6 +148,10 @@ fn rejects_ambiguous_or_duplicate_generation_requests() -> Result<(), Box<dyn st
         GeneratedEnvironment::literal("INVALID=NAME", plain("value")?),
         Err(GenerationError::InvalidEnvironmentName)
     );
+    assert_eq!(
+        GeneratedLabel::new("", plain("value")?),
+        Err(GenerationError::EmptyValue("label name"))
+    );
     let mut invalid_service = GeneratedService::new("invalid")?;
     assert_eq!(
         invalid_service.set_image(plain("")?),
@@ -154,6 +160,14 @@ fn rejects_ambiguous_or_duplicate_generation_requests() -> Result<(), Box<dyn st
     assert_eq!(
         invalid_service.add_supplementary_group(plain("")?),
         Err(GenerationError::EmptyValue("supplementary group"))
+    );
+    invalid_service.add_label(GeneratedLabel::new("com.example.duplicate", plain("first")?)?)?;
+    assert_eq!(
+        invalid_service.add_label(GeneratedLabel::new("com.example.duplicate", plain("second")?)?),
+        Err(GenerationError::DuplicateName {
+            kind: "service label",
+            name: "com.example.duplicate".to_owned(),
+        })
     );
     assert_eq!(
         GeneratedExtraHost::new("invalid=name", "127.0.0.1"),
@@ -210,6 +224,12 @@ fn complete_project() -> Result<ComposeDocumentBuilder, Box<dyn std::error::Erro
     )?);
     service.add_environment(GeneratedEnvironment::host("FROM_HOST")?);
     service.add_environment(GeneratedEnvironment::literal("MODE", plain("last-wins")?)?);
+    service.add_label(GeneratedLabel::new("com.example.purpose", plain("runtime=migration")?)?)?;
+    service.add_label(GeneratedLabel::new("com.example.empty", plain("")?)?)?;
+    service.add_label(GeneratedLabel::new(
+        "com.example.secret",
+        GeneratedString::sensitive("private-label-value")?,
+    )?)?;
     service.set_user(GeneratedString::sensitive("1001:1002")?)?;
     service.set_userns_mode(plain("keep-id")?)?;
     service.add_supplementary_group(plain("audio")?)?;
@@ -267,6 +287,10 @@ fn expected_document() -> &'static str {
         "      - \"MODE=production-secret\"\n",
         "      - \"FROM_HOST\"\n",
         "      - \"MODE=last-wins\"\n",
+        "    labels:\n",
+        "      \"com.example.purpose\": \"runtime=migration\"\n",
+        "      \"com.example.empty\": \"\"\n",
+        "      \"com.example.secret\": \"private-label-value\"\n",
         "    user: \"1001:1002\"\n",
         "    userns_mode: \"keep-id\"\n",
         "    group_add:\n",

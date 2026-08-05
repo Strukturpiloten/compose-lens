@@ -11,6 +11,10 @@ services:
     environment:
       BASE_ONLY: base
       SHARED: base
+    labels:
+      - com.example.base=base
+      - com.example.shared=base
+      - com.example.empty
     extra_hosts:
       - host.docker.internal=host-gateway
       - ipv6=[::1]
