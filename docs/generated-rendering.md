@@ -16,6 +16,7 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 
 `GeneratedService` supports the first runtime-migration fields:
 
+- an optional explicit runtime `container_name` validated against Compose's portable grammar;
 - image references, including `name:tag@digest` spellings;
 - exec, shell, and explicitly empty commands;
 - ordered literal and host-resolved environment entries;

@@ -42,6 +42,10 @@ Execution identity and context are native at both document and merged-project la
 field provenance, and, for supplementary groups, per-item provenance. No account, group, path, or
 namespace lookup is performed.
 
+An explicit `container_name` is a source-aware scalar at both layers. The effective project view
+retains ordinary Compose scalar replacement provenance across files. The parser does not confuse
+the custom runtime name with the service key or infer one when the field is absent.
+
 Service config and secret grants are native at both layers. The merged-project view retains short
 versus long syntax, collection/item provenance, and separate provenance for long-form `source`,
 `target`, `uid`, `gid`, and `mode`. This preserves Compose's unique-by-target merge behavior,
@@ -57,7 +61,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `image`, `build`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `container_name`, `image`, `build`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |

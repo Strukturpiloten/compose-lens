@@ -16,6 +16,7 @@ It is designed for tools that need more than strict deserialization: source-awar
 - Construct new deterministic Compose documents through Compose-owned, parse-back-validated values.
 - Preserve, merge, inspect, and generate service metadata labels without exposing sensitive values
   through debug output.
+- Preserve, merge, inspect, and generate explicit runtime container names with field provenance.
 - Allow callers to choose strict, implementation-specific, or tolerant validation profiles.
 
 ## Non-goals
@@ -63,7 +64,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
-- [0.1.9 release notes](docs/releases/0.1.9.md)
+- [0.1.10 release notes](docs/releases/0.1.10.md)
 - [Release process](docs/releasing.md)
 - [Changelog](CHANGELOG.md)
 - [Architecture decisions](docs/decisions/README.md)

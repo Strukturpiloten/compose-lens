@@ -85,7 +85,7 @@ profile-disabled service.
 services. A selection created from a different project returns the same stable mismatch diagnostic
 used by the other post-merge operations.
 
-The native view covers project name, services, images, commands, merged environment, service labels, extra host
+The native view covers project name, services, explicit container names, images, commands, merged environment, service labels, extra host
 mappings, health checks, service dependencies, ports, volume mounts, service config and secret
 grants, service networks, profiles, and top-level network, volume, config, and secret definitions.
 Environment and service-label values are keyed after field-specific Compose merging, while each

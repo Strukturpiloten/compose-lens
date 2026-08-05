@@ -27,6 +27,47 @@ const TRAILING_EMPTY_VALUE: &str = include_str!("../fixtures/roundtrip/canonical
 const COMMA_PLAIN_SCALAR: &str = include_str!("../fixtures/syntax/comma-plain-scalar/compose.yaml");
 
 #[test]
+fn retains_an_explicit_container_name_as_a_source_aware_scalar() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  web:\n    container_name: application-web\n    image: example.invalid/web:1\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(31), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let service = parsed
+        .document()
+        .and_then(|document| document.service("web"))
+        .ok_or("web service expected")?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(
+        service.container_name().map(|name| name.value().as_str()),
+        Some("application-web")
+    );
+    assert!(service.unknown_fields().is_empty());
+    Ok(())
+}
+
+#[test]
+fn reports_a_non_scalar_container_name_without_losing_the_service() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  web:\n    container_name:\n      invalid: mapping\n    image: example.invalid/web:1\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(32), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let service = parsed
+        .document()
+        .and_then(|document| document.service("web"))
+        .ok_or("partial web service expected")?;
+
+    assert!(!parsed.is_valid());
+    assert!(service.container_name().is_none());
+    assert!(parsed.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == compose_lens::model::EXPECTED_SCALAR
+            && diagnostic
+                .labels()
+                .iter()
+                .all(|label| label.span().source_id() == SourceId::new(32))
+    }));
+    Ok(())
+}
+
+#[test]
 fn retains_service_label_mapping_and_sequence_forms() -> Result<(), Box<dyn std::error::Error>> {
     let syntax = SyntaxDocument::parse(SourceId::new(29), SERVICE_LABEL_FORMS)?;
     let parsed = ComposeDocument::parse(syntax.document());

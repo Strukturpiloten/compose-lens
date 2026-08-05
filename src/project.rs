@@ -538,6 +538,7 @@ impl ProjectHealthcheck {
 pub struct ProjectService {
     name: ProjectKey,
     provenance: MergeProvenance,
+    container_name: Option<ProjectValue<String>>,
     image: Option<ProjectValue<ImageReference>>,
     command: Option<ProjectValue<Command>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
@@ -570,6 +571,12 @@ impl ProjectService {
     #[must_use]
     pub const fn provenance(&self) -> &MergeProvenance {
         &self.provenance
+    }
+
+    /// Returns the effective explicit runtime container name.
+    #[must_use]
+    pub const fn container_name(&self) -> Option<&ProjectValue<String>> {
+        self.container_name.as_ref()
     }
 
     /// Returns the effective image reference.
@@ -927,6 +934,7 @@ impl<'a> Builder<'a> {
         let mut service = ProjectService {
             name: ProjectKey::from_entry(entry),
             provenance: value.provenance().clone(),
+            container_name: None,
             image: None,
             command: None,
             environment: None,
@@ -951,6 +959,9 @@ impl<'a> Builder<'a> {
 
         for field in fields {
             match field.key() {
+                "container_name" => {
+                    service.container_name = self.project_string(field.value(), "service container name");
+                }
                 "image" => {
                     service.image = self
                         .project_string(field.value(), "service image")

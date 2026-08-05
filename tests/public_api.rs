@@ -141,6 +141,7 @@ fn assert_labels(project_view: &compose_lens::project::ProjectViewResult) {
 #[test]
 fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(), Box<dyn std::error::Error>> {
     let mut service = GeneratedService::new("app")?;
+    service.set_container_name(GeneratedString::plain("example-app")?)?;
     service.set_image(GeneratedString::plain("example.invalid/app:1")?)?;
     service.add_label(GeneratedLabel::new(
         "com.example.owner",
@@ -159,6 +160,14 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             .map(|image| image.value().raw()),
         Some("example.invalid/app:1")
     );
+    assert_eq!(
+        generated
+            .document()
+            .service("app")
+            .and_then(compose_lens::model::Service::container_name)
+            .map(|name| name.value().as_str()),
+        Some("example-app")
+    );
     assert!(
         generated
             .document()
@@ -172,6 +181,7 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             "name: \"example\"\n",
             "services:\n",
             "  \"app\":\n",
+            "    container_name: \"example-app\"\n",
             "    image: \"example.invalid/app:1\"\n",
             "    labels:\n",
             "      \"com.example.owner\": \"strukturpiloten\"\n",

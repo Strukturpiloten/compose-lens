@@ -36,7 +36,7 @@ Typed nodes retain source references and unknown fields. Parsing into typed data
 Short and long syntax remain distinct field-specific variants. They are not normalized merely because they describe similar concepts: defaults, available options, and runtime behavior can differ. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) defines the representation-fidelity rule.
 
 The completed native boundary types images, build field identities, commands, environment, service
-labels, extra hosts, raw user and user-namespace values, ulimits, health checks, dependencies, deploy field
+explicit container names, labels, extra hosts, raw user and user-namespace values, ulimits, health checks, dependencies, deploy field
 identities, ports, volumes, service networks, profiles, config and secret grants, and the
 corresponding top-level network, volume, config, and secret definitions. Deferred interpolation
 expressions, empty values, extensions, and unknown fields remain distinguishable. Container paths

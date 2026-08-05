@@ -185,12 +185,9 @@ subset. Field-specific syntax selection retains short SELinux bind behavior, emi
 the platform-protocol-capable short port form, and keeps optional exact platform names distinct
 from network/volume lifecycle ownership.
 
-ComposeLens 0.1.8 is the validated release candidate that promotes service labels through the
-source-aware document,
-effective merged-project, and generated-document boundaries. Mapping and list syntax, key-only
-empty values, multi-file provenance, deterministic output, duplicate rejection, and sensitive
-value redaction are covered without adding `label_file` I/O or runtime validation. QuadletLens
-0.1.7 is the coordinated target-side release candidate with repeatable native `Label=` entries and
-exact ordinary, empty, and quote-bearing generator evidence across Podman 5.4.0 through 6.0.2.
-BoxFerry consumption remains gated on both crates.io releases; sibling path dependencies are not
-used.
+ComposeLens 0.1.8 and 0.1.9 are published with service-label support and the real-world YAML
+backend corrections. ComposeLens 0.1.10 is the additive source-side candidate for explicit
+`container_name` values across the document, merged-project, and generated-document boundaries.
+The coordinated QuadletLens 0.1.9 candidate types and generator-verifies `ContainerName=`. BoxFerry
+will consume both published releases before promoting the field into its neutral model; sibling
+path dependencies are not used.
