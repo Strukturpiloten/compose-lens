@@ -20,7 +20,10 @@ pub use dependency::{
     DependencyCondition, DependsOn, Healthcheck, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
     HealthcheckTestKind, ServiceDependency,
 };
-pub use environment::{Environment, EnvironmentListEntry, EnvironmentMapEntry};
+pub use environment::{
+    Environment, EnvironmentFile, EnvironmentFileFormat, EnvironmentFileFormatKind, EnvironmentListEntry,
+    EnvironmentMapEntry, LongEnvironmentFile,
+};
 pub use host::{ExtraHostSeparator, ExtraHosts, HostAddress, HostAddressKind, LongExtraHost, ShortExtraHost};
 pub use identity::{IdentityComponent, UserNamespaceMode, UserNamespaceModeKind, UserSpec};
 pub use image::{ImageDigest, ImageReference};
@@ -113,6 +116,18 @@ pub const HEALTHCHECK_INVALID_RETRIES: DiagnosticCode = DiagnosticCode::new("com
 /// A service-level restart policy is not one of the Compose-defined forms or an expression.
 pub const RESTART_INVALID_POLICY: DiagnosticCode = DiagnosticCode::new("compose.restart.invalid-policy");
 
+/// A service environment-file item is neither scalar short syntax nor mapping long syntax.
+pub const ENVIRONMENT_FILE_EXPECTED_FORM: DiagnosticCode =
+    DiagnosticCode::new("compose.environment-file.expected-short-or-long");
+
+/// A long-syntax service environment-file entry is missing `path`.
+pub const ENVIRONMENT_FILE_MISSING_PATH: DiagnosticCode =
+    DiagnosticCode::new("compose.environment-file.long.missing-path");
+
+/// A long-syntax service environment-file format is not defined by Compose.
+pub const ENVIRONMENT_FILE_INVALID_FORMAT: DiagnosticCode =
+    DiagnosticCode::new("compose.environment-file.invalid-format");
+
 /// A long dependency uses an unrecognized condition.
 pub const DEPENDENCY_INVALID_CONDITION: DiagnosticCode = DiagnosticCode::new("compose.dependencies.invalid-condition");
 
@@ -198,6 +213,7 @@ pub struct Service {
     image: Option<Located<ImageReference>>,
     command: Option<Command>,
     environment: Option<Environment>,
+    environment_files: Vec<EnvironmentFile>,
     labels: Option<Labels>,
     extra_hosts: Option<ExtraHosts>,
     user: Option<UserSpec>,
@@ -230,6 +246,7 @@ impl Service {
             image: None,
             command: None,
             environment: None,
+            environment_files: Vec::new(),
             labels: None,
             extra_hosts: None,
             user: None,
@@ -288,6 +305,12 @@ impl Service {
     #[must_use]
     pub const fn environment(&self) -> Option<&Environment> {
         self.environment.as_ref()
+    }
+
+    /// Returns service environment files in authored order with syntax retained.
+    #[must_use]
+    pub fn environment_files(&self) -> &[EnvironmentFile] {
+        &self.environment_files
     }
 
     /// Returns service metadata labels with list and mapping forms kept distinct.
@@ -797,6 +820,9 @@ impl Parser {
                 "environment" if !duplicate => {
                     service.environment = self.parse_environment(&service_field);
                 }
+                "env_file" if !duplicate => {
+                    service.environment_files = self.parse_environment_files(&service_field);
+                }
                 "labels" if !duplicate => {
                     service.labels = self.parse_labels(&service_field);
                 }
@@ -951,6 +977,99 @@ impl Parser {
             }
         }
         entries
+    }
+
+    fn parse_environment_files(&mut self, field: &ParsedField) -> Vec<EnvironmentFile> {
+        match field.value.as_ref() {
+            Some(YamlNode::Scalar(_)) => self
+                .parse_string(field, "service environment-file path")
+                .map(EnvironmentFile::Short)
+                .into_iter()
+                .collect(),
+            Some(YamlNode::Sequence(sequence)) => sequence
+                .values()
+                .filter_map(|value| match value {
+                    YamlNode::Scalar(scalar) => {
+                        let span = span_from_position(self.source_id, scalar.byte_range());
+                        Some(EnvironmentFile::Short(Located::new(
+                            scalar_string_from_source(&self.source, &scalar),
+                            span,
+                        )))
+                    }
+                    YamlNode::Mapping(mapping) => Some(EnvironmentFile::Long(Box::new(
+                        self.parse_long_environment_file(&mapping),
+                    ))),
+                    _ => {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                ENVIRONMENT_FILE_EXPECTED_FORM,
+                                Severity::Error,
+                                "env_file item must use scalar short syntax or mapping long syntax",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                node_span(self.source_id, &value).unwrap_or(field.span),
+                                "invalid environment-file item",
+                            )),
+                        );
+                        None
+                    }
+                })
+                .collect(),
+            _ => {
+                self.expected(
+                    EXPECTED_FIELD_FORM,
+                    field,
+                    "env_file must be a scalar path or a sequence of short/long entries",
+                );
+                Vec::new()
+            }
+        }
+    }
+
+    fn parse_long_environment_file(&mut self, mapping: &Mapping) -> LongEnvironmentFile {
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut environment_file = LongEnvironmentFile::new(span);
+        let mut seen = BTreeMap::new();
+        for field in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &field);
+            match field.name.value.as_str() {
+                "path" if !duplicate => self
+                    .parse_string(&field, "environment-file path")
+                    .into_iter()
+                    .for_each(|value| environment_file.set_path(value)),
+                "required" if !duplicate => self
+                    .parse_boolean(&field, "environment-file required option")
+                    .into_iter()
+                    .for_each(|value| environment_file.set_required(value)),
+                "format" if !duplicate => {
+                    if let Some(raw) = self.parse_string(&field, "environment-file format") {
+                        let format = EnvironmentFileFormat::parse(raw);
+                        if !format.is_valid() {
+                            self.diagnostics.push(
+                                Diagnostic::new(
+                                    ENVIRONMENT_FILE_INVALID_FORMAT,
+                                    Severity::Error,
+                                    "environment-file format must be `raw` or interpolation",
+                                )
+                                .with_label(DiagnosticLabel::primary(format.raw().span(), "invalid format")),
+                            );
+                        }
+                        environment_file.set_format(format);
+                    }
+                }
+                name if name.starts_with("x-") => environment_file.push_extension(field.reference()),
+                _ if duplicate => {}
+                _ => environment_file.push_unknown(field.reference()),
+            }
+        }
+        if environment_file.path().is_none() {
+            self.missing(
+                ENVIRONMENT_FILE_MISSING_PATH,
+                span,
+                "long environment-file entry is missing `path`",
+            );
+        }
+        environment_file
     }
 
     fn parse_extra_hosts(&mut self, field: &ParsedField) -> Option<ExtraHosts> {

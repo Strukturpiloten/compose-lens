@@ -35,8 +35,8 @@ Typed nodes retain source references and unknown fields. Parsing into typed data
 
 Short and long syntax remain distinct field-specific variants. They are not normalized merely because they describe similar concepts: defaults, available options, and runtime behavior can differ. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) defines the representation-fidelity rule.
 
-The completed native boundary types images, build field identities, commands, environment, service
-explicit container names, labels, extra hosts, raw user and user-namespace values, ulimits, health checks, dependencies, deploy field
+The completed native boundary types images, build field identities, commands, environment,
+environment-file declarations, service explicit container names, labels, extra hosts, raw user and user-namespace values, ulimits, health checks, dependencies, deploy field
 identities, ports, volumes, service networks, profiles, config and secret grants, and the
 corresponding top-level network, volume, config, and secret definitions. Deferred interpolation
 expressions, empty values, extensions, and unknown fields remain distinguishable. Container paths
@@ -80,6 +80,11 @@ Service labels are normalized by semantic key only in this effective view. Each 
 mapping, `KEY=VALUE`, or key-only list syntax and all contributing spans. A key-only list label has
 an explicit empty-string semantic value; this differs from a key-only environment variable, which
 requests host-environment resolution.
+
+Service environment-file declarations remain ordered and do not trigger I/O. The document model
+retains scalar/list and long syntax; the project view preserves append order, item provenance, and
+the provenance of long `path`, `required`, and `format` values. Reading or resolving those files is
+an application concern, not a parsing or merge side effect.
 
 Post-merge processing remains a set of independent views. Profile selection records active and
 inactive services without deleting either. Path resolution uses retained origins plus explicit

@@ -53,6 +53,14 @@ decimal retry spelling is not normalized, so an authored `on-failure:003` remain
 This field is separate from `depends_on.<service>.restart`, which describes an explicit
 Compose-controlled dependency update, and from `deploy.restart_policy`.
 
+Service `env_file` is native at both layers without performing file I/O. A lone scalar and each
+ordered sequence item retain short syntax; mapping items retain long syntax with source-aware
+`path`, `required`, and `format`. `required` distinguishes a literal boolean from deferred
+interpolation. `format` retains its complete scalar while classifying `raw`, a deferred
+expression, or an invalid/provider-specific value. The effective project view preserves ordinary
+sequence append order plus collection, item, and nested-field provenance. Relative-path
+resolution, file existence, and parsing file contents remain caller-owned operations.
+
 Service config and secret grants are native at both layers. The merged-project view retains short
 versus long syntax, collection/item provenance, and separate provenance for long-form `source`,
 `target`, `uid`, `gid`, and `mode`. This preserves Compose's unique-by-target merge behavior,
@@ -68,7 +76,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `container_name`, `image`, `build`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `container_name`, `image`, `build`, `command`, `environment`, `env_file`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -83,6 +91,8 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 
 - command: explicit null, scalar, or list, including empty scalar and empty list;
 - environment: list or mapping, including `NAME`, `NAME=`, empty strings, and null values;
+- environment files: a scalar path, ordered path list, or ordered long entries with `path`,
+  `required`, and `format` retained independently;
 - ports: scalar short syntax or mapping long syntax;
 - service volumes: scalar short syntax or mapping long syntax;
 - service networks: name sequence or options mapping;

@@ -189,8 +189,9 @@ ComposeLens 0.1.8 through 0.1.10 and QuadletLens 0.1.9 are published. BoxFerry c
 crates.io boundaries and now carries explicit runtime container names end to end; sibling path
 dependencies are not used.
 
-ComposeLens 0.1.11 is the additive source-side candidate for service-level `restart` values across
-the document, merged-project, and generated-document boundaries. It distinguishes runtime restart
-policy from dependency-update `restart` and deploy policy, retains optional maximum-retry spelling,
-and recovers invalid values with diagnostics. After publication, BoxFerry can map this policy into
-its existing neutral restart model and Quadlet/systemd output without a QuadletLens release.
+ComposeLens 0.1.11 is published, and BoxFerry consumes its service-level `restart` boundary without
+a sibling path dependency. ComposeLens 0.1.12 is the next additive source-side candidate: ordered
+service `env_file` scalar/list and long syntax now reaches the document and merged-project views
+with option-level provenance and no implicit file I/O. After publication, BoxFerry can map these
+declarations to Quadlet `EnvironmentFile=` while reporting optional-file and raw-format semantic
+differences explicitly.

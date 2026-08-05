@@ -6,6 +6,15 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-08-05
+
+### Added
+
+- Source-aware service `env_file` scalar, ordered list, and long syntax in the authored document
+  model and effective multi-file project view.
+- Raw-preserving `path`, `required`, and `format` options, complete merge provenance, sensitive
+  interpolation redaction, and recoverable malformed-entry diagnostics without file I/O.
+
 ## [0.1.11] - 2026-08-05
 
 ### Added

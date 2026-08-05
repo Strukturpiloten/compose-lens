@@ -4,11 +4,11 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
-    BooleanValue, ComposeDocument, DependencyCondition, HealthcheckDuration, HostAddressKind, IdentityComponent,
-    RestartPolicyKind, UserNamespaceModeKind,
+    BooleanValue, ComposeDocument, DependencyCondition, EnvironmentFileFormatKind, HealthcheckDuration,
+    HostAddressKind, IdentityComponent, RestartPolicyKind, UserNamespaceModeKind,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
-use compose_lens::project::{ProjectGrant, build_project_view};
+use compose_lens::project::{ProjectEnvironmentFile, ProjectGrant, build_project_view};
 use compose_lens::render::{
     ComposeDocumentBuilder, GeneratedLabel, GeneratedRestartPolicy, GeneratedService, GeneratedString,
     ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
@@ -35,6 +35,7 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
         "      com.example.owner: strukturpiloten\n",
         "    extra_hosts:\n",
         "      - host.docker.internal=host-gateway\n",
+        "    env_file: [{ path: ./app.env, required: false, format: raw }]\n",
         "    healthcheck:\n",
         "      test: [CMD, /usr/bin/true]\n",
         "      interval: 30s\n",
@@ -106,6 +107,7 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
         Some("example.invalid/app:1.2.3@sha256:abcdef")
     );
     assert_host_and_health(&project_view)?;
+    assert_environment_file(&project_view)?;
     assert_dependency(&project_view)?;
     assert_execution_identity(&project_view)?;
     assert_resource_grants(&project_view)?;
@@ -120,6 +122,39 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     );
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
     assert!(rendered.output().contains("example.invalid/app:1.2.3@sha256:abcdef"));
+    Ok(())
+}
+
+fn assert_environment_file(project_view: &compose_lens::project::ProjectViewResult) -> Result<(), &'static str> {
+    let environment_file = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::environment_files)
+        .and_then(|files| files.value().first())
+        .ok_or("native project environment file expected")?;
+    let ProjectEnvironmentFile::Long(environment_file) = environment_file.value() else {
+        return Err("long environment-file syntax expected");
+    };
+    assert_eq!(
+        environment_file
+            .path()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("./app.env")
+    );
+    assert_eq!(
+        environment_file
+            .required()
+            .map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        environment_file
+            .format()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(compose_lens::model::EnvironmentFileFormat::kind),
+        Some(EnvironmentFileFormatKind::Raw)
+    );
     Ok(())
 }
 

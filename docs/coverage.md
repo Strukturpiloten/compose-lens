@@ -21,9 +21,9 @@ provenance.
 
 | Coverage | Service fields |
 | --- | --- |
-| Document model and project view | `container_name`, `image`, `command`, `environment`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Document model and project view | `container_name`, `image`, `command`, `environment`, `env_file`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Document model only | `build`, `ulimits`, `deploy` |
-| Preserved, not typed | `annotations`, `attach`, `blkio_config`, CPU controls, `cap_add`, `cap_drop`, `cgroup`, `cgroup_parent`, `credential_spec`, `develop`, `device_cgroup_rules`, `devices`, `dns`, `dns_opt`, `dns_search`, `domainname`, service `driver_opts`, `entrypoint`, `env_file`, `expose`, `extends`, `external_links`, `gpus`, `hostname`, `init`, `ipc`, `isolation`, `label_file`, `links`, `logging`, `mac_address`, memory controls, `models`, `network_mode`, OOM controls, `pid`, `pids_limit`, `platform`, lifecycle hooks, `privileged`, `provider`, `pull_policy`, `runtime`, `scale`, `security_opt`, `shm_size`, `stdin_open`, `stop_grace_period`, `stop_signal`, `storage_opt`, `sysctls`, `tmpfs`, `tty`, `use_api_socket`, `uts`, `volumes_from` |
+| Preserved, not typed | `annotations`, `attach`, `blkio_config`, CPU controls, `cap_add`, `cap_drop`, `cgroup`, `cgroup_parent`, `credential_spec`, `develop`, `device_cgroup_rules`, `devices`, `dns`, `dns_opt`, `dns_search`, `domainname`, service `driver_opts`, `entrypoint`, `expose`, `extends`, `external_links`, `gpus`, `hostname`, `init`, `ipc`, `isolation`, `label_file`, `links`, `logging`, `mac_address`, memory controls, `models`, `network_mode`, OOM controls, `pid`, `pids_limit`, `platform`, lifecycle hooks, `privileged`, `provider`, `pull_policy`, `runtime`, `scale`, `security_opt`, `shm_size`, `stdin_open`, `stop_grace_period`, `stop_signal`, `storage_opt`, `sysctls`, `tmpfs`, `tty`, `use_api_socket`, `uts`, `volumes_from` |
 
 The preserved row follows the current Docker documentation grouping. Provider-specific additions
 remain preserved even when they are not part of the compose-spec repository.
@@ -58,6 +58,12 @@ authored parsing retains the scalar and leaves provider/runtime acceptance to co
 Service-level `restart` now travels through the same three boundaries. Authored input retains
 retry-count spelling and interpolation; generated input uses a typed policy that cannot emit an
 unknown value. Dependency-update `restart` and deploy restart policy remain separate concepts.
+
+Service `env_file` now travels through the document model and effective project view. Scalar and
+ordered-list short syntax remain distinct from long entries; long `path`, `required`, `format:
+raw`, extensions, unknown fields, nested provenance, and deferred interpolation are retained.
+ComposeLens performs no file discovery, existence check, or environment-file parsing. Generated
+Compose output for this field remains outside the current boundary.
 
 Entrypoint behavior and resource limits are the next high-value promotion groups.
 

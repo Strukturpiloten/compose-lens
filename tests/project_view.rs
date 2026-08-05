@@ -4,14 +4,14 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, merge_project};
 use compose_lens::model::{
-    BooleanValue, Command, ComposeScalar, DependencyCondition, HealthcheckDuration, HealthcheckRetries,
-    HealthcheckTest, HealthcheckTestKind, HostAddressKind, IdentityComponent, Port, RestartPolicyKind, SelinuxRelabel,
-    ServiceNetworks, UserNamespaceModeKind, VolumeMount,
+    BooleanValue, Command, ComposeScalar, DependencyCondition, EnvironmentFileFormatKind, HealthcheckDuration,
+    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, IdentityComponent, Port,
+    RestartPolicyKind, SelinuxRelabel, ServiceNetworks, UserNamespaceModeKind, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
-    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, PROJECT_MISSING_FIELD, ProjectDependsOn, ProjectGrant,
-    ProjectService, ProjectValue, ProjectView, build_project_view,
+    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, PROJECT_MISSING_FIELD, ProjectDependsOn, ProjectEnvironmentFile,
+    ProjectGrant, ProjectService, ProjectValue, ProjectView, build_project_view,
 };
 use compose_lens::resolution::SELECTION_PROJECT_MISMATCH;
 use compose_lens::source::SourceId;
@@ -883,6 +883,7 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
         "    labels: [\"com.example.${LABEL_NAME}=${LABEL_VALUE}\"]\n",
         "    depends_on: [\"${DEPENDENCY}\"]\n",
         "    secrets: [\"${SECRET_GRANT}\"]\n",
+        "    env_file: [\"${ENV_FILE_PATH}\"]\n",
     );
     let loaded = LoadedProject::load([DocumentInput::new(
         SourceId::new(641),
@@ -895,6 +896,7 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
     let _ = environment.insert_sensitive("LABEL_VALUE", "private-label");
     let _ = environment.insert_sensitive("DEPENDENCY", "private-service");
     let _ = environment.insert_sensitive("SECRET_GRANT", "private-secret");
+    let _ = environment.insert_sensitive("ENV_FILE_PATH", "private-environment-file.env");
     let interpolation = loaded.interpolate(&environment);
     let merged = merge_project(&loaded, Some(&interpolation));
     let project = merged.project().ok_or("project expected")?;
@@ -940,6 +942,15 @@ fn redacts_sensitive_interpolation_from_project_value_debug() -> Result<(), Box<
     assert!(secrets.is_sensitive());
     assert!(!format!("{secrets:?}").contains("private-secret"));
     assert!(format!("{secrets:?}").contains("<redacted>"));
+    let environment_file = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::environment_files)
+        .and_then(|files| files.value().first())
+        .ok_or("environment file expected")?;
+    assert!(environment_file.is_sensitive());
+    assert!(!format!("{environment_file:?}").contains("private-environment-file.env"));
+    assert!(format!("{environment_file:?}").contains("<redacted>"));
     Ok(())
 }
 
@@ -987,6 +998,138 @@ fn redacts_sensitive_semantic_keys_across_keyed_merges() -> Result<(), Box<dyn s
     assert!(name.is_sensitive());
     assert!(!format!("{name:?}").contains("private-name"));
     assert!(!format!("{merged:?}").contains("private-name"));
+    Ok(())
+}
+
+#[test]
+fn exposes_environment_files_in_effective_append_order_with_nested_provenance() -> Result<(), Box<dyn std::error::Error>>
+{
+    let base = concat!(
+        "services:\n",
+        "  app:\n",
+        "    env_file:\n",
+        "      - base.env\n",
+        "      - path: optional.env\n",
+        "        required: false\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    env_file:\n",
+        "      - override.env\n",
+        "      - path: raw.env\n",
+        "        format: raw\n",
+    );
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(649),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            base,
+        ),
+        DocumentInput::new(
+            SourceId::new(650),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            override_source,
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let environment_files = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::environment_files)
+        .ok_or("environment files expected")?;
+
+    assert!(result.is_valid(), "{:#?}", result.diagnostics());
+    assert_eq!(environment_files.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(
+        environment_files.provenance().sources(),
+        &[SourceId::new(649), SourceId::new(650)],
+    );
+    assert_eq!(environment_files.value().len(), 4);
+    assert!(matches!(
+        environment_files.value()[0].value(),
+        ProjectEnvironmentFile::Short(path) if path == "base.env"
+    ));
+    assert_source_ids(
+        environment_files.value()[0].provenance().sources(),
+        &[SourceId::new(649)],
+    );
+    let ProjectEnvironmentFile::Long(optional) = environment_files.value()[1].value() else {
+        return Err("optional long environment file expected".into());
+    };
+    assert_eq!(
+        optional.path().map(ProjectValue::value).map(String::as_str),
+        Some("optional.env")
+    );
+    assert_eq!(
+        optional.required().map(ProjectValue::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    let ProjectEnvironmentFile::Long(raw) = environment_files.value()[3].value() else {
+        return Err("raw long environment file expected".into());
+    };
+    assert_eq!(
+        raw.format()
+            .map(ProjectValue::value)
+            .map(compose_lens::model::EnvironmentFileFormat::kind),
+        Some(EnvironmentFileFormatKind::Raw)
+    );
+    assert_source_ids(
+        raw.path().ok_or("raw path expected")?.provenance().sources(),
+        &[SourceId::new(650)],
+    );
+    Ok(())
+}
+
+#[test]
+fn reports_malformed_environment_files_without_erasing_valid_entries() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    env_file:\n",
+        "      - good.env\n",
+        "      - required: true\n",
+        "      - path: invalid-required.env\n",
+        "        required: []\n",
+        "      - path: invalid-format.env\n",
+        "        format: dotenv\n",
+        "      - [invalid]\n",
+    );
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(651),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let environment_files = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::environment_files)
+        .ok_or("partial environment files expected")?;
+
+    assert!(!result.is_valid());
+    assert_eq!(environment_files.value().len(), 4);
+    for code in [PROJECT_MISSING_FIELD, PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE] {
+        assert!(result.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code() == code
+                && diagnostic
+                    .labels()
+                    .iter()
+                    .all(|label| label.span().source_id() == SourceId::new(651))
+        }));
+    }
+    let ProjectEnvironmentFile::Long(invalid_format) = environment_files.value()[3].value() else {
+        return Err("retained invalid-format entry expected".into());
+    };
+    assert_eq!(
+        invalid_format
+            .format()
+            .map(ProjectValue::value)
+            .map(compose_lens::model::EnvironmentFileFormat::kind),
+        Some(EnvironmentFileFormatKind::Other)
+    );
     Ok(())
 }
 
