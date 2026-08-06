@@ -63,7 +63,8 @@ Service `env_file` now travels through the document model and effective project 
 ordered-list short syntax remain distinct from long entries; long `path`, `required`, `format:
 raw`, extensions, unknown fields, nested provenance, and deferred interpolation are retained.
 ComposeLens performs no file discovery, existence check, or environment-file parsing. Generated
-Compose output for this field remains outside the current boundary.
+Compose output retains ordered short and long entries, explicit `required`, and `format: raw`,
+then validates its own bytes through the native parser.
 
 Entrypoint behavior and resource limits are the next high-value promotion groups.
 

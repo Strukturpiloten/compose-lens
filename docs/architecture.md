@@ -155,6 +155,9 @@ merged project or run compatibility validation. ADR 0017 records the
 Generated service labels use ordered mapping syntax with explicit quoted string values. This keeps
 empty values and values containing `=` unambiguous, rejects duplicate names, and propagates
 caller-marked value sensitivity to the complete generated document.
+Generated environment-file declarations preserve caller-selected short or long syntax and ordered
+`required`/`format: raw` options. Paths use the same sensitivity boundary and are never opened,
+resolved, or parsed during generation.
 
 ## Dependency direction
 

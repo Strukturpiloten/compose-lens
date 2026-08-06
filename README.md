@@ -19,8 +19,8 @@ It is designed for tools that need more than strict deserialization: source-awar
 - Preserve, merge, inspect, and generate explicit runtime container names with field provenance.
 - Preserve, merge, inspect, and generate service-level restart policies without confusing them
   with dependency-update or deploy restart settings.
-- Preserve and inspect ordered service `env_file` short/long syntax, options, interpolation, and
-  multi-file provenance without reading environment files.
+- Preserve, inspect, and generate ordered service `env_file` short/long syntax and options; retain
+  interpolation and multi-file provenance without reading environment files.
 - Allow callers to choose strict, implementation-specific, or tolerant validation profiles.
 
 ## Non-goals
@@ -68,7 +68,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
-- [0.1.12 release notes](docs/releases/0.1.12.md)
+- [0.1.13 release notes](docs/releases/0.1.13.md)
 - [Release process](docs/releasing.md)
 - [Changelog](CHANGELOG.md)
 - [Architecture decisions](docs/decisions/README.md)

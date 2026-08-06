@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-04
-- Additive amendment: 2026-08-05
+- Additive amendments: 2026-08-05, 2026-08-06
 
 ## Context
 
@@ -42,6 +42,9 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
 10. Generated service labels use ordered mapping syntax and explicit quoted string values. Empty
     values and embedded `=` characters remain unambiguous, duplicate names are rejected, and
     caller-marked value sensitivity propagates to the generated document.
+11. Generated service environment files retain ordered short or long syntax. Long entries emit
+    only caller-selected `required` and `format: raw` options. Paths use the generated-string
+    sensitivity boundary, and generation never resolves, opens, or parses the referenced file.
 
 ## Consequences
 

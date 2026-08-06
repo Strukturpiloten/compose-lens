@@ -24,6 +24,7 @@ The repository that owns a task is authoritative for its detailed status. Update
 | T5 | All repositories | in progress | Minimum native typed subsets for the first conversion |
 | T6 | BoxFerry, integrating both Lens libraries | in progress | First Compose-to-Quadlet vertical slice |
 | T7 | All repositories | in progress | Expanded conformance, runtime, and release testing tiers |
+| T8 | BoxFerry, integrating all adapters | in progress | First N-to-N Docker/Compose/Podman/Quadlet milestone |
 
 ## T1: Testing foundations
 
@@ -189,9 +190,22 @@ ComposeLens 0.1.8 through 0.1.10 and QuadletLens 0.1.9 are published. BoxFerry c
 crates.io boundaries and now carries explicit runtime container names end to end; sibling path
 dependencies are not used.
 
-ComposeLens 0.1.11 is published, and BoxFerry consumes its service-level `restart` boundary without
-a sibling path dependency. ComposeLens 0.1.12 is the next additive source-side candidate: ordered
-service `env_file` scalar/list and long syntax now reaches the document and merged-project views
-with option-level provenance and no implicit file I/O. After publication, BoxFerry can map these
-declarations to Quadlet `EnvironmentFile=` while reporting optional-file and raw-format semantic
-differences explicitly.
+ComposeLens 0.1.12 is published and consumed by BoxFerry. Ordered service `env_file` scalar/list
+and long syntax reaches the document and merged-project views with option-level provenance and no
+implicit file I/O. The 0.1.13 candidate adds the missing generated-document boundary so BoxFerry
+can write those declarations back to Compose while retaining short/long form, required behavior,
+raw parser selection, ordering, and sensitivity.
+
+## T8: First N-to-N runtime and definition milestone
+
+Status: in progress. BoxFerry coordinates this task. Docker runtime resources, Docker Compose,
+Podman runtime resources, and Podman Quadlet must each be available as a source and a target.
+Routes compose through the neutral application model rather than pair-specific conversion logic.
+
+Exit criteria:
+
+- All four boundaries have importers and exporters for one documented shared semantic subset.
+- The CLI explicitly selects every source and target without owning conversion rules.
+- All sixteen source/target combinations have offline golden contract tests.
+- Runtime targets produce reviewable plans before any explicit apply operation.
+- Incompatible intent always produces structured, policy-controlled outcomes.

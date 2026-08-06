@@ -19,6 +19,7 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - an optional explicit runtime `container_name` validated against Compose's portable grammar;
 - image references, including `name:tag@digest` spellings;
 - exec, shell, and explicitly empty commands;
+- ordered environment-file short and long declarations with optional `required` and `format: raw`;
 - ordered literal and host-resolved environment entries;
 - ordered service metadata labels with explicit, potentially empty string values;
 - combined `user[:group]`, user namespace, supplementary groups, working directory, and explicit
@@ -61,6 +62,9 @@ relabel request or silently switch forms.
 
 Environment and `extra_hosts` use quoted sequence short forms. That preserves insertion order and
 allows repeated effective environment names without constructing a duplicate-key YAML mapping.
+Environment files retain the caller-selected form: `GeneratedEnvironmentFile::short` emits a
+quoted path item, while `GeneratedEnvironmentFile::long` emits a mapping with only the explicitly
+selected `required` and `format: raw` options. Neither constructor reads or resolves its path.
 Labels use quoted mapping syntax because label names must be unique and explicit mapping values
 represent empty strings and embedded `=` characters without short-form ambiguity.
 
@@ -74,6 +78,8 @@ final document's debug representation when any generated value is sensitive.
 Generated label values use this same sensitivity boundary. Label names remain visible identifiers;
 the builder rejects empty/NUL-bearing names and duplicate names but does not enforce Docker's
 non-binding reverse-DNS naming recommendations.
+Generated environment-file paths also use `GeneratedString`; one sensitive path redacts the
+complete builder and generated document from `Debug`.
 
 ## Validation boundary
 
