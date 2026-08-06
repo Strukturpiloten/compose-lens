@@ -10,8 +10,8 @@ use compose_lens::model::{
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{ProjectEnvironmentFile, ProjectGrant, build_project_view};
 use compose_lens::render::{
-    ComposeDocumentBuilder, GeneratedLabel, GeneratedRestartPolicy, GeneratedService, GeneratedString,
-    ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
+    ComposeDocumentBuilder, GeneratedEnvironmentFile, GeneratedLabel, GeneratedRestartPolicy, GeneratedService,
+    GeneratedString, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
 use compose_lens::resolution::validate_references;
 use compose_lens::source::SourceId;
@@ -178,6 +178,7 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
     let mut service = GeneratedService::new("app")?;
     service.set_container_name(GeneratedString::plain("example-app")?)?;
     service.set_image(GeneratedString::plain("example.invalid/app:1")?)?;
+    service.add_environment_file(GeneratedEnvironmentFile::short(GeneratedString::plain("./app.env")?)?);
     service.set_restart(GeneratedRestartPolicy::UnlessStopped)?;
     service.add_label(GeneratedLabel::new(
         "com.example.owner",
@@ -211,6 +212,14 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             .and_then(compose_lens::model::Service::labels)
             .is_some()
     );
+    assert_eq!(
+        generated
+            .document()
+            .service("app")
+            .map(compose_lens::model::Service::environment_files)
+            .map(<[_]>::len),
+        Some(1)
+    );
     assert!(matches!(
         generated
             .document()
@@ -227,6 +236,8 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             "  \"app\":\n",
             "    container_name: \"example-app\"\n",
             "    image: \"example.invalid/app:1\"\n",
+            "    env_file:\n",
+            "      - \"./app.env\"\n",
             "    labels:\n",
             "      \"com.example.owner\": \"strukturpiloten\"\n",
             "    restart: \"unless-stopped\"\n",

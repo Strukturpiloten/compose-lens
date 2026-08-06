@@ -6,6 +6,13 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-08-06
+
+### Added
+
+- Deterministic generated service `env_file` output with ordered short and long syntax, explicit
+  `required`/`format: raw` options, sensitive-path redaction, and typed parse-back validation.
+
 ## [0.1.12] - 2026-08-05
 
 ### Added

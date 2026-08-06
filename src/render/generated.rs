@@ -163,6 +163,31 @@ pub struct GeneratedEnvironment {
     value: Option<GeneratedString>,
 }
 
+/// Explicit parser mode for one generated long-syntax `env_file` entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedEnvironmentFileFormat {
+    /// Preserve raw environment-file values without Compose interpolation or quote processing.
+    Raw,
+}
+
+/// One ordered generated Compose `env_file` declaration.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedEnvironmentFile {
+    /// Scalar path syntax with Compose defaults.
+    Short(GeneratedString),
+    /// Mapping syntax with independently selected options.
+    Long {
+        /// Environment-file path.
+        path: GeneratedString,
+        /// Explicit required/optional behavior, or source-format default when omitted.
+        required: Option<bool>,
+        /// Explicit parser mode, or source-format default when omitted.
+        format: Option<GeneratedEnvironmentFileFormat>,
+    },
+}
+
 /// One generated service metadata label.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedLabel {
@@ -232,6 +257,66 @@ impl GeneratedEnvironment {
     #[must_use]
     pub const fn value(&self) -> Option<&GeneratedString> {
         self.value.as_ref()
+    }
+}
+
+impl GeneratedEnvironmentFile {
+    /// Creates one scalar short-syntax declaration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::EmptyValue`] for an empty path. NUL-bearing paths are rejected
+    /// while constructing [`GeneratedString`].
+    pub fn short(path: GeneratedString) -> Result<Self, GenerationError> {
+        require_generated_string("environment-file path", &path)?;
+        Ok(Self::Short(path))
+    }
+
+    /// Creates one mapping long-syntax declaration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::EmptyValue`] for an empty path. NUL-bearing paths are rejected
+    /// while constructing [`GeneratedString`].
+    pub fn long(
+        path: GeneratedString,
+        required: Option<bool>,
+        format: Option<GeneratedEnvironmentFileFormat>,
+    ) -> Result<Self, GenerationError> {
+        require_generated_string("environment-file path", &path)?;
+        Ok(Self::Long { path, required, format })
+    }
+
+    /// Returns the environment-file path through its explicit sensitivity boundary.
+    #[must_use]
+    pub const fn path(&self) -> &GeneratedString {
+        match self {
+            Self::Short(path) | Self::Long { path, .. } => path,
+        }
+    }
+
+    /// Returns the explicitly selected required/optional behavior for long syntax.
+    #[must_use]
+    pub const fn required(&self) -> Option<bool> {
+        match self {
+            Self::Short(_) => None,
+            Self::Long { required, .. } => *required,
+        }
+    }
+
+    /// Returns the explicitly selected parser mode for long syntax.
+    #[must_use]
+    pub const fn format(&self) -> Option<GeneratedEnvironmentFileFormat> {
+        match self {
+            Self::Short(_) => None,
+            Self::Long { format, .. } => *format,
+        }
+    }
+
+    /// Reports whether debug output must redact this declaration's path.
+    #[must_use]
+    pub const fn is_sensitive(&self) -> bool {
+        self.path().is_sensitive()
     }
 }
 
@@ -579,6 +664,7 @@ pub struct GeneratedService {
     container_name: Option<GeneratedString>,
     image: Option<GeneratedString>,
     command: Option<GeneratedCommand>,
+    environment_files: Vec<GeneratedEnvironmentFile>,
     environment: Vec<GeneratedEnvironment>,
     labels: Vec<GeneratedLabel>,
     user: Option<GeneratedString>,
@@ -605,6 +691,7 @@ impl GeneratedService {
             container_name: None,
             image: None,
             command: None,
+            environment_files: Vec::new(),
             environment: Vec::new(),
             labels: Vec::new(),
             user: None,
@@ -658,6 +745,11 @@ impl GeneratedService {
     /// Returns [`GenerationError::DuplicateField`] when already configured.
     pub fn set_command(&mut self, command: GeneratedCommand) -> Result<(), GenerationError> {
         set_once(&mut self.command, command, "command")
+    }
+
+    /// Adds one ordered environment-file declaration.
+    pub fn add_environment_file(&mut self, environment_file: GeneratedEnvironmentFile) {
+        self.environment_files.push(environment_file);
     }
 
     /// Adds one ordered environment entry.
@@ -775,6 +867,10 @@ impl GeneratedService {
     fn is_sensitive(&self) -> bool {
         self.image.as_ref().is_some_and(GeneratedString::is_sensitive)
             || self.command.as_ref().is_some_and(command_is_sensitive)
+            || self
+                .environment_files
+                .iter()
+                .any(GeneratedEnvironmentFile::is_sensitive)
             || self
                 .environment
                 .iter()
@@ -944,6 +1040,7 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     if let Some(command) = &service.command {
         render_command(output, command);
     }
+    render_environment_files(output, &service.environment_files);
     render_environment(output, &service.environment);
     render_labels(output, &service.labels);
     render_optional_string(output, "user", service.user.as_ref());
@@ -1008,6 +1105,41 @@ fn render_environment(output: &mut String, environment: &[GeneratedEnvironment])
         );
         write_quoted(output, &value);
         output.push('\n');
+    }
+}
+
+fn render_environment_files(output: &mut String, environment_files: &[GeneratedEnvironmentFile]) {
+    if environment_files.is_empty() {
+        return;
+    }
+    output.push_str("    env_file:\n");
+    for environment_file in environment_files {
+        match environment_file {
+            GeneratedEnvironmentFile::Short(path) => {
+                output.push_str("      - ");
+                write_quoted(output, path.expose());
+                output.push('\n');
+            }
+            GeneratedEnvironmentFile::Long { path, required, format } => {
+                output.push_str("      - path: ");
+                write_quoted(output, path.expose());
+                output.push('\n');
+                if let Some(required) = required {
+                    output.push_str("        required: ");
+                    output.push_str(if *required { "true\n" } else { "false\n" });
+                }
+                if let Some(format) = format {
+                    output.push_str("        format: ");
+                    write_quoted(
+                        output,
+                        match format {
+                            GeneratedEnvironmentFileFormat::Raw => "raw",
+                        },
+                    );
+                    output.push('\n');
+                }
+            }
+        }
     }
 }
 

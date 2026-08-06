@@ -1,11 +1,15 @@
 //! Deterministic generated-document construction and parse-back validation.
 
 use compose_lens::{
-    model::{Command, Environment, ExtraHosts, Labels, Port, ServiceNetworks, VolumeMount},
+    model::{
+        BooleanValue, Command, Environment, EnvironmentFile, EnvironmentFileFormatKind, ExtraHosts, Labels, Port,
+        ServiceNetworks, VolumeMount,
+    },
     render::{
-        ComposeDocumentBuilder, GeneratedCommand, GeneratedEnvironment, GeneratedExtraHost, GeneratedLabel,
-        GeneratedMount, GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource,
-        GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedString, GenerationError,
+        ComposeDocumentBuilder, GeneratedCommand, GeneratedEnvironment, GeneratedEnvironmentFile,
+        GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedLabel, GeneratedMount, GeneratedNetworkAttachment,
+        GeneratedPort, GeneratedProtocol, GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux,
+        GeneratedService, GeneratedString, GenerationError,
     },
     source::SourceId,
 };
@@ -144,6 +148,59 @@ fn retains_empty_shell_protocol_and_shared_selinux_variants() -> Result<(), Box<
 }
 
 #[test]
+fn generates_ordered_environment_file_short_and_long_forms() -> Result<(), Box<dyn std::error::Error>> {
+    let mut service = GeneratedService::new("web")?;
+    service.set_image(plain("example.invalid/web:1")?)?;
+    service.add_environment_file(GeneratedEnvironmentFile::short(plain("./default.env")?)?);
+    service.add_environment_file(GeneratedEnvironmentFile::long(
+        GeneratedString::sensitive("/run/credentials/private.env")?,
+        Some(false),
+        Some(GeneratedEnvironmentFileFormat::Raw),
+    )?);
+    let mut project = ComposeDocumentBuilder::new();
+    project.add_service(service)?;
+
+    let generated = project.build(SourceId::new(704))?;
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"web\":\n",
+            "    image: \"example.invalid/web:1\"\n",
+            "    env_file:\n",
+            "      - \"./default.env\"\n",
+            "      - path: \"/run/credentials/private.env\"\n",
+            "        required: false\n",
+            "        format: \"raw\"\n",
+        )
+    );
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("private.env"));
+
+    let environment_files = generated
+        .document()
+        .service("web")
+        .ok_or("generated service expected")?
+        .environment_files();
+    assert!(matches!(
+        &environment_files[0],
+        EnvironmentFile::Short(path) if path.value() == "./default.env"
+    ));
+    let EnvironmentFile::Long(long) = &environment_files[1] else {
+        return Err("generated long environment file expected".into());
+    };
+    assert_eq!(
+        long.required().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        long.format().map(compose_lens::model::EnvironmentFileFormat::kind),
+        Some(EnvironmentFileFormatKind::Raw)
+    );
+    Ok(())
+}
+
+#[test]
 fn generates_every_service_restart_policy_form() -> Result<(), Box<dyn std::error::Error>> {
     let policies = [
         ("disabled", GeneratedRestartPolicy::No, "no"),
@@ -225,6 +282,10 @@ fn rejects_ambiguous_or_duplicate_generation_requests() -> Result<(), Box<dyn st
     assert_eq!(
         GeneratedEnvironment::literal("INVALID=NAME", plain("value")?),
         Err(GenerationError::InvalidEnvironmentName)
+    );
+    assert_eq!(
+        GeneratedEnvironmentFile::short(plain("")?),
+        Err(GenerationError::EmptyValue("environment-file path"))
     );
     assert_eq!(
         GeneratedLabel::new("", plain("value")?),

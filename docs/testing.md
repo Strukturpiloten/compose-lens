@@ -33,7 +33,8 @@ reparent ports, volumes, or extensions into the environment mapping.
 
 Generated-rendering tests construct the runtime-migration subset through public Compose-owned
 types, compare exact deterministic bytes, and inspect the parse-back native model. They protect
-ordered duplicate-capable environment syntax, ordered unique service-label mappings, spec-shaped
+ordered duplicate-capable environment syntax, ordered environment-file short/long forms and
+options, ordered unique service-label mappings, spec-shaped
 long TCP/UDP ports, short SCTP ports,
 ordinary mounts, deliberate short `SELinux` bind syntax, network aliases,
 all service-level restart-policy forms and optional maximum retries,
