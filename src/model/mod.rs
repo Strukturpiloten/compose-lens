@@ -2,6 +2,7 @@
 
 mod command;
 mod dependency;
+mod entrypoint;
 mod environment;
 mod host;
 mod identity;
@@ -20,6 +21,7 @@ pub use dependency::{
     DependencyCondition, DependsOn, Healthcheck, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
     HealthcheckTestKind, ServiceDependency,
 };
+pub use entrypoint::Entrypoint;
 pub use environment::{
     Environment, EnvironmentFile, EnvironmentFileFormat, EnvironmentFileFormatKind, EnvironmentListEntry,
     EnvironmentMapEntry, LongEnvironmentFile,
@@ -211,7 +213,9 @@ pub struct Service {
     span: SourceSpan,
     container_name: Option<Located<String>>,
     image: Option<Located<ImageReference>>,
+    entrypoint: Option<Entrypoint>,
     command: Option<Command>,
+    init: Option<Located<BooleanValue>>,
     environment: Option<Environment>,
     environment_files: Vec<EnvironmentFile>,
     labels: Option<Labels>,
@@ -244,7 +248,9 @@ impl Service {
             span,
             container_name: None,
             image: None,
+            entrypoint: None,
             command: None,
+            init: None,
             environment: None,
             environment_files: Vec::new(),
             labels: None,
@@ -295,10 +301,22 @@ impl Service {
         self.image.as_ref()
     }
 
+    /// Returns the entrypoint without normalizing its authored form.
+    #[must_use]
+    pub const fn entrypoint(&self) -> Option<&Entrypoint> {
+        self.entrypoint.as_ref()
+    }
+
     /// Returns the command without normalizing its authored form.
     #[must_use]
     pub const fn command(&self) -> Option<&Command> {
         self.command.as_ref()
+    }
+
+    /// Returns whether Compose should run its platform-specific init process.
+    #[must_use]
+    pub const fn init(&self) -> Option<&Located<BooleanValue>> {
+        self.init.as_ref()
     }
 
     /// Returns environment variables with list and mapping forms kept distinct.
@@ -814,8 +832,14 @@ impl Parser {
                         .parse_string(&service_field, "service image")
                         .map(|value| Located::new(ImageReference::parse(value.value), value.span));
                 }
+                "entrypoint" if !duplicate => {
+                    service.entrypoint = self.parse_entrypoint(&service_field);
+                }
                 "command" if !duplicate => {
                     service.command = self.parse_command(&service_field);
+                }
+                "init" if !duplicate => {
+                    service.init = self.parse_boolean(&service_field, "service init");
                 }
                 "environment" if !duplicate => {
                     service.environment = self.parse_environment(&service_field);
@@ -935,6 +959,36 @@ impl Parser {
                     EXPECTED_FIELD_FORM,
                     field,
                     "command must be null, a scalar, or a sequence",
+                );
+                None
+            }
+        }
+    }
+
+    fn parse_entrypoint(&mut self, field: &ParsedField) -> Option<Entrypoint> {
+        match field.value.as_ref() {
+            Some(YamlNode::Scalar(scalar)) => {
+                let span = span_from_position(self.source_id, scalar.byte_range());
+                if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null {
+                    Some(Entrypoint::Null(span))
+                } else {
+                    Some(Entrypoint::String(Located::new(
+                        scalar_string_from_source(&self.source, scalar),
+                        span,
+                    )))
+                }
+            }
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let values =
+                    self.parse_scalar_nodes(sequence.values(), field.span, "entrypoint list items must be scalars");
+                Some(Entrypoint::List { span, values })
+            }
+            _ => {
+                self.expected(
+                    EXPECTED_FIELD_FORM,
+                    field,
+                    "entrypoint must be null, a scalar, or a sequence",
                 );
                 None
             }

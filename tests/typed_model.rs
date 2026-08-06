@@ -5,7 +5,7 @@ use compose_lens::model::{
     DEPENDENCY_HEALTHCHECK_UNVERIFIED, DEPENDENCY_INVALID_CONDITION, DEPENDENCY_MISSING_HEALTHCHECK,
     DEPENDENCY_MISSING_SERVICE, DependencyCondition, DeployFieldKind, ENVIRONMENT_FILE_EXPECTED_FORM,
     ENVIRONMENT_FILE_INVALID_FORMAT, ENVIRONMENT_FILE_MISSING_PATH, EXPECTED_BOOLEAN, EXPECTED_FIELD_FORM,
-    EXPECTED_MAPPING, EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Environment, EnvironmentFile,
+    EXPECTED_MAPPING, EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Entrypoint, Environment, EnvironmentFile,
     EnvironmentFileFormatKind, ExtraHostSeparator, ExtraHosts, GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE,
     HEALTHCHECK_INVALID_DURATION, HEALTHCHECK_INVALID_RETRIES, HEALTHCHECK_INVALID_TEST, HealthcheckTestKind,
     HostAddressKind, IdentityComponent, Labels, LimitValue, Located, MountType, PORT_EXPECTED_FORM,
@@ -461,6 +461,9 @@ fn retains_image_command_and_environment_forms() -> Result<(), Box<dyn std::erro
     let app = document.service("app").ok_or("app service is missing")?;
     let worker = document.service("worker").ok_or("worker service is missing")?;
     let shell = document.service("shell").ok_or("shell service is missing")?;
+    let exec_entrypoint = document
+        .service("exec-entrypoint")
+        .ok_or("exec-entrypoint service is missing")?;
 
     assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
     assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
@@ -476,6 +479,8 @@ fn retains_image_command_and_environment_forms() -> Result<(), Box<dyn std::erro
         Some("sha256")
     );
     assert!(matches!(app.command(), Some(Command::Null(_))));
+    assert!(matches!(app.entrypoint(), Some(Entrypoint::Null(_))));
+    assert_eq!(app.init().map(Located::value), Some(&BooleanValue::Literal(true)));
 
     let Some(Environment::Map { entries, .. }) = app.environment() else {
         return Err("app environment did not retain mapping syntax".into());
@@ -497,7 +502,18 @@ fn retains_image_command_and_environment_forms() -> Result<(), Box<dyn std::erro
     assert_eq!(entries[1].value(), Some(""));
     assert_eq!(entries[2].value(), Some("a=b"));
     assert!(matches!(worker.command(), Some(Command::List { values, .. }) if values.is_empty()));
+    assert!(matches!(worker.entrypoint(), Some(Entrypoint::List { values, .. }) if values.is_empty()));
+    assert!(matches!(
+        worker.init().map(Located::value),
+        Some(BooleanValue::Expression(value)) if value == "${USE_INIT:-false}"
+    ));
     assert!(matches!(shell.command(), Some(Command::String(value)) if value.value().is_empty()));
+    assert!(matches!(shell.entrypoint(), Some(Entrypoint::String(value)) if value.value().is_empty()));
+    assert!(matches!(
+        exec_entrypoint.entrypoint(),
+        Some(Entrypoint::List { values, .. })
+            if values.iter().map(Located::value).map(String::as_str).eq(["/usr/bin/env", "php"])
+    ));
     Ok(())
 }
 
@@ -744,6 +760,7 @@ fn invalid_phase_two_forms_return_partial_data_and_stable_diagnostics() -> Resul
     assert_eq!(service.secrets().len(), 1);
     for expected in [
         EXPECTED_FIELD_FORM,
+        EXPECTED_BOOLEAN,
         PORT_EXPECTED_FORM,
         PORT_MISSING_TARGET,
         EXPECTED_SEQUENCE,

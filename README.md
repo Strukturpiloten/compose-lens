@@ -62,6 +62,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Generated documents](docs/generated-rendering.md)
 - [Phase 2 typed model](docs/typed-model.md)
 - [Native coverage](docs/coverage.md)
+- [Roadmap and exact specification gaps](docs/roadmap.md)
 - [Testing strategy](docs/testing.md)
 - [Development environment](docs/development-environment.md)
 - [Compose implementation conformance](docs/conformance.md)

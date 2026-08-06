@@ -2,11 +2,11 @@
 
 use compose_lens::{
     model::{
-        BooleanValue, Command, Environment, EnvironmentFile, EnvironmentFileFormatKind, ExtraHosts, Labels, Port,
-        ServiceNetworks, VolumeMount,
+        BooleanValue, Command, Entrypoint, Environment, EnvironmentFile, EnvironmentFileFormatKind, ExtraHosts, Labels,
+        Port, ServiceNetworks, VolumeMount,
     },
     render::{
-        ComposeDocumentBuilder, GeneratedCommand, GeneratedEnvironment, GeneratedEnvironmentFile,
+        ComposeDocumentBuilder, GeneratedCommand, GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile,
         GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedLabel, GeneratedMount, GeneratedNetworkAttachment,
         GeneratedPort, GeneratedProtocol, GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux,
         GeneratedService, GeneratedString, GenerationError,
@@ -20,6 +20,7 @@ fn generates_the_runtime_migration_subset_deterministically() -> Result<(), Box<
     let builder_debug = format!("{project:?}");
     assert!(!builder_debug.contains("production-secret"));
     assert!(!builder_debug.contains("1001:1002"));
+    assert!(!builder_debug.contains("/usr/bin/env"));
     let generated = project.clone().build(SourceId::new(701))?;
     let repeated = project.build(SourceId::new(702))?;
 
@@ -44,7 +45,12 @@ fn generates_the_runtime_migration_subset_deterministically() -> Result<(), Box<
         service.image().map(|image| image.value().raw()),
         Some("example.invalid/web:1@sha256:abcd")
     );
+    assert!(matches!(service.entrypoint(), Some(Entrypoint::List { values, .. }) if values.len() == 2));
     assert!(matches!(service.command(), Some(Command::List { values, .. }) if values.len() == 2));
+    assert_eq!(
+        service.init().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
     assert!(matches!(service.environment(), Some(Environment::List { entries, .. }) if entries.len() == 3));
     assert!(matches!(service.labels(), Some(Labels::Map { entries, .. }) if entries.len() == 3));
     assert!(matches!(service.extra_hosts(), Some(ExtraHosts::Short { entries, .. }) if entries.len() == 2));
@@ -79,7 +85,9 @@ fn generates_the_runtime_migration_subset_deterministically() -> Result<(), Box<
 fn retains_empty_shell_protocol_and_shared_selinux_variants() -> Result<(), Box<dyn std::error::Error>> {
     let mut shell = GeneratedService::new("shell")?;
     shell.set_image(plain("example.invalid/shell:1")?)?;
+    shell.set_entrypoint(GeneratedEntrypoint::String(plain("")?))?;
     shell.set_command(GeneratedCommand::Shell(plain("echo hello")?))?;
+    shell.set_init(false)?;
     shell.set_read_only(false)?;
     shell.add_port(GeneratedPort::new(53, Some(1053), None, GeneratedProtocol::Udp)?);
     shell.add_mount(GeneratedMount::bind(
@@ -92,6 +100,7 @@ fn retains_empty_shell_protocol_and_shared_selinux_variants() -> Result<(), Box<
 
     let mut empty = GeneratedService::new("empty")?;
     empty.set_image(plain("example.invalid/empty:1")?)?;
+    empty.set_entrypoint(GeneratedEntrypoint::Empty)?;
     empty.set_command(GeneratedCommand::Empty)?;
     empty.add_port(GeneratedPort::new(5000, None, None, GeneratedProtocol::Sctp)?);
     empty.add_port(GeneratedPort::new(
@@ -111,7 +120,9 @@ fn retains_empty_shell_protocol_and_shared_selinux_variants() -> Result<(), Box<
             "services:\n",
             "  \"shell\":\n",
             "    image: \"example.invalid/shell:1\"\n",
+            "    entrypoint: \"\"\n",
             "    command: \"echo hello\"\n",
+            "    init: false\n",
             "    read_only: false\n",
             "    ports:\n",
             "      - target: 53\n",
@@ -123,6 +134,7 @@ fn retains_empty_shell_protocol_and_shared_selinux_variants() -> Result<(), Box<
             "      \"frontend\": {}\n",
             "  \"empty\":\n",
             "    image: \"example.invalid/empty:1\"\n",
+            "    entrypoint: []\n",
             "    command: []\n",
             "    ports:\n",
             "      - \"5000/sctp\"\n",
@@ -132,6 +144,13 @@ fn retains_empty_shell_protocol_and_shared_selinux_variants() -> Result<(), Box<
     assert!(
         matches!(generated.document().service("empty").and_then(|service| service.command()), Some(Command::List { values, .. }) if values.is_empty())
     );
+    assert!(
+        matches!(generated.document().service("empty").and_then(|service| service.entrypoint()), Some(Entrypoint::List { values, .. }) if values.is_empty())
+    );
+    assert!(matches!(
+        generated.document().service("shell").and_then(|service| service.entrypoint()),
+        Some(Entrypoint::String(value)) if value.value().is_empty()
+    ));
     assert!(matches!(
         generated.document().service("empty").and_then(|service| service.ports().first()),
         Some(Port::Short(port)) if port.target() == "5000" && port.protocol() == Some("sctp")
@@ -279,6 +298,8 @@ fn rejects_ambiguous_or_duplicate_generation_requests() -> Result<(), Box<dyn st
         service.set_restart(GeneratedRestartPolicy::No),
         Err(GenerationError::DuplicateField("restart"))
     );
+    service.set_init(true)?;
+    assert_eq!(service.set_init(false), Err(GenerationError::DuplicateField("init")));
     assert_eq!(
         GeneratedEnvironment::literal("INVALID=NAME", plain("value")?),
         Err(GenerationError::InvalidEnvironmentName)
@@ -365,7 +386,12 @@ fn complete_project() -> Result<ComposeDocumentBuilder, Box<dyn std::error::Erro
     let mut service = GeneratedService::new("web")?;
     service.set_container_name(plain("application-web")?)?;
     service.set_image(plain("example.invalid/web:1@sha256:abcd")?)?;
+    service.set_entrypoint(GeneratedEntrypoint::List(vec![
+        GeneratedString::sensitive("/usr/bin/env")?,
+        plain("php")?,
+    ]))?;
     service.set_command(GeneratedCommand::Exec(vec![plain("server")?, plain("--foreground")?]))?;
+    service.set_init(true)?;
     service.add_environment(GeneratedEnvironment::literal(
         "MODE",
         GeneratedString::sensitive("production-secret")?,
@@ -432,9 +458,13 @@ fn expected_document() -> &'static str {
         "  \"web\":\n",
         "    container_name: \"application-web\"\n",
         "    image: \"example.invalid/web:1@sha256:abcd\"\n",
+        "    entrypoint:\n",
+        "      - \"/usr/bin/env\"\n",
+        "      - \"php\"\n",
         "    command:\n",
         "      - \"server\"\n",
         "      - \"--foreground\"\n",
+        "    init: true\n",
         "    environment:\n",
         "      - \"MODE=production-secret\"\n",
         "      - \"FROM_HOST\"\n",

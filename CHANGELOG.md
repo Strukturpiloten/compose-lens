@@ -6,6 +6,17 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Added
+
+- A distinct source-aware `Entrypoint` type at authored-document and merged-project layers,
+  retaining null, scalar, list, empty forms, replacement provenance, and malformed-form diagnostics.
+- `GeneratedEntrypoint` and `GeneratedService::set_entrypoint` for deterministic, redaction-aware,
+  parse-back-validated string, list, and explicitly empty Compose output.
+- Source-aware service `init` support in authored-document and merged-project layers, retaining
+  literal/deferred values and complete replacement provenance.
+- Deterministic `GeneratedService::set_init` boolean output with duplicate-singleton rejection and
+  typed parse-back validation.
+
 ## [0.1.13] - 2026-08-06
 
 ### Added

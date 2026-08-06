@@ -12,7 +12,8 @@ Cover scalars, mappings, sequences, anchors, aliases, comments where supported, 
 
 Cover every field in the documented [typed boundary](typed-model.md), all supported syntax variants,
 unknown fields, extensions, image references, ports, volumes, host/container path separation,
-environment values, environment-file short/long forms and options, service-label forms, commands,
+environment values, environment-file short/long forms and options, service-label forms,
+entrypoints, commands,
 extra hosts, raw identities, service-level restart policies,
 ulimits, health checks, dependency conditions, field-level build/deploy identities, networks,
 profiles, configs, secrets, top-level resources, and discriminated unions.

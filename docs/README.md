@@ -12,6 +12,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Generated documents](generated-rendering.md) — typed construction, syntax-form selection, parse-back validation, and redaction
 - [Phase 2 typed model](typed-model.md) — implemented field boundary, fidelity rules, and diagnostics
 - [Native coverage](coverage.md) — syntax, document-model, and merged-project field coverage
+- [Roadmap and exact specification gaps](roadmap.md) — all current untyped keys and promotion order
 - [Testing strategy](testing.md) — parser, resolver, conformance, and round-trip tests
 - [Development environment](development-environment.md) — reproducible VS Code tooling and update policy
 - [Compose implementation conformance](conformance.md) — exact matrices, evidence lifecycle, and open runtime work

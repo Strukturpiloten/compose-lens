@@ -1,7 +1,10 @@
 services:
   app:
+    entrypoint:
+      invalid: mapping
     command:
       invalid: mapping
+    init: sometimes
     environment: invalid
     ports:
       - [nested, sequence]

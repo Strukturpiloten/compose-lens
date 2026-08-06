@@ -4,9 +4,9 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, merge_project};
 use compose_lens::model::{
-    BooleanValue, Command, ComposeScalar, DependencyCondition, EnvironmentFileFormatKind, HealthcheckDuration,
-    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, IdentityComponent, Port,
-    RestartPolicyKind, SelinuxRelabel, ServiceNetworks, UserNamespaceModeKind, VolumeMount,
+    BooleanValue, Command, ComposeScalar, DependencyCondition, Entrypoint, EnvironmentFileFormatKind,
+    HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, IdentityComponent,
+    Port, RestartPolicyKind, SelinuxRelabel, ServiceNetworks, UserNamespaceModeKind, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
@@ -50,6 +50,7 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
         web.command().map(ProjectValue::value),
         Some(Command::List { values, .. }) if values.len() == 2
     ));
+    assert_entrypoint(web)?;
     let image = web.image().ok_or("image expected")?;
     assert_eq!(image.value().raw(), "example.invalid/web:2@sha256:abcdef");
     assert_eq!(image.provenance().operation(), MergeOperation::Replaced);
@@ -123,6 +124,22 @@ fn builds_a_profile_selected_native_view_with_multifile_provenance() -> Result<(
             .and_then(|profiles| profiles.value().first())
             .map(|profile| profile.value().as_str()),
         Some("workers")
+    );
+    Ok(())
+}
+
+fn assert_entrypoint(web: &ProjectService) -> Result<(), &'static str> {
+    let entrypoint = web.entrypoint().ok_or("entrypoint expected")?;
+    assert!(matches!(
+        entrypoint.value(),
+        Entrypoint::List { values, .. }
+            if values.iter().map(compose_lens::model::Located::value).map(String::as_str)
+                .eq(["/usr/local/bin/php", "-d", "variables_order=EGPCS"])
+    ));
+    assert_eq!(entrypoint.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(
+        entrypoint.provenance().sources(),
+        &[SourceId::new(601), SourceId::new(602)],
     );
     Ok(())
 }
@@ -257,7 +274,12 @@ fn assert_execution_identity(web: &ProjectService) -> Result<(), Box<dyn std::er
         &[SourceId::new(601), SourceId::new(602)],
     );
 
-    for field in ["user", "userns_mode", "group_add", "working_dir", "read_only"] {
+    let init = web.init().ok_or("init value expected")?;
+    assert_eq!(init.value(), &BooleanValue::Literal(true));
+    assert_eq!(init.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(init.provenance().sources(), &[SourceId::new(601), SourceId::new(602)]);
+
+    for field in ["user", "userns_mode", "group_add", "working_dir", "read_only", "init"] {
         assert!(
             !web.unmodeled_fields()
                 .iter()
@@ -393,9 +415,11 @@ fn malformed_native_forms_return_a_partial_view_and_stable_diagnostics() -> Resu
         "services:\n",
         "  app:\n",
         "    image: []\n",
+        "    entrypoint: {invalid: mapping}\n",
         "    group_add: wrong\n",
         "    working_dir: []\n",
         "    read_only: sometimes\n",
+        "    init: sometimes\n",
         "    ports: wrong\n",
         "  broken: true\n",
     );

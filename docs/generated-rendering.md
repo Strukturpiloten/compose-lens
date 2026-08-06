@@ -18,7 +18,8 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 
 - an optional explicit runtime `container_name` validated against Compose's portable grammar;
 - image references, including `name:tag@digest` spellings;
-- exec, shell, and explicitly empty commands;
+- independent string/list entrypoints and exec/shell commands, including explicitly empty forms;
+- an explicit boolean init-process choice;
 - ordered environment-file short and long declarations with optional `required` and `format: raw`;
 - ordered literal and host-resolved environment entries;
 - ordered service metadata labels with explicit, potentially empty string values;
@@ -41,6 +42,9 @@ their type.
 documents require a reviewed semantic choice. `GeneratedService::set_restart` rejects a second
 assignment instead of overwriting the first policy. The renderer quotes every policy, including
 `no`, and the parse-back model must recover the same policy family and retry count.
+
+`GeneratedService::set_init` accepts an explicit boolean and rejects a second assignment. The
+renderer emits an unquoted YAML boolean and parse-back validation must recover the same literal.
 
 `GeneratedResource::set_custom_name` emits Compose's top-level `name:` field. Runtime migration
 uses it when an application-owned observed network or volume must keep its exact platform name;

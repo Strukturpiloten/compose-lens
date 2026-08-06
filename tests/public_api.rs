@@ -4,14 +4,14 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
-    BooleanValue, ComposeDocument, DependencyCondition, EnvironmentFileFormatKind, HealthcheckDuration,
+    BooleanValue, ComposeDocument, DependencyCondition, Entrypoint, EnvironmentFileFormatKind, HealthcheckDuration,
     HostAddressKind, IdentityComponent, RestartPolicyKind, UserNamespaceModeKind,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{ProjectEnvironmentFile, ProjectGrant, build_project_view};
 use compose_lens::render::{
-    ComposeDocumentBuilder, GeneratedEnvironmentFile, GeneratedLabel, GeneratedRestartPolicy, GeneratedService,
-    GeneratedString, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
+    ComposeDocumentBuilder, GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedLabel, GeneratedRestartPolicy,
+    GeneratedService, GeneratedString, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
 use compose_lens::resolution::validate_references;
 use compose_lens::source::SourceId;
@@ -26,6 +26,8 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
         "services:\n",
         "  app:\n",
         "    image: example.invalid/app:old\n",
+        "    entrypoint: [/usr/bin/env, php]\n",
+        "    init: true\n",
         "    user: 1000:1001\n",
         "    userns_mode: keep-id\n",
         "    group_add: [audio, '44']\n",
@@ -98,14 +100,7 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     assert!(merge.is_valid(), "{:#?}", merge.diagnostics());
     assert!(selection.is_valid(), "{:#?}", selection.diagnostics());
     assert!(project_view.is_valid(), "{:#?}", project_view.diagnostics());
-    assert_eq!(
-        project_view
-            .view()
-            .and_then(|view| view.service("app"))
-            .and_then(compose_lens::project::ProjectService::image)
-            .map(|image| image.value().raw()),
-        Some("example.invalid/app:1.2.3@sha256:abcdef")
-    );
+    assert_image_and_entrypoint(&project_view)?;
     assert_host_and_health(&project_view)?;
     assert_environment_file(&project_view)?;
     assert_dependency(&project_view)?;
@@ -122,6 +117,24 @@ fn supported_public_pipeline_compiles_and_preserves_explicit_stages() -> Result<
     );
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
     assert!(rendered.output().contains("example.invalid/app:1.2.3@sha256:abcdef"));
+    Ok(())
+}
+
+fn assert_image_and_entrypoint(project_view: &compose_lens::project::ProjectViewResult) -> Result<(), &'static str> {
+    let service = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .ok_or("native project service expected")?;
+    assert_eq!(
+        service.image().map(|image| image.value().raw()),
+        Some("example.invalid/app:1.2.3@sha256:abcdef")
+    );
+    let entrypoint = service.entrypoint().ok_or("native project entrypoint expected")?;
+    assert!(matches!(entrypoint.value(), Entrypoint::List { values, .. } if values.len() == 2));
+    assert_eq!(
+        service.init().map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Literal(true))
+    );
     Ok(())
 }
 
@@ -178,6 +191,8 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
     let mut service = GeneratedService::new("app")?;
     service.set_container_name(GeneratedString::plain("example-app")?)?;
     service.set_image(GeneratedString::plain("example.invalid/app:1")?)?;
+    service.set_entrypoint(GeneratedEntrypoint::List(vec![GeneratedString::plain("/usr/bin/env")?]))?;
+    service.set_init(true)?;
     service.add_environment_file(GeneratedEnvironmentFile::short(GeneratedString::plain("./app.env")?)?);
     service.set_restart(GeneratedRestartPolicy::UnlessStopped)?;
     service.add_label(GeneratedLabel::new(
@@ -204,6 +219,21 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             .and_then(compose_lens::model::Service::container_name)
             .map(|name| name.value().as_str()),
         Some("example-app")
+    );
+    assert!(matches!(
+        generated
+            .document()
+            .service("app")
+            .and_then(compose_lens::model::Service::entrypoint),
+        Some(Entrypoint::List { values, .. }) if values.len() == 1
+    ));
+    assert_eq!(
+        generated
+            .document()
+            .service("app")
+            .and_then(compose_lens::model::Service::init)
+            .map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
     );
     assert!(
         generated
@@ -236,6 +266,9 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             "  \"app\":\n",
             "    container_name: \"example-app\"\n",
             "    image: \"example.invalid/app:1\"\n",
+            "    entrypoint:\n",
+            "      - \"/usr/bin/env\"\n",
+            "    init: true\n",
             "    env_file:\n",
             "      - \"./app.env\"\n",
             "    labels:\n",

@@ -2,6 +2,8 @@ services:
   web:
     container_name: project-view-web-override
     image: example.invalid/web:2@sha256:abcdef
+    entrypoint: ["/usr/local/bin/php", "-d", "variables_order=EGPCS"]
+    init: true
     user: "1001:1002"
     userns_mode: keep-id
     group_add: [video]

@@ -37,6 +37,15 @@ The merged-project view also exposes `healthcheck` without collapsing scalar/lis
 Every effective timing, retry, disable, and command field has its own merge provenance. Compose
 `start_interval` remains distinct from provider-specific startup-healthcheck features.
 
+Service `entrypoint` is native at both document and merged-project layers through a distinct
+`Entrypoint` type. Explicit null, scalar, list, empty scalar, and empty list forms remain distinct.
+It is not represented as `Command`: null selects the image entrypoint, empty values clear it, and
+Compose replaces rather than appends the complete value during multi-file merge.
+
+Service `init` is a source-aware boolean at both layers. Literal `true`/`false` and deferred
+interpolation remain distinct, and complete-value replacement retains every contributing source.
+ComposeLens does not select or inspect the platform-specific init binary.
+
 Execution identity and context are native at both document and merged-project layers. Effective
 `user`, `userns_mode`, `group_add`, `working_dir`, and `read_only` values retain raw spelling,
 field provenance, and, for supplementary groups, per-item provenance. No account, group, path, or
@@ -76,7 +85,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `container_name`, `image`, `build`, `command`, `environment`, `env_file`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -89,7 +98,9 @@ Collections retain authored order.
 
 Field-specific variants retain forms whose behavior or meaning can differ:
 
-- command: explicit null, scalar, or list, including empty scalar and empty list;
+- entrypoint and command: independent explicit null, scalar, or list values, including empty
+  scalar and empty list;
+- init: a literal boolean or deferred interpolation expression;
 - environment: list or mapping, including `NAME`, `NAME=`, empty strings, and null values;
 - environment files: a scalar path, ordered path list, or ordered long entries with `path`,
   `required`, and `format` retained independently;

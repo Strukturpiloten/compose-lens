@@ -4,10 +4,10 @@ mod generated;
 mod preserved;
 
 pub use generated::{
-    ComposeDocumentBuilder, GeneratedCommand, GeneratedComposeDocument, GeneratedEnvironment, GeneratedEnvironmentFile,
-    GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedLabel, GeneratedMount, GeneratedNetworkAttachment,
-    GeneratedPort, GeneratedProtocol, GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux, GeneratedService,
-    GeneratedString, GenerationError,
+    ComposeDocumentBuilder, GeneratedCommand, GeneratedComposeDocument, GeneratedEntrypoint, GeneratedEnvironment,
+    GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedLabel, GeneratedMount,
+    GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource, GeneratedRestartPolicy,
+    GeneratedSelinux, GeneratedService, GeneratedString, GenerationError,
 };
 
 pub use preserved::{

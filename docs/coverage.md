@@ -3,7 +3,8 @@
 This document distinguishes source preservation from typed consumer coverage. It was audited
 against the current official
 [Compose service reference](https://docs.docker.com/reference/compose-file/services/) on
-2026-08-05.
+2026-08-06. The exact current untyped-key inventory and promotion order live in the
+[roadmap](roadmap.md).
 
 ## Coverage layers
 
@@ -21,9 +22,9 @@ provenance.
 
 | Coverage | Service fields |
 | --- | --- |
-| Document model and project view | `container_name`, `image`, `command`, `environment`, `env_file`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Document model and project view | `container_name`, `image`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Document model only | `build`, `ulimits`, `deploy` |
-| Preserved, not typed | `annotations`, `attach`, `blkio_config`, CPU controls, `cap_add`, `cap_drop`, `cgroup`, `cgroup_parent`, `credential_spec`, `develop`, `device_cgroup_rules`, `devices`, `dns`, `dns_opt`, `dns_search`, `domainname`, service `driver_opts`, `entrypoint`, `expose`, `extends`, `external_links`, `gpus`, `hostname`, `init`, `ipc`, `isolation`, `label_file`, `links`, `logging`, `mac_address`, memory controls, `models`, `network_mode`, OOM controls, `pid`, `pids_limit`, `platform`, lifecycle hooks, `privileged`, `provider`, `pull_policy`, `runtime`, `scale`, `security_opt`, `shm_size`, `stdin_open`, `stop_grace_period`, `stop_signal`, `storage_opt`, `sysctls`, `tmpfs`, `tty`, `use_api_socket`, `uts`, `volumes_from` |
+| Preserved, not typed | 67 exact current service keys; see [Exact service gaps](roadmap.md#exact-service-gaps). |
 
 The preserved row follows the current Docker documentation grouping. Provider-specific additions
 remain preserved even when they are not part of the compose-spec repository.
@@ -31,9 +32,10 @@ remain preserved even when they are not part of the compose-spec repository.
 ## Current top-level boundary
 
 `name`, `services`, `networks`, `volumes`, `configs`, and `secrets` have both document-model and
-project-view support. Their implemented definition fields are listed in
-[Typed Compose model](typed-model.md). Other top-level or nested values remain source-addressable
-and appear as typed field references where the current boundary supports them.
+project-view support. `version`, `include`, and `models` remain syntax-preserved only. Their exact
+nested gaps and implemented definition fields are listed in the [roadmap](roadmap.md) and
+[Typed Compose model](typed-model.md). Other nested values remain source-addressable and appear as
+typed field references where the current boundary supports them.
 
 ## Next promotion
 
@@ -66,7 +68,12 @@ ComposeLens performs no file discovery, existence check, or environment-file par
 Compose output retains ordered short and long entries, explicit `required`, and `format: raw`,
 then validates its own bytes through the native parser.
 
-Entrypoint behavior and resource limits are the next high-value promotion groups.
+Entrypoint now has distinct source-aware document/project types and generated string, list, and
+explicitly empty forms. `null` continues to mean “use the image entrypoint,” while empty scalar or
+list forms explicitly clear it. Multi-file processing uses Compose's replacement rule and retains
+all contributing spans. Service `init` also crosses all three boundaries as an authored/project
+boolean that can retain deferred interpolation and a generated explicit boolean. Remaining
+lifecycle controls and resource limits are the next high-value promotion groups.
 
 ## Promotion checklist
 

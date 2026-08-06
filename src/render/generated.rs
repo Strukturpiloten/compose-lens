@@ -139,6 +139,18 @@ pub enum GeneratedCommand {
     Empty,
 }
 
+/// Compose entrypoint form selected for a generated service.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedEntrypoint {
+    /// Emit an exact entrypoint list in authored argument order.
+    List(Vec<GeneratedString>),
+    /// Emit the short scalar string form.
+    String(GeneratedString),
+    /// Explicitly clear the entrypoint declared by the image.
+    Empty,
+}
+
 /// A valid service-level Compose restart policy selected for generated output.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -663,7 +675,9 @@ pub struct GeneratedService {
     name: String,
     container_name: Option<GeneratedString>,
     image: Option<GeneratedString>,
+    entrypoint: Option<GeneratedEntrypoint>,
     command: Option<GeneratedCommand>,
+    init: Option<bool>,
     environment_files: Vec<GeneratedEnvironmentFile>,
     environment: Vec<GeneratedEnvironment>,
     labels: Vec<GeneratedLabel>,
@@ -690,7 +704,9 @@ impl GeneratedService {
             name: required("service name", name.into())?,
             container_name: None,
             image: None,
+            entrypoint: None,
             command: None,
+            init: None,
             environment_files: Vec::new(),
             environment: Vec::new(),
             labels: Vec::new(),
@@ -738,6 +754,15 @@ impl GeneratedService {
         set_once(&mut self.image, image, "image")
     }
 
+    /// Sets the Compose entrypoint form exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_entrypoint(&mut self, entrypoint: GeneratedEntrypoint) -> Result<(), GenerationError> {
+        set_once(&mut self.entrypoint, entrypoint, "entrypoint")
+    }
+
     /// Sets the Compose command form exactly once.
     ///
     /// # Errors
@@ -745,6 +770,15 @@ impl GeneratedService {
     /// Returns [`GenerationError::DuplicateField`] when already configured.
     pub fn set_command(&mut self, command: GeneratedCommand) -> Result<(), GenerationError> {
         set_once(&mut self.command, command, "command")
+    }
+
+    /// Sets the Compose init-process choice exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_init(&mut self, init: bool) -> Result<(), GenerationError> {
+        set_once(&mut self.init, init, "init")
     }
 
     /// Adds one ordered environment-file declaration.
@@ -866,6 +900,7 @@ impl GeneratedService {
 
     fn is_sensitive(&self) -> bool {
         self.image.as_ref().is_some_and(GeneratedString::is_sensitive)
+            || self.entrypoint.as_ref().is_some_and(entrypoint_is_sensitive)
             || self.command.as_ref().is_some_and(command_is_sensitive)
             || self
                 .environment_files
@@ -1037,8 +1072,15 @@ fn render_document(project: &ComposeDocumentBuilder) -> String {
 fn render_service(output: &mut String, service: &GeneratedService) {
     render_optional_string(output, "container_name", service.container_name.as_ref());
     render_optional_string(output, "image", service.image.as_ref());
+    if let Some(entrypoint) = &service.entrypoint {
+        render_entrypoint(output, entrypoint);
+    }
     if let Some(command) = &service.command {
         render_command(output, command);
+    }
+    if let Some(init) = service.init {
+        write_field(output, 2, "init");
+        output.push_str(if init { "true\n" } else { "false\n" });
     }
     render_environment_files(output, &service.environment_files);
     render_environment(output, &service.environment);
@@ -1058,6 +1100,15 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     render_ports(output, &service.ports);
     render_mounts(output, &service.mounts);
     render_networks(output, &service.networks);
+}
+
+fn render_entrypoint(output: &mut String, entrypoint: &GeneratedEntrypoint) {
+    match entrypoint {
+        GeneratedEntrypoint::List(arguments) if arguments.is_empty() => output.push_str("    entrypoint: []\n"),
+        GeneratedEntrypoint::List(arguments) => render_string_sequence(output, "entrypoint", arguments),
+        GeneratedEntrypoint::String(entrypoint) => render_optional_string(output, "entrypoint", Some(entrypoint)),
+        GeneratedEntrypoint::Empty => output.push_str("    entrypoint: []\n"),
+    }
 }
 
 fn render_restart(output: &mut String, restart: GeneratedRestartPolicy) {
@@ -1415,5 +1466,13 @@ fn command_is_sensitive(command: &GeneratedCommand) -> bool {
         GeneratedCommand::Exec(arguments) => arguments.iter().any(GeneratedString::is_sensitive),
         GeneratedCommand::Shell(command) => command.is_sensitive(),
         GeneratedCommand::Empty => false,
+    }
+}
+
+fn entrypoint_is_sensitive(entrypoint: &GeneratedEntrypoint) -> bool {
+    match entrypoint {
+        GeneratedEntrypoint::List(arguments) => arguments.iter().any(GeneratedString::is_sensitive),
+        GeneratedEntrypoint::String(entrypoint) => entrypoint.is_sensitive(),
+        GeneratedEntrypoint::Empty => false,
     }
 }

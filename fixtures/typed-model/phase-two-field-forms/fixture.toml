@@ -1,7 +1,7 @@
 schema = 1
 id = "phase-two-field-forms"
 suite = "typed-model"
-description = "Protects Phase 2 typed service fields, top-level resources, alternate syntax forms, deferred expressions, extensions, and unknown fields."
+description = "Protects typed service fields, independent entrypoint/command forms, literal and deferred init choices, top-level resources, alternate syntax forms, deferred expressions, extensions, and unknown fields."
 secrets_reviewed = true
 files = ["compose.yaml"]
 
@@ -15,7 +15,7 @@ modifications = "none"
 description = "No interpolation or runtime is used; expressions remain deferred typed values."
 
 [expectations]
-summary = "Every Phase 2 field is extracted without normalization or structural diagnostics, including null and empty values."
+summary = "Every typed field is extracted without normalization or structural diagnostics, including null, empty, scalar, and list entrypoint values plus literal and deferred init choices."
 
 [extensions.typed-model]
 expected_diagnostics = []

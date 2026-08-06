@@ -5,12 +5,12 @@ use crate::merge::{
     EntrySyntax, MergeProvenance, MergedEntry, MergedProject, MergedScalarKind, MergedValue, MergedValueKind,
 };
 use crate::model::{
-    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, DependencyCondition, EnvironmentFileFormat,
-    EnvironmentFileFormatKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
-    HostAddress, ImageReference, Ipam, IpamConfig, KeyValueEntry, Labels, Located, LongPort, LongVolumeMount,
-    MountType, NetworkDefinition, Port, RestartPolicy, SecretDefinition, SelinuxRelabel, ServiceNetwork,
-    ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, UserNamespaceMode, UserSpec, VolumeDefinition,
-    VolumeMount,
+    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, DependencyCondition, Entrypoint,
+    EnvironmentFileFormat, EnvironmentFileFormatKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
+    HealthcheckTestKind, HostAddress, ImageReference, Ipam, IpamConfig, KeyValueEntry, Labels, Located, LongPort,
+    LongVolumeMount, MountType, NetworkDefinition, Port, RestartPolicy, SecretDefinition, SelinuxRelabel,
+    ServiceNetwork, ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, UserNamespaceMode, UserSpec,
+    VolumeDefinition, VolumeMount,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -585,7 +585,9 @@ pub struct ProjectService {
     provenance: MergeProvenance,
     container_name: Option<ProjectValue<String>>,
     image: Option<ProjectValue<ImageReference>>,
+    entrypoint: Option<ProjectValue<Entrypoint>>,
     command: Option<ProjectValue<Command>>,
+    init: Option<ProjectValue<BooleanValue>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
     environment_files: Option<ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>>,
     labels: Option<ProjectValue<ProjectLabels>>,
@@ -632,10 +634,22 @@ impl ProjectService {
         self.image.as_ref()
     }
 
+    /// Returns the effective entrypoint without normalizing scalar and list forms.
+    #[must_use]
+    pub const fn entrypoint(&self) -> Option<&ProjectValue<Entrypoint>> {
+        self.entrypoint.as_ref()
+    }
+
     /// Returns the effective command without normalizing scalar and list forms.
     #[must_use]
     pub const fn command(&self) -> Option<&ProjectValue<Command>> {
         self.command.as_ref()
+    }
+
+    /// Returns the effective platform-specific init-process choice.
+    #[must_use]
+    pub const fn init(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.init.as_ref()
     }
 
     /// Returns environment entries normalized by key with per-entry syntax retained.
@@ -995,7 +1009,9 @@ impl<'a> Builder<'a> {
             provenance: value.provenance().clone(),
             container_name: None,
             image: None,
+            entrypoint: None,
             command: None,
+            init: None,
             environment: None,
             environment_files: None,
             labels: None,
@@ -1032,7 +1048,13 @@ impl<'a> Builder<'a> {
                             sensitive: value.sensitive,
                         });
                 }
+                "entrypoint" => service.entrypoint = self.entrypoint(field.value()),
                 "command" => service.command = self.command(field.value()),
+                "init" => {
+                    service.init = self
+                        .located_boolean(field.value(), "service init must be a boolean")
+                        .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                }
                 "environment" => service.environment = self.environment(field.value()),
                 "env_file" => service.environment_files = self.environment_files(field.value(), &path),
                 "labels" => service.labels = self.service_labels(field.value()),
@@ -1100,6 +1122,29 @@ impl<'a> Builder<'a> {
             }
         };
         Some(ProjectValue::new(command, value))
+    }
+
+    fn entrypoint(&mut self, value: &MergedValue) -> Option<ProjectValue<Entrypoint>> {
+        let span = effective_span(value);
+        let entrypoint = match value.kind() {
+            MergedValueKind::Null(_) => Entrypoint::Null(span),
+            MergedValueKind::Scalar(scalar) => Entrypoint::String(Located::new(scalar.value().to_owned(), span)),
+            MergedValueKind::Sequence(values) => {
+                let mut arguments = Vec::new();
+                for value in values {
+                    arguments.push(self.located_string(value, "entrypoint list item must be a scalar")?);
+                }
+                Entrypoint::List {
+                    span,
+                    values: arguments,
+                }
+            }
+            _ => {
+                self.expected(value, "entrypoint must be null, a scalar, or a sequence");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(entrypoint, value))
     }
 
     fn user(&mut self, value: &MergedValue) -> Option<ProjectValue<UserSpec>> {
