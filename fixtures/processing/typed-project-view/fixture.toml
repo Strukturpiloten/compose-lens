@@ -1,7 +1,7 @@
 schema = 1
 id = "typed-project-view"
 suite = "processing"
-description = "Protects direct native typing, execution identity, profile selection, comma-containing plain scalars, and field-level provenance after multi-file merge."
+description = "Protects direct native typing, entrypoint and bidirectional boolean init replacement, execution identity, profile selection, comma-containing plain scalars, and field-level provenance after multi-file merge."
 secrets_reviewed = true
 files = ["compose.yaml", "compose.override.yaml"]
 
@@ -15,7 +15,7 @@ modifications = "none"
 description = "Two caller-supplied files are merged without interpolation; no profiles are activated."
 
 [expectations]
-summary = "The typed view contains only the active web service and retains both source IDs for replaced, appended, and recursively merged values, including container identity and execution context."
+summary = "The typed view contains only the active web service and retains both source IDs for replaced, appended, and recursively merged values, including false-to-true and true-to-false init replacements, entrypoint, container identity, and execution context."
 
 [extensions.processing]
 stage = "merge-select-type"

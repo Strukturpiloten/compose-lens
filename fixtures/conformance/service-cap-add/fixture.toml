@@ -1,0 +1,22 @@
+schema = 1
+id = "service-cap-add"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, explicitly empty, ordered, and case-distinct service capability-add sequences plus independent coexistence with cap_drop."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains omission, explicit emptiness, order, exact case, and independent cap_add/cap_drop declarations or returns a feature-specific rejection; planned rows make no runtime capability claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-cap-add"]

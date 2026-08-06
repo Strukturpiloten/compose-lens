@@ -1,0 +1,43 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty:
+    cap_drop: []
+    image: example.invalid/empty:1
+  exact-values:
+    cap_drop:
+      - NET_ADMIN
+      - NET_ADMIN
+      - net_admin
+      - ""
+      - "CAP WITH SPACE"
+      - "${DROP_CAP}"
+    image: example.invalid/exact:1
+  malformed-items:
+    cap_drop:
+      - CHOWN
+      - true
+      - 42
+      - null
+      - nested: SYS_TIME
+      - [SYS_PTRACE]
+      - SYS_NICE
+    image: example.invalid/recovered:1
+  scalar:
+    cap_drop: NET_ADMIN
+    image: example.invalid/scalar:1
+  null:
+    cap_drop: null
+    image: example.invalid/null:1
+  boolean:
+    cap_drop: false
+    image: example.invalid/boolean:1
+  number:
+    cap_drop: 7
+    image: example.invalid/number:1
+  mapping:
+    cap_drop: { capability: NET_ADMIN }
+    image: example.invalid/mapping:1
+  nested-sequence:
+    cap_drop: [[NET_ADMIN]]
+    image: example.invalid/nested:1

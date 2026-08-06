@@ -1,0 +1,12 @@
+services:
+  named:
+    image: example.invalid/composelens/named:1
+    stop_signal: SIGUSR1
+    stop_grace_period: 1m30s
+  numeric:
+    image: example.invalid/composelens/numeric:1
+    stop_signal: 15
+    stop_grace_period: 0s
+  fractional:
+    image: example.invalid/composelens/fractional:1
+    stop_grace_period: 1.5s

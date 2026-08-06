@@ -1,0 +1,18 @@
+schema = 1
+id = "service-pull-policy-model"
+suite = "typed-model"
+description = "Protects raw service pull-policy classification, malformed recovery, duplicate handling, and schema-only evidence retention."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is supplied; interpolation-shaped pull policy text remains deferred."
+
+[expectations]
+summary = "Documented policies, the alias, integer w/d/h/m/s custom intervals including schema-valid zero, deferred values, and schema-only refresh remain distinct while malformed values produce diagnostics without deleting services."

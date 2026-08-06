@@ -12,6 +12,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Generated documents](generated-rendering.md) — typed construction, syntax-form selection, parse-back validation, and redaction
 - [Phase 2 typed model](typed-model.md) — implemented field boundary, fidelity rules, and diagnostics
 - [Native coverage](coverage.md) — syntax, document-model, and merged-project field coverage
+- [Roadmap and exact specification gaps](roadmap.md) — all current untyped keys and promotion order
 - [Testing strategy](testing.md) — parser, resolver, conformance, and round-trip tests
 - [Development environment](development-environment.md) — reproducible VS Code tooling and update policy
 - [Compose implementation conformance](conformance.md) — exact matrices, evidence lifecycle, and open runtime work
@@ -28,8 +29,8 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Canonical-rendering evidence](research/compose-canonical-rendering.md) — fixed output, explicit processing boundary, recovery, and redaction
 - [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
 - [API stability policy](api-stability.md) — pre-1.0 compatibility and public dependency boundaries
+- [0.1.14 release notes](releases/0.1.14.md) — lifecycle and resource settings across authored, effective, and generated documents
 - [0.1.13 release notes](releases/0.1.13.md) — generated service environment files
-- [0.1.12 release notes](releases/0.1.12.md) — source-aware service environment files
 - [Release process](releasing.md) — Cargo versioning, crates.io authentication, and GitHub releases
 - [Changelog](../CHANGELOG.md) — release-facing behavior changes
 - [Implementation plan](implementation-plan.md) — synchronized cross-repository tasks T1–T8

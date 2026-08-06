@@ -1,0 +1,18 @@
+schema = 1
+id = "service-sysctls-model"
+suite = "typed-model"
+description = "Protects service sysctls mapping/list form fidelity, scalar spelling, duplicates, spans, interpolation-shaped strings, and malformed sibling recovery."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is provided; dollar-bearing map values and list items remain authored evidence while mapping keys are literal."
+
+[expectations]
+summary = "Omission, explicit empty mapping/list, ordered map entries, exact scalar kinds and spelling, ordered list strings, duplicates, valid siblings, service scope, and stable diagnostics remain observable without namespace or runtime validation."

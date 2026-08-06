@@ -1,0 +1,20 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty:
+    image: example.invalid/empty:1
+    cap_add: []
+  ordered:
+    image: example.invalid/ordered:1
+    cap_add:
+      - NET_ADMIN
+      - CHOWN
+  case-variant:
+    image: example.invalid/case-variant:1
+    cap_add:
+      - NET_ADMIN
+      - net_admin
+  coexistence:
+    image: example.invalid/coexistence:1
+    cap_add: [SYS_TIME]
+    cap_drop: [MKNOD]

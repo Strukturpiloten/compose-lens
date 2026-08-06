@@ -1,0 +1,43 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  mapping:
+    sysctls:
+      net.ipv4.ip_forward: "01"
+      kernel.shm_rmid_forced: 0001
+      fs.protected_hardlinks: true
+      net.ipv6.conf.all.disable_ipv6: null
+      user.${LITERAL_KEY}: "${SENSITIVE_VALUE}"
+  empty-map:
+    sysctls: {}
+  list:
+    sysctls:
+      - net.core.somaxconn=1024
+      - "${SYSCTL_ASSIGNMENT}"
+      - net.core.somaxconn=1024
+  empty-list:
+    sysctls: []
+  malformed-map:
+    image: example.invalid/map-recovery:1
+    sysctls:
+      "": rejected-empty-name
+      valid.before: retained
+      invalid.nested: { value: rejected }
+      valid.after: false
+  malformed-list:
+    image: example.invalid/list-recovery:1
+    sysctls:
+      - valid.before=value
+      - true
+      - 64
+      - null
+      - { invalid: mapping }
+      - [invalid]
+      - valid.after=value
+  scalar:
+    image: example.invalid/scalar-recovery:1
+    sysctls: net.ipv4.ip_forward=1
+  deploy-only:
+    deploy:
+      sysctls:
+        net.ipv4.ip_forward: "1"

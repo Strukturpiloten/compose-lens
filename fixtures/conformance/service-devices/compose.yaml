@@ -1,0 +1,19 @@
+services:
+  omitted:
+    image: example.invalid/composelens/devices-omitted:1
+  empty:
+    devices: []
+  path-short:
+    devices:
+      - /dev/dri:/dev/dri:rwm
+      - /dev/dri:/dev/dri:rwm
+  cdi-short:
+    devices:
+      - vendor.example/device=gpu
+  mixed-long:
+    devices:
+      - /dev/video0:/dev/camera:rw
+      - source: /dev/video1
+        target: /dev/camera-secondary
+        permissions: provider-specific
+      - source: vendor.example/device=accelerator

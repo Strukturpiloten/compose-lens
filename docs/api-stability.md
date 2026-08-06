@@ -42,6 +42,63 @@ validation, or rendering.
 
 The additive generated-document path accepts only explicit Compose-owned values and performs no
 processing or I/O. Successful output is parse-back validated through the syntax and native model.
+Additive `init` getters retain omitted, literal, and deferred states at the authored-document and
+effective-project layers; the generated setter emits only an explicitly supplied boolean.
+Additive lifecycle getters expose `stop_signal` independently from the lifecycle-specific
+`StopGracePeriod` state at both authored-document and effective-project layers. Generated setters
+retain caller spelling and sensitivity without applying target-runtime normalization.
+Additive `PullPolicy` getters retain exact authored spelling and separate documented, aliased,
+deferred, schema-only, and other classifications. `GeneratedPullPolicy` is non-exhaustive and
+emits documented forms only; `pull_refresh_after` remains source-addressable unmodeled evidence.
+Additive `PidsLimit` getters retain exact spelling and separate unlimited, arbitrary-precision
+finite, ambiguous zero, deferred, and other states. Non-exhaustive `GeneratedPidsLimit` emits only
+unlimited or validated positive ASCII-decimal values; omission remains omission.
+Additive `ShmSize` getters retain exact scalar text, source span, YAML number/string provenance,
+documented lowercase units and amount spelling, ambiguous zero, deferred expressions, and distinct
+provider-dependent number/string states. Public shared-memory enums are non-exhaustive.
+`GeneratedShmSize` emits only a quoted canonical positive ASCII-integer amount with an explicit
+documented lowercase unit; omission remains omission and no provider default is injected.
+Additive `MemLimit` getters retain exact scalar text, span, YAML number/string provenance,
+documented lowercase units and amount spelling, lexical zero, deferred expressions, schema-only
+numbers, and provider-dependent strings. `GeneratedMemLimit` emits only a quoted canonical positive
+ASCII-decimal amount with a distinct explicit unit; omission remains omission and no default,
+deploy reconciliation, runtime enforcement, host/cgroup inspection, or non-byte exact
+cross-format claim is introduced.
+Additive `Tmpfs`/`TmpfsItem` getters retain omission, scalar/list form, explicit empty lists,
+`<path>[:<options>]` spelling, documented versus expression/provider-dependent classification,
+exact duplicates, spans, sensitivity, and merge provenance. `GeneratedTmpfs` is non-exhaustive and
+retains scalar/list form, duplicates, documented assignments, and well-shaped raw target options;
+omission remains omission and service `tmpfs` stays distinct from volume type `tmpfs`.
+Additive `Sysctls`/`SysctlsForm` getters retain omission, explicit empty mapping/list forms,
+ordered mapping entries, exact scalar kinds and spelling, ordered list strings, duplicates, spans,
+sensitivity, and generic merge provenance. `ProjectSysctls` retains per-entry provenance and key
+locations. `GeneratedSysctls` emits only quoted resolved strings, rejects unsafe or exact-duplicate
+input, and performs no namespace, privilege, runtime, or cross-format interpretation.
+Additive `ProjectUlimits`, ordered `ProjectUlimit`, `ProjectUlimitValue`, `ProjectUlimitRange`, and
+`ProjectUlimitScalar` getters retain omission, explicit empty/reset mappings, lowercase keys,
+single/range form, authored/effective scalar spelling and kind, nested recursive-merge provenance,
+sensitivity, replacement, and override. Existing authored `Ulimits` types and diagnostic codes
+remain available. `GeneratedUlimits`/`GeneratedUlimit` preserve order and explicit empty maps,
+emit only quoted `-1` or non-negative ASCII decimals, and reject duplicate or non-lowercase names,
+missing range members, deferred/multiline/NUL values, and arbitrary schema strings such as `host`.
+Additive `Hostname` getters retain the exact YAML string scalar and classify resolved RFC-1123
+literals, deferred dollar-bearing expressions, and invalid literals without deleting the service.
+`HostnameKind` and `GeneratedHostname` are non-exhaustive; generated output accepts only a
+validated resolved literal, and omission remains omission.
+Additive `CapabilityAdd`/`CapabilityAddItem` and `CapabilityDrop`/`CapabilityDropItem` getters
+retain omission versus explicit empty state, exact item strings and spans, schema-duplicate
+diagnostics, order, and lexical exact-candidate classification. Effective values retain full field
+and per-item merge provenance and sensitivity. `GeneratedService::set_cap_add` and
+`GeneratedService::set_cap_drop` each set one independent complete vector exactly once, including
+an explicit empty vector, and reject unsafe or exact-duplicate items without a whitelist, case
+normalization, or cross-field reconciliation.
+Additive `Devices`, `Device`, `ShortDevice`, and `LongDevice` getters retain omission versus
+explicit empty state, ordered mixed short/long forms, exact duplicates, raw CDI/deferred/opaque
+short strings, required long string `source`, optional raw `target`/`permissions`, spans,
+extensions, unknown fields, sensitivity, and target-keyed merge provenance. `ProjectDevice` and
+`ProjectLongDevice` expose item and nested provenance. `GeneratedDevice`/`GeneratedLongDevice` and
+`GeneratedService::set_devices` emit safe resolved quoted strings, retain order and duplicates,
+and parse-back validate without host-device, colon-triple, CDI, permissions, or runtime checks.
 
 ## Changes before 1.0
 

@@ -83,7 +83,7 @@ pub enum LimitValue {
 }
 
 impl LimitValue {
-    pub(super) fn parse(value: String) -> Self {
+    pub(crate) fn parse(value: String) -> Self {
         if value == "-1" {
             Self::Unlimited
         } else if value.bytes().all(|byte| byte.is_ascii_digit()) && !value.is_empty() {
@@ -109,6 +109,10 @@ impl LimitValue {
             Self::Number(value) | Self::Expression(value) | Self::Other(value) => value,
         }
     }
+}
+
+pub(crate) fn valid_ulimit_name(name: &str) -> bool {
+    !name.is_empty() && name.bytes().all(|byte| byte.is_ascii_lowercase())
 }
 
 /// Long syntax with independent soft and hard limits.

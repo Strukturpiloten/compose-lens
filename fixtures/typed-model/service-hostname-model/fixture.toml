@@ -1,0 +1,18 @@
+schema = 1
+id = "service-hostname-model"
+suite = "typed-model"
+description = "Protects source-aware service hostname classification, conservative RFC-1123 validation, malformed recovery, and YAML string-scalar typing."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is supplied; every dollar-bearing hostname remains deferred."
+
+[expectations]
+summary = "Omission, valid uppercase and digit-leading literals, deferred text, invalid literals, and wrong YAML shapes remain distinct without deleting services or synthesizing a default."

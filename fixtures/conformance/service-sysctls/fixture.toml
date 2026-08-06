@@ -1,0 +1,18 @@
+schema = 1
+id = "service-sysctls"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, mapping/list, explicit empty, scalar-kind, interpolation-free, and duplicate-list service sysctls forms."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains or specifically rejects each service sysctls config form; planned rows make no runtime application, namespace, privilege, host-kernel, or cross-provider equivalence claim."

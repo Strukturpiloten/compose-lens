@@ -1,0 +1,22 @@
+schema = 1
+id = "service-pull-policy"
+suite = "conformance"
+description = "Isolates provider config handling of documented, aliased, integer interval, schema-valid zero interval, and schema-only service pull policy spellings."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains or specifically rejects each pull-policy spelling, including composite and schema-valid but semantically ambiguous zero intervals; planned rows make no runtime or cross-provider support claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-pull-policy", "service-pull-refresh-after"]

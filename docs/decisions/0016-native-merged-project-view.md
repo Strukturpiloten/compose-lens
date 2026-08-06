@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-02
-- Additive amendments: 2026-08-03, 2026-08-05
+- Additive amendments: 2026-08-03, 2026-08-05, 2026-08-06
 
 ## Context
 
@@ -59,6 +59,11 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
     Each entry retains mapping, `KEY=VALUE`, or key-only list syntax plus complete key and value
     provenance. Key-only labels expose an empty string rather than inheriting environment-variable
     host-resolution semantics.
+14. Effective service devices retain an optional ordered mixed short/long sequence. Raw path,
+    CDI-like, deferred, and opaque short strings remain authoritative. Long `source`, `target`, and
+    `permissions` values plus extensions and unknown fields retain nested provenance. The existing
+    target-keyed replacement rule remains observable alongside reset, override, duplicates, and
+    interpolation sensitivity without device, permissions, CDI, GPU, or runtime validation.
 
 The generic `MergedProject` remains public for advanced analysis, validation, rendering, and future
 native-boundary expansion. The new view is additive within the 0.1.x compatibility line.

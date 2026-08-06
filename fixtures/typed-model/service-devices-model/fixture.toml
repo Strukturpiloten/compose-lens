@@ -1,0 +1,18 @@
+schema = 1
+id = "service-devices-model"
+suite = "typed-model"
+description = "Protects ordered mixed short/long service devices, explicit empty and duplicate sequences, CDI/deferred/opaque raw spellings, retained long options, and malformed-item recovery without runtime device interpretation."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is provided; expression-shaped device selectors remain authored evidence."
+
+[expectations]
+summary = "Omission, explicit empty, order, exact duplicates, short lexical families, long nested fields, x/unknown retention, spans, and structured recovery remain observable without validating host existence, colon triples, CDI, permissions, or runtime access."

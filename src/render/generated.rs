@@ -1,12 +1,20 @@
 //! Deterministic construction of new Compose documents from reviewed native values.
 
-use std::{error::Error, fmt};
+use std::{collections::BTreeSet, error::Error, fmt};
 
-use crate::{model::ComposeDocument, source::SourceId, syntax::SyntaxDocument};
+use crate::{
+    model::{
+        ComposeDocument, MemLimitUnit, ShmSizeUnit, StopGracePeriod, valid_generated_device_string,
+        valid_generated_mem_amount, valid_generated_shm_amount, valid_generated_tmpfs_item, valid_hostname,
+        valid_positive_pids_decimal, valid_pull_policy_duration, valid_ulimit_name,
+    },
+    source::SourceId,
+    syntax::SyntaxDocument,
+};
 
 use super::write_quoted;
 
-/// A generated Compose value is empty or contains a NUL byte.
+/// A generated Compose construction request is invalid or cannot be represented safely.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GenerationError {
@@ -14,10 +22,38 @@ pub enum GenerationError {
     EmptyValue(&'static str),
     /// A value contains a NUL byte and cannot represent native container intent safely.
     ContainsNul(&'static str),
+    /// A value contains a carriage return or line feed where one YAML string item is required.
+    ContainsLineBreak(&'static str),
     /// An environment name contains Compose list-form's `=` separator.
     InvalidEnvironmentName,
     /// A custom container name does not satisfy Compose's portable name grammar.
     InvalidContainerName,
+    /// A service hostname is empty, deferred, or outside the conservative RFC-1123 grammar.
+    InvalidHostname,
+    /// A custom pull interval does not match the documented Compose duration grammar.
+    InvalidPullPolicyDuration,
+    /// A finite PID limit is not a positive integral decimal.
+    InvalidPidsLimit,
+    /// A service shared-memory amount is not a canonical positive ASCII decimal.
+    InvalidShmSize,
+    /// A service memory-limit amount is not a canonical positive ASCII decimal.
+    InvalidMemLimit,
+    /// A service-level temporary-filesystem item is deferred, malformed, or provider-dependent.
+    InvalidTmpfsItem,
+    /// A generated short device or long-device member is empty where required, multiline, or deferred.
+    InvalidDeviceValue(&'static str),
+    /// A generated sysctl mapping name is empty, multiline, NUL-bearing, or expression-shaped.
+    InvalidSysctlName,
+    /// A generated sysctl value or list item is multiline, NUL-bearing, or expression-shaped.
+    InvalidSysctlValue,
+    /// A generated ulimit name is outside the portable lowercase ASCII grammar.
+    InvalidUlimitName,
+    /// A generated ulimit value is outside the supported portable decimal or unlimited set.
+    InvalidUlimitValue,
+    /// A generated ulimit range omitted its required soft or hard member.
+    MissingUlimitRangeMember(&'static str),
+    /// A stop grace period does not match the raw-preserving policy based on documented Compose units.
+    InvalidStopGracePeriod,
     /// A short-form component contains its reserved separator.
     InvalidShortComponent(&'static str),
     /// A short bind spelling needed for `SELinux` cannot be encoded unambiguously.
@@ -31,6 +67,8 @@ pub enum GenerationError {
         /// Duplicate non-sensitive name.
         name: String,
     },
+    /// A generated sequence contains an exact duplicate item.
+    DuplicateItem(&'static str),
     /// A generated port used target port zero.
     InvalidPort,
     /// An `SCTP` port selected a host address without a published port.
@@ -46,10 +84,54 @@ impl fmt::Display for GenerationError {
         match self {
             Self::EmptyValue(kind) => write!(formatter, "generated {kind} must not be empty"),
             Self::ContainsNul(kind) => write!(formatter, "generated {kind} must not contain a NUL byte"),
+            Self::ContainsLineBreak(kind) => {
+                write!(formatter, "generated {kind} must not contain a carriage return or line feed")
+            }
             Self::InvalidEnvironmentName => formatter.write_str("generated environment name must not contain `=`"),
             Self::InvalidContainerName => {
                 formatter.write_str("generated container name must match `[a-zA-Z0-9][a-zA-Z0-9_.-]+`")
             }
+            Self::InvalidHostname => formatter.write_str(
+                "generated hostname must be a resolved ASCII RFC-1123 name with labels of 1 to 63 characters and total length at most 253",
+            ),
+            Self::InvalidPullPolicyDuration => formatter.write_str(
+                "generated pull policy duration must match integer `w`, `d`, `h`, `m`, and `s` components",
+            ),
+            Self::InvalidPidsLimit => {
+                formatter.write_str("generated finite PID limit must be a positive integral decimal")
+            }
+            Self::InvalidShmSize => formatter.write_str(
+                "generated shared-memory size must use a canonical positive ASCII-integer amount and an explicit documented lowercase unit",
+            ),
+            Self::InvalidMemLimit => formatter.write_str(
+                "generated memory limit must use a canonical positive ASCII-integer amount and an explicit documented lowercase unit",
+            ),
+            Self::InvalidTmpfsItem => formatter.write_str(
+                "generated tmpfs item must be a non-empty path optionally followed by a colon and non-empty comma-separated raw options",
+            ),
+            Self::InvalidDeviceValue(member) => write!(
+                formatter,
+                "generated device {member} must be a safe resolved single-line string{}",
+                if matches!(*member, "short item" | "source") {
+                    " and must not be empty"
+                } else {
+                    ""
+                }
+            ),
+            Self::InvalidSysctlName => formatter
+                .write_str("generated sysctl name must be a non-empty resolved single-line string"),
+            Self::InvalidSysctlValue => formatter
+                .write_str("generated sysctl value must be a resolved single-line string"),
+            Self::InvalidUlimitName => formatter
+                .write_str("generated ulimit name must match lowercase ASCII `[a-z]+`"),
+            Self::InvalidUlimitValue => formatter
+                .write_str("generated ulimit value must be `-1` or a non-negative ASCII decimal"),
+            Self::MissingUlimitRangeMember(member) => {
+                write!(formatter, "generated ulimit range is missing required `{member}`")
+            }
+            Self::InvalidStopGracePeriod => formatter.write_str(
+                "generated stop grace period must match the ComposeLens duration policy using `us`, `ms`, `s`, `m`, or `h`, or contain an interpolation marker",
+            ),
             Self::InvalidShortComponent(kind) => {
                 write!(formatter, "generated {kind} contains its reserved short-form separator")
             }
@@ -59,6 +141,7 @@ impl fmt::Display for GenerationError {
             Self::DuplicateName { kind, name } => {
                 write!(formatter, "generated {kind} `{name}` was added more than once")
             }
+            Self::DuplicateItem(kind) => write!(formatter, "generated {kind} contains an exact duplicate item"),
             Self::InvalidPort => formatter.write_str("generated container target port must be greater than zero"),
             Self::UnrepresentableSctpHostIp => formatter.write_str(
                 "generated SCTP port with a host address also requires a published port for Compose short syntax",
@@ -139,6 +222,18 @@ pub enum GeneratedCommand {
     Empty,
 }
 
+/// Compose entrypoint form selected for a generated service.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedEntrypoint {
+    /// Emit an exact entrypoint list in authored argument order.
+    List(Vec<GeneratedString>),
+    /// Emit the short scalar string form.
+    String(GeneratedString),
+    /// Explicitly clear the entrypoint declared by the image.
+    Empty,
+}
+
 /// A valid service-level Compose restart policy selected for generated output.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -154,6 +249,349 @@ pub enum GeneratedRestartPolicy {
     },
     /// Restart except after an explicit stop or removal.
     UnlessStopped,
+}
+
+/// A documented service-level Compose image pull policy selected for generated output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedPullPolicy {
+    /// Pull before every service start.
+    Always,
+    /// Never pull and rely on a cached image.
+    Never,
+    /// Pull only when the image is missing.
+    Missing,
+    /// Emit the retained `if_not_present` alias.
+    IfNotPresentAlias,
+    /// Build the image before starting the service.
+    Build,
+    /// Check once per day.
+    Daily,
+    /// Check once per week.
+    Weekly,
+    /// Check after an exact caller-supplied duration spelling.
+    Every(GeneratedString),
+}
+
+/// A service-level Compose PID limit selected for generated output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedPidsLimit {
+    /// Emit the documented unlimited spelling `-1`.
+    Unlimited,
+    /// Emit an exact positive integral decimal without fixed-width integer parsing.
+    Finite(String),
+}
+
+/// A safe explicit service shared-memory size selected for generated Compose output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedShmSize {
+    /// Emit one quoted amount and documented lowercase unit.
+    Explicit {
+        /// Canonical positive ASCII-integer amount without leading zeros.
+        amount: GeneratedString,
+        /// Explicit documented lowercase unit.
+        unit: ShmSizeUnit,
+    },
+}
+
+/// A safe explicit service memory limit selected for generated Compose output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedMemLimit {
+    /// Emit one quoted amount and documented lowercase unit.
+    Explicit {
+        /// Canonical positive ASCII-integer amount without leading zeros.
+        amount: GeneratedString,
+        /// Explicit documented lowercase unit.
+        unit: MemLimitUnit,
+    },
+}
+
+/// The exact service-level `tmpfs` form selected for generated Compose output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedTmpfs {
+    /// Emit one quoted scalar item.
+    Scalar(GeneratedString),
+    /// Emit one quoted ordered list, including an explicit empty list.
+    List(Vec<GeneratedString>),
+}
+
+/// One generated long-syntax service device.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedLongDevice {
+    source: GeneratedString,
+    target: Option<GeneratedString>,
+    permissions: Option<GeneratedString>,
+}
+
+impl GeneratedLongDevice {
+    /// Creates a long device from safe resolved strings without interpreting device paths or permissions.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty source and any NUL-bearing, multiline, or dollar-bearing member. NUL bytes
+    /// are normally rejected while constructing [`GeneratedString`]. Empty optional target and
+    /// permissions strings remain raw schema strings and are not assigned runtime meaning.
+    pub fn new(
+        source: GeneratedString,
+        target: Option<GeneratedString>,
+        permissions: Option<GeneratedString>,
+    ) -> Result<Self, GenerationError> {
+        validate_generated_device_member("source", &source, true)?;
+        if let Some(target) = &target {
+            validate_generated_device_member("target", target, false)?;
+        }
+        if let Some(permissions) = &permissions {
+            validate_generated_device_member("permissions", permissions, false)?;
+        }
+        Ok(Self {
+            source,
+            target,
+            permissions,
+        })
+    }
+
+    /// Returns the exact generated source through its sensitivity boundary.
+    #[must_use]
+    pub const fn source(&self) -> &GeneratedString {
+        &self.source
+    }
+
+    /// Returns the optional exact generated target.
+    #[must_use]
+    pub const fn target(&self) -> Option<&GeneratedString> {
+        self.target.as_ref()
+    }
+
+    /// Returns the optional exact raw generated permissions string.
+    #[must_use]
+    pub const fn permissions(&self) -> Option<&GeneratedString> {
+        self.permissions.as_ref()
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.source.is_sensitive()
+            || self.target.as_ref().is_some_and(GeneratedString::is_sensitive)
+            || self.permissions.as_ref().is_some_and(GeneratedString::is_sensitive)
+    }
+}
+
+/// One generated service device with explicit short or long syntax.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedDevice {
+    /// Emit one exact quoted raw short item.
+    Short(GeneratedString),
+    /// Emit one ordered long mapping.
+    Long(GeneratedLongDevice),
+}
+
+impl GeneratedDevice {
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::Short(value) => value.is_sensitive(),
+            Self::Long(value) => value.is_sensitive(),
+        }
+    }
+}
+
+/// One ordered mapping-form generated sysctl assignment.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedSysctl {
+    name: String,
+    value: GeneratedString,
+}
+
+impl GeneratedSysctl {
+    /// Creates one resolved string-valued sysctl assignment.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, multiline, NUL-bearing, or dollar-bearing names and multiline or
+    /// dollar-bearing values. Values may be empty. NUL-bearing values are rejected while
+    /// constructing [`GeneratedString`].
+    pub fn new(name: impl Into<String>, value: GeneratedString) -> Result<Self, GenerationError> {
+        let name = name.into();
+        if name.is_empty()
+            || name.contains(['\0', '\r', '\n'])
+            || name.contains('$')
+            || value.expose().contains(['\r', '\n', '$'])
+        {
+            return Err(if name.is_empty() || name.contains(['\0', '\r', '\n', '$']) {
+                GenerationError::InvalidSysctlName
+            } else {
+                GenerationError::InvalidSysctlValue
+            });
+        }
+        Ok(Self { name, value })
+    }
+
+    /// Returns the exact generated sysctl name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the exact quoted-string value through its sensitivity boundary.
+    #[must_use]
+    pub const fn value(&self) -> &GeneratedString {
+        &self.value
+    }
+}
+
+/// The mapping or list form selected for generated service `sysctls`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedSysctls {
+    /// Ordered unique-name mapping assignments, including an explicit empty mapping.
+    Map(Vec<GeneratedSysctl>),
+    /// Ordered unique exact strings, including an explicit empty list.
+    List(Vec<GeneratedString>),
+}
+
+/// The single or soft/hard form selected for one generated service limit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedUlimitValue {
+    /// One value applies to both the soft and hard limit.
+    Single(GeneratedString),
+    /// Separate required soft and hard values.
+    Range {
+        /// Required soft limit; omission is rejected during construction.
+        soft: Option<GeneratedString>,
+        /// Required hard limit; omission is rejected during construction.
+        hard: Option<GeneratedString>,
+    },
+}
+
+/// One ordered generated service limit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedUlimit {
+    name: String,
+    value: GeneratedUlimitValue,
+}
+
+impl GeneratedUlimit {
+    /// Creates one validated named generated limit.
+    ///
+    /// # Errors
+    ///
+    /// Rejects non-lowercase names, missing range members, deferred/multiline/NUL-bearing values,
+    /// and values other than `-1` or non-negative ASCII decimals.
+    pub fn new(name: impl Into<String>, value: GeneratedUlimitValue) -> Result<Self, GenerationError> {
+        let name = name.into();
+        if !valid_ulimit_name(&name) {
+            return Err(GenerationError::InvalidUlimitName);
+        }
+        match &value {
+            GeneratedUlimitValue::Single(value) => validate_generated_ulimit_value(value)?,
+            GeneratedUlimitValue::Range { soft, hard } => {
+                let soft = soft.as_ref().ok_or(GenerationError::MissingUlimitRangeMember("soft"))?;
+                let hard = hard.as_ref().ok_or(GenerationError::MissingUlimitRangeMember("hard"))?;
+                validate_generated_ulimit_value(soft)?;
+                validate_generated_ulimit_value(hard)?;
+            }
+        }
+        Ok(Self { name, value })
+    }
+
+    /// Creates one validated single-form generated limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same name and value validation errors as [`Self::new`].
+    pub fn single(name: impl Into<String>, value: GeneratedString) -> Result<Self, GenerationError> {
+        Self::new(name, GeneratedUlimitValue::Single(value))
+    }
+
+    /// Creates one validated soft/hard generated limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same name and value validation errors as [`Self::new`].
+    pub fn range(
+        name: impl Into<String>,
+        soft: GeneratedString,
+        hard: GeneratedString,
+    ) -> Result<Self, GenerationError> {
+        Self::new(
+            name,
+            GeneratedUlimitValue::Range {
+                soft: Some(soft),
+                hard: Some(hard),
+            },
+        )
+    }
+
+    /// Returns the lowercase limit name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the selected single or soft/hard form.
+    #[must_use]
+    pub const fn value(&self) -> &GeneratedUlimitValue {
+        &self.value
+    }
+
+    fn is_sensitive(&self) -> bool {
+        match &self.value {
+            GeneratedUlimitValue::Single(value) => value.is_sensitive(),
+            GeneratedUlimitValue::Range { soft, hard } => {
+                soft.iter().chain(hard.iter()).any(GeneratedString::is_sensitive)
+            }
+        }
+    }
+}
+
+/// Ordered generated service limits, including an explicit empty mapping.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedUlimits {
+    entries: Vec<GeneratedUlimit>,
+}
+
+impl GeneratedUlimits {
+    /// Creates an ordered unique-name limit mapping.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate names without reordering the retained entries.
+    pub fn new(entries: Vec<GeneratedUlimit>) -> Result<Self, GenerationError> {
+        let mut seen = BTreeSet::new();
+        for entry in &entries {
+            if !seen.insert(entry.name()) {
+                return Err(GenerationError::DuplicateName {
+                    kind: "ulimit",
+                    name: entry.name().to_owned(),
+                });
+            }
+        }
+        Ok(Self { entries })
+    }
+
+    /// Returns limits in generated output order.
+    #[must_use]
+    pub fn entries(&self) -> &[GeneratedUlimit] {
+        &self.entries
+    }
+
+    /// Reports whether generation will emit an explicit empty mapping.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// A resolved service hostname selected for generated Compose output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedHostname {
+    /// Emit one exact resolved hostname after conservative RFC-1123 validation.
+    Resolved(GeneratedString),
 }
 
 /// One ordered Compose environment entry.
@@ -661,18 +1099,33 @@ impl GeneratedResource {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedService {
     name: String,
+    hostname: Option<GeneratedHostname>,
     container_name: Option<GeneratedString>,
     image: Option<GeneratedString>,
+    entrypoint: Option<GeneratedEntrypoint>,
     command: Option<GeneratedCommand>,
+    init: Option<bool>,
     environment_files: Vec<GeneratedEnvironmentFile>,
     environment: Vec<GeneratedEnvironment>,
     labels: Vec<GeneratedLabel>,
     user: Option<GeneratedString>,
     userns_mode: Option<GeneratedString>,
     group_add: Vec<GeneratedString>,
+    cap_add: Option<Vec<GeneratedString>>,
+    cap_drop: Option<Vec<GeneratedString>>,
+    devices: Option<Vec<GeneratedDevice>>,
     working_dir: Option<GeneratedString>,
     read_only: Option<bool>,
+    pids_limit: Option<GeneratedPidsLimit>,
+    shm_size: Option<GeneratedShmSize>,
+    mem_limit: Option<GeneratedMemLimit>,
+    tmpfs: Option<GeneratedTmpfs>,
+    sysctls: Option<GeneratedSysctls>,
+    ulimits: Option<GeneratedUlimits>,
+    pull_policy: Option<GeneratedPullPolicy>,
     restart: Option<GeneratedRestartPolicy>,
+    stop_signal: Option<GeneratedString>,
+    stop_grace_period: Option<GeneratedString>,
     extra_hosts: Vec<GeneratedExtraHost>,
     ports: Vec<GeneratedPort>,
     mounts: Vec<GeneratedMount>,
@@ -688,18 +1141,33 @@ impl GeneratedService {
     pub fn new(name: impl Into<String>) -> Result<Self, GenerationError> {
         Ok(Self {
             name: required("service name", name.into())?,
+            hostname: None,
             container_name: None,
             image: None,
+            entrypoint: None,
             command: None,
+            init: None,
             environment_files: Vec::new(),
             environment: Vec::new(),
             labels: Vec::new(),
             user: None,
             userns_mode: None,
             group_add: Vec::new(),
+            cap_add: None,
+            cap_drop: None,
+            devices: None,
             working_dir: None,
             read_only: None,
+            pids_limit: None,
+            shm_size: None,
+            mem_limit: None,
+            tmpfs: None,
+            sysctls: None,
+            ulimits: None,
+            pull_policy: None,
             restart: None,
+            stop_signal: None,
+            stop_grace_period: None,
             extra_hosts: Vec::new(),
             ports: Vec::new(),
             mounts: Vec::new(),
@@ -711,6 +1179,21 @@ impl GeneratedService {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Sets one resolved RFC-1123 service hostname exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::InvalidHostname`] for an empty, expression-shaped, non-ASCII,
+    /// overlong, or otherwise invalid hostname, or [`GenerationError::DuplicateField`] when
+    /// already configured.
+    pub fn set_hostname(&mut self, hostname: GeneratedHostname) -> Result<(), GenerationError> {
+        let GeneratedHostname::Resolved(value) = &hostname;
+        if !valid_hostname(value.expose()) {
+            return Err(GenerationError::InvalidHostname);
+        }
+        set_once(&mut self.hostname, hostname, "hostname")
     }
 
     /// Sets the custom runtime container name exactly once.
@@ -738,6 +1221,15 @@ impl GeneratedService {
         set_once(&mut self.image, image, "image")
     }
 
+    /// Sets the Compose entrypoint form exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_entrypoint(&mut self, entrypoint: GeneratedEntrypoint) -> Result<(), GenerationError> {
+        set_once(&mut self.entrypoint, entrypoint, "entrypoint")
+    }
+
     /// Sets the Compose command form exactly once.
     ///
     /// # Errors
@@ -745,6 +1237,15 @@ impl GeneratedService {
     /// Returns [`GenerationError::DuplicateField`] when already configured.
     pub fn set_command(&mut self, command: GeneratedCommand) -> Result<(), GenerationError> {
         set_once(&mut self.command, command, "command")
+    }
+
+    /// Sets the Compose init-process choice exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_init(&mut self, init: bool) -> Result<(), GenerationError> {
+        set_once(&mut self.init, init, "init")
     }
 
     /// Adds one ordered environment-file declaration.
@@ -804,6 +1305,108 @@ impl GeneratedService {
         Ok(())
     }
 
+    /// Sets the complete ordered `cap_add` sequence exactly once.
+    ///
+    /// An empty vector is retained as explicit `cap_add: []`; never calling this method omits the
+    /// field. Values preserve exact case and ordering. No capability whitelist is applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::EmptyValue`] for an empty item,
+    /// [`GenerationError::ContainsLineBreak`] for a carriage return or line feed,
+    /// [`GenerationError::DuplicateItem`] for an exact case-sensitive duplicate, or
+    /// [`GenerationError::DuplicateField`] when already configured. NUL bytes are rejected while
+    /// constructing [`GeneratedString`].
+    pub fn set_cap_add(&mut self, capabilities: Vec<GeneratedString>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for capability in &capabilities {
+            require_generated_string("cap_add item", capability)?;
+            if capability.expose().contains('\r') || capability.expose().contains('\n') {
+                return Err(GenerationError::ContainsLineBreak("cap_add item"));
+            }
+            if !seen.insert(capability.expose()) {
+                return Err(GenerationError::DuplicateItem("cap_add"));
+            }
+        }
+        set_once(&mut self.cap_add, capabilities, "cap_add")
+    }
+
+    /// Returns the configured `cap_add` sequence, distinguishing omission from an empty vector.
+    #[must_use]
+    pub fn cap_add(&self) -> Option<&[GeneratedString]> {
+        self.cap_add.as_deref()
+    }
+
+    /// Sets the complete ordered `cap_drop` sequence exactly once.
+    ///
+    /// An empty vector is retained as explicit `cap_drop: []`; never calling this method omits the
+    /// field. Values preserve exact case and ordering. No capability whitelist is applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::EmptyValue`] for an empty item,
+    /// [`GenerationError::ContainsLineBreak`] for a carriage return or line feed,
+    /// [`GenerationError::DuplicateItem`] for an exact case-sensitive duplicate, or
+    /// [`GenerationError::DuplicateField`] when already configured. NUL bytes are rejected while
+    /// constructing [`GeneratedString`].
+    pub fn set_cap_drop(&mut self, capabilities: Vec<GeneratedString>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for capability in &capabilities {
+            require_generated_string("cap_drop item", capability)?;
+            if capability.expose().contains('\r') || capability.expose().contains('\n') {
+                return Err(GenerationError::ContainsLineBreak("cap_drop item"));
+            }
+            if !seen.insert(capability.expose()) {
+                return Err(GenerationError::DuplicateItem("cap_drop"));
+            }
+        }
+        set_once(&mut self.cap_drop, capabilities, "cap_drop")
+    }
+
+    /// Returns the configured `cap_drop` sequence, distinguishing omission from an empty vector.
+    #[must_use]
+    pub fn cap_drop(&self) -> Option<&[GeneratedString]> {
+        self.cap_drop.as_deref()
+    }
+
+    /// Sets the complete ordered mixed short/long `devices` sequence exactly once.
+    ///
+    /// An empty vector is emitted as `devices: []`; omission remains distinct. Exact duplicate
+    /// items and caller order are preserved. This validates only safe resolved YAML output and
+    /// does not inspect host devices, split colon triples, validate CDI, normalize permissions,
+    /// or claim runtime access.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty short items and empty long sources, plus NUL-bearing, multiline, or
+    /// dollar-bearing values. NUL bytes are normally rejected while constructing
+    /// [`GeneratedString`]. Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_devices(&mut self, devices: Vec<GeneratedDevice>) -> Result<(), GenerationError> {
+        for device in &devices {
+            match device {
+                GeneratedDevice::Short(value) => {
+                    validate_generated_device_member("short item", value, true)?;
+                }
+                GeneratedDevice::Long(value) => {
+                    validate_generated_device_member("source", value.source(), true)?;
+                    if let Some(target) = value.target() {
+                        validate_generated_device_member("target", target, false)?;
+                    }
+                    if let Some(permissions) = value.permissions() {
+                        validate_generated_device_member("permissions", permissions, false)?;
+                    }
+                }
+            }
+        }
+        set_once(&mut self.devices, devices, "devices")
+    }
+
+    /// Returns configured devices, distinguishing omission from an explicit empty sequence.
+    #[must_use]
+    pub fn devices(&self) -> Option<&[GeneratedDevice]> {
+        self.devices.as_deref()
+    }
+
     /// Sets the container working directory exactly once.
     ///
     /// # Errors
@@ -824,6 +1427,161 @@ impl GeneratedService {
         set_once(&mut self.read_only, read_only, "read_only")
     }
 
+    /// Sets an unlimited or positive finite service PID limit exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::InvalidPidsLimit`] when a finite spelling is empty, zero,
+    /// signed, fractional, exponent-shaped, or otherwise not ASCII decimal, or
+    /// [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_pids_limit(&mut self, limit: GeneratedPidsLimit) -> Result<(), GenerationError> {
+        if let GeneratedPidsLimit::Finite(decimal) = &limit {
+            if !valid_positive_pids_decimal(decimal) {
+                return Err(GenerationError::InvalidPidsLimit);
+            }
+        }
+        set_once(&mut self.pids_limit, limit, "pids_limit")
+    }
+
+    /// Sets one explicit positive service shared-memory size exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::InvalidShmSize`] when the amount is empty, zero, has leading
+    /// zeros, a sign, fraction, exponent, whitespace, or non-ASCII digits, or
+    /// [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_shm_size(&mut self, size: GeneratedShmSize) -> Result<(), GenerationError> {
+        let GeneratedShmSize::Explicit { amount, .. } = &size;
+        if !valid_generated_shm_amount(amount.expose()) {
+            return Err(GenerationError::InvalidShmSize);
+        }
+        set_once(&mut self.shm_size, size, "shm_size")
+    }
+
+    /// Sets one explicit positive service memory limit exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::InvalidMemLimit`] when the amount is empty, zero, has leading
+    /// zeros, a sign, fraction, exponent, whitespace, or non-ASCII digits, or
+    /// [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_mem_limit(&mut self, limit: GeneratedMemLimit) -> Result<(), GenerationError> {
+        let GeneratedMemLimit::Explicit { amount, .. } = &limit;
+        if !valid_generated_mem_amount(amount.expose()) {
+            return Err(GenerationError::InvalidMemLimit);
+        }
+        set_once(&mut self.mem_limit, limit, "mem_limit")
+    }
+
+    /// Sets the complete scalar or list service-level `tmpfs` form exactly once.
+    ///
+    /// An empty list is retained explicitly. Item spelling, ordering, and case remain unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, multiline, deferred, or structurally malformed items. Documented `mode`,
+    /// `uid`, and `gid` assignments and other well-shaped raw target options remain exact, including
+    /// duplicate list entries. NUL bytes are rejected while constructing [`GeneratedString`]. Returns
+    /// [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_tmpfs(&mut self, tmpfs: GeneratedTmpfs) -> Result<(), GenerationError> {
+        let items = match &tmpfs {
+            GeneratedTmpfs::Scalar(item) => std::slice::from_ref(item),
+            GeneratedTmpfs::List(items) => items.as_slice(),
+        };
+        for item in items {
+            require_generated_string("tmpfs item", item)?;
+            if item.expose().contains('\r') || item.expose().contains('\n') {
+                return Err(GenerationError::ContainsLineBreak("tmpfs item"));
+            }
+            if !valid_generated_tmpfs_item(item.expose()) {
+                return Err(GenerationError::InvalidTmpfsItem);
+            }
+        }
+        set_once(&mut self.tmpfs, tmpfs, "tmpfs")
+    }
+
+    /// Returns the configured scalar or list form, distinguishing omission from an empty list.
+    #[must_use]
+    pub const fn tmpfs(&self) -> Option<&GeneratedTmpfs> {
+        self.tmpfs.as_ref()
+    }
+
+    /// Sets the complete mapping or list `sysctls` form exactly once.
+    ///
+    /// Empty collections remain explicit. Mapping names and list strings must be exact-unique;
+    /// neither form applies namespace validation or runtime coercion.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate map names, duplicate exact list items, multiline or dollar-bearing list
+    /// items, and duplicate field configuration. NUL-bearing list items are rejected while
+    /// constructing [`GeneratedString`].
+    pub fn set_sysctls(&mut self, sysctls: GeneratedSysctls) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        match &sysctls {
+            GeneratedSysctls::Map(entries) => {
+                for entry in entries {
+                    if !seen.insert(entry.name()) {
+                        return Err(GenerationError::DuplicateName {
+                            kind: "sysctl",
+                            name: entry.name().to_owned(),
+                        });
+                    }
+                }
+            }
+            GeneratedSysctls::List(items) => {
+                for item in items {
+                    if item.expose().contains(['\r', '\n', '$']) {
+                        return Err(GenerationError::InvalidSysctlValue);
+                    }
+                    if !seen.insert(item.expose()) {
+                        return Err(GenerationError::DuplicateItem("sysctls"));
+                    }
+                }
+            }
+        }
+        set_once(&mut self.sysctls, sysctls, "sysctls")
+    }
+
+    /// Returns the configured form, distinguishing omission from explicit empty collections.
+    #[must_use]
+    pub const fn sysctls(&self) -> Option<&GeneratedSysctls> {
+        self.sysctls.as_ref()
+    }
+
+    /// Sets the complete ordered service `ulimits` mapping exactly once.
+    ///
+    /// An empty mapping remains explicit. Values are already validated while constructing
+    /// [`GeneratedUlimit`] and names are unique by construction in [`GeneratedUlimits`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_ulimits(&mut self, ulimits: GeneratedUlimits) -> Result<(), GenerationError> {
+        set_once(&mut self.ulimits, ulimits, "ulimits")
+    }
+
+    /// Returns configured ordered limits, distinguishing omission from an explicit empty mapping.
+    #[must_use]
+    pub const fn ulimits(&self) -> Option<&GeneratedUlimits> {
+        self.ulimits.as_ref()
+    }
+
+    /// Sets a documented service image pull policy exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::InvalidPullPolicyDuration`] for an invalid custom interval or
+    /// [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_pull_policy(&mut self, policy: GeneratedPullPolicy) -> Result<(), GenerationError> {
+        if let GeneratedPullPolicy::Every(duration) = &policy {
+            if !valid_pull_policy_duration(duration.expose()) {
+                return Err(GenerationError::InvalidPullPolicyDuration);
+            }
+        }
+        set_once(&mut self.pull_policy, policy, "pull_policy")
+    }
+
     /// Sets the service-level restart policy exactly once.
     ///
     /// # Errors
@@ -831,6 +1589,30 @@ impl GeneratedService {
     /// Returns [`GenerationError::DuplicateField`] when already configured.
     pub fn set_restart(&mut self, restart: GeneratedRestartPolicy) -> Result<(), GenerationError> {
         set_once(&mut self.restart, restart, "restart")
+    }
+
+    /// Sets the service stop signal exactly once without imposing a signal-token grammar.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured. Quoted empty values
+    /// are preserved; NUL-bearing values are rejected while constructing [`GeneratedString`].
+    pub fn set_stop_signal(&mut self, signal: GeneratedString) -> Result<(), GenerationError> {
+        set_once(&mut self.stop_signal, signal, "stop_signal")
+    }
+
+    /// Sets the raw-preserving service stop grace period exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::InvalidStopGracePeriod`] when the value does not match the
+    /// `ComposeLens` raw-preserving duration policy or dollar-marker convention, or
+    /// [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_stop_grace_period(&mut self, period: GeneratedString) -> Result<(), GenerationError> {
+        if !StopGracePeriod::parse(period.expose().to_owned()).is_valid() {
+            return Err(GenerationError::InvalidStopGracePeriod);
+        }
+        set_once(&mut self.stop_grace_period, period, "stop_grace_period")
     }
 
     /// Adds one ordered host mapping.
@@ -865,7 +1647,11 @@ impl GeneratedService {
     }
 
     fn is_sensitive(&self) -> bool {
-        self.image.as_ref().is_some_and(GeneratedString::is_sensitive)
+        matches!(
+            self.hostname.as_ref(),
+            Some(GeneratedHostname::Resolved(hostname)) if hostname.is_sensitive()
+        ) || self.image.as_ref().is_some_and(GeneratedString::is_sensitive)
+            || self.entrypoint.as_ref().is_some_and(entrypoint_is_sensitive)
             || self.command.as_ref().is_some_and(command_is_sensitive)
             || self
                 .environment_files
@@ -877,11 +1663,55 @@ impl GeneratedService {
                 .filter_map(GeneratedEnvironment::value)
                 .any(GeneratedString::is_sensitive)
             || self.labels.iter().any(|label| label.value.is_sensitive())
-            || [self.user.as_ref(), self.userns_mode.as_ref(), self.working_dir.as_ref()]
-                .into_iter()
-                .flatten()
-                .any(GeneratedString::is_sensitive)
+            || matches!(
+                self.pull_policy.as_ref(),
+                Some(GeneratedPullPolicy::Every(duration)) if duration.is_sensitive()
+            )
+            || matches!(
+                self.shm_size.as_ref(),
+                Some(GeneratedShmSize::Explicit { amount, .. }) if amount.is_sensitive()
+            )
+            || matches!(
+                self.mem_limit.as_ref(),
+                Some(GeneratedMemLimit::Explicit { amount, .. }) if amount.is_sensitive()
+            )
+            || match self.tmpfs.as_ref() {
+                Some(GeneratedTmpfs::Scalar(item)) => item.is_sensitive(),
+                Some(GeneratedTmpfs::List(items)) => items.iter().any(GeneratedString::is_sensitive),
+                None => false,
+            }
+            || match self.sysctls.as_ref() {
+                Some(GeneratedSysctls::Map(entries)) => entries.iter().any(|entry| entry.value.is_sensitive()),
+                Some(GeneratedSysctls::List(items)) => items.iter().any(GeneratedString::is_sensitive),
+                None => false,
+            }
+            || self
+                .ulimits
+                .as_ref()
+                .is_some_and(|limits| limits.entries.iter().any(GeneratedUlimit::is_sensitive))
+            || [
+                self.user.as_ref(),
+                self.userns_mode.as_ref(),
+                self.working_dir.as_ref(),
+                self.stop_signal.as_ref(),
+                self.stop_grace_period.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .any(GeneratedString::is_sensitive)
             || self.group_add.iter().any(GeneratedString::is_sensitive)
+            || self
+                .cap_add
+                .as_ref()
+                .is_some_and(|items| items.iter().any(GeneratedString::is_sensitive))
+            || self
+                .cap_drop
+                .as_ref()
+                .is_some_and(|items| items.iter().any(GeneratedString::is_sensitive))
+            || self
+                .devices
+                .as_ref()
+                .is_some_and(|items| items.iter().any(GeneratedDevice::is_sensitive))
     }
 }
 
@@ -1035,10 +1865,20 @@ fn render_document(project: &ComposeDocumentBuilder) -> String {
 }
 
 fn render_service(output: &mut String, service: &GeneratedService) {
+    if let Some(GeneratedHostname::Resolved(hostname)) = &service.hostname {
+        render_optional_string(output, "hostname", Some(hostname));
+    }
     render_optional_string(output, "container_name", service.container_name.as_ref());
     render_optional_string(output, "image", service.image.as_ref());
+    if let Some(entrypoint) = &service.entrypoint {
+        render_entrypoint(output, entrypoint);
+    }
     if let Some(command) = &service.command {
         render_command(output, command);
+    }
+    if let Some(init) = service.init {
+        write_field(output, 2, "init");
+        output.push_str(if init { "true\n" } else { "false\n" });
     }
     render_environment_files(output, &service.environment_files);
     render_environment(output, &service.environment);
@@ -1046,18 +1886,192 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     render_optional_string(output, "user", service.user.as_ref());
     render_optional_string(output, "userns_mode", service.userns_mode.as_ref());
     render_string_sequence(output, "group_add", &service.group_add);
+    if let Some(capabilities) = &service.cap_add {
+        render_configured_string_sequence(output, "cap_add", capabilities);
+    }
+    if let Some(capabilities) = &service.cap_drop {
+        render_configured_string_sequence(output, "cap_drop", capabilities);
+    }
     render_optional_string(output, "working_dir", service.working_dir.as_ref());
     if let Some(read_only) = service.read_only {
         write_field(output, 2, "read_only");
         output.push_str(if read_only { "true\n" } else { "false\n" });
     }
+    if let Some(pids_limit) = &service.pids_limit {
+        render_pids_limit(output, pids_limit);
+    }
+    if let Some(shm_size) = &service.shm_size {
+        render_shm_size(output, shm_size);
+    }
+    if let Some(mem_limit) = &service.mem_limit {
+        render_mem_limit(output, mem_limit);
+    }
+    if let Some(devices) = &service.devices {
+        render_devices(output, devices);
+    }
+    if let Some(tmpfs) = &service.tmpfs {
+        render_tmpfs(output, tmpfs);
+    }
+    if let Some(sysctls) = &service.sysctls {
+        render_sysctls(output, sysctls);
+    }
+    if let Some(ulimits) = &service.ulimits {
+        render_ulimits(output, ulimits);
+    }
+    if let Some(pull_policy) = &service.pull_policy {
+        render_pull_policy(output, pull_policy);
+    }
     if let Some(restart) = service.restart {
         render_restart(output, restart);
     }
+    render_optional_string(output, "stop_signal", service.stop_signal.as_ref());
+    render_optional_string(output, "stop_grace_period", service.stop_grace_period.as_ref());
     render_extra_hosts(output, &service.extra_hosts);
     render_ports(output, &service.ports);
     render_mounts(output, &service.mounts);
     render_networks(output, &service.networks);
+}
+
+fn render_pids_limit(output: &mut String, limit: &GeneratedPidsLimit) {
+    write_field(output, 2, "pids_limit");
+    match limit {
+        GeneratedPidsLimit::Unlimited => output.push_str("-1\n"),
+        GeneratedPidsLimit::Finite(decimal) => {
+            output.push_str(decimal);
+            output.push('\n');
+        }
+    }
+}
+
+fn render_shm_size(output: &mut String, size: &GeneratedShmSize) {
+    let GeneratedShmSize::Explicit { amount, unit } = size;
+    write_field(output, 2, "shm_size");
+    write_quoted(output, &format!("{}{}", amount.expose(), unit.as_str()));
+    output.push('\n');
+}
+
+fn render_mem_limit(output: &mut String, limit: &GeneratedMemLimit) {
+    let GeneratedMemLimit::Explicit { amount, unit } = limit;
+    write_field(output, 2, "mem_limit");
+    write_quoted(output, &format!("{}{}", amount.expose(), unit.as_str()));
+    output.push('\n');
+}
+
+fn render_devices(output: &mut String, devices: &[GeneratedDevice]) {
+    if devices.is_empty() {
+        output.push_str("    devices: []\n");
+        return;
+    }
+    output.push_str("    devices:\n");
+    for device in devices {
+        match device {
+            GeneratedDevice::Short(value) => {
+                output.push_str("      - ");
+                write_quoted(output, value.expose());
+                output.push('\n');
+            }
+            GeneratedDevice::Long(value) => {
+                output.push_str("      - source: ");
+                write_quoted(output, value.source().expose());
+                output.push('\n');
+                if let Some(target) = value.target() {
+                    output.push_str("        target: ");
+                    write_quoted(output, target.expose());
+                    output.push('\n');
+                }
+                if let Some(permissions) = value.permissions() {
+                    output.push_str("        permissions: ");
+                    write_quoted(output, permissions.expose());
+                    output.push('\n');
+                }
+            }
+        }
+    }
+}
+
+fn render_tmpfs(output: &mut String, tmpfs: &GeneratedTmpfs) {
+    match tmpfs {
+        GeneratedTmpfs::Scalar(item) => render_optional_string(output, "tmpfs", Some(item)),
+        GeneratedTmpfs::List(items) => render_configured_string_sequence(output, "tmpfs", items),
+    }
+}
+
+fn render_sysctls(output: &mut String, sysctls: &GeneratedSysctls) {
+    match sysctls {
+        GeneratedSysctls::Map(entries) if entries.is_empty() => output.push_str("    sysctls: {}\n"),
+        GeneratedSysctls::Map(entries) => {
+            output.push_str("    sysctls:\n");
+            for entry in entries {
+                write_indent(output, 3);
+                write_quoted(output, entry.name());
+                output.push_str(": ");
+                write_quoted(output, entry.value().expose());
+                output.push('\n');
+            }
+        }
+        GeneratedSysctls::List(items) => render_configured_string_sequence(output, "sysctls", items),
+    }
+}
+
+fn render_ulimits(output: &mut String, ulimits: &GeneratedUlimits) {
+    if ulimits.entries.is_empty() {
+        output.push_str("    ulimits: {}\n");
+        return;
+    }
+    output.push_str("    ulimits:\n");
+    for limit in &ulimits.entries {
+        write_indent(output, 3);
+        write_quoted(output, limit.name());
+        match limit.value() {
+            GeneratedUlimitValue::Single(value) => {
+                output.push_str(": ");
+                write_quoted(output, value.expose());
+                output.push('\n');
+            }
+            GeneratedUlimitValue::Range {
+                soft: Some(soft),
+                hard: Some(hard),
+            } => {
+                output.push_str(":\n");
+                write_indent(output, 4);
+                output.push_str("soft: ");
+                write_quoted(output, soft.expose());
+                output.push('\n');
+                write_indent(output, 4);
+                output.push_str("hard: ");
+                write_quoted(output, hard.expose());
+                output.push('\n');
+            }
+            GeneratedUlimitValue::Range { .. } => {
+                unreachable!("generated ulimit ranges are validated during construction")
+            }
+        }
+    }
+}
+
+fn render_pull_policy(output: &mut String, policy: &GeneratedPullPolicy) {
+    write_field(output, 2, "pull_policy");
+    let value = match policy {
+        GeneratedPullPolicy::Always => "always".to_owned(),
+        GeneratedPullPolicy::Never => "never".to_owned(),
+        GeneratedPullPolicy::Missing => "missing".to_owned(),
+        GeneratedPullPolicy::IfNotPresentAlias => "if_not_present".to_owned(),
+        GeneratedPullPolicy::Build => "build".to_owned(),
+        GeneratedPullPolicy::Daily => "daily".to_owned(),
+        GeneratedPullPolicy::Weekly => "weekly".to_owned(),
+        GeneratedPullPolicy::Every(duration) => format!("every_{}", duration.expose()),
+    };
+    write_quoted(output, &value);
+    output.push('\n');
+}
+
+fn render_entrypoint(output: &mut String, entrypoint: &GeneratedEntrypoint) {
+    match entrypoint {
+        GeneratedEntrypoint::List(arguments) if arguments.is_empty() => output.push_str("    entrypoint: []\n"),
+        GeneratedEntrypoint::List(arguments) => render_string_sequence(output, "entrypoint", arguments),
+        GeneratedEntrypoint::String(entrypoint) => render_optional_string(output, "entrypoint", Some(entrypoint)),
+        GeneratedEntrypoint::Empty => output.push_str("    entrypoint: []\n"),
+    }
 }
 
 fn render_restart(output: &mut String, restart: GeneratedRestartPolicy) {
@@ -1168,6 +2182,16 @@ fn render_string_sequence(output: &mut String, key: &str, values: &[GeneratedStr
         output.push_str("      - ");
         write_quoted(output, value.expose());
         output.push('\n');
+    }
+}
+
+fn render_configured_string_sequence(output: &mut String, key: &str, values: &[GeneratedString]) {
+    if values.is_empty() {
+        write_indent(output, 2);
+        output.push_str(key);
+        output.push_str(": []\n");
+    } else {
+        render_string_sequence(output, key, values);
     }
 }
 
@@ -1360,6 +2384,28 @@ fn require_generated_string(kind: &'static str, value: &GeneratedString) -> Resu
     Ok(())
 }
 
+fn validate_generated_device_member(
+    member: &'static str,
+    value: &GeneratedString,
+    require_non_empty: bool,
+) -> Result<(), GenerationError> {
+    if valid_generated_device_string(value.expose(), require_non_empty) {
+        Ok(())
+    } else {
+        Err(GenerationError::InvalidDeviceValue(member))
+    }
+}
+
+fn validate_generated_ulimit_value(value: &GeneratedString) -> Result<(), GenerationError> {
+    let value = value.expose();
+    if value.contains(['\r', '\n', '$'])
+        || (value != "-1" && (value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit())))
+    {
+        return Err(GenerationError::InvalidUlimitValue);
+    }
+    Ok(())
+}
+
 fn environment_name(value: String) -> Result<String, GenerationError> {
     let value = required("environment name", value)?;
     if value.contains('=') {
@@ -1415,5 +2461,13 @@ fn command_is_sensitive(command: &GeneratedCommand) -> bool {
         GeneratedCommand::Exec(arguments) => arguments.iter().any(GeneratedString::is_sensitive),
         GeneratedCommand::Shell(command) => command.is_sensitive(),
         GeneratedCommand::Empty => false,
+    }
+}
+
+fn entrypoint_is_sensitive(entrypoint: &GeneratedEntrypoint) -> bool {
+    match entrypoint {
+        GeneratedEntrypoint::List(arguments) => arguments.iter().any(GeneratedString::is_sensitive),
+        GeneratedEntrypoint::String(entrypoint) => entrypoint.is_sensitive(),
+        GeneratedEntrypoint::Empty => false,
     }
 }

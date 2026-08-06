@@ -1,0 +1,22 @@
+schema = 1
+id = "service-stop-lifecycle"
+suite = "conformance"
+description = "Isolates provider config handling of service stop signals and raw Compose stop grace periods."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains named and numeric signal spellings plus composite, zero, and fractional stop grace periods, or returns a feature-specific rejection."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-stop-signal", "service-stop-grace-period"]

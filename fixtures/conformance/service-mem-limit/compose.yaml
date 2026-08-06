@@ -1,0 +1,21 @@
+services:
+  omitted:
+    image: example.invalid/composelens/mem-omitted:1
+  documented:
+    mem_limit: 64m
+  explicit-bytes:
+    mem_limit: 67108864b
+  leading-zero:
+    mem_limit: "064mb"
+  numeric:
+    mem_limit: 64
+  fractional-number:
+    mem_limit: 1.5
+  bare-string:
+    mem_limit: "64"
+  zero:
+    mem_limit: 0
+  uppercase:
+    mem_limit: 64M
+  iec:
+    mem_limit: 64MiB

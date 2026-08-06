@@ -1,0 +1,18 @@
+schema = 1
+id = "service-pids-limit-model"
+suite = "typed-model"
+description = "Protects raw service PID-limit classification, arbitrary-precision decimals, malformed recovery, ambiguous zero, and duplicate handling."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is supplied; interpolation-shaped PID-limit text remains deferred."
+
+[expectations]
+summary = "Omission, unlimited, positive finite decimals, all-zero spellings, deferred text, and unsupported scalars remain distinct while wrong YAML types diagnose without deleting services."

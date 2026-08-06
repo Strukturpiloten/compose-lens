@@ -362,13 +362,13 @@ fn merges_compose_fields_with_order_fidelity_and_provenance() -> Result<(), Box<
     let capabilities = merged
         .value(&["services", "app", "cap_add"])
         .and_then(MergedValue::as_sequence)
-        .ok_or("appended capabilities expected")?;
+        .ok_or("merged capabilities expected")?;
     assert_eq!(capabilities.len(), 2);
     assert_eq!(
         merged
             .value(&["services", "app", "cap_add"])
             .map(|value| value.provenance().operation()),
-        Some(MergeOperation::Appended)
+        Some(MergeOperation::Merged)
     );
 
     assert_keyed_and_unique_merge(merged)?;
@@ -430,6 +430,367 @@ fn applies_reset_and_override_tags_without_normal_merge() -> Result<(), Box<dyn 
         .ok_or("overridden volumes expected")?;
     assert_eq!(volumes.as_sequence().map(<[MergedValue]>::len), Some(1));
     assert_eq!(volumes.provenance().operation(), MergeOperation::Override);
+    Ok(())
+}
+
+#[test]
+fn merges_cap_drop_by_exact_scalar_while_reset_and_override_keep_their_contract()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  normal:\n",
+        "    cap_drop: [NET_ADMIN, CHOWN, NET_ADMIN]\n",
+        "  reset:\n",
+        "    cap_drop: [NET_ADMIN]\n",
+        "  override:\n",
+        "    cap_drop: [NET_ADMIN]\n",
+        "  case:\n",
+        "    cap_drop: [NET_ADMIN]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  normal:\n",
+        "    cap_drop: [CHOWN, net_admin, SYS_TIME, SYS_TIME]\n",
+        "  reset:\n",
+        "    cap_drop: !reset []\n",
+        "  override:\n",
+        "    cap_drop: !override [CHOWN, CHOWN, chown]\n",
+        "  case:\n",
+        "    cap_drop: [net_admin]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 121)?;
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let normal = merged
+        .value(&["services", "normal", "cap_drop"])
+        .ok_or("merged cap_drop expected")?;
+    let normal_items = normal.as_sequence().ok_or("cap_drop sequence expected")?;
+    assert_eq!(
+        sequence_strings(normal_items),
+        ["NET_ADMIN", "CHOWN", "net_admin", "SYS_TIME"]
+    );
+    assert_eq!(normal.provenance().operation(), MergeOperation::Merged);
+    assert_eq!(normal.provenance().sources().len(), 2);
+    assert_eq!(normal_items[0].provenance().sources().len(), 2);
+    assert_eq!(normal_items[1].provenance().sources().len(), 2);
+    assert_eq!(normal_items[3].provenance().sources().len(), 2);
+
+    let case = merged
+        .value(&["services", "case", "cap_drop"])
+        .and_then(MergedValue::as_sequence)
+        .ok_or("case-sensitive cap_drop expected")?;
+    assert_eq!(sequence_strings(case), ["NET_ADMIN", "net_admin"]);
+
+    let reset = merged
+        .value(&["services", "reset", "cap_drop"])
+        .ok_or("reset cap_drop expected")?;
+    assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+
+    let overridden = merged
+        .value(&["services", "override", "cap_drop"])
+        .ok_or("overridden cap_drop expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override sequence expected")?),
+        ["CHOWN", "CHOWN", "chown"]
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_cap_add_by_exact_scalar_without_rewriting_cap_drop() -> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  normal:\n",
+        "    cap_add: [NET_ADMIN, CHOWN, NET_ADMIN]\n",
+        "    cap_drop: [MKNOD]\n",
+        "  reset:\n",
+        "    cap_add: [NET_ADMIN]\n",
+        "  override:\n",
+        "    cap_add: [NET_ADMIN]\n",
+        "  case:\n",
+        "    cap_add: [NET_ADMIN]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  normal:\n",
+        "    cap_add: [CHOWN, net_admin, SYS_TIME, SYS_TIME]\n",
+        "    cap_drop: [SYS_ADMIN]\n",
+        "  reset:\n",
+        "    cap_add: !reset []\n",
+        "  override:\n",
+        "    cap_add: !override [CHOWN, CHOWN, chown]\n",
+        "  case:\n",
+        "    cap_add: [net_admin]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 123)?;
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let normal = merged
+        .value(&["services", "normal", "cap_add"])
+        .ok_or("merged cap_add expected")?;
+    let normal_items = normal.as_sequence().ok_or("cap_add sequence expected")?;
+    assert_eq!(
+        sequence_strings(normal_items),
+        ["NET_ADMIN", "CHOWN", "net_admin", "SYS_TIME"]
+    );
+    assert_eq!(normal.provenance().operation(), MergeOperation::Merged);
+    assert_eq!(normal.provenance().sources().len(), 2);
+    assert_eq!(normal_items[0].provenance().sources().len(), 2);
+    assert_eq!(normal_items[1].provenance().sources().len(), 2);
+    assert_eq!(normal_items[3].provenance().sources().len(), 2);
+    assert_eq!(
+        sequence_strings(
+            merged
+                .value(&["services", "normal", "cap_drop"])
+                .and_then(MergedValue::as_sequence)
+                .ok_or("independently merged cap_drop expected")?
+        ),
+        ["MKNOD", "SYS_ADMIN"]
+    );
+
+    let case = merged
+        .value(&["services", "case", "cap_add"])
+        .and_then(MergedValue::as_sequence)
+        .ok_or("case-sensitive cap_add expected")?;
+    assert_eq!(sequence_strings(case), ["NET_ADMIN", "net_admin"]);
+
+    let reset = merged
+        .value(&["services", "reset", "cap_add"])
+        .ok_or("reset cap_add expected")?;
+    assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+
+    let overridden = merged
+        .value(&["services", "override", "cap_add"])
+        .ok_or("overridden cap_add expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override sequence expected")?),
+        ["CHOWN", "CHOWN", "chown"]
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_service_tmpfs_as_an_ordinary_sequence_without_cross_file_deduplication()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  appended:\n    tmpfs: [/base, /same]\n",
+        "  scalar-scalar:\n    tmpfs: /old\n",
+        "  scalar-list:\n    tmpfs: /old\n",
+        "  list-scalar:\n    tmpfs: [/old]\n",
+        "  reset:\n    tmpfs: [/old]\n",
+        "  override:\n    tmpfs: [/old]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  appended:\n    tmpfs: [/same, /later]\n",
+        "  scalar-scalar:\n    tmpfs: /new\n",
+        "  scalar-list:\n    tmpfs: [/new]\n",
+        "  list-scalar:\n    tmpfs: /new\n",
+        "  reset:\n    tmpfs: !reset []\n",
+        "  override:\n    tmpfs: !override [/same, /same, /case, /CASE]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 124)?;
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let appended = merged
+        .value(&["services", "appended", "tmpfs"])
+        .ok_or("appended tmpfs expected")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(
+        sequence_strings(appended.as_sequence().ok_or("tmpfs sequence expected")?),
+        ["/base", "/same", "/same", "/later"]
+    );
+
+    let scalar_scalar = merged
+        .value(&["services", "scalar-scalar", "tmpfs"])
+        .and_then(MergedValue::as_scalar)
+        .ok_or("replacement scalar expected")?;
+    assert_eq!(scalar_scalar.value(), "/new");
+    assert_eq!(
+        merged
+            .value(&["services", "scalar-scalar", "tmpfs"])
+            .ok_or("scalar expected")?
+            .provenance()
+            .operation(),
+        MergeOperation::Replaced
+    );
+    assert_eq!(
+        sequence_strings(
+            merged
+                .value(&["services", "scalar-list", "tmpfs"])
+                .and_then(MergedValue::as_sequence)
+                .ok_or("replacement list expected")?
+        ),
+        ["/new"]
+    );
+    assert_eq!(
+        merged
+            .value(&["services", "list-scalar", "tmpfs"])
+            .and_then(MergedValue::as_scalar)
+            .map(MergedScalar::value),
+        Some("/new")
+    );
+
+    let reset = merged
+        .value(&["services", "reset", "tmpfs"])
+        .ok_or("reset tmpfs expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+
+    let overridden = merged
+        .value(&["services", "override", "tmpfs"])
+        .ok_or("overridden tmpfs expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override list expected")?),
+        ["/same", "/same", "/case", "/CASE"]
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_service_sysctls_by_authored_form_without_deduplicating_lists() -> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  mapping:\n    sysctls: {base.only: base, shared: old}\n",
+        "  list:\n    sysctls: [same=value, base=value]\n",
+        "  map-to-list:\n    sysctls: {old: value}\n",
+        "  list-to-map:\n    sysctls: [old=value]\n",
+        "  reset-map:\n    sysctls: {old: value}\n",
+        "  reset-list:\n    sysctls: [old=value]\n",
+        "  override:\n    sysctls: [old=value]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  mapping:\n    sysctls: {shared: new, added: true}\n",
+        "  list:\n    sysctls: [same=value, later=value]\n",
+        "  map-to-list:\n    sysctls: [new=value]\n",
+        "  list-to-map:\n    sysctls: {new: value}\n",
+        "  reset-map:\n    sysctls: !reset {}\n",
+        "  reset-list:\n    sysctls: !reset []\n",
+        "  override:\n    sysctls: !override [same=value, same=value]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 125)?;
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let mapping = merged
+        .value(&["services", "mapping", "sysctls"])
+        .ok_or("merged sysctls mapping expected")?;
+    assert_eq!(mapping.provenance().operation(), MergeOperation::Merged);
+    assert_eq!(merged_scalar(mapping.get("base.only")), Some("base"));
+    assert_eq!(merged_scalar(mapping.get("shared")), Some("new"));
+    assert_eq!(merged_scalar(mapping.get("added")), Some("true"));
+    assert_eq!(
+        mapping.get("shared").map(|value| value.provenance().sources().len()),
+        Some(2)
+    );
+
+    let list = merged
+        .value(&["services", "list", "sysctls"])
+        .ok_or("appended sysctls list expected")?;
+    assert_eq!(list.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(
+        sequence_strings(list.as_sequence().ok_or("sysctls list expected")?),
+        ["same=value", "base=value", "same=value", "later=value"]
+    );
+
+    assert_eq!(
+        sequence_strings(
+            merged
+                .value(&["services", "map-to-list", "sysctls"])
+                .and_then(MergedValue::as_sequence)
+                .ok_or("replacement list expected")?
+        ),
+        ["new=value"]
+    );
+    assert_eq!(
+        merged_scalar(
+            merged
+                .value(&["services", "list-to-map", "sysctls"])
+                .and_then(|value| value.get("new"))
+        ),
+        Some("value")
+    );
+
+    for service in ["reset-map", "reset-list"] {
+        let reset = merged
+            .value(&["services", service, "sysctls"])
+            .ok_or("reset sysctls expected")?;
+        assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    }
+    assert!(
+        merged
+            .value(&["services", "reset-map", "sysctls"])
+            .and_then(MergedValue::as_mapping)
+            .is_some_and(<[MergedEntry]>::is_empty)
+    );
+    assert!(
+        merged
+            .value(&["services", "reset-list", "sysctls"])
+            .and_then(MergedValue::as_sequence)
+            .is_some_and(<[MergedValue]>::is_empty)
+    );
+    let overridden = merged
+        .value(&["services", "override", "sysctls"])
+        .ok_or("overridden sysctls expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override list expected")?),
+        ["same=value", "same=value"]
+    );
+    Ok(())
+}
+
+#[test]
+fn interpolates_sysctl_values_and_list_items_but_not_mapping_keys_before_merge()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(127),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        concat!(
+            "services:\n",
+            "  app:\n",
+            "    sysctls:\n",
+            "      literal.${KEY}: \"${VALUE}\"\n",
+            "  list:\n",
+            "    sysctls: [\"${ASSIGNMENT}\"]\n",
+        ),
+    )])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("KEY", "resolved-key");
+    let _ = environment.insert_sensitive("VALUE", "sensitive-value");
+    let _ = environment.insert("ASSIGNMENT", "net.core.somaxconn=1024");
+    let interpolation = loaded.interpolate(&environment);
+    let result = merge_project(&loaded, Some(&interpolation));
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let mapping = merged
+        .value(&["services", "app", "sysctls"])
+        .ok_or("mapped sysctls expected")?;
+    assert!(mapping.get("literal.${KEY}").is_some());
+    assert!(mapping.get("literal.resolved-key").is_none());
+    let mapped_value = mapping.get("literal.${KEY}").ok_or("literal key expected")?;
+    assert_eq!(merged_scalar(Some(mapped_value)), Some("sensitive-value"));
+    assert!(mapped_value.is_sensitive());
+    let list_value = merged
+        .value(&["services", "list", "sysctls"])
+        .and_then(MergedValue::as_sequence)
+        .and_then(|values| values.first())
+        .ok_or("interpolated list item expected")?;
+    assert_eq!(
+        list_value.as_scalar().map(MergedScalar::value),
+        Some("net.core.somaxconn=1024")
+    );
+    assert!(!format!("{result:?}").contains("sensitive-value"));
     Ok(())
 }
 
@@ -624,8 +985,79 @@ fn assert_shell_command_merge(merged: &MergedProject) -> Result<(), Box<dyn std:
     Ok(())
 }
 
+#[test]
+fn recursively_merges_ulimit_ranges_and_preserves_reset_override_and_shape_replacement()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(683),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n",
+                "  merged:\n",
+                "    ulimits: {nofile: {soft: 100, hard: 200}, core: {soft: 1, hard: 2}}\n",
+                "  reset:\n",
+                "    ulimits: {nofile: 1}\n",
+                "  overridden:\n",
+                "    ulimits: {nofile: 1}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(684),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  merged:\n",
+                "    ulimits: {nofile: {hard: 300}, core: -1}\n",
+                "  reset:\n",
+                "    ulimits: !reset {}\n",
+                "  overridden:\n",
+                "    ulimits: !override {nproc: 8}\n",
+            ),
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project expected")?;
+    let nofile = project
+        .value(&["services", "merged", "ulimits", "nofile"])
+        .ok_or("merged nofile expected")?;
+    assert_eq!(nofile.provenance().operation(), MergeOperation::Merged);
+    assert_eq!(merged_scalar(nofile.get("soft")), Some("100"));
+    assert_eq!(merged_scalar(nofile.get("hard")), Some("300"));
+    assert_eq!(
+        nofile.get("hard").map(|value| value.provenance().operation()),
+        Some(MergeOperation::Replaced)
+    );
+    assert_eq!(
+        project
+            .value(&["services", "merged", "ulimits", "core"])
+            .map(|value| value.provenance().operation()),
+        Some(MergeOperation::Replaced)
+    );
+    let reset = project
+        .value(&["services", "reset", "ulimits"])
+        .ok_or("reset ulimits expected")?;
+    assert!(reset.as_mapping().is_some_and(<[_]>::is_empty));
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = project
+        .value(&["services", "overridden", "ulimits"])
+        .ok_or("overridden ulimits expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(merged_scalar(overridden.get("nproc")), Some("8"));
+    assert!(overridden.get("nofile").is_none());
+    Ok(())
+}
+
 fn merged_scalar(value: Option<&MergedValue>) -> Option<&str> {
     value.and_then(MergedValue::as_scalar).map(MergedScalar::value)
+}
+
+fn sequence_strings(values: &[MergedValue]) -> Vec<&str> {
+    values
+        .iter()
+        .filter_map(MergedValue::as_scalar)
+        .map(MergedScalar::value)
+        .collect()
 }
 
 fn entry_syntax(value: &MergedValue, key: &str) -> Option<EntrySyntax> {

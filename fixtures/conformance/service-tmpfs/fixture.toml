@@ -1,0 +1,22 @@
+schema = 1
+id = "service-tmpfs"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, scalar, explicitly empty list, ordered duplicates, colon-delimited documented options, and raw provider-specific service-level tmpfs options."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains or specifically rejects each service-level tmpfs form; planned rows make no runtime mount, default-flag, rootless, pod, or cross-provider support claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-tmpfs"]

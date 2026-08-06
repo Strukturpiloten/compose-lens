@@ -1,0 +1,18 @@
+schema = 1
+id = "service-cap-add-model"
+suite = "typed-model"
+description = "Protects source-aware service cap_add omission, explicit emptiness, exact strings, uniqueItems diagnostics, malformed-item recovery, and independent coexistence with cap_drop."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is supplied; the dollar-bearing capability string remains deferred and non-sensitive."
+
+[expectations]
+summary = "Only YAML string items are typed; exact duplicates remain inspectable with diagnostics, case variants remain distinct, malformed items do not erase valid siblings, omission differs from an explicit empty sequence, and cap_add does not rewrite cap_drop."

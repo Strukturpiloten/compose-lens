@@ -1,0 +1,48 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  lowercase:
+    hostname: api-1.example
+  uppercase:
+    hostname: API.Example-Corp.COM
+  digit-leading:
+    hostname: 3api.example
+  quoted-number:
+    hostname: "123"
+  deferred:
+    hostname: ${SERVICE_HOSTNAME:-api.example}
+  dollar-literal:
+    hostname: invalid_$_hostname
+  empty:
+    hostname: ""
+  trailing-dot:
+    hostname: example.
+  empty-label:
+    hostname: example..com
+  underscore:
+    hostname: example_host
+  leading-hyphen:
+    hostname: -example
+  trailing-hyphen:
+    hostname: example-
+  non-ascii:
+    hostname: café.example
+  overlong-label:
+    hostname: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  null:
+    hostname: null
+  boolean:
+    hostname: true
+  numeric:
+    hostname: 123
+  mapping:
+    hostname:
+      value: api.example
+  flow-list:
+    hostname: [api.example]
+  sequence:
+    hostname:
+      - api.example
+  duplicate:
+    hostname: first.example
+    hostname: second.example

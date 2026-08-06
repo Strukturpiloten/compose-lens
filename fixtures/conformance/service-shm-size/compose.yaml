@@ -1,0 +1,21 @@
+services:
+  omitted:
+    image: example.invalid/composelens/shm-omitted:1
+  documented:
+    shm_size: 64m
+  explicit-bytes:
+    shm_size: 67108864b
+  leading-zero:
+    shm_size: "064mb"
+  numeric:
+    shm_size: 64
+  fractional-number:
+    shm_size: 1.5
+  bare-string:
+    shm_size: "64"
+  zero:
+    shm_size: 0
+  uppercase:
+    shm_size: 64M
+  iec:
+    shm_size: 64MiB

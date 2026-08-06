@@ -1,0 +1,18 @@
+schema = 1
+id = "service-tmpfs-model"
+suite = "typed-model"
+description = "Protects service-level tmpfs scalar/list form fidelity, colon-delimited options, exact raw items, duplicates, and malformed-item recovery without conflating volume tmpfs mounts."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is provided; expression-shaped values remain authored evidence."
+
+[expectations]
+summary = "Omission, scalar/list form, explicit empty list, exact duplicates, order, case, spans, classifications, valid siblings, and structured malformed-form recovery remain observable."

@@ -2,7 +2,9 @@ name: phase-two-forms
 services:
   app:
     image: registry.example:5000/team/app:1.2@sha256:abcdef
+    entrypoint: null
     command: null
+    init: true
     environment:
       INHERITED:
       EMPTY: ""
@@ -59,14 +61,20 @@ services:
         gid: "1000"
         mode: "0400"
   worker:
+    entrypoint: []
     command: []
+    init: ${USE_INIT:-false}
     environment:
       - INHERITED
       - EMPTY=
       - PAIR=a=b
     networks: [frontend]
   shell:
+    entrypoint: ""
     command: ""
+    init: false
+  exec-entrypoint:
+    entrypoint: ["/usr/bin/env", "php"]
 networks:
   implicit:
   frontend:

@@ -5,16 +5,25 @@ use crate::merge::{
     EntrySyntax, MergeProvenance, MergedEntry, MergedProject, MergedScalarKind, MergedValue, MergedValueKind,
 };
 use crate::model::{
-    BindOptions, BooleanValue, Command, ComposeScalar, ConfigDefinition, DependencyCondition, EnvironmentFileFormat,
-    EnvironmentFileFormatKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
-    HostAddress, ImageReference, Ipam, IpamConfig, KeyValueEntry, Labels, Located, LongPort, LongVolumeMount,
-    MountType, NetworkDefinition, Port, RestartPolicy, SecretDefinition, SelinuxRelabel, ServiceNetwork,
-    ServiceNetworks, ShortExtraHost, ShortPort, ShortVolumeMount, UserNamespaceMode, UserSpec, VolumeDefinition,
-    VolumeMount,
+    BindOptions, BooleanValue, CAP_ADD_DUPLICATE_ITEM, CAP_DROP_DUPLICATE_ITEM, CapabilityAddItem, CapabilityDropItem,
+    Command, ComposeScalar, ConfigDefinition, DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING, DependencyCondition,
+    Entrypoint, EnvironmentFileFormat, EnvironmentFileFormatKind, HealthcheckDuration, HealthcheckRetries,
+    HealthcheckTest, HealthcheckTestKind, HostAddress, Hostname, HostnameKind, ImageReference, Ipam, IpamConfig,
+    KeyValueEntry, Labels, LimitValue, Located, LongPort, LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO,
+    MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind,
+    MemLimitScalarKind, MountType, NetworkDefinition, PIDS_LIMIT_AMBIGUOUS_ZERO, PidsLimit, PidsLimitKind, Port,
+    PullPolicy, RestartPolicy, SHM_SIZE_AMBIGUOUS_ZERO, SHM_SIZE_EXPECTED_VALUE, SHM_SIZE_PROVIDER_DEPENDENT_NUMBER,
+    SHM_SIZE_PROVIDER_DEPENDENT_STRING, SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM,
+    SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING, SecretDefinition, SelinuxRelabel, ServiceNetwork,
+    ServiceNetworks, ShmSize, ShmSizeKind, ShmSizeScalarKind, ShortDevice, ShortExtraHost, ShortPort, ShortVolumeMount,
+    StopGracePeriod, TMPFS_EXPECTED_FORM, TMPFS_EXPECTED_STRING, TMPFS_PROVIDER_DEPENDENT, TmpfsItem, TmpfsItemKind,
+    ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceMode, UserSpec,
+    VolumeDefinition, VolumeMount, valid_ulimit_name,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
 use crate::source::{SourceId, SourceSpan};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -516,6 +525,58 @@ pub enum ProjectGrant {
     Long(Box<ProjectLongGrant>),
 }
 
+/// Effective long-form service device with nested merge provenance retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLongDevice {
+    source: Option<ProjectValue<String>>,
+    target: Option<ProjectValue<String>>,
+    permissions: Option<ProjectValue<String>>,
+    extension_fields: Vec<ProjectFieldReference>,
+    unknown_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectLongDevice {
+    /// Returns the required raw source when it was valid and present.
+    #[must_use]
+    pub const fn source(&self) -> Option<&ProjectValue<String>> {
+        self.source.as_ref()
+    }
+
+    /// Returns the optional raw target without path interpretation.
+    #[must_use]
+    pub const fn target(&self) -> Option<&ProjectValue<String>> {
+        self.target.as_ref()
+    }
+
+    /// Returns the optional raw permissions string without validating runtime meaning.
+    #[must_use]
+    pub const fn permissions(&self) -> Option<&ProjectValue<String>> {
+        self.permissions.as_ref()
+    }
+
+    /// Returns retained `x-` options with their complete source evidence.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[ProjectFieldReference] {
+        &self.extension_fields
+    }
+
+    /// Returns unrecognized long-form options with their complete source evidence.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[ProjectFieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// One effective service device with short and long syntax kept distinct.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDevice {
+    /// A raw short scalar, including path, CDI, deferred, and opaque spellings.
+    Short(ShortDevice),
+    /// A mapping-form device whose nested values retain their own provenance.
+    Long(ProjectLongDevice),
+}
+
 impl ProjectHealthcheck {
     /// Returns the effective health command without collapsing scalar and list forms.
     #[must_use]
@@ -578,14 +639,165 @@ impl ProjectHealthcheck {
     }
 }
 
+/// Effective service-level `tmpfs` syntax with per-item merge provenance retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectTmpfs {
+    /// One effective scalar declaration.
+    Scalar(ProjectValue<TmpfsItem>),
+    /// One effective list, including an explicit empty or reset list.
+    List(Vec<ProjectValue<TmpfsItem>>),
+}
+
+/// One effective ulimit scalar with authored spelling and YAML scalar kind retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectUlimitScalar {
+    authored: String,
+    value: LimitValue,
+    kind: MergedScalarKind,
+}
+
+impl ProjectUlimitScalar {
+    /// Returns the exact authored scalar spelling before optional interpolation.
+    #[must_use]
+    pub fn authored(&self) -> &str {
+        &self.authored
+    }
+
+    /// Returns the classified effective spelling after optional interpolation.
+    #[must_use]
+    pub const fn value(&self) -> &LimitValue {
+        &self.value
+    }
+
+    /// Returns whether the authored YAML scalar was a string or number.
+    #[must_use]
+    pub const fn kind(&self) -> MergedScalarKind {
+        self.kind
+    }
+}
+
+/// Effective long-syntax ulimit members with independent merge provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectUlimitRange {
+    soft: Option<ProjectValue<ProjectUlimitScalar>>,
+    hard: Option<ProjectValue<ProjectUlimitScalar>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectUlimitRange {
+    /// Returns the effective soft limit, or `None` when the required member was omitted or malformed.
+    #[must_use]
+    pub const fn soft(&self) -> Option<&ProjectValue<ProjectUlimitScalar>> {
+        self.soft.as_ref()
+    }
+
+    /// Returns the effective hard limit, or `None` when the required member was omitted or malformed.
+    #[must_use]
+    pub const fn hard(&self) -> Option<&ProjectValue<ProjectUlimitScalar>> {
+        self.hard.as_ref()
+    }
+
+    /// Returns retained range fields outside the `soft` and `hard` boundary.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// The effective single or soft/hard form of one named ulimit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectUlimitValue {
+    /// One scalar applies to both the soft and hard limit.
+    Single(ProjectValue<ProjectUlimitScalar>),
+    /// Soft and hard members remain independently source-aware.
+    Range(ProjectUlimitRange),
+}
+
+/// One ordered effective named ulimit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectUlimit {
+    name: ProjectKey,
+    value: ProjectUlimitValue,
+}
+
+impl ProjectUlimit {
+    /// Returns the lowercase limit name and every authored key location.
+    #[must_use]
+    pub const fn name(&self) -> &ProjectKey {
+        &self.name
+    }
+
+    /// Returns the effective single or soft/hard form.
+    #[must_use]
+    pub const fn value(&self) -> &ProjectUlimitValue {
+        &self.value
+    }
+}
+
+/// Effective service `ulimits`, including an explicitly empty or reset mapping.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectUlimits {
+    entries: Vec<ProjectValue<ProjectUlimit>>,
+}
+
+impl ProjectUlimits {
+    /// Returns named limits in effective mapping order.
+    #[must_use]
+    pub fn entries(&self) -> &[ProjectValue<ProjectUlimit>] {
+        &self.entries
+    }
+
+    /// Reports whether the effective mapping is explicitly empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// One effective mapping-form service sysctl with key and scalar-value provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectSysctl {
+    name: ProjectKey,
+    value: ProjectValue<ComposeScalar>,
+}
+
+impl ProjectSysctl {
+    /// Returns the exact sysctl name and every authored key location.
+    #[must_use]
+    pub const fn name(&self) -> &ProjectKey {
+        &self.name
+    }
+
+    /// Returns the exact scalar kind and spelling with complete merge provenance.
+    #[must_use]
+    pub const fn value(&self) -> &ProjectValue<ComposeScalar> {
+        &self.value
+    }
+}
+
+/// Effective service `sysctls` with mapping/list form and per-entry provenance retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectSysctls {
+    /// Ordered mapping entries merged by exact key.
+    Map(Vec<ProjectValue<ProjectSysctl>>),
+    /// Ordered list items appended without implicit deduplication.
+    List(Vec<ProjectValue<String>>),
+}
+
 /// One selected service with the native fields needed by the first conversion boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectService {
     name: ProjectKey,
     provenance: MergeProvenance,
+    hostname: Option<ProjectValue<Hostname>>,
     container_name: Option<ProjectValue<String>>,
     image: Option<ProjectValue<ImageReference>>,
+    entrypoint: Option<ProjectValue<Entrypoint>>,
     command: Option<ProjectValue<Command>>,
+    init: Option<ProjectValue<BooleanValue>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
     environment_files: Option<ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>>,
     labels: Option<ProjectValue<ProjectLabels>>,
@@ -593,9 +805,21 @@ pub struct ProjectService {
     user: Option<ProjectValue<UserSpec>>,
     userns_mode: Option<ProjectValue<UserNamespaceMode>>,
     group_add: Option<ProjectValue<Vec<ProjectValue<String>>>>,
+    cap_add: Option<ProjectValue<Vec<ProjectValue<CapabilityAddItem>>>>,
+    cap_drop: Option<ProjectValue<Vec<ProjectValue<CapabilityDropItem>>>>,
+    devices: Option<ProjectValue<Vec<ProjectValue<ProjectDevice>>>>,
     working_dir: Option<ProjectValue<String>>,
     read_only: Option<ProjectValue<BooleanValue>>,
+    pids_limit: Option<ProjectValue<PidsLimit>>,
+    shm_size: Option<ProjectValue<ShmSize>>,
+    mem_limit: Option<ProjectValue<MemLimit>>,
+    tmpfs: Option<ProjectValue<ProjectTmpfs>>,
+    sysctls: Option<ProjectValue<ProjectSysctls>>,
+    ulimits: Option<ProjectValue<ProjectUlimits>>,
+    pull_policy: Option<ProjectValue<PullPolicy>>,
     restart: Option<ProjectValue<RestartPolicy>>,
+    stop_signal: Option<ProjectValue<String>>,
+    stop_grace_period: Option<ProjectValue<StopGracePeriod>>,
     healthcheck: Option<ProjectValue<ProjectHealthcheck>>,
     depends_on: Option<ProjectValue<ProjectDependsOn>>,
     ports: Option<ProjectValue<Vec<ProjectValue<Port>>>>,
@@ -608,6 +832,50 @@ pub struct ProjectService {
 }
 
 impl ProjectService {
+    fn from_entry(entry: &MergedEntry) -> Self {
+        Self {
+            name: ProjectKey::from_entry(entry),
+            provenance: entry.value().provenance().clone(),
+            hostname: None,
+            container_name: None,
+            image: None,
+            entrypoint: None,
+            command: None,
+            init: None,
+            environment: None,
+            environment_files: None,
+            labels: None,
+            extra_hosts: None,
+            user: None,
+            userns_mode: None,
+            group_add: None,
+            cap_add: None,
+            cap_drop: None,
+            devices: None,
+            working_dir: None,
+            read_only: None,
+            pids_limit: None,
+            shm_size: None,
+            mem_limit: None,
+            tmpfs: None,
+            sysctls: None,
+            ulimits: None,
+            pull_policy: None,
+            restart: None,
+            stop_signal: None,
+            stop_grace_period: None,
+            healthcheck: None,
+            depends_on: None,
+            ports: None,
+            volumes: None,
+            configs: None,
+            secrets: None,
+            networks: None,
+            profiles: None,
+            unmodeled_fields: Vec::new(),
+        }
+    }
+
     /// Returns the service name and all contributing key spans.
     #[must_use]
     pub const fn name(&self) -> &ProjectKey {
@@ -618,6 +886,12 @@ impl ProjectService {
     #[must_use]
     pub const fn provenance(&self) -> &MergeProvenance {
         &self.provenance
+    }
+
+    /// Returns the effective raw-preserving service hostname.
+    #[must_use]
+    pub const fn hostname(&self) -> Option<&ProjectValue<Hostname>> {
+        self.hostname.as_ref()
     }
 
     /// Returns the effective explicit runtime container name.
@@ -632,10 +906,22 @@ impl ProjectService {
         self.image.as_ref()
     }
 
+    /// Returns the effective entrypoint without normalizing scalar and list forms.
+    #[must_use]
+    pub const fn entrypoint(&self) -> Option<&ProjectValue<Entrypoint>> {
+        self.entrypoint.as_ref()
+    }
+
     /// Returns the effective command without normalizing scalar and list forms.
     #[must_use]
     pub const fn command(&self) -> Option<&ProjectValue<Command>> {
         self.command.as_ref()
+    }
+
+    /// Returns the effective platform-specific init-process choice.
+    #[must_use]
+    pub const fn init(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.init.as_ref()
     }
 
     /// Returns environment entries normalized by key with per-entry syntax retained.
@@ -680,6 +966,32 @@ impl ProjectService {
         self.group_add.as_ref()
     }
 
+    /// Returns the effective capability-add sequence with full field and per-item provenance.
+    ///
+    /// `None` means the field was omitted; `Some` with an empty vector means it was explicitly
+    /// configured empty or reset.
+    #[must_use]
+    pub const fn cap_add(&self) -> Option<&ProjectValue<Vec<ProjectValue<CapabilityAddItem>>>> {
+        self.cap_add.as_ref()
+    }
+
+    /// Returns the effective capability-drop sequence with full field and per-item provenance.
+    ///
+    /// `None` means the field was omitted; `Some` with an empty vector means it was explicitly
+    /// configured empty or reset.
+    #[must_use]
+    pub const fn cap_drop(&self) -> Option<&ProjectValue<Vec<ProjectValue<CapabilityDropItem>>>> {
+        self.cap_drop.as_ref()
+    }
+
+    /// Returns effective ordered mixed short/long service devices with complete provenance.
+    ///
+    /// `None` means omission; `Some` with an empty vector means an explicit empty sequence or reset.
+    #[must_use]
+    pub const fn devices(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectDevice>>>> {
+        self.devices.as_ref()
+    }
+
     /// Returns the effective container working-directory override.
     #[must_use]
     pub const fn working_dir(&self) -> Option<&ProjectValue<String>> {
@@ -692,10 +1004,67 @@ impl ProjectService {
         self.read_only.as_ref()
     }
 
+    /// Returns the effective raw-preserving service PID limit.
+    #[must_use]
+    pub const fn pids_limit(&self) -> Option<&ProjectValue<PidsLimit>> {
+        self.pids_limit.as_ref()
+    }
+
+    /// Returns the effective raw-preserving service shared-memory size.
+    #[must_use]
+    pub const fn shm_size(&self) -> Option<&ProjectValue<ShmSize>> {
+        self.shm_size.as_ref()
+    }
+
+    /// Returns the effective raw-preserving service memory limit.
+    #[must_use]
+    pub const fn mem_limit(&self) -> Option<&ProjectValue<MemLimit>> {
+        self.mem_limit.as_ref()
+    }
+
+    /// Returns effective service-level temporary filesystems with source form and provenance.
+    #[must_use]
+    pub const fn tmpfs(&self) -> Option<&ProjectValue<ProjectTmpfs>> {
+        self.tmpfs.as_ref()
+    }
+
+    /// Returns effective service sysctls with source form and per-entry provenance.
+    #[must_use]
+    pub const fn sysctls(&self) -> Option<&ProjectValue<ProjectSysctls>> {
+        self.sysctls.as_ref()
+    }
+
+    /// Returns effective ordered service limits with nested and field-level merge provenance.
+    ///
+    /// `None` means the field was omitted; an empty mapping remains present and can carry reset or
+    /// override provenance.
+    #[must_use]
+    pub const fn ulimits(&self) -> Option<&ProjectValue<ProjectUlimits>> {
+        self.ulimits.as_ref()
+    }
+
+    /// Returns the effective raw-preserving service image pull policy.
+    #[must_use]
+    pub const fn pull_policy(&self) -> Option<&ProjectValue<PullPolicy>> {
+        self.pull_policy.as_ref()
+    }
+
     /// Returns the effective service-level container restart policy.
     #[must_use]
     pub const fn restart(&self) -> Option<&ProjectValue<RestartPolicy>> {
         self.restart.as_ref()
+    }
+
+    /// Returns the effective explicitly authored service stop signal.
+    #[must_use]
+    pub const fn stop_signal(&self) -> Option<&ProjectValue<String>> {
+        self.stop_signal.as_ref()
+    }
+
+    /// Returns the effective raw-preserving service stop grace period.
+    #[must_use]
+    pub const fn stop_grace_period(&self) -> Option<&ProjectValue<StopGracePeriod>> {
+        self.stop_grace_period.as_ref()
     }
 
     /// Returns the effective health check with per-field merge provenance.
@@ -990,36 +1359,12 @@ impl<'a> Builder<'a> {
         let pending_start = self.pending_unmodeled.len();
         let value = entry.value();
         let fields = self.mapping(value, "service definition must be a mapping")?;
-        let mut service = ProjectService {
-            name: ProjectKey::from_entry(entry),
-            provenance: value.provenance().clone(),
-            container_name: None,
-            image: None,
-            command: None,
-            environment: None,
-            environment_files: None,
-            labels: None,
-            extra_hosts: None,
-            user: None,
-            userns_mode: None,
-            group_add: None,
-            working_dir: None,
-            read_only: None,
-            restart: None,
-            healthcheck: None,
-            depends_on: None,
-            ports: None,
-            volumes: None,
-            configs: None,
-            secrets: None,
-            networks: None,
-            profiles: None,
-            unmodeled_fields: Vec::new(),
-        };
+        let mut service = ProjectService::from_entry(entry);
         let path = ["services".to_owned(), entry.key().to_owned()];
 
         for field in fields {
             match field.key() {
+                "hostname" => service.hostname = self.hostname(field.value()),
                 "container_name" => {
                     service.container_name = self.project_string(field.value(), "service container name");
                 }
@@ -1032,7 +1377,13 @@ impl<'a> Builder<'a> {
                             sensitive: value.sensitive,
                         });
                 }
+                "entrypoint" => service.entrypoint = self.entrypoint(field.value()),
                 "command" => service.command = self.command(field.value()),
+                "init" => {
+                    service.init = self
+                        .located_boolean(field.value(), "service init must be a boolean")
+                        .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                }
                 "environment" => service.environment = self.environment(field.value()),
                 "env_file" => service.environment_files = self.environment_files(field.value(), &path),
                 "labels" => service.labels = self.service_labels(field.value()),
@@ -1042,15 +1393,29 @@ impl<'a> Builder<'a> {
                 "group_add" => {
                     service.group_add = self.string_collection(field.value(), "group_add must be a sequence");
                 }
-                "working_dir" => {
-                    service.working_dir = self.project_string(field.value(), "service working directory");
-                }
+                "cap_add" => service.cap_add = self.capability_add(field.value()),
+                "cap_drop" => service.cap_drop = self.capability_drop(field.value()),
+                "devices" => service.devices = self.devices(field.value(), &path),
+                "working_dir" => service.working_dir = self.project_string(field.value(), "service working directory"),
                 "read_only" => {
                     service.read_only = self
                         .located_boolean(field.value(), "service read_only must be a boolean")
                         .map(|value| ProjectValue::new(value.into_value(), field.value()));
                 }
+                "pids_limit" => service.pids_limit = self.pids_limit(field.value()),
+                "shm_size" => service.shm_size = self.shm_size(field.value()),
+                "mem_limit" => service.mem_limit = self.mem_limit(field.value()),
+                "tmpfs" => service.tmpfs = self.tmpfs(field.value()),
+                "sysctls" => service.sysctls = self.sysctls(field.value()),
+                "ulimits" => service.ulimits = self.ulimits(field.value(), &path),
+                "pull_policy" => service.pull_policy = self.pull_policy(field.value()),
                 "restart" => service.restart = self.restart_policy(field.value()),
+                "stop_signal" => {
+                    service.stop_signal = self.project_string(field.value(), "service stop signal");
+                }
+                "stop_grace_period" => {
+                    service.stop_grace_period = self.stop_grace_period(field.value());
+                }
                 "healthcheck" => service.healthcheck = self.healthcheck(field.value(), &path),
                 "depends_on" => service.depends_on = self.depends_on(field.value(), &path),
                 "ports" => service.ports = self.ports(field.value(), &path),
@@ -1068,6 +1433,24 @@ impl<'a> Builder<'a> {
         Some(service)
     }
 
+    fn hostname(&mut self, value: &MergedValue) -> Option<ProjectValue<Hostname>> {
+        let scalar = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => scalar,
+            _ => {
+                self.expected(value, "hostname must be a YAML string scalar");
+                return None;
+            }
+        };
+        let hostname = Hostname::parse(Located::new(scalar.value().to_owned(), effective_span(value)));
+        if hostname.kind() == &HostnameKind::Invalid {
+            self.invalid(
+                effective_span(value),
+                "hostname must be an ASCII RFC-1123 name of 1 to 253 characters with dot-separated labels of 1 to 63 alphanumeric or hyphen characters; each label must start and end alphanumeric",
+            );
+        }
+        Some(ProjectValue::new(hostname, value))
+    }
+
     fn restart_policy(&mut self, value: &MergedValue) -> Option<ProjectValue<RestartPolicy>> {
         let policy = RestartPolicy::parse(self.located_string(value, "restart must be a non-null scalar")?);
         if !policy.is_valid() {
@@ -1077,6 +1460,512 @@ impl<'a> Builder<'a> {
             );
         }
         Some(ProjectValue::new(policy, value))
+    }
+
+    fn pids_limit(&mut self, value: &MergedValue) -> Option<ProjectValue<PidsLimit>> {
+        let scalar = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() != MergedScalarKind::Boolean => scalar,
+            _ => {
+                self.expected(value, "pids_limit must be a number or string scalar");
+                return None;
+            }
+        };
+        let limit = PidsLimit::parse(Located::new(scalar.value().to_owned(), effective_span(value)));
+        match limit.kind() {
+            PidsLimitKind::Zero => self.diagnostics.push(
+                Diagnostic::new(
+                    PIDS_LIMIT_AMBIGUOUS_ZERO,
+                    Severity::Warning,
+                    "pids_limit zero is preserved as an ambiguous and unportable native state",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "ambiguous zero PID limit",
+                )),
+            ),
+            PidsLimitKind::Other => self.invalid(
+                effective_span(value),
+                "pids_limit must be `-1`, a positive integral decimal, or interpolation",
+            ),
+            _ => {}
+        }
+        Some(ProjectValue::new(limit, value))
+    }
+
+    fn shm_size(&mut self, value: &MergedValue) -> Option<ProjectValue<ShmSize>> {
+        let scalar = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::Number => {
+                (scalar, ShmSizeScalarKind::Number)
+            }
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                (scalar, ShmSizeScalarKind::String)
+            }
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SHM_SIZE_EXPECTED_VALUE,
+                        Severity::Error,
+                        "shm_size must be a YAML number or string scalar",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected shared-memory-size form",
+                    )),
+                );
+                return None;
+            }
+        };
+        let size = ShmSize::parse(
+            Located::new(scalar.0.value().to_owned(), effective_span(value)),
+            scalar.1,
+        );
+        let (code, message, label, note) = match size.kind() {
+            ShmSizeKind::Zero { .. } => (
+                SHM_SIZE_AMBIGUOUS_ZERO,
+                "shm_size zero is preserved because Compose does not define its semantics",
+                "ambiguous zero shared-memory size",
+                "choose a positive size with an explicit documented lowercase unit",
+            ),
+            ShmSizeKind::ProviderDependentNumber => (
+                SHM_SIZE_PROVIDER_DEPENDENT_NUMBER,
+                "numeric shm_size is schema-accepted but lacks a documented explicit unit",
+                "provider-dependent numeric shared-memory size",
+                "use a positive quoted value with `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` for portable intent",
+            ),
+            ShmSizeKind::ProviderDependentString => (
+                SHM_SIZE_PROVIDER_DEPENDENT_STRING,
+                "string shm_size is schema-accepted but falls outside the documented lowercase suffix family",
+                "provider-dependent string shared-memory size",
+                "use an explicit lowercase `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` suffix when that is the intended unit",
+            ),
+            ShmSizeKind::Documented { .. } | ShmSizeKind::Expression => {
+                return Some(ProjectValue::new(size, value));
+            }
+        };
+        self.diagnostics.push(
+            Diagnostic::new(code, Severity::Warning, message)
+                .with_label(DiagnosticLabel::primary(effective_span(value), label))
+                .with_note(note),
+        );
+        Some(ProjectValue::new(size, value))
+    }
+
+    fn mem_limit(&mut self, value: &MergedValue) -> Option<ProjectValue<MemLimit>> {
+        let scalar = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::Number => {
+                (scalar, MemLimitScalarKind::Number)
+            }
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                (scalar, MemLimitScalarKind::String)
+            }
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        MEM_LIMIT_EXPECTED_VALUE,
+                        Severity::Error,
+                        "mem_limit must be a YAML number or string scalar",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected memory-limit form",
+                    )),
+                );
+                return None;
+            }
+        };
+        let limit = MemLimit::parse(
+            Located::new(scalar.0.value().to_owned(), effective_span(value)),
+            scalar.1,
+        );
+        let (code, message, label, note) = match limit.kind() {
+            MemLimitKind::Zero { .. } => (
+                MEM_LIMIT_AMBIGUOUS_ZERO,
+                "mem_limit zero is preserved without inferring portable runtime behavior",
+                "ambiguous zero memory limit",
+                "choose a positive size with an explicit documented lowercase unit",
+            ),
+            MemLimitKind::SchemaNumber => (
+                MEM_LIMIT_SCHEMA_NUMBER,
+                "numeric mem_limit is schema-accepted but lacks a documented explicit unit",
+                "schema-only numeric memory limit",
+                "use a positive quoted value with `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` for explicit intent",
+            ),
+            MemLimitKind::ProviderDependentString => (
+                MEM_LIMIT_PROVIDER_DEPENDENT_STRING,
+                "string mem_limit is schema-accepted but falls outside the documented lowercase suffix family",
+                "provider-dependent string memory limit",
+                "use an explicit lowercase `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` suffix when that is the intended unit",
+            ),
+            MemLimitKind::Documented { .. } | MemLimitKind::Expression => {
+                return Some(ProjectValue::new(limit, value));
+            }
+        };
+        self.diagnostics.push(
+            Diagnostic::new(code, Severity::Warning, message)
+                .with_label(DiagnosticLabel::primary(effective_span(value), label))
+                .with_note(note),
+        );
+        Some(ProjectValue::new(limit, value))
+    }
+
+    fn tmpfs(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectTmpfs>> {
+        let form = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                let item = self.tmpfs_item(value, scalar.value());
+                ProjectTmpfs::Scalar(ProjectValue::new(item, value))
+            }
+            MergedValueKind::Sequence(values) => {
+                let mut items = Vec::new();
+                for item_value in values {
+                    let MergedValueKind::Scalar(scalar) = item_value.kind() else {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                TMPFS_EXPECTED_STRING,
+                                Severity::Error,
+                                "tmpfs entries must be string scalars",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                effective_span(item_value),
+                                "unexpected temporary-filesystem list item",
+                            )),
+                        );
+                        continue;
+                    };
+                    if scalar.kind() != MergedScalarKind::String {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                TMPFS_EXPECTED_STRING,
+                                Severity::Error,
+                                "tmpfs entries must be string scalars",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                effective_span(item_value),
+                                "unexpected temporary-filesystem list item",
+                            )),
+                        );
+                        continue;
+                    }
+                    let item = self.tmpfs_item(item_value, scalar.value());
+                    items.push(ProjectValue::new(item, item_value));
+                }
+                ProjectTmpfs::List(items)
+            }
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        TMPFS_EXPECTED_FORM,
+                        Severity::Error,
+                        "tmpfs must be a string scalar or a sequence of string scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected service-level temporary-filesystem form",
+                    )),
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(form, value))
+    }
+
+    fn tmpfs_item(&mut self, source: &MergedValue, raw: &str) -> TmpfsItem {
+        let item = TmpfsItem::parse(Located::new(raw.to_owned(), effective_span(source)));
+        if item.kind() == TmpfsItemKind::ProviderDependent {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    TMPFS_PROVIDER_DEPENDENT,
+                    Severity::Warning,
+                    "tmpfs item is malformed or uses provider- or target-specific options",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(source),
+                    "provider-dependent temporary-filesystem item",
+                ))
+                .with_note("use a non-empty path with only non-empty `mode`, `uid`, or `gid` assignments for documented portable syntax"),
+            );
+        }
+        item
+    }
+
+    fn sysctls(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectSysctls>> {
+        let form = match value.kind() {
+            MergedValueKind::Mapping(entries) => ProjectSysctls::Map(self.sysctls_map(entries)),
+            MergedValueKind::Sequence(items) => ProjectSysctls::List(self.sysctls_list(items)),
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SYSCTLS_EXPECTED_FORM,
+                        Severity::Error,
+                        "sysctls must be a mapping or a sequence of string scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected service sysctls form",
+                    )),
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(form, value))
+    }
+
+    fn sysctls_map(&mut self, entries: &[MergedEntry]) -> Vec<ProjectValue<ProjectSysctl>> {
+        let mut sysctls = Vec::new();
+        for entry in entries {
+            if entry.key().is_empty() {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SYSCTLS_EMPTY_KEY,
+                        Severity::Error,
+                        "sysctls mapping keys must not be empty",
+                    )
+                    .with_label(DiagnosticLabel::primary(entry_span(entry), "empty sysctl name")),
+                );
+                continue;
+            }
+            let Some(scalar) = self.sysctl_scalar(entry.value()) else {
+                continue;
+            };
+            let sysctl = ProjectSysctl {
+                name: ProjectKey::from_entry(entry),
+                value: ProjectValue::new(scalar, entry.value()),
+            };
+            sysctls.push(ProjectValue::new(sysctl, entry.value()));
+        }
+        sysctls
+    }
+
+    fn sysctl_scalar(&mut self, value: &MergedValue) -> Option<ComposeScalar> {
+        match value.kind() {
+            MergedValueKind::Null(_) => Some(ComposeScalar::Null),
+            MergedValueKind::Scalar(scalar) => Some(match scalar.kind() {
+                MergedScalarKind::String => ComposeScalar::String(scalar.value().to_owned()),
+                MergedScalarKind::Boolean => ComposeScalar::Boolean(scalar.value().eq_ignore_ascii_case("true")),
+                MergedScalarKind::Number => ComposeScalar::Number(scalar.value().to_owned()),
+            }),
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SYSCTLS_EXPECTED_SCALAR,
+                        Severity::Error,
+                        "sysctls mapping values must be scalar strings, numbers, booleans, or null",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "non-scalar sysctl value",
+                    )),
+                );
+                None
+            }
+        }
+    }
+
+    fn sysctls_list(&mut self, items: &[MergedValue]) -> Vec<ProjectValue<String>> {
+        let mut sysctls = Vec::new();
+        let mut seen = BTreeMap::new();
+        for item in items {
+            let MergedValueKind::Scalar(scalar) = item.kind() else {
+                self.invalid_sysctl_list_item(item);
+                continue;
+            };
+            if scalar.kind() != MergedScalarKind::String {
+                self.invalid_sysctl_list_item(item);
+                continue;
+            }
+            let span = effective_span(item);
+            if let Some(first) = seen.get(scalar.value()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SYSCTLS_DUPLICATE_ITEM,
+                        Severity::Error,
+                        "effective sysctls list entries must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(span, "duplicate sysctl string"))
+                    .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                );
+            } else {
+                seen.insert(scalar.value().to_owned(), span);
+            }
+            sysctls.push(ProjectValue::new(scalar.value().to_owned(), item));
+        }
+        sysctls
+    }
+
+    fn invalid_sysctl_list_item(&mut self, value: &MergedValue) {
+        self.diagnostics.push(
+            Diagnostic::new(
+                SYSCTLS_EXPECTED_STRING,
+                Severity::Error,
+                "sysctls list entries must be YAML string scalars",
+            )
+            .with_label(DiagnosticLabel::primary(
+                effective_span(value),
+                "non-string sysctl list item",
+            )),
+        );
+    }
+
+    fn ulimits(&mut self, value: &MergedValue, service_path: &[String]) -> Option<ProjectValue<ProjectUlimits>> {
+        let Some(entries) = value.as_mapping() else {
+            self.expected(value, "ulimits must be a mapping");
+            return None;
+        };
+        let mut limits = Vec::new();
+        let mut path = service_path.to_vec();
+        path.push("ulimits".to_owned());
+        for entry in entries {
+            if !valid_ulimit_name(entry.key()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        ULIMIT_INVALID_NAME,
+                        Severity::Error,
+                        "ulimit names must contain only lowercase ASCII letters",
+                    )
+                    .with_label(DiagnosticLabel::primary(entry_span(entry), "invalid ulimit name")),
+                );
+                self.record_pending_unmodeled(&path, entry);
+                continue;
+            }
+            let Some(limit) = self.ulimit(entry, &path) else {
+                self.record_pending_unmodeled(&path, entry);
+                continue;
+            };
+            limits.push(ProjectValue::new(limit, entry.value()));
+        }
+        Some(ProjectValue::new(ProjectUlimits { entries: limits }, value))
+    }
+
+    fn ulimit(&mut self, entry: &MergedEntry, parent_path: &[String]) -> Option<ProjectUlimit> {
+        let value = match entry.value().kind() {
+            MergedValueKind::Scalar(_) => ProjectUlimitValue::Single(
+                self.ulimit_scalar(entry.value())
+                    .map(|scalar| ProjectValue::new(scalar, entry.value()))?,
+            ),
+            MergedValueKind::Mapping(fields) => {
+                let mut soft = None;
+                let mut hard = None;
+                let mut unmodeled_fields = Vec::new();
+                let mut range_path = parent_path.to_vec();
+                range_path.push(entry.key().to_owned());
+                for field in fields {
+                    match field.key() {
+                        "soft" => {
+                            soft = self
+                                .ulimit_scalar(field.value())
+                                .map(|scalar| ProjectValue::new(scalar, field.value()));
+                        }
+                        "hard" => {
+                            hard = self
+                                .ulimit_scalar(field.value())
+                                .map(|scalar| ProjectValue::new(scalar, field.value()));
+                        }
+                        _ => unmodeled_fields.push(field_reference(&range_path, field)),
+                    }
+                }
+                if soft.is_none() {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            ULIMIT_MISSING_RANGE_MEMBER,
+                            Severity::Error,
+                            "ulimit range is missing required `soft`",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            effective_span(entry.value()),
+                            "missing soft limit",
+                        )),
+                    );
+                }
+                if hard.is_none() {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            ULIMIT_MISSING_RANGE_MEMBER,
+                            Severity::Error,
+                            "ulimit range is missing required `hard`",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            effective_span(entry.value()),
+                            "missing hard limit",
+                        )),
+                    );
+                }
+                ProjectUlimitValue::Range(ProjectUlimitRange {
+                    soft,
+                    hard,
+                    unmodeled_fields,
+                })
+            }
+            _ => {
+                self.expected(
+                    entry.value(),
+                    "ulimit must be a number/string scalar or a soft/hard mapping",
+                );
+                return None;
+            }
+        };
+        Some(ProjectUlimit {
+            name: ProjectKey::from_entry(entry),
+            value,
+        })
+    }
+
+    fn ulimit_scalar(&mut self, value: &MergedValue) -> Option<ProjectUlimitScalar> {
+        let Some(scalar) = value.as_scalar() else {
+            self.expected(value, "ulimit values must be number or string scalars");
+            return None;
+        };
+        if !matches!(scalar.kind(), MergedScalarKind::String | MergedScalarKind::Number) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    ULIMIT_INVALID_VALUE,
+                    Severity::Error,
+                    "ulimit values must be number or string scalars",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "invalid ulimit scalar kind",
+                )),
+            );
+            return None;
+        }
+        let parsed = LimitValue::parse(scalar.value().to_owned());
+        if !parsed.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    ULIMIT_INVALID_VALUE,
+                    Severity::Error,
+                    "ulimit must be -1, a non-negative integer, or an interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(effective_span(value), "invalid ulimit value")),
+            );
+        }
+        Some(ProjectUlimitScalar {
+            authored: scalar.raw().to_owned(),
+            value: parsed,
+            kind: scalar.kind(),
+        })
+    }
+
+    fn pull_policy(&mut self, value: &MergedValue) -> Option<ProjectValue<PullPolicy>> {
+        let policy = PullPolicy::parse(self.located_string(value, "pull_policy must be a non-null scalar")?);
+        if !policy.is_recognized() {
+            self.invalid(
+                effective_span(value),
+                "pull_policy must be a documented Compose policy, the retained `if_not_present` alias, schema-only `refresh`, an `every_` interval matching integer `w`, `d`, `h`, `m`, and `s` components, or interpolation",
+            );
+        }
+        Some(ProjectValue::new(policy, value))
+    }
+
+    fn stop_grace_period(&mut self, value: &MergedValue) -> Option<ProjectValue<StopGracePeriod>> {
+        let scalar = self.scalar(value, "stop_grace_period must be a non-null scalar")?;
+        let period = StopGracePeriod::parse(scalar.value().to_owned());
+        if !period.is_valid() {
+            self.invalid(
+                effective_span(value),
+                "stop_grace_period must match the ComposeLens duration policy using `us`, `ms`, `s`, `m`, or `h`, or contain an interpolation marker",
+            );
+        }
+        Some(ProjectValue::new(period, value))
     }
 
     fn command(&mut self, value: &MergedValue) -> Option<ProjectValue<Command>> {
@@ -1100,6 +1989,29 @@ impl<'a> Builder<'a> {
             }
         };
         Some(ProjectValue::new(command, value))
+    }
+
+    fn entrypoint(&mut self, value: &MergedValue) -> Option<ProjectValue<Entrypoint>> {
+        let span = effective_span(value);
+        let entrypoint = match value.kind() {
+            MergedValueKind::Null(_) => Entrypoint::Null(span),
+            MergedValueKind::Scalar(scalar) => Entrypoint::String(Located::new(scalar.value().to_owned(), span)),
+            MergedValueKind::Sequence(values) => {
+                let mut arguments = Vec::new();
+                for value in values {
+                    arguments.push(self.located_string(value, "entrypoint list item must be a scalar")?);
+                }
+                Entrypoint::List {
+                    span,
+                    values: arguments,
+                }
+            }
+            _ => {
+                self.expected(value, "entrypoint must be null, a scalar, or a sequence");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(entrypoint, value))
     }
 
     fn user(&mut self, value: &MergedValue) -> Option<ProjectValue<UserSpec>> {
@@ -1532,6 +2444,169 @@ impl<'a> Builder<'a> {
             strings.push(ProjectValue::new(scalar.value().to_owned(), value));
         }
         Some(ProjectValue::new(strings, value))
+    }
+
+    fn capability_drop(&mut self, value: &MergedValue) -> Option<ProjectValue<Vec<ProjectValue<CapabilityDropItem>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, "cap_drop must be a sequence of string scalars");
+            return None;
+        };
+        let mut items = Vec::new();
+        let mut seen = BTreeMap::new();
+        for item in values {
+            let scalar = match item.kind() {
+                MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => scalar,
+                _ => {
+                    self.expected(item, "cap_drop entries must be string scalars");
+                    continue;
+                }
+            };
+            let span = effective_span(item);
+            if let Some(first) = seen.get(scalar.value()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        CAP_DROP_DUPLICATE_ITEM,
+                        Severity::Error,
+                        "cap_drop entries must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(span, "duplicate capability string"))
+                    .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                );
+            } else {
+                seen.insert(scalar.value().to_owned(), span);
+            }
+            let typed = CapabilityDropItem::new(Located::new(scalar.value().to_owned(), span));
+            items.push(ProjectValue::new(typed, item));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn capability_add(&mut self, value: &MergedValue) -> Option<ProjectValue<Vec<ProjectValue<CapabilityAddItem>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, "cap_add must be a sequence of string scalars");
+            return None;
+        };
+        let mut items = Vec::new();
+        let mut seen = BTreeMap::new();
+        for item in values {
+            let scalar = match item.kind() {
+                MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => scalar,
+                _ => {
+                    self.expected(item, "cap_add entries must be string scalars");
+                    continue;
+                }
+            };
+            let span = effective_span(item);
+            if let Some(first) = seen.get(scalar.value()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        CAP_ADD_DUPLICATE_ITEM,
+                        Severity::Error,
+                        "cap_add entries must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(span, "duplicate capability string"))
+                    .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                );
+            } else {
+                seen.insert(scalar.value().to_owned(), span);
+            }
+            let typed = CapabilityAddItem::new(Located::new(scalar.value().to_owned(), span));
+            items.push(ProjectValue::new(typed, item));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn devices(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectDevice>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, "service devices must be a sequence");
+            return None;
+        };
+        let mut devices = Vec::new();
+        for (index, item) in values.iter().enumerate() {
+            let mut path = service_path.to_vec();
+            path.push("devices".to_owned());
+            path.push(index.to_string());
+            let device = match item.kind() {
+                MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => ProjectDevice::Short(
+                    ShortDevice::new(Located::new(scalar.value().to_owned(), effective_span(item))),
+                ),
+                MergedValueKind::Mapping(fields) => ProjectDevice::Long(self.long_device(item, fields, &path)),
+                _ => {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DEVICE_EXPECTED_FORM,
+                            Severity::Error,
+                            "service device must use string short syntax or mapping long syntax",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            effective_span(item),
+                            "unsupported device form",
+                        )),
+                    );
+                    continue;
+                }
+            };
+            devices.push(ProjectValue::new(device, item));
+        }
+        Some(ProjectValue::new(devices, value))
+    }
+
+    fn long_device(&mut self, value: &MergedValue, fields: &[MergedEntry], path: &[String]) -> ProjectLongDevice {
+        let mut device = ProjectLongDevice {
+            source: None,
+            target: None,
+            permissions: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        };
+        for field in fields {
+            let parsed = match field.key() {
+                "source" | "target" | "permissions" => self.device_string(field.value(), field.key()),
+                name if name.starts_with("x-") => {
+                    device.extension_fields.push(field_reference(path, field));
+                    continue;
+                }
+                _ => {
+                    device.unknown_fields.push(field_reference(path, field));
+                    continue;
+                }
+            };
+            match field.key() {
+                "source" => device.source = parsed,
+                "target" => device.target = parsed,
+                "permissions" => device.permissions = parsed,
+                _ => unreachable!("unrecognized device fields continue before assignment"),
+            }
+        }
+        if device.source.is_none() {
+            self.missing(value, "long-syntax device is missing required string `source`");
+        }
+        device
+    }
+
+    fn device_string(&mut self, value: &MergedValue, member: &str) -> Option<ProjectValue<String>> {
+        let scalar = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => scalar,
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DEVICE_EXPECTED_STRING,
+                        Severity::Error,
+                        format!("device {member} must be a string scalar"),
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected long-device member form",
+                    )),
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(scalar.value().to_owned(), value))
     }
 
     fn scalar<'value>(

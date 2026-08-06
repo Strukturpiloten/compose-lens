@@ -3,7 +3,9 @@ services:
   web:
     container_name: project-view-web
     image: example.invalid/web:1
+    entrypoint: ["/usr/bin/env", "php"]
     command: ["serve", "--foreground"]
+    init: false
     user: "1000:1000"
     userns_mode: host
     group_add: [audio]
@@ -36,6 +38,7 @@ services:
     restart: unless-stopped
   worker:
     image: example.invalid/worker:1
+    init: true
     profiles: [workers]
 volumes:
   data:

@@ -1,0 +1,9 @@
+services:
+  omitted:
+    image: example.invalid/composelens/init-omitted:1
+  enabled:
+    image: example.invalid/composelens/init-enabled:1
+    init: true
+  disabled:
+    image: example.invalid/composelens/init-disabled:1
+    init: false
