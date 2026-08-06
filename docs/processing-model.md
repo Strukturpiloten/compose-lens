@@ -58,6 +58,28 @@ source spans and classifies authored, added, replaced, recursively merged, appen
 overridden values. It handles ordinary mappings and sequences, shell-command replacement,
 environment and label keys across map/list forms, unique service resources, YAML merge keys,
 `!reset`, and `!override`.
+Service `cap_add` and `cap_drop` independently use exact-scalar sequence uniqueness during ordinary
+multi-file merge: values append in order and exact case-sensitive duplicates collapse with
+combined provenance. Case variants stay distinct. `!reset` yields an explicit empty sequence,
+while `!override` replaces the whole sequence and preserves duplicates inside the replacement for
+diagnostics. No cross-field reconciliation is performed.
+Service `devices` keeps the existing Compose-Go-compatible target-unique rule for path forms.
+Matching targets replace or recursively merge in place and retain all contributor provenance;
+`!reset` yields an explicit empty sequence and `!override` replaces the complete sequence. CDI,
+deferred, opaque, colon-delimited, and permissions spelling remains raw. Current Compose merge prose
+does not list `devices` among the ordinary append exclusions, while Compose-Go's `extends` metadata
+does; ComposeLens records that discrepancy without silently changing its compatibility behavior.
+Service-level `tmpfs` list-to-list merging uses the ordinary append rule with no cross-file
+deduplication. Scalar/list mismatches use ordinary replacement; reset and override retain their
+explicit operations.
+Service `sysctls` mappings use ordinary recursive mapping merge by exact key, while list-to-list
+merging appends without deduplication. Map/list mismatches replace normally. Per-file interpolation
+applies to mapping values and list items but not mapping keys; duplicate effective list strings are
+retained with source-aware diagnostics.
+Service `ulimits` uses the same generic recursive mapping merge, including independent `soft` and
+`hard` members. Single/range mismatches replace normally. Limit names never interpolate; scalar and
+range-member values use the explicit per-file interpolation overlay. Reset produces an explicit
+empty mapping, and override replaces the complete mapping with its operation retained.
 
 The operation accepts an optional set of matching per-file interpolation overlays. Omitting them is
 an explicit request to merge authored expressions. A mismatched project/overlay pair is rejected.
@@ -85,10 +107,11 @@ profile-disabled service.
 services. A selection created from a different project returns the same stable mismatch diagnostic
 used by the other post-merge operations.
 
-The native view covers project name, services, explicit container names, images, entrypoints,
+The native view covers project name, services, service hostnames, explicit container names, images, entrypoints,
 commands, init-process choices, merged environment, service labels, extra host
-mappings, health checks, service dependencies, ports, volume mounts, service config and secret
-grants, service networks, profiles, and top-level network, volume, config, and secret definitions.
+mappings, ordered service capability additions and drops, ordered mixed service devices, raw service PID limits, raw service shared-memory sizes, raw service memory limits, service-level temporary filesystems, service sysctls, ordered service ulimits, image pull policies, health checks, service dependencies, independent stop signals and stop grace periods,
+ports, volume mounts, service config and secret grants, service networks, profiles, and top-level
+network, volume, config, and secret definitions.
 Environment and service-label values are keyed after field-specific Compose merging, while each
 entry retains whether its effective spelling came from mapping, `KEY=VALUE`, or key-only list
 syntax. A key-only label means an empty value; a key-only environment entry retains its distinct

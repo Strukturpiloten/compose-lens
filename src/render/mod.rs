@@ -4,10 +4,13 @@ mod generated;
 mod preserved;
 
 pub use generated::{
-    ComposeDocumentBuilder, GeneratedCommand, GeneratedComposeDocument, GeneratedEntrypoint, GeneratedEnvironment,
-    GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedLabel, GeneratedMount,
-    GeneratedNetworkAttachment, GeneratedPort, GeneratedProtocol, GeneratedResource, GeneratedRestartPolicy,
-    GeneratedSelinux, GeneratedService, GeneratedString, GenerationError,
+    ComposeDocumentBuilder, GeneratedCommand, GeneratedComposeDocument, GeneratedDevice, GeneratedEntrypoint,
+    GeneratedEnvironment, GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat, GeneratedExtraHost,
+    GeneratedHostname, GeneratedLabel, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount,
+    GeneratedNetworkAttachment, GeneratedPidsLimit, GeneratedPort, GeneratedProtocol, GeneratedPullPolicy,
+    GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedShmSize, GeneratedString,
+    GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits,
+    GenerationError,
 };
 
 pub use preserved::{

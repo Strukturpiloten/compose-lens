@@ -1,0 +1,18 @@
+schema = 1
+id = "service-ulimits"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, explicit empty, integer/string scalar, unlimited, and soft/hard range service ulimits forms."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains or specifically rejects each service ulimits config form; planned rows make no runtime enforcement, default, resource-accounting, or cross-provider equivalence claim."

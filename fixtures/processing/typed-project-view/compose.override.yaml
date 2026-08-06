@@ -29,6 +29,8 @@ services:
     networks:
       appnet:
         aliases: [web-override]
+  worker:
+    init: false
 volumes:
   data:
     labels:

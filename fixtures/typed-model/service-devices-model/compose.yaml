@@ -1,0 +1,42 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty:
+    devices: []
+  mixed:
+    devices:
+      - /dev/dri:/dev/dri:rwm
+      - /dev/dri:/dev/dri:rwm
+      - vendor.example/device=gpu
+      - "${DEVICE_SELECTOR:-vendor.example/device=gpu}"
+      - provider-token
+      - source: /dev/video0
+        target: /dev/camera
+        permissions: weird-permissions
+        x-provider-note: retained
+        future-option: retained
+      - source: vendor.example/device=accelerator
+  malformed-items:
+    image: example.invalid/recovery:1
+    devices:
+      - /dev/valid
+      - true
+      - 64
+      - null
+      - [/nested]
+      - source: 42
+        target: true
+        permissions: [rwm]
+        x-recovery: retained
+        future: retained
+      - target: /dev/missing-source
+      - source: /dev/later
+  scalar-field:
+    image: example.invalid/scalar:1
+    devices: /dev/not-a-sequence
+  mapping-field:
+    image: example.invalid/mapping:1
+    devices: { source: /dev/not-a-sequence }
+  null-field:
+    image: example.invalid/null:1
+    devices: null

@@ -2,7 +2,7 @@
 
 This plan gives BoxFerry, ComposeLens, and QuadletLens one stable task numbering scheme. Repository roadmaps describe internal phases; this document describes delivery order across repositories.
 
-Last synchronized: 2026-08-05.
+Last synchronized: 2026-08-06.
 
 ## Status convention
 
@@ -81,8 +81,9 @@ The component crates remain unpublished until their release contract is finalize
 
 Status: in progress. Each repository owns its native types; BoxFerry owns mappings.
 
-- ComposeLens (completed): services, images, commands, environment, service labels, extra hosts, ports, volumes,
-  networks, profiles, configs, and secrets.
+- ComposeLens (completed): services, images, commands, environment, service labels, hostnames, extra hosts, capability additions and drops, service devices,
+  service PID limits, shared-memory sizes, service-level temporary filesystems, service sysctls, service ulimits, image pull policies, independent stop signals and stop grace periods, ports, volumes, networks,
+  profiles, configs, and secrets.
 - QuadletLens (completed): `.container`, `.pod`, `.volume`, `.network`, required generic systemd
   sections, repeatable container/pod host mappings, repeatable container labels, and exact
   document-set relationships.
@@ -195,6 +196,42 @@ and long syntax reaches the document and merged-project views with option-level 
 implicit file I/O. The 0.1.13 candidate adds the missing generated-document boundary so BoxFerry
 can write those declarations back to Compose while retaining short/long form, required behavior,
 raw parser selection, ordering, and sensitivity.
+
+The current post-0.1.13 worktree adds raw-preserving service `pids_limit`, `shm_size`, and `tmpfs`,
+source-aware service `hostname`, and independent ordered service `cap_add` and `cap_drop` across
+authored, effective-project, and generated boundaries. Capability additions and drops retain
+omission versus explicit empty state, exact strings, order, schema-duplicate diagnostics,
+exact-scalar merge provenance, case variants, and sensitivity without a whitelist, target logic,
+or cross-field reconciliation. PID limits retain
+arbitrary-precision decimals and ambiguous zero without runtime probing or deploy-limit
+conflation. Hostnames retain omission, deferred expressions, invalid literals, sensitivity, and
+ordinary scalar-replacement provenance while generation accepts only conservative resolved
+RFC-1123 values. Shared-memory sizes retain exact number/string provenance, documented lowercase
+units with unconstrained amount spelling, ambiguous zero, and provider-dependent schema scalars;
+generation accepts only quoted canonical positive integer values with explicit units and injects
+no Podman default. Exact provider rows remain planned-only evidence questions.
+Service-level `tmpfs` remains distinct from volume type `tmpfs` and preserves scalar/list form,
+explicit empty lists, duplicates, `<path>[:<options>]` spelling, raw target options, sensitivity,
+ordinary append/replacement provenance, reset, and override. Generated output retains the same
+forms without inventing target-runtime equivalence.
+Service `sysctls` preserves mapping/list form, explicit empty collections, ordered mapping keys,
+exact scalar kinds and spelling, ordered list items, duplicate evidence, per-file interpolation,
+sensitivity, generic map/list merge provenance, reset, and override. Generated output emits only
+resolved quoted strings and applies no namespace, privilege, kernel, runtime, or cross-format policy.
+Six provider-config rows remain planned-only evidence questions.
+Service `ulimits` preserves ordered lowercase keys, single and soft/hard range forms, authored and
+effective scalar spelling, YAML number/string kind, nested recursive-merge provenance,
+interpolation sensitivity, omission, explicit empty/reset mappings, scalar/range replacement, and
+override. Generated output quotes only resolved `-1` or non-negative ASCII decimals. Six
+provider-config rows remain planned-only without a runtime enforcement, default, resource, Podman,
+or cross-format claim.
+Service `devices` preserves an explicit ordered sequence of mixed raw short and long forms across
+authored, effective-project, and generated boundaries. Short path, CDI-like, deferred, and opaque
+strings remain authoritative; long `source`, optional `target`/`permissions`, extensions, unknown
+fields, and nested provenance remain source-aware. The established Compose-Go-compatible
+target-keyed merge, reset, and override behavior is retained despite a discrepancy with current
+Compose merge prose. Six provider-config rows remain planned-only; no host-device, permissions,
+CDI, GPU, runtime-access, or cross-format behavior is inferred.
 
 ## T8: First N-to-N runtime and definition milestone
 

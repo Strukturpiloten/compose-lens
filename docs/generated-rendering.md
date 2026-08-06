@@ -16,6 +16,8 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 
 `GeneratedService` supports the first runtime-migration fields:
 
+- an optional resolved service `hostname`, independently validated with conservative ASCII
+  RFC-1123 rules and never derived from another name;
 - an optional explicit runtime `container_name` validated against Compose's portable grammar;
 - image references, including `name:tag@digest` spellings;
 - independent string/list entrypoints and exec/shell commands, including explicitly empty forms;
@@ -25,7 +27,19 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - ordered service metadata labels with explicit, potentially empty string values;
 - combined `user[:group]`, user namespace, supplementary groups, working directory, and explicit
   read-only-root state;
+- independent optional complete ordered `cap_add` and `cap_drop` vectors, including explicitly
+  configured empty vectors;
+- an optional complete ordered mixed short/long service `devices` vector, including explicit empty
+  state, raw CDI-like strings, exact duplicates, and long source/target/permissions;
+- unlimited or positive integral service PID limits;
+- quoted positive canonical service shared-memory sizes with explicit documented lowercase units;
+- quoted positive canonical service memory limits with explicit documented lowercase units;
+- scalar/list service-level temporary filesystems, including explicit empty lists and raw options;
+- mapping/list service sysctls, including explicit empty collections and ordered quoted strings;
+- ordered service ulimits with quoted single or required soft/hard values and explicit empty maps;
 - service-level `no`, `always`, `on-failure[:max-retries]`, and `unless-stopped` restart policies;
+- documented service image pull policies, including exact custom interval spelling;
+- independent raw stop signals and raw-preserving Compose stop grace periods;
 - ordered short-form host mappings;
 - protocol-aware target/published/host-address ports;
 - named, anonymous, and bind mounts;
@@ -38,13 +52,104 @@ syntax would otherwise overwrite intent. Singleton service fields reject a secon
 Strings are always double-quoted by the private renderer, so YAML scalar inference cannot change
 their type.
 
+`GeneratedService::set_cap_add` and `GeneratedService::set_cap_drop` configure their complete
+vectors independently and exactly once. Not calling a setter omits its field; an empty vector emits
+the corresponding `[]`. Non-empty items retain order and exact case and render as quoted sequence
+strings. Empty strings, NUL, carriage return, line feed, and exact case-sensitive duplicates are
+rejected. Case variants and other single-line schema strings, including strings containing spaces,
+remain accepted. Generation does not invent a capability whitelist, lowercase values, apply
+target/runtime policy, or reconcile additions with drops.
+
+`GeneratedService::set_devices` configures the complete device vector exactly once. Not calling it
+omits the field; an empty vector emits `devices: []`. `GeneratedDevice` retains mixed short/long
+order and exact duplicates, and `GeneratedLongDevice` requires `source` while optionally retaining
+raw `target` and `permissions`. All emitted values are quoted resolved single-line strings; NUL,
+line breaks, dollar-bearing deferred output, empty short items, and empty long sources are rejected.
+Parse-back must recover the same ordered forms. Generation does not inspect host devices, split
+colon triples, validate CDI or permission letters, infer GPU behavior, or claim runtime access.
+
 `GeneratedRestartPolicy` cannot represent deferred or provider-specific values because generated
 documents require a reviewed semantic choice. `GeneratedService::set_restart` rejects a second
 assignment instead of overwriting the first policy. The renderer quotes every policy, including
 `no`, and the parse-back model must recover the same policy family and retry count.
 
+`GeneratedHostname` is non-exhaustive and currently represents a resolved `GeneratedString`.
+`GeneratedService::set_hostname` rejects empty values, every dollar-bearing expression, non-ASCII
+text, overlong names or labels, empty labels, underscores, leading/trailing hyphens, and trailing
+dots. Uppercase and digit-leading labels are accepted. Successful output is quoted and must parse
+back to the exact resolved value. Leaving the setter unused omits the field; generation does not
+invent a hostname or couple it to `container_name`.
+
+`GeneratedPidsLimit` is non-exhaustive and represents only `Unlimited` or `Finite(String)`.
+Unlimited emits unquoted `-1`. Finite spellings must be non-empty positive ASCII decimals; the
+setter rejects zero (including all-zero spellings), signs, fractions, exponents, interpolation,
+and arbitrary strings. Validation does not parse into a fixed-width integer, so arbitrarily large
+positive values and leading zeros remain exact and parse back into `PidsLimitKind::Finite`.
+Generation does not inspect cgroups, inject a default, emit an ambiguous zero state, or validate
+against `deploy.resources.limits.pids`.
+
+`GeneratedShmSize` is non-exhaustive and represents an explicit `GeneratedString` amount plus one
+typed documented unit from `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb`. The amount must match
+`[1-9][0-9]*`; this rejects zero, leading zeros, signs, fractions, exponents, whitespace,
+expressions, and non-ASCII digits without fixed-width parsing. Because the unit is mandatory and
+typed, successful output cannot be a bare number or use uppercase or IEC units. The renderer
+always quotes the combined value, and parse-back must recover the exact amount, unit, YAML string
+category. Caller-marked sensitivity still propagates to the generated document. Leaving the setter
+unused omits `shm_size`; generation does not inject
+Podman's 64 MiB default, normalize a provider-dependent value, inspect `/dev/shm`, or encode IPC,
+pod-grouping, cross-format, CPU, or memory policy.
+
+`GeneratedMemLimit` is a distinct non-exhaustive service-memory type with its own `MemLimitUnit`.
+It emits only a quoted positive `[1-9][0-9]*` amount plus `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb`,
+rejects duplicate assignment and unsafe values, and requires native parse-back to recover the exact
+parts. Omission remains omission. Generation does not normalize units, infer deploy consistency or
+defaults, inspect a host/cgroup, enforce runtime policy, or conflate memory with shared memory,
+reservation, swap, or deploy limits. Only explicit `b` values can be candidates for exact
+cross-format treatment; other units and authored zero/deferred/bare/provider forms are loss-aware.
+
+`GeneratedTmpfs` is non-exhaustive and preserves the selected scalar or ordered list form,
+including an explicit empty list and exact duplicates. Each item must be a non-empty
+`<path>[:<options>]` string without interpolation or line breaks. `mode`, `uid`, and `gid`
+assignments are documented Compose options; other well-shaped raw assignments or flags remain
+exact so a caller can retain target-only evidence. The renderer quotes every item and parse-back
+recovers its exact form, spelling, order, and duplicates. Leaving the setter unused omits `tmpfs`;
+generation neither selects mount defaults nor conflates this field with volume type `tmpfs`.
+
+`GeneratedSysctls` is non-exhaustive and preserves the selected ordered mapping or list form,
+including explicit empty collections. `GeneratedSysctl` accepts one unique non-empty resolved map
+name and one `GeneratedString` value; list items must also be resolved single-line strings and exact
+duplicates are rejected. The renderer quotes mapping names, mapping values, and list items, so
+`true`, `1`, and `null` remain strings on parse-back. Generation rejects NUL, multiline, and
+dollar-bearing deferred forms but deliberately applies no sysctl namespace, privilege, host-kernel,
+provider, runtime, or cross-format policy.
+
+`GeneratedUlimits` preserves caller order and explicit empty mappings. Each `GeneratedUlimit`
+uses either one scalar or a range with both `soft` and `hard`; all values render as quoted strings.
+Names must match lowercase ASCII `[a-z]+`, remain unique, and never interpolate. Values must be a
+resolved non-negative ASCII decimal or `-1`; missing range members, multiline, NUL-bearing,
+dollar-bearing, provider-specific strings, and `host` are rejected. Generation injects no default,
+normalizes no provider value, and makes no runtime enforcement or host-resource claim.
+
+`GeneratedPullPolicy` is non-exhaustive and represents documented literal forms plus the retained
+`if_not_present` alias. Its custom `Every(GeneratedString)` form receives the duration after the
+`every_` prefix, validates integer `w`, `d`, `h`, `m`, and `s` components, and preserves exact
+spelling and sensitivity. Fractions, `us`, and `ms` are rejected. Schema-valid `0s` is retained even
+though its prose semantics are ambiguous. The generator deliberately does not emit schema-only
+`refresh`, `pull_refresh_after`, deferred expressions, or provider-specific values, and makes no
+provider or cross-format equivalence claim.
+
 `GeneratedService::set_init` accepts an explicit boolean and rejects a second assignment. The
 renderer emits an unquoted YAML boolean and parse-back validation must recover the same literal.
+Leaving the setter unused omits `init`; generation does not invent `false` for an omitted choice.
+
+`GeneratedService::set_stop_signal` accepts any NUL-free `GeneratedString`, including named,
+numeric, and empty spellings, without inventing a signal grammar. The quoted empty spelling remains
+distinct from null. `set_stop_grace_period` applies a `ComposeLens` raw-preserving policy based on
+the documented `us`, `ms`, `s`, `m`, and `h` units, including composite, `0s`, and fractional
+values. Consistent with existing native-field conventions, any retained scalar containing `$` is
+classified as interpolation-shaped; that lexical state does not prove that interpolation is
+eligible or valid. Both setters reject duplicate assignment and retain the exact caller spelling
+and sensitivity. The renderer does not normalize values into target-runtime seconds.
 
 `GeneratedResource::set_custom_name` emits Compose's top-level `name:` field. Runtime migration
 uses it when an application-owned observed network or volume must keep its exact platform name;
@@ -84,6 +189,25 @@ the builder rejects empty/NUL-bearing names and duplicate names but does not enf
 non-binding reverse-DNS naming recommendations.
 Generated environment-file paths also use `GeneratedString`; one sensitive path redacts the
 complete builder and generated document from `Debug`.
+Generated lifecycle values use the same boundary, so caller-marked stop signals or grace periods
+redact the complete generated document while remaining available through explicit output access.
+The custom pull-policy duration uses the same boundary and redacts the builder and generated
+document when caller-marked sensitive.
+Generated hostnames use the same boundary, so a caller-marked sensitive hostname redacts the
+builder and generated document while remaining available only through explicit output access.
+Generated shared-memory amounts use the same boundary, so a caller-marked sensitive amount redacts
+the builder and generated document while exact deployable text remains explicitly accessible.
+Generated `tmpfs` items use the same boundary; one sensitive path or raw option redacts the builder
+and generated document while explicit output access retains the exact scalar/list value.
+Generated device short strings and long source/target/permissions use the same boundary; one
+sensitive member redacts the builder and complete generated document without entering diagnostics.
+Generated sysctl mapping values and list items use the same boundary; one sensitive value redacts
+the builder and generated document while map names remain ordinary uninterpolated keys.
+Generated ulimit values use the same boundary; one sensitive single, soft, or hard value redacts
+the builder and generated document while limit names remain ordinary uninterpolated keys.
+Generated capability-add and capability-drop items use the same boundary; one sensitive item
+redacts the builder and generated document while explicit output access still returns the exact
+ordered strings.
 
 ## Validation boundary
 

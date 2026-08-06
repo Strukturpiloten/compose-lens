@@ -30,8 +30,55 @@ collection does not require a working Podman runtime. Both selected releases exp
 their versioned source: [`podman-compose` 1.3.0](https://github.com/containers/podman-compose/blob/v1.3.0/podman_compose.py)
 and [`podman-compose` 1.5.0](https://github.com/containers/podman-compose/blob/v1.5.0/podman_compose.py).
 
-All 48 combined and feature-specific provider observations are reviewed and retained. See the
-[result table](research/provider-config-conformance-2026-07-31.md). Runtime-effect probes remain
+All 48 previously collected combined and feature-specific provider observations are reviewed and
+retained. Six provider-config runs each for authored service `init`, service hostname, service
+`cap_add`, service `cap_drop`, service `devices`, the service
+stop-lifecycle probe, service pull policy, service PID limit, service shared-memory size, service memory limit,
+service-level `tmpfs`, service `sysctls`, and service `ulimits` are
+`planned` and make no support claim.
+The pull-policy probe includes schema-only `refresh` and `pull_refresh_after` solely as an explicit
+evidence question. It also asks about composite integer intervals and schema-valid `every_0s`,
+whose prose semantics remain ambiguous; no provider behavior or cross-format equivalence is
+inferred. See the
+[result table](research/provider-config-conformance-2026-07-31.md).
+The PID-limit probe asks only how provider config handles omission, numeric/string `-1`, positive
+integral values including arbitrary precision, ambiguous zero, fractions, and arbitrary strings.
+It does not inspect cgroups, infer a default, or compare service `pids_limit` with
+`deploy.resources.limits.pids`.
+The service-devices probe asks only how provider config handles omission, explicit empty state,
+ordered duplicate path forms, CDI-like selectors, and mixed short/long mappings. It does not
+inspect host devices, validate colon triples, permissions, CDI or GPU semantics, start a
+container, infer privileges, or claim runtime access or cross-format equivalence.
+The service-tmpfs probe asks only how provider config handles omission, scalar/list form, explicit
+empty lists, exact duplicates, colon-delimited documented assignments, and raw provider options.
+It does not inspect runtime mounts, infer default flags, or claim rootless, pod, volume-type, or
+cross-format equivalence.
+The service-sysctls probe asks only how provider config handles omission, mapping/list form,
+explicit empty collections, scalar-valued mappings, ordered list strings, and exact duplicate list
+items. It does not apply the configuration, validate namespaces or privileges, inspect a host
+kernel, infer provider coercion, or claim runtime or cross-format equivalence.
+The service-ulimits probe asks only how provider config handles omission, explicit empty mappings,
+integer/string single values, `-1`, and soft/hard ranges. It does not start a container, inspect or
+enforce host resource limits, infer a default, normalize a provider spelling, compare Podman
+behavior, or claim runtime or cross-format equivalence.
+The shared-memory-size probe asks only how provider config handles omission, documented lowercase
+units, explicit bytes, leading-zero amounts, numeric and fractional scalars, bare strings, zero,
+uppercase units, and IEC spelling. It does not infer Podman's 64 MiB default, inspect runtime
+`/dev/shm` allocation, normalize units, or claim IPC, pod-grouping, or cross-format equivalence.
+The service-memory-limit probe asks only how provider config handles omission, documented
+lowercase units, explicit bytes, leading-zero, numeric, fractional, bare-string, zero, uppercase,
+and IEC spellings. Its six planned rows make no default, normalization, enforcement, host/cgroup,
+runtime, deploy-consistency, or cross-provider equivalence claim.
+The hostname probe asks only whether provider config retains omission, uppercase and digit-leading
+labels, and multi-label spelling. It does not claim container-runtime hostname acceptance, DNS or
+hosts-file behavior, UTS isolation, or equivalence with service keys and `container_name`.
+The capability-drop probe asks only whether provider config retains omission, explicit empty
+state, order, and exact case. It does not claim that a runtime recognizes or applies any named
+capability, nor infer privilege, namespace, seccomp, SELinux, or cross-format behavior.
+The capability-add probe asks the same provider-config-only questions plus independent coexistence
+with `cap_drop`. It does not claim runtime privilege effects, reconcile the two fields, or infer
+namespace, seccomp, SELinux, runtime capability-set, or cross-format behavior.
+Runtime-effect probes remain
 separate because accepting or rendering a configuration does not show that its requested behavior
 occurred. The runtime matrix includes:
 

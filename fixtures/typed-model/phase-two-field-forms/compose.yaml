@@ -72,6 +72,7 @@ services:
   shell:
     entrypoint: ""
     command: ""
+    init: false
   exec-entrypoint:
     entrypoint: ["/usr/bin/env", "php"]
 networks:

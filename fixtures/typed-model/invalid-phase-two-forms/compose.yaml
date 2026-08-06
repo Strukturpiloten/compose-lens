@@ -17,6 +17,9 @@ services:
       - target: /etc/app.conf
     secrets:
       - target: /run/secrets/token
+  init-shape:
+    image: example.invalid/init-shape:1
+    init: [true]
 networks:
   invalid: scalar
   bad-ipam:

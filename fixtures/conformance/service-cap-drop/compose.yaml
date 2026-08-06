@@ -1,0 +1,16 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty:
+    image: example.invalid/empty:1
+    cap_drop: []
+  ordered:
+    image: example.invalid/ordered:1
+    cap_drop:
+      - NET_ADMIN
+      - CHOWN
+  case-variant:
+    image: example.invalid/case-variant:1
+    cap_drop:
+      - NET_ADMIN
+      - net_admin

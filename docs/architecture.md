@@ -36,8 +36,9 @@ Typed nodes retain source references and unknown fields. Parsing into typed data
 Short and long syntax remain distinct field-specific variants. They are not normalized merely because they describe similar concepts: defaults, available options, and runtime behavior can differ. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) defines the representation-fidelity rule.
 
 The completed native boundary types images, build field identities, commands, environment,
-environment-file declarations, service explicit container names, labels, extra hosts, raw user and user-namespace values, ulimits, health checks, dependencies, deploy field
-identities, ports, volumes, service networks, profiles, config and secret grants, and the
+environment-file declarations, service hostnames, explicit container names, labels, extra hosts, service capability additions and drops, raw user and
+user-namespace values, ordered mixed service devices, PID limits, shared-memory sizes, service-level temporary filesystems, service sysctls, image pull policies, independent stop signals and stop grace periods, ulimits, health checks,
+dependencies, deploy field identities, ports, volumes, service networks, profiles, config and secret grants, and the
 corresponding top-level network, volume, config, and secret definitions. Deferred interpolation
 expressions, empty values, extensions, and unknown fields remain distinguishable. Container paths
 are classified independently of host paths. The exact boundary and parse contract are documented
@@ -67,6 +68,34 @@ nodes. It recursively merges mappings, applies field-specific sequence rules and
 tags, resolves same-document YAML aliases and merge keys, and records every contributing span plus
 the effective merge operation. The original syntax and per-document typed models remain available.
 ADR 0006 records the [merge-view decision](decisions/0006-provenance-preserving-compose-merge.md).
+
+Service `cap_add` and `cap_drop` are independent exact-scalar unique sequences in ordinary
+multi-file merging. Exact case-sensitive duplicates collapse only after append and retain combined
+item provenance and sensitivity. Case variants remain distinct. Reset produces an explicit empty
+sequence, while override replaces the complete sequence without silently repairing duplicates in
+its replacement. Neither field rewrites the other.
+
+Service `devices` retains the repository's established Compose-Go-compatible unique-by-target
+merge. Matching path targets replace or recursively merge in place with full contributor
+provenance; reset and override remain explicit. Raw CDI, deferred, and opaque short strings are not
+normalized. The current Compose merge prose's ordinary append exclusion does not list `devices`,
+while Compose-Go's `extends` metadata does; this discrepancy is documented as evidence rather than
+silently changing existing behavior.
+
+Service-level `tmpfs` is an ordinary sequence when both files use list form: entries append without
+deduplication so ordering, exact duplicates, item provenance, `!reset`, and `!override` remain
+observable. Scalar/list shape mismatches use the normal replacement rule.
+
+Service `sysctls` uses generic Compose collection semantics: mappings recursively merge by exact
+key, lists append without deduplication, and map/list mismatches replace. Mapping keys remain
+uninterpolated while mapping values and list items use each file's explicit interpolation overlay.
+Exact duplicate list strings remain source-aware and diagnosed rather than silently removed.
+
+Service `ulimits` is an ordered mapping whose outer names and nested `soft`/`hard` mappings use
+generic recursive merge. Keys remain uninterpolated, values retain each file's explicit
+interpolation result, scalar/range mismatches replace, reset produces an explicit empty mapping,
+and override replaces the whole field. The project view exposes this behavior without applying
+runtime defaults or resource semantics.
 
 The `project` module builds a native consumer view directly from a merged project and an optional
 matching profile selection. It exposes the first conversion fields through native Compose types,
@@ -158,6 +187,46 @@ caller-marked value sensitivity to the complete generated document.
 Generated environment-file declarations preserve caller-selected short or long syntax and ordered
 `required`/`format: raw` options. Paths use the same sensitivity boundary and are never opened,
 resolved, or parsed during generation.
+Generated capability-add and capability-drop declarations independently distinguish omission from
+a configured vector, including empty. They preserve exact case and order, reject unsafe or
+exact-duplicate items, quote every non-empty item, and apply no capability whitelist or target
+normalization.
+Generated service devices distinguish omission from an explicit empty vector and retain mixed
+short/long order and duplicates. Every value is a quoted resolved single-line string; long source
+is required. Generation does not inspect host devices, parse short colon triples, validate CDI or
+permissions, or claim runtime access.
+Generated stop signals remain unconstrained raw strings because Compose defines no normative
+signal-token grammar; quoted empty strings are retained as distinct from null. Generated stop
+grace periods retain caller spelling under a `ComposeLens` policy based on the documented `us`,
+`ms`, `s`, `m`, and `h` units; no target-runtime normalization occurs.
+Generated PID limits use a non-exhaustive Compose-owned enum. Unlimited emits `-1`; finite values
+retain arbitrary-precision positive ASCII-decimal spelling. Zero, signs, fractions, exponents,
+expressions, and arbitrary strings cannot enter successful generated output.
+Generated shared-memory sizes use a non-exhaustive Compose-owned enum plus an explicit documented
+lowercase unit. Only canonical positive ASCII-integer amounts can be emitted, and the complete
+value is always quoted. Omission, zero, leading zeros, signs, fractions, exponents, whitespace,
+expressions, bare numbers, uppercase units, and IEC units cannot enter successful generated output.
+No provider default, normalization, or runtime allocation is inferred.
+Generated service `tmpfs` retains caller-selected scalar or list form, including explicit empty
+lists, exact duplicates, and well-shaped raw target options. Values use `<path>[:<options>]`; the
+documented option assignments are `mode`, `uid`, and `gid`, while other raw options remain
+provider-dependent evidence rather than being normalized or rejected.
+Generated service `sysctls` retains caller-selected mapping or list form, including explicit empty
+collections. Mapping names are unique and every map value/list item is emitted as a quoted resolved
+string; multiline, NUL-bearing, deferred, and exact-duplicate forms are rejected without applying
+namespace, privilege, kernel, or target-runtime rules.
+Generated service `ulimits` retains ordered single and required soft/hard forms plus an explicit
+empty map. Lowercase names are unique and uninterpolated. Values are quoted resolved `-1` or
+non-negative ASCII decimals; missing members, multiline, NUL-bearing, deferred, and arbitrary
+schema strings are rejected without injecting provider defaults or claiming runtime enforcement.
+Generated hostnames use a separate non-exhaustive Compose-owned API and accept only resolved ASCII
+RFC-1123 values. They remain independent from explicit runtime container names; generation does
+not derive either value from the other or synthesize a hostname when omitted.
+Generated pull policies use a non-exhaustive Compose-owned enum for documented forms. Custom
+`every_<duration>` values retain exact caller spelling and sensitivity while applying the schema
+grammar `every_([0-9]+[wdhms])+`. Schema-valid `every_0s` remains representable even though its
+prose semantics are ambiguous. Schema-only `refresh` and `pull_refresh_after` are not generated,
+and no provider behavior or cross-format equivalence is inferred.
 
 ## Dependency direction
 

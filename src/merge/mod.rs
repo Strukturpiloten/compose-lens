@@ -670,6 +670,9 @@ fn merge_unique_sequences(
     let Some(field) = unique_field(path) else {
         return append_sequences(base, incoming);
     };
+    if field == UniqueField::ExactScalar {
+        return merge_exact_scalar_sequences(base, incoming);
+    }
     let MergedValueKind::Sequence(mut base_values) = base.kind else {
         return base;
     };
@@ -698,6 +701,54 @@ fn merge_unique_sequences(
 
     MergedValue {
         kind: MergedValueKind::Sequence(base_values),
+        provenance: combined_provenance(base.provenance, &incoming.provenance, MergeOperation::Merged),
+    }
+}
+
+fn merge_exact_scalar_sequences(base: MergedValue, incoming: MergedValue) -> MergedValue {
+    let MergedValueKind::Sequence(mut values) = base.kind else {
+        return base;
+    };
+    let MergedValueKind::Sequence(mut incoming_values) = incoming.kind else {
+        return MergedValue {
+            kind: MergedValueKind::Sequence(values),
+            provenance: base.provenance,
+        };
+    };
+    for value in &mut incoming_values {
+        mark_added(value);
+    }
+    values.append(&mut incoming_values);
+
+    let mut deduplicated: Vec<MergedValue> = Vec::with_capacity(values.len());
+    for value in values {
+        let exact = value
+            .as_scalar()
+            .and_then(|scalar| (scalar.kind == MergedScalarKind::String).then(|| scalar.value.clone()));
+        let existing = exact.as_ref().and_then(|exact| {
+            deduplicated.iter().position(|candidate| {
+                candidate
+                    .as_scalar()
+                    .is_some_and(|scalar| scalar.kind == MergedScalarKind::String && scalar.value == *exact)
+            })
+        });
+        if let Some(index) = existing {
+            let prior = &deduplicated[index];
+            let sensitive = prior.is_sensitive() || value.is_sensitive();
+            let provenance = combined_provenance(prior.provenance.clone(), &value.provenance, MergeOperation::Merged);
+            let mut retained = prior.clone();
+            retained.provenance = provenance;
+            if let MergedValueKind::Scalar(scalar) = &mut retained.kind {
+                scalar.sensitive = sensitive;
+            }
+            deduplicated[index] = retained;
+        } else {
+            deduplicated.push(value);
+        }
+    }
+
+    MergedValue {
+        kind: MergedValueKind::Sequence(deduplicated),
         provenance: combined_provenance(base.provenance, &incoming.provenance, MergeOperation::Merged),
     }
 }
@@ -817,6 +868,7 @@ fn normalize_keyed(value: MergedValue) -> Option<MergedValue> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UniqueField {
+    ExactScalar,
     Volume,
     Device,
     Config,
@@ -837,6 +889,7 @@ fn unique_field(path: &[String]) -> Option<UniqueField> {
         "configs" => Some(UniqueField::Config),
         "secrets" => Some(UniqueField::Secret),
         "ports" => Some(UniqueField::Port),
+        "cap_add" | "cap_drop" => Some(UniqueField::ExactScalar),
         _ => None,
     }
 }
@@ -854,6 +907,9 @@ enum UniqueKey {
 
 fn unique_key(value: &MergedValue, field: UniqueField) -> Option<UniqueKey> {
     match field {
+        UniqueField::ExactScalar => value.as_scalar().and_then(|scalar| {
+            (scalar.kind == MergedScalarKind::String).then(|| UniqueKey::Target(scalar.value.clone()))
+        }),
         UniqueField::Volume | UniqueField::Device => target_key(value, true).map(UniqueKey::Target),
         UniqueField::Config | UniqueField::Secret => target_key(value, false).map(UniqueKey::Target),
         UniqueField::Port => port_key(value),

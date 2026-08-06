@@ -1,0 +1,19 @@
+services:
+  omitted:
+    image: example.invalid/composelens/pids-omitted:1
+  unlimited-number:
+    pids_limit: -1
+  unlimited-string:
+    pids_limit: "-1"
+  finite-number:
+    pids_limit: 64
+  finite-string:
+    pids_limit: "00064"
+  arbitrary-precision:
+    pids_limit: 18446744073709551616000000000000000000000000000000
+  zero:
+    pids_limit: 0
+  fraction:
+    pids_limit: 1.5
+  arbitrary-string:
+    pids_limit: many

@@ -1,0 +1,44 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  unlimited-number:
+    pids_limit: -1
+  unlimited-string:
+    pids_limit: "-1"
+  finite-number:
+    pids_limit: 64
+  finite-string:
+    pids_limit: "00064"
+  overflow:
+    pids_limit: 18446744073709551616000000000000000000000000000000
+  zero-number:
+    pids_limit: 0
+  zero-string:
+    pids_limit: "000"
+  deferred:
+    pids_limit: ${PIDS_LIMIT:-64}
+  fraction-number:
+    pids_limit: 1.5
+  fraction-string:
+    pids_limit: "1.5"
+  exponent:
+    pids_limit: 1e3
+  negative:
+    pids_limit: -2
+  arbitrary:
+    pids_limit: many
+  boolean:
+    pids_limit: true
+  null:
+    pids_limit: null
+  map:
+    pids_limit:
+      value: 64
+  flow-list:
+    pids_limit: [64]
+  sequence:
+    pids_limit:
+      - 64
+  duplicate:
+    pids_limit: 64
+    pids_limit: 128

@@ -33,7 +33,7 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 | Surface | Project typed | Document typed only | Syntax-preserved only |
 | --- | ---: | ---: | ---: |
 | Top level | 6 | 0 | 3 |
-| Service | 23 | 3 | 67 |
+| Service | 28 | 3 | 62 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
@@ -56,8 +56,8 @@ project-typed.
 The effective project view currently exposes:
 
 `command`, `configs`, `container_name`, `depends_on`, `entrypoint`, `env_file`, `environment`, `extra_hosts`,
-`group_add`, `healthcheck`, `image`, `init`, `labels`, `networks`, `ports`, `profiles`, `read_only`,
-`restart`, `secrets`, `user`, `userns_mode`, `volumes`, and `working_dir`.
+`cap_add`, `cap_drop`, `devices`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `labels`, `networks`, `ports`, `profiles`, `read_only`,
+`pids_limit`, `pull_policy`, `restart`, `secrets`, `shm_size`, `stop_grace_period`, `stop_signal`, `sysctls`, `tmpfs`, `ulimits`, `user`, `userns_mode`, `volumes`, and `working_dir`.
 
 ### Document-only service keys
 
@@ -70,25 +70,24 @@ These keys are source-aware in one document but are not yet effective-project va
   `secrets`, `shm_size`, `ssh`, `tags`, `target`, and `ulimits`;
 - `deploy` — all current immediate subkeys are recognized as field references: `endpoint_mode`,
   `labels`, `mode`, `placement`, `replicas`, `resources`, `restart_policy`, `rollback_config`, and
-  `update_config`; and
-- `ulimits` — scalar and soft/hard forms are typed in one document.
+  `update_config`.
 
 Build and deploy field recognition is not a claim that every nested value is semantically typed.
 
 ### Syntax-preserved-only service keys
 
-The following 67 current service keys do not yet have a dedicated typed model:
+The following 56 current service keys do not yet have a dedicated typed model:
 
-`annotations`, `attach`, `blkio_config`, `cap_add`, `cap_drop`, `cgroup`, `cgroup_parent`,
+`annotations`, `attach`, `blkio_config`, `cgroup`, `cgroup_parent`,
 `cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `cpu_rt_runtime`,
-`cpu_shares`, `cpus`, `cpuset`, `credential_spec`, `develop`, `device_cgroup_rules`, `devices`,
+`cpu_shares`, `cpus`, `cpuset`, `credential_spec`, `develop`, `device_cgroup_rules`,
 `dns`, `dns_opt`, `dns_search`, `domainname`, `expose`, `extends`,
-`external_links`, `gpus`, `hostname`, `ipc`, `isolation`, `label_file`, `links`,
+`external_links`, `gpus`, `ipc`, `isolation`, `label_file`, `links`,
 `logging`, `mac_address`, `mem_limit`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
-`models`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `pids_limit`, `platform`,
-`post_start`, `pre_start`, `pre_stop`, `privileged`, `provider`, `pull_policy`,
-`pull_refresh_after`, `runtime`, `scale`, `security_opt`, `shm_size`, `stdin_open`,
-`stop_grace_period`, `stop_signal`, `storage_opt`, `sysctls`, `tmpfs`, `tty`, `use_api_socket`,
+`models`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `platform`,
+`post_start`, `pre_start`, `pre_stop`, `privileged`, `provider`, `pull_refresh_after`, `runtime`,
+`scale`, `security_opt`, `stdin_open`,
+`storage_opt`, `tty`, `use_api_socket`,
 `uts`, and `volumes_from`.
 
 ## Nested resource gaps
@@ -118,7 +117,6 @@ environment variables, driver options, and extension fields are intentionally no
   `device_write_iops`, `weight`, and `weight_device`; each rate entry has `path` and `rate`, and
   each weight entry has `path` and `weight`;
 - `credential_spec`: `config`, `file`, and `registry`;
-- long `devices` entries: `source`, `target`, and `permissions`;
 - GPU/device-reservation entries: `capabilities`, `count`, `device_ids`, `driver`, and `options`;
 - `extends`: `file` and `service`;
 - `logging`: `driver` and `options`;
@@ -163,8 +161,9 @@ hiding a nested semantic gap.
 ## Generated-document boundary
 
 Generated documents currently cover project `name`, services, networks, and volumes. Generated
-services cover `container_name`, `image`, `entrypoint`, `command`, `init`, `env_file`, `environment`, `labels`, `user`,
-`userns_mode`, `group_add`, `working_dir`, `read_only`, `restart`, `extra_hosts`, `ports`,
+services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `env_file`, `environment`, `labels`, `user`,
+`userns_mode`, `group_add`, `cap_add`, `cap_drop`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`,
+`stop_grace_period`, `extra_hosts`, `ports`,
 `volumes`, and `networks`.
 
 All other typed or preserved service/resource keys remain open for generated construction. A key
@@ -179,23 +178,53 @@ parse-back tests are defined.
   add deterministic generated string, list, and empty forms.
 - [x] Type `init` as a source-aware/interpolation-preserving boolean and add deterministic
   generated output.
-- [ ] Type `stop_grace_period`, `stop_signal`, `stdin_open`, and `tty`.
-- [ ] Type `pull_policy`, `pull_refresh_after`, `platform`, and `runtime` with deferred-value
-  retention and provider-specific compatibility evidence.
+- [x] Type independent `stop_grace_period` and `stop_signal` fields through generated output.
+- [x] Type and generate raw-preserving `pull_policy` values while keeping schema-only `refresh`
+  distinct and provider evidence planned.
+- [ ] Type `stdin_open` and `tty`.
+- [ ] Type `pull_refresh_after`, `platform`, and `runtime` with deferred-value retention and
+  provider-specific compatibility evidence.
 - [ ] Add generated construction only after each field's null/empty/short/long behavior is fixed.
 
 ### Phase 2: limits, security, devices, and storage
 
-- [ ] Promote `ulimits`, `build`, and `deploy` into the effective project view before deepening
-  their semantic types.
+- [x] Type service `pids_limit` through the authored, effective-project, and generated boundaries
+  without normalizing zero or conflating it with `deploy.resources.limits.pids`.
+- [x] Type service `shm_size` through the authored, effective-project, and generated boundaries
+  with exact YAML scalar provenance, documented lowercase units, ambiguous zero, provider-dependent
+  states, and no injected default or runtime inspection.
+- [x] Type service `cap_drop` through authored, exact-scalar merge, effective-project, and generated
+  boundaries while preserving explicit empty state, case, provenance, and planned-only provider
+  evidence without target logic or a capability whitelist.
+- [x] Type service `cap_add` through authored, exact-scalar merge, effective-project, and generated
+  boundaries while preserving explicit empty state, case, provenance, independent coexistence
+  with `cap_drop`, and planned-only provider evidence without target logic or a capability
+  whitelist.
+- [x] Promote `ulimits` through recursive mapping merge, the effective project view, and safe
+  generated output while retaining ordered names, single/range form, nested provenance,
+  sensitivity, empty/reset/override state, and planned-only provider evidence.
+- [ ] Promote `build` and `deploy` into the effective project view before deepening their semantic
+  types.
 - [ ] Type all CPU, memory, PID, OOM, and block-I/O keys without applying host defaults.
-- [ ] Type capabilities, devices/CDI/GPU, `privileged`, `security_opt`, `credential_spec`,
-  `storage_opt`, cgroup, IPC, PID, and UTS namespace choices.
-- [ ] Type `tmpfs`, `shm_size`, `volumes_from`, and remaining mount-specific nested semantics.
+- [x] Type service `devices` through authored, Compose-Go-compatible target merge,
+  effective-project, and generated boundaries while preserving mixed raw short/long forms,
+  CDI/deferred/opaque evidence, duplicates, nested provenance, reset/override, and planned-only
+  provider evidence without device, permissions, CDI, GPU, or runtime validation.
+- [ ] Type GPU reservations, `gpus`, `privileged`, `security_opt`, `credential_spec`, `storage_opt`,
+  cgroup, IPC, PID, and UTS namespace choices.
+- [x] Type service-level `tmpfs` through authored, ordinary-append merge, effective-project, and
+  generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,
+  provenance, sensitivity, reset/override, and planned-only provider evidence.
+- [x] Type service `sysctls` through authored, generic map/list merge, effective-project, and
+  generated boundaries while preserving form, scalar spelling, duplicate evidence, provenance,
+  sensitivity, reset/override, and planned-only provider evidence without runtime interpretation.
+- [ ] Type `volumes_from` and remaining mount-specific nested semantics.
 
 ### Phase 3: networking, identity, and metadata
 
-- [ ] Type DNS/search/options, hostname/domain name, exposed ports, MAC addresses, network modes,
+- [x] Type and generate service `hostname` with conservative RFC-1123 validation, deferred and
+  invalid authored states, complete merge provenance, and planned-only provider evidence.
+- [ ] Type DNS/search/options, domain name, exposed ports, MAC addresses, network modes,
   external links, and links.
 - [ ] Type service annotations, `label_file`, logging, and remaining config/secret metadata fields.
 - [ ] Preserve provider/runtime-specific value spellings and attach compatibility evidence instead

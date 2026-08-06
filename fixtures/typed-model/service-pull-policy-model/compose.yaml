@@ -1,0 +1,52 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  always:
+    pull_policy: always
+  never:
+    pull_policy: never
+  missing:
+    pull_policy: missing
+  alias:
+    pull_policy: if_not_present
+  build:
+    pull_policy: build
+  daily:
+    pull_policy: daily
+  weekly:
+    pull_policy: weekly
+  every:
+    pull_policy: every_1h30m
+  every-week:
+    pull_policy: every_1w
+  every-day:
+    pull_policy: every_2d
+  every-zero:
+    pull_policy: every_0s
+  deferred:
+    pull_policy: ${PULL_POLICY:-missing}
+  schema-refresh:
+    pull_policy: refresh
+    pull_refresh_after: 12h
+  invalid-every:
+    pull_policy: every_
+  invalid-microseconds:
+    pull_policy: every_1us
+  invalid-milliseconds:
+    pull_policy: every_1ms
+  invalid-fraction:
+    pull_policy: every_1.5h
+  invalid-dangling:
+    pull_policy: every_1h30
+  provider-specific:
+    pull_policy: newest
+  null-value:
+    pull_policy: null
+  map-value:
+    pull_policy:
+      mode: always
+  list-value:
+    pull_policy: [always]
+  duplicate:
+    pull_policy: always
+    pull_policy: never

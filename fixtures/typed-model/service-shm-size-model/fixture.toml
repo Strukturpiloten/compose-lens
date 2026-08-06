@@ -1,0 +1,18 @@
+schema = 1
+id = "service-shm-size-model"
+suite = "typed-model"
+description = "Protects raw service shared-memory-size scalar categories, documented suffixes, ambiguous zero, provider-dependent values, malformed recovery, and duplicate handling."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is supplied; dollar-bearing shared-memory-size text remains deferred."
+
+[expectations]
+summary = "Omission, documented lowercase suffixes, amount spelling, YAML number/string provenance, zero, deferred text, and provider-dependent scalars remain distinct while wrong YAML types diagnose without deleting services."

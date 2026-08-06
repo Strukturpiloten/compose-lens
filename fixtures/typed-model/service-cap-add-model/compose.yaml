@@ -1,0 +1,44 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty:
+    cap_add: []
+    image: example.invalid/empty:1
+  exact-values:
+    cap_add:
+      - NET_ADMIN
+      - NET_ADMIN
+      - net_admin
+      - ""
+      - "CAP WITH SPACE"
+      - "${ADD_CAP}"
+    cap_drop: [MKNOD]
+    image: example.invalid/exact:1
+  malformed-items:
+    cap_add:
+      - CHOWN
+      - true
+      - 42
+      - null
+      - nested: SYS_TIME
+      - [SYS_PTRACE]
+      - SYS_NICE
+    image: example.invalid/recovered:1
+  scalar:
+    cap_add: NET_ADMIN
+    image: example.invalid/scalar:1
+  null:
+    cap_add: null
+    image: example.invalid/null:1
+  boolean:
+    cap_add: false
+    image: example.invalid/boolean:1
+  number:
+    cap_add: 7
+    image: example.invalid/number:1
+  mapping:
+    cap_add: { capability: NET_ADMIN }
+    image: example.invalid/mapping:1
+  nested-sequence:
+    cap_add: [[NET_ADMIN]]
+    image: example.invalid/nested:1

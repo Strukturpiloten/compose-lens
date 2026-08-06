@@ -1,0 +1,22 @@
+schema = 1
+id = "service-devices"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, explicitly empty, ordered duplicate path short forms, CDI-like short selectors, and mixed short/long service devices."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains or specifically rejects each service devices form; planned rows make no host-device existence, permission enforcement, CDI validity, runtime access, GPU, privilege, or cross-provider equivalence claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-devices", "service-devices-cdi"]

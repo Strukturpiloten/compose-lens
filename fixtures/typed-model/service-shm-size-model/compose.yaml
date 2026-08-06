@@ -1,0 +1,62 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  bytes:
+    shm_size: 1b
+  kilo-short:
+    shm_size: 2k
+  kilo-long:
+    shm_size: 3kb
+  mega-short:
+    shm_size: 4m
+  mega-long:
+    shm_size: 5mb
+  giga-short:
+    shm_size: 6g
+  giga-long:
+    shm_size: 7gb
+  leading-zero-amount:
+    shm_size: "00064mb"
+  signed-amount:
+    shm_size: "+64mb"
+  fractional-amount:
+    shm_size: "1.5mb"
+  arbitrary-amount:
+    shm_size: "hugemb"
+  zero-number:
+    shm_size: 0
+  zero-string:
+    shm_size: "000"
+  zero-unit:
+    shm_size: "00m"
+  deferred:
+    shm_size: ${SHM_SIZE:-64m}
+  numeric-integer:
+    shm_size: 64
+  numeric-fraction:
+    shm_size: 1.5
+  numeric-exponent:
+    shm_size: 1e3
+  string-bare:
+    shm_size: "64"
+  uppercase-unit:
+    shm_size: "64M"
+  iec-unit:
+    shm_size: "64MiB"
+  whitespace:
+    shm_size: " 64m "
+  boolean:
+    shm_size: true
+  null:
+    shm_size: null
+  map:
+    shm_size:
+      value: 64m
+  flow-list:
+    shm_size: [64m]
+  sequence:
+    shm_size:
+      - 64m
+  duplicate:
+    shm_size: 64m
+    shm_size: 128m

@@ -1,0 +1,12 @@
+services:
+  omitted:
+    image: example.invalid/composelens/hostname-omitted:1
+  lowercase:
+    image: example.invalid/composelens/hostname-lowercase:1
+    hostname: api-1.example
+  uppercase:
+    image: example.invalid/composelens/hostname-uppercase:1
+    hostname: API.Example-Corp.COM
+  digit-leading:
+    image: example.invalid/composelens/hostname-digit-leading:1
+    hostname: 3api.example

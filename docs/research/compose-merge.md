@@ -29,6 +29,26 @@ Sources:
 - [Docker multi-file merge guide](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/)
 - [Compose Specification: interpolation](https://github.com/compose-spec/compose-spec/blob/main/12-interpolation.md)
 
+## Documented devices discrepancy
+
+The current general merge prose names `ports`, `volumes`, `secrets`, and `configs` as unique
+resources, but does not name service `devices`; a literal reading therefore leaves `devices` under
+ordinary sequence append. Separately, the Compose service `extends` rules treat `devices` like
+volumes: the container target path is the mapping key and a later entry replaces the earlier entry
+at that key. Compose-Go-compatible observed behavior and ComposeLens's existing merge regression
+follow that target-keyed replacement rule.
+
+Sources:
+
+- [Compose Specification: merge unique resources](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md#unique-resources)
+- [Compose Specification: `extends` volumes and devices mappings](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#merging-service-definitions)
+- the authored ComposeLens multi-file devices regression in `tests/processing.rs`
+
+This is an explicit compatibility discrepancy, not a claim that the general merge prose already
+contains `devices`. The current work preserves target-keyed replacement and full provenance rather
+than silently changing established behavior; planned provider rows remain necessary before
+promoting a version-specific provider claim.
+
 ## Required ComposeLens representation
 
 The merge result cannot be a plain recursive YAML overlay. It must record enough provenance to

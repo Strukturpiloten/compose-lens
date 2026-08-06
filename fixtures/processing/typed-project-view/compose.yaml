@@ -38,6 +38,7 @@ services:
     restart: unless-stopped
   worker:
     image: example.invalid/worker:1
+    init: true
     profiles: [workers]
 volumes:
   data:

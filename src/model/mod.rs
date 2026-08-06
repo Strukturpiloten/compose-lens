@@ -1,41 +1,69 @@
 //! Source-aware native Compose document types.
 
+mod capability;
 mod command;
 mod dependency;
+mod device;
 mod entrypoint;
 mod environment;
 mod host;
+mod hostname;
 mod identity;
 mod image;
+mod lifecycle;
+mod memory;
 mod network;
+mod pids;
 mod port;
+mod pull;
 mod resource;
 mod restart;
 mod sections;
+mod shm;
+mod sysctl;
+mod tmpfs;
 mod ulimit;
 mod value;
 mod volume;
 
+pub use capability::{CapabilityAdd, CapabilityAddItem, CapabilityDrop, CapabilityDropItem};
 pub use command::Command;
 pub use dependency::{
     DependencyCondition, DependsOn, Healthcheck, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
     HealthcheckTestKind, ServiceDependency,
 };
+pub(crate) use device::valid_generated_device_string;
+pub use device::{Device, Devices, LongDevice, ShortDevice, ShortDeviceKind};
 pub use entrypoint::Entrypoint;
 pub use environment::{
     Environment, EnvironmentFile, EnvironmentFileFormat, EnvironmentFileFormatKind, EnvironmentListEntry,
     EnvironmentMapEntry, LongEnvironmentFile,
 };
 pub use host::{ExtraHostSeparator, ExtraHosts, HostAddress, HostAddressKind, LongExtraHost, ShortExtraHost};
+pub(crate) use hostname::valid_hostname;
+pub use hostname::{Hostname, HostnameKind};
 pub use identity::{IdentityComponent, UserNamespaceMode, UserNamespaceModeKind, UserSpec};
 pub use image::{ImageDigest, ImageReference};
+pub use lifecycle::StopGracePeriod;
+pub(crate) use memory::valid_generated_mem_amount;
+pub use memory::{MemLimit, MemLimitKind, MemLimitScalarKind, MemLimitUnit};
 pub use network::{Ipam, IpamConfig, NetworkDefinition, ServiceNetwork, ServiceNetworks};
+pub(crate) use pids::valid_positive_pids_decimal;
+pub use pids::{PidsLimit, PidsLimitKind};
 pub use port::{LongPort, Port, ShortPort};
+pub(crate) use pull::valid_pull_policy_duration;
+pub use pull::{PullPolicy, PullPolicyKind};
 pub use resource::{ConfigDefinition, ConfigGrant, LongGrant, SecretDefinition, SecretGrant, VolumeDefinition};
 pub use restart::{RestartPolicy, RestartPolicyKind};
 pub use sections::{
     Build, BuildDefinition, BuildField, BuildFieldKind, DeployDefinition, DeployField, DeployFieldKind,
 };
+pub(crate) use shm::valid_generated_shm_amount;
+pub use shm::{ShmSize, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit};
+pub use sysctl::{Sysctls, SysctlsForm};
+pub(crate) use tmpfs::valid_generated_tmpfs_item;
+pub use tmpfs::{Tmpfs, TmpfsForm, TmpfsItem, TmpfsItemKind};
+pub(crate) use ulimit::valid_ulimit_name;
 pub use ulimit::{LimitValue, Ulimit, UlimitRange, UlimitValue, Ulimits};
 pub use value::{BooleanValue, ComposeScalar, KeyValueEntry, Labels};
 pub use volume::{
@@ -106,6 +134,12 @@ pub const EXTRA_HOST_INVALID_ENTRY: DiagnosticCode = DiagnosticCode::new("compos
 /// A service limit is neither unlimited, a non-negative integer, nor deferred.
 pub const ULIMIT_INVALID_VALUE: DiagnosticCode = DiagnosticCode::new("compose.ulimits.invalid-value");
 
+/// A service limit name is outside Compose's portable lowercase-name grammar.
+pub const ULIMIT_INVALID_NAME: DiagnosticCode = DiagnosticCode::new("compose.ulimits.invalid-name");
+
+/// A service limit range is missing its required `soft` or `hard` member.
+pub const ULIMIT_MISSING_RANGE_MEMBER: DiagnosticCode = DiagnosticCode::new("compose.ulimits.missing-range-member");
+
 /// A health-check list has no valid command-mode token.
 pub const HEALTHCHECK_INVALID_TEST: DiagnosticCode = DiagnosticCode::new("compose.healthcheck.invalid-test");
 
@@ -117,6 +151,110 @@ pub const HEALTHCHECK_INVALID_RETRIES: DiagnosticCode = DiagnosticCode::new("com
 
 /// A service-level restart policy is not one of the Compose-defined forms or an expression.
 pub const RESTART_INVALID_POLICY: DiagnosticCode = DiagnosticCode::new("compose.restart.invalid-policy");
+
+/// A service hostname is not authored as a YAML string scalar.
+pub const HOSTNAME_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.hostname.expected-string");
+
+/// A resolved service hostname does not satisfy the conservative RFC-1123 grammar.
+pub const HOSTNAME_INVALID: DiagnosticCode = DiagnosticCode::new("compose.hostname.invalid-value");
+
+/// A service PID limit is not a number or string scalar.
+pub const PIDS_LIMIT_EXPECTED_VALUE: DiagnosticCode =
+    DiagnosticCode::new("compose.pids-limit.expected-number-or-string");
+
+/// A service PID limit is neither unlimited, positive integral decimal, nor deferred.
+pub const PIDS_LIMIT_INVALID: DiagnosticCode = DiagnosticCode::new("compose.pids-limit.invalid-value");
+
+/// A zero service PID limit has ambiguous and unportable native semantics.
+pub const PIDS_LIMIT_AMBIGUOUS_ZERO: DiagnosticCode = DiagnosticCode::new("compose.pids-limit.ambiguous-zero");
+
+/// A service shared-memory size is not a number or string scalar.
+pub const SHM_SIZE_EXPECTED_VALUE: DiagnosticCode = DiagnosticCode::new("compose.shm-size.expected-number-or-string");
+
+/// A zero service shared-memory size has no defined Compose semantics.
+pub const SHM_SIZE_AMBIGUOUS_ZERO: DiagnosticCode = DiagnosticCode::new("compose.shm-size.ambiguous-zero");
+
+/// A schema-accepted numeric shared-memory size lacks a documented explicit unit.
+pub const SHM_SIZE_PROVIDER_DEPENDENT_NUMBER: DiagnosticCode =
+    DiagnosticCode::new("compose.shm-size.provider-dependent-number");
+
+/// A schema-accepted string shared-memory size is outside the documented lowercase suffix family.
+pub const SHM_SIZE_PROVIDER_DEPENDENT_STRING: DiagnosticCode =
+    DiagnosticCode::new("compose.shm-size.provider-dependent-string");
+
+/// A service memory limit is not a number or string scalar.
+pub const MEM_LIMIT_EXPECTED_VALUE: DiagnosticCode = DiagnosticCode::new("compose.mem-limit.expected-number-or-string");
+
+/// A zero service memory limit has no portable cross-provider meaning inferred by `ComposeLens`.
+pub const MEM_LIMIT_AMBIGUOUS_ZERO: DiagnosticCode = DiagnosticCode::new("compose.mem-limit.ambiguous-zero");
+
+/// A schema-accepted numeric memory limit lacks a documented explicit unit.
+pub const MEM_LIMIT_SCHEMA_NUMBER: DiagnosticCode = DiagnosticCode::new("compose.mem-limit.schema-number");
+
+/// A schema-accepted string memory limit is outside the documented lowercase suffix family.
+pub const MEM_LIMIT_PROVIDER_DEPENDENT_STRING: DiagnosticCode =
+    DiagnosticCode::new("compose.mem-limit.provider-dependent-string");
+
+/// A service image pull policy is not documented, schema-recognized, or deferred.
+pub const PULL_POLICY_INVALID: DiagnosticCode = DiagnosticCode::new("compose.pull-policy.invalid-policy");
+
+/// A service stop grace period does not match the raw-preserving policy based on documented Compose units.
+pub const STOP_GRACE_PERIOD_INVALID: DiagnosticCode =
+    DiagnosticCode::new("compose.lifecycle.invalid-stop-grace-period");
+
+/// A service `cap_drop` value is not a YAML sequence.
+pub const CAP_DROP_EXPECTED_SEQUENCE: DiagnosticCode = DiagnosticCode::new("compose.cap-drop.expected-sequence");
+
+/// A service `cap_drop` item is not a YAML string scalar.
+pub const CAP_DROP_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.cap-drop.expected-string");
+
+/// A service `cap_drop` sequence contains an exact duplicate string.
+pub const CAP_DROP_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.cap-drop.duplicate-item");
+
+/// A service `cap_add` value is not a YAML sequence.
+pub const CAP_ADD_EXPECTED_SEQUENCE: DiagnosticCode = DiagnosticCode::new("compose.cap-add.expected-sequence");
+
+/// A service `cap_add` item is not a YAML string scalar.
+pub const CAP_ADD_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.cap-add.expected-string");
+
+/// A service `cap_add` sequence contains an exact duplicate string.
+pub const CAP_ADD_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.cap-add.duplicate-item");
+
+/// A service `devices` value is not a YAML sequence.
+pub const DEVICES_EXPECTED_SEQUENCE: DiagnosticCode = DiagnosticCode::new("compose.devices.expected-sequence");
+
+/// A service device item is neither a string scalar nor a mapping.
+pub const DEVICE_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.devices.expected-short-or-long");
+
+/// A short device or long-device member is not a YAML string scalar.
+pub const DEVICE_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.devices.expected-string");
+
+/// A long-syntax service device is missing its required `source` string.
+pub const DEVICE_MISSING_SOURCE: DiagnosticCode = DiagnosticCode::new("compose.devices.long.missing-source");
+
+/// A service-level `tmpfs` value is neither a string scalar nor a sequence.
+pub const TMPFS_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.tmpfs.expected-string-or-list");
+
+/// A service-level `tmpfs` sequence item is not a YAML string scalar.
+pub const TMPFS_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.tmpfs.expected-string");
+
+/// A service-level `tmpfs` item is malformed or depends on provider- or target-specific behavior.
+pub const TMPFS_PROVIDER_DEPENDENT: DiagnosticCode = DiagnosticCode::new("compose.tmpfs.provider-dependent-item");
+
+/// A service `sysctls` value is neither a mapping nor a sequence.
+pub const SYSCTLS_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.sysctls.expected-map-or-list");
+
+/// A service `sysctls` mapping contains an empty key.
+pub const SYSCTLS_EMPTY_KEY: DiagnosticCode = DiagnosticCode::new("compose.sysctls.empty-key");
+
+/// A service `sysctls` mapping value is not a scalar or null.
+pub const SYSCTLS_EXPECTED_SCALAR: DiagnosticCode = DiagnosticCode::new("compose.sysctls.expected-scalar");
+
+/// A service `sysctls` list item is not a YAML string scalar.
+pub const SYSCTLS_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.sysctls.expected-string");
+
+/// A service `sysctls` list contains an exact duplicate string.
+pub const SYSCTLS_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.sysctls.duplicate-item");
 
 /// A service environment-file item is neither scalar short syntax nor mapping long syntax.
 pub const ENVIRONMENT_FILE_EXPECTED_FORM: DiagnosticCode =
@@ -211,6 +349,7 @@ impl FieldReference {
 pub struct Service {
     name: Located<String>,
     span: SourceSpan,
+    hostname: Option<Hostname>,
     container_name: Option<Located<String>>,
     image: Option<Located<ImageReference>>,
     entrypoint: Option<Entrypoint>,
@@ -223,9 +362,20 @@ pub struct Service {
     user: Option<UserSpec>,
     userns_mode: Option<UserNamespaceMode>,
     group_add: Vec<Located<String>>,
+    cap_add: Option<CapabilityAdd>,
+    cap_drop: Option<CapabilityDrop>,
+    devices: Option<Devices>,
     working_dir: Option<Located<String>>,
     read_only: Option<Located<BooleanValue>>,
+    pids_limit: Option<PidsLimit>,
+    shm_size: Option<ShmSize>,
+    mem_limit: Option<MemLimit>,
+    tmpfs: Option<Tmpfs>,
+    sysctls: Option<Sysctls>,
+    pull_policy: Option<PullPolicy>,
     restart: Option<RestartPolicy>,
+    stop_signal: Option<Located<String>>,
+    stop_grace_period: Option<Located<StopGracePeriod>>,
     ulimits: Option<Ulimits>,
     depends_on: Option<DependsOn>,
     healthcheck: Option<Healthcheck>,
@@ -246,6 +396,7 @@ impl Service {
         Self {
             name,
             span,
+            hostname: None,
             container_name: None,
             image: None,
             entrypoint: None,
@@ -258,9 +409,20 @@ impl Service {
             user: None,
             userns_mode: None,
             group_add: Vec::new(),
+            cap_add: None,
+            cap_drop: None,
+            devices: None,
             working_dir: None,
             read_only: None,
+            pids_limit: None,
+            shm_size: None,
+            mem_limit: None,
+            tmpfs: None,
+            sysctls: None,
+            pull_policy: None,
             restart: None,
+            stop_signal: None,
+            stop_grace_period: None,
             ulimits: None,
             depends_on: None,
             healthcheck: None,
@@ -287,6 +449,12 @@ impl Service {
     #[must_use]
     pub const fn span(&self) -> SourceSpan {
         self.span
+    }
+
+    /// Returns the explicitly authored raw-preserving service hostname.
+    #[must_use]
+    pub const fn hostname(&self) -> Option<&Hostname> {
+        self.hostname.as_ref()
     }
 
     /// Returns the explicitly authored runtime container name.
@@ -361,6 +529,24 @@ impl Service {
         &self.group_add
     }
 
+    /// Returns the explicitly authored capability-add sequence, including an explicit empty one.
+    #[must_use]
+    pub const fn cap_add(&self) -> Option<&CapabilityAdd> {
+        self.cap_add.as_ref()
+    }
+
+    /// Returns the explicitly authored capability-drop sequence, including an explicit empty one.
+    #[must_use]
+    pub const fn cap_drop(&self) -> Option<&CapabilityDrop> {
+        self.cap_drop.as_ref()
+    }
+
+    /// Returns the explicitly authored ordered device sequence, including an explicit empty one.
+    #[must_use]
+    pub const fn devices(&self) -> Option<&Devices> {
+        self.devices.as_ref()
+    }
+
     /// Returns the container working-directory override.
     #[must_use]
     pub const fn working_dir(&self) -> Option<&Located<String>> {
@@ -373,10 +559,58 @@ impl Service {
         self.read_only.as_ref()
     }
 
+    /// Returns the raw-preserving service PID limit.
+    #[must_use]
+    pub const fn pids_limit(&self) -> Option<&PidsLimit> {
+        self.pids_limit.as_ref()
+    }
+
+    /// Returns the raw-preserving service shared-memory size.
+    #[must_use]
+    pub const fn shm_size(&self) -> Option<&ShmSize> {
+        self.shm_size.as_ref()
+    }
+
+    /// Returns the raw-preserving service memory limit.
+    #[must_use]
+    pub const fn mem_limit(&self) -> Option<&MemLimit> {
+        self.mem_limit.as_ref()
+    }
+
+    /// Returns service-level temporary filesystems with scalar and list forms retained.
+    #[must_use]
+    pub const fn tmpfs(&self) -> Option<&Tmpfs> {
+        self.tmpfs.as_ref()
+    }
+
+    /// Returns service sysctls with mapping/list form and scalar spelling retained.
+    #[must_use]
+    pub const fn sysctls(&self) -> Option<&Sysctls> {
+        self.sysctls.as_ref()
+    }
+
+    /// Returns the raw-preserving service image pull policy.
+    #[must_use]
+    pub const fn pull_policy(&self) -> Option<&PullPolicy> {
+        self.pull_policy.as_ref()
+    }
+
     /// Returns the service-level container restart policy.
     #[must_use]
     pub const fn restart(&self) -> Option<&RestartPolicy> {
         self.restart.as_ref()
+    }
+
+    /// Returns the explicitly authored signal used to stop the service.
+    #[must_use]
+    pub const fn stop_signal(&self) -> Option<&Located<String>> {
+        self.stop_signal.as_ref()
+    }
+
+    /// Returns the raw-preserving service stop grace period.
+    #[must_use]
+    pub const fn stop_grace_period(&self) -> Option<&Located<StopGracePeriod>> {
+        self.stop_grace_period.as_ref()
     }
 
     /// Returns explicitly authored service resource limits.
@@ -824,6 +1058,7 @@ impl Parser {
         for service_field in self.fields(mapping) {
             let duplicate = self.record_duplicate(&mut seen, &service_field);
             match service_field.name.value.as_str() {
+                "hostname" if !duplicate => service.hostname = self.parse_hostname(&service_field),
                 "container_name" if !duplicate => {
                     service.container_name = self.parse_string(&service_field, "service container name");
                 }
@@ -832,27 +1067,15 @@ impl Parser {
                         .parse_string(&service_field, "service image")
                         .map(|value| Located::new(ImageReference::parse(value.value), value.span));
                 }
-                "entrypoint" if !duplicate => {
-                    service.entrypoint = self.parse_entrypoint(&service_field);
-                }
-                "command" if !duplicate => {
-                    service.command = self.parse_command(&service_field);
-                }
-                "init" if !duplicate => {
-                    service.init = self.parse_boolean(&service_field, "service init");
-                }
-                "environment" if !duplicate => {
-                    service.environment = self.parse_environment(&service_field);
-                }
+                "entrypoint" if !duplicate => service.entrypoint = self.parse_entrypoint(&service_field),
+                "command" if !duplicate => service.command = self.parse_command(&service_field),
+                "init" if !duplicate => service.init = self.parse_boolean(&service_field, "service init"),
+                "environment" if !duplicate => service.environment = self.parse_environment(&service_field),
                 "env_file" if !duplicate => {
                     service.environment_files = self.parse_environment_files(&service_field);
                 }
-                "labels" if !duplicate => {
-                    service.labels = self.parse_labels(&service_field);
-                }
-                "extra_hosts" if !duplicate => {
-                    service.extra_hosts = self.parse_extra_hosts(&service_field);
-                }
+                "labels" if !duplicate => service.labels = self.parse_labels(&service_field),
+                "extra_hosts" if !duplicate => service.extra_hosts = self.parse_extra_hosts(&service_field),
                 "user" if !duplicate => {
                     service.user = self.parse_string(&service_field, "service user").map(UserSpec::parse);
                 }
@@ -864,14 +1087,27 @@ impl Parser {
                 "group_add" if !duplicate => {
                     service.group_add = self.parse_string_sequence(&service_field, "service supplementary groups");
                 }
+                "cap_add" if !duplicate => service.cap_add = self.parse_cap_add(&service_field),
+                "cap_drop" if !duplicate => service.cap_drop = self.parse_cap_drop(&service_field),
+                "devices" if !duplicate => service.devices = self.parse_devices(&service_field),
                 "working_dir" if !duplicate => {
                     service.working_dir = self.parse_string(&service_field, "service working directory");
                 }
                 "read_only" if !duplicate => {
                     service.read_only = self.parse_boolean(&service_field, "service read_only");
                 }
-                "restart" if !duplicate => {
-                    service.restart = self.parse_restart_policy(&service_field);
+                "pids_limit" if !duplicate => service.pids_limit = self.parse_pids_limit(&service_field),
+                "shm_size" if !duplicate => service.shm_size = self.parse_shm_size(&service_field),
+                "mem_limit" if !duplicate => service.mem_limit = self.parse_mem_limit(&service_field),
+                "tmpfs" if !duplicate => service.tmpfs = self.parse_tmpfs(&service_field),
+                "sysctls" if !duplicate => service.sysctls = self.parse_sysctls(&service_field),
+                "pull_policy" if !duplicate => service.pull_policy = self.parse_pull_policy(&service_field),
+                "restart" if !duplicate => service.restart = self.parse_restart_policy(&service_field),
+                "stop_signal" if !duplicate => {
+                    service.stop_signal = self.parse_string(&service_field, "service stop signal");
+                }
+                "stop_grace_period" if !duplicate => {
+                    service.stop_grace_period = self.parse_stop_grace_period(&service_field);
                 }
                 "ulimits" if !duplicate => {
                     service.ulimits = self.parse_ulimits(&service_field);
@@ -916,6 +1152,414 @@ impl Parser {
         service
     }
 
+    fn parse_hostname(&mut self, field: &ParsedField) -> Option<Hostname> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(HOSTNAME_EXPECTED_STRING, field, "hostname must be a YAML string scalar");
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(HOSTNAME_EXPECTED_STRING, field, "hostname must be a YAML string scalar");
+            return None;
+        }
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let hostname = Hostname::parse(Located::new(scalar_string_from_source(&self.source, scalar), span));
+        if hostname.kind() == &HostnameKind::Invalid {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    HOSTNAME_INVALID,
+                    Severity::Error,
+                    "hostname must be an ASCII RFC-1123 name of 1 to 253 characters with dot-separated labels of 1 to 63 alphanumeric or hyphen characters",
+                )
+                .with_label(DiagnosticLabel::primary(span, "invalid service hostname"))
+                .with_note("each label must start and end with an ASCII letter or digit"),
+            );
+        }
+        Some(hostname)
+    }
+
+    fn parse_cap_drop(&mut self, field: &ParsedField) -> Option<CapabilityDrop> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                CAP_DROP_EXPECTED_SEQUENCE,
+                field,
+                "cap_drop must be a sequence of string scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        let mut seen = BTreeMap::new();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    CAP_DROP_EXPECTED_STRING,
+                    &node,
+                    field.span,
+                    "cap_drop entries must be string scalars",
+                );
+                continue;
+            };
+            let scalar_type = ScalarValue::from_scalar(&scalar).scalar_type();
+            if !matches!(
+                scalar_type,
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(
+                    CAP_DROP_EXPECTED_STRING,
+                    &YamlNode::Scalar(scalar),
+                    field.span,
+                    "cap_drop entries must be string scalars",
+                );
+                continue;
+            }
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            let value = scalar_string_from_source(&self.source, &scalar);
+            if let Some(first) = seen.get(&value) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        CAP_DROP_DUPLICATE_ITEM,
+                        Severity::Error,
+                        "cap_drop entries must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(item_span, "duplicate capability string"))
+                    .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                );
+            } else {
+                seen.insert(value.clone(), item_span);
+            }
+            items.push(CapabilityDropItem::new(Located::new(value, item_span)));
+        }
+        Some(CapabilityDrop::new(span, items))
+    }
+
+    fn parse_cap_add(&mut self, field: &ParsedField) -> Option<CapabilityAdd> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                CAP_ADD_EXPECTED_SEQUENCE,
+                field,
+                "cap_add must be a sequence of string scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        let mut seen = BTreeMap::new();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    CAP_ADD_EXPECTED_STRING,
+                    &node,
+                    field.span,
+                    "cap_add entries must be string scalars",
+                );
+                continue;
+            };
+            let scalar_type = ScalarValue::from_scalar(&scalar).scalar_type();
+            if !matches!(
+                scalar_type,
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(
+                    CAP_ADD_EXPECTED_STRING,
+                    &YamlNode::Scalar(scalar),
+                    field.span,
+                    "cap_add entries must be string scalars",
+                );
+                continue;
+            }
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            let value = scalar_string_from_source(&self.source, &scalar);
+            if let Some(first) = seen.get(&value) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        CAP_ADD_DUPLICATE_ITEM,
+                        Severity::Error,
+                        "cap_add entries must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(item_span, "duplicate capability string"))
+                    .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                );
+            } else {
+                seen.insert(value.clone(), item_span);
+            }
+            items.push(CapabilityAddItem::new(Located::new(value, item_span)));
+        }
+        Some(CapabilityAdd::new(span, items))
+    }
+
+    fn parse_devices(&mut self, field: &ParsedField) -> Option<Devices> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                DEVICES_EXPECTED_SEQUENCE,
+                field,
+                "service devices must be a sequence of string scalars or mappings",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut devices = Vec::new();
+        for node in sequence.values() {
+            match node {
+                YamlNode::Scalar(scalar)
+                    if matches!(
+                        ScalarValue::from_scalar(&scalar).scalar_type(),
+                        ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+                    ) =>
+                {
+                    let item_span = span_from_position(self.source_id, scalar.byte_range());
+                    let raw = Located::new(scalar_string_from_source(&self.source, &scalar), item_span);
+                    devices.push(Device::Short(ShortDevice::new(raw)));
+                }
+                YamlNode::Mapping(mapping) => devices.push(Device::Long(self.parse_long_device(&mapping))),
+                other => self.unsupported_sequence_item(
+                    DEVICE_EXPECTED_FORM,
+                    &other,
+                    field.span,
+                    "service device must use string short syntax or mapping long syntax",
+                ),
+            }
+        }
+        Some(Devices::new(span, devices))
+    }
+
+    fn parse_long_device(&mut self, mapping: &Mapping) -> LongDevice {
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut device = LongDevice::new(span);
+        let mut seen = BTreeMap::new();
+        for field in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &field);
+            match field.name.value.as_str() {
+                "source" if !duplicate => self
+                    .parse_device_string(&field, "device source")
+                    .into_iter()
+                    .for_each(|value| device.set_source(value)),
+                "target" if !duplicate => self
+                    .parse_device_string(&field, "device target")
+                    .into_iter()
+                    .for_each(|value| device.set_target(value)),
+                "permissions" if !duplicate => self
+                    .parse_device_string(&field, "device permissions")
+                    .into_iter()
+                    .for_each(|value| device.set_permissions(value)),
+                name if name.starts_with("x-") => device.push_extension(field.reference()),
+                _ if duplicate => {}
+                _ => device.push_unknown(field.reference()),
+            }
+        }
+        if device.source().is_none() {
+            self.missing(
+                DEVICE_MISSING_SOURCE,
+                span,
+                "long service device is missing required string `source`",
+            );
+        }
+        device
+    }
+
+    fn parse_device_string(&mut self, field: &ParsedField, description: &str) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                DEVICE_EXPECTED_STRING,
+                field,
+                format!("{description} must be a string scalar"),
+            );
+            return None;
+        };
+        if !matches!(
+            ScalarValue::from_scalar(scalar).scalar_type(),
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+        ) {
+            self.expected(
+                DEVICE_EXPECTED_STRING,
+                field,
+                format!("{description} must be a string scalar"),
+            );
+            return None;
+        }
+        Some(Located::new(
+            scalar_string_from_source(&self.source, scalar),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_tmpfs(&mut self, field: &ParsedField) -> Option<Tmpfs> {
+        let value = field.value.as_ref()?;
+        if let Some(scalar) = value.as_scalar() {
+            if !matches!(
+                ScalarValue::from_scalar(scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.expected(
+                    TMPFS_EXPECTED_FORM,
+                    field,
+                    "tmpfs must be a string scalar or a sequence of string scalars",
+                );
+                return None;
+            }
+            let span = span_from_position(self.source_id, scalar.byte_range());
+            let item = TmpfsItem::parse(Located::new(scalar_string_from_source(&self.source, scalar), span));
+            self.diagnose_tmpfs_item(&item);
+            return Some(Tmpfs::new(span, TmpfsForm::Scalar(item)));
+        }
+
+        let Some(sequence) = value.as_sequence() else {
+            self.expected(
+                TMPFS_EXPECTED_FORM,
+                field,
+                "tmpfs must be a string scalar or a sequence of string scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    TMPFS_EXPECTED_STRING,
+                    &node,
+                    field.span,
+                    "tmpfs entries must be string scalars",
+                );
+                continue;
+            };
+            if !matches!(
+                ScalarValue::from_scalar(&scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(
+                    TMPFS_EXPECTED_STRING,
+                    &YamlNode::Scalar(scalar),
+                    field.span,
+                    "tmpfs entries must be string scalars",
+                );
+                continue;
+            }
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            let raw = scalar_string_from_source(&self.source, &scalar);
+            let item = TmpfsItem::parse(Located::new(raw, item_span));
+            self.diagnose_tmpfs_item(&item);
+            items.push(item);
+        }
+        Some(Tmpfs::new(span, TmpfsForm::List(items)))
+    }
+
+    fn diagnose_tmpfs_item(&mut self, item: &TmpfsItem) {
+        if item.kind() != TmpfsItemKind::ProviderDependent {
+            return;
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                TMPFS_PROVIDER_DEPENDENT,
+                Severity::Warning,
+                "tmpfs item is malformed or uses provider- or target-specific options",
+            )
+            .with_label(DiagnosticLabel::primary(
+                item.span(),
+                "provider-dependent temporary-filesystem item",
+            ))
+            .with_note("use a non-empty path with only non-empty `mode`, `uid`, or `gid` assignments for documented portable syntax"),
+        );
+    }
+
+    fn parse_sysctls(&mut self, field: &ParsedField) -> Option<Sysctls> {
+        match field.value.as_ref() {
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let mut entries = Vec::new();
+                let mut seen = BTreeMap::new();
+                for entry in self.fields(mapping) {
+                    if self.record_duplicate(&mut seen, &entry) {
+                        continue;
+                    }
+                    if entry.name.value.is_empty() {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                SYSCTLS_EMPTY_KEY,
+                                Severity::Error,
+                                "sysctls mapping keys must not be empty",
+                            )
+                            .with_label(DiagnosticLabel::primary(entry.name.span, "empty sysctl name")),
+                        );
+                        continue;
+                    }
+                    if entry.value.as_ref().is_some_and(|value| value.as_scalar().is_none()) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                SYSCTLS_EXPECTED_SCALAR,
+                                Severity::Error,
+                                "sysctls mapping values must be scalar strings, numbers, booleans, or null",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                entry.value_span.unwrap_or(entry.span),
+                                "non-scalar sysctl value",
+                            )),
+                        );
+                        continue;
+                    }
+                    let Some(value) = self.parse_compose_scalar(&entry, "sysctls mapping values must be scalars")
+                    else {
+                        continue;
+                    };
+                    entries.push(KeyValueEntry::new(entry.name, value, entry.span));
+                }
+                Some(Sysctls::new(span, SysctlsForm::Map(entries)))
+            }
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let mut items = Vec::new();
+                let mut seen = BTreeMap::new();
+                for node in sequence.values() {
+                    let YamlNode::Scalar(scalar) = node else {
+                        self.unsupported_sequence_item(
+                            SYSCTLS_EXPECTED_STRING,
+                            &node,
+                            field.span,
+                            "sysctls list entries must be YAML string scalars",
+                        );
+                        continue;
+                    };
+                    if !matches!(
+                        ScalarValue::from_scalar(&scalar).scalar_type(),
+                        ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+                    ) {
+                        self.unsupported_sequence_item(
+                            SYSCTLS_EXPECTED_STRING,
+                            &YamlNode::Scalar(scalar),
+                            field.span,
+                            "sysctls list entries must be YAML string scalars",
+                        );
+                        continue;
+                    }
+                    let item_span = span_from_position(self.source_id, scalar.byte_range());
+                    let value = scalar_string_from_source(&self.source, &scalar);
+                    if let Some(first) = seen.get(&value) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                SYSCTLS_DUPLICATE_ITEM,
+                                Severity::Error,
+                                "sysctls list entries must be unique exact strings",
+                            )
+                            .with_label(DiagnosticLabel::primary(item_span, "duplicate sysctl string"))
+                            .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                        );
+                    } else {
+                        seen.insert(value.clone(), item_span);
+                    }
+                    items.push(Located::new(value, item_span));
+                }
+                Some(Sysctls::new(span, SysctlsForm::List(items)))
+            }
+            _ => {
+                self.expected(
+                    SYSCTLS_EXPECTED_FORM,
+                    field,
+                    "sysctls must be a mapping or a sequence of string scalars",
+                );
+                None
+            }
+        }
+    }
+
     fn parse_restart_policy(&mut self, field: &ParsedField) -> Option<RestartPolicy> {
         let value = self.parse_string(field, "service restart policy")?;
         let policy = RestartPolicy::parse(value);
@@ -933,6 +1577,206 @@ impl Parser {
             );
         }
         Some(policy)
+    }
+
+    fn parse_pids_limit(&mut self, field: &ParsedField) -> Option<PidsLimit> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                PIDS_LIMIT_EXPECTED_VALUE,
+                field,
+                "pids_limit must be a number or string scalar",
+            );
+            return None;
+        };
+        if matches!(
+            ScalarValue::from_scalar(scalar).scalar_type(),
+            ScalarType::Boolean | ScalarType::Null
+        ) {
+            self.expected(
+                PIDS_LIMIT_EXPECTED_VALUE,
+                field,
+                "pids_limit must be a number or string scalar",
+            );
+            return None;
+        }
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let limit = PidsLimit::parse(Located::new(scalar_string_from_source(&self.source, scalar), span));
+        match limit.kind() {
+            PidsLimitKind::Zero => self.diagnostics.push(
+                Diagnostic::new(
+                    PIDS_LIMIT_AMBIGUOUS_ZERO,
+                    Severity::Warning,
+                    "pids_limit zero is preserved as an ambiguous and unportable native state",
+                )
+                .with_label(DiagnosticLabel::primary(span, "ambiguous zero PID limit")),
+            ),
+            PidsLimitKind::Other => self.diagnostics.push(
+                Diagnostic::new(
+                    PIDS_LIMIT_INVALID,
+                    Severity::Error,
+                    "pids_limit must be `-1`, a positive integral decimal, or interpolation",
+                )
+                .with_label(DiagnosticLabel::primary(span, "unsupported service PID limit")),
+            ),
+            _ => {}
+        }
+        Some(limit)
+    }
+
+    fn parse_shm_size(&mut self, field: &ParsedField) -> Option<ShmSize> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                SHM_SIZE_EXPECTED_VALUE,
+                field,
+                "shm_size must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let scalar_kind = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer | ScalarType::Float => ShmSizeScalarKind::Number,
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => ShmSizeScalarKind::String,
+            ScalarType::Boolean | ScalarType::Null => {
+                self.expected(
+                    SHM_SIZE_EXPECTED_VALUE,
+                    field,
+                    "shm_size must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let size = ShmSize::parse(
+            Located::new(scalar_string_from_source(&self.source, scalar), span),
+            scalar_kind,
+        );
+        self.diagnose_shm_size(&size);
+        Some(size)
+    }
+
+    fn diagnose_shm_size(&mut self, size: &ShmSize) {
+        let (code, message, label, note) = match size.kind() {
+            ShmSizeKind::Zero { .. } => (
+                SHM_SIZE_AMBIGUOUS_ZERO,
+                "shm_size zero is preserved because Compose does not define its semantics",
+                "ambiguous zero shared-memory size",
+                "choose a positive size with an explicit documented lowercase unit",
+            ),
+            ShmSizeKind::ProviderDependentNumber => (
+                SHM_SIZE_PROVIDER_DEPENDENT_NUMBER,
+                "numeric shm_size is schema-accepted but lacks a documented explicit unit",
+                "provider-dependent numeric shared-memory size",
+                "use a positive quoted value with `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` for portable intent",
+            ),
+            ShmSizeKind::ProviderDependentString => (
+                SHM_SIZE_PROVIDER_DEPENDENT_STRING,
+                "string shm_size is schema-accepted but falls outside the documented lowercase suffix family",
+                "provider-dependent string shared-memory size",
+                "use an explicit lowercase `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` suffix when that is the intended unit",
+            ),
+            ShmSizeKind::Documented { .. } | ShmSizeKind::Expression => return,
+        };
+        self.diagnostics.push(
+            Diagnostic::new(code, Severity::Warning, message)
+                .with_label(DiagnosticLabel::primary(size.raw().span(), label))
+                .with_note(note),
+        );
+    }
+
+    fn parse_mem_limit(&mut self, field: &ParsedField) -> Option<MemLimit> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                MEM_LIMIT_EXPECTED_VALUE,
+                field,
+                "mem_limit must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let scalar_kind = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer | ScalarType::Float => MemLimitScalarKind::Number,
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => MemLimitScalarKind::String,
+            ScalarType::Boolean | ScalarType::Null => {
+                self.expected(
+                    MEM_LIMIT_EXPECTED_VALUE,
+                    field,
+                    "mem_limit must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let limit = MemLimit::parse(
+            Located::new(scalar_string_from_source(&self.source, scalar), span),
+            scalar_kind,
+        );
+        self.diagnose_mem_limit(&limit);
+        Some(limit)
+    }
+
+    fn diagnose_mem_limit(&mut self, limit: &MemLimit) {
+        let (code, message, label, note) = match limit.kind() {
+            MemLimitKind::Zero { .. } => (
+                MEM_LIMIT_AMBIGUOUS_ZERO,
+                "mem_limit zero is preserved without inferring portable runtime behavior",
+                "ambiguous zero memory limit",
+                "choose a positive size with an explicit documented lowercase unit",
+            ),
+            MemLimitKind::SchemaNumber => (
+                MEM_LIMIT_SCHEMA_NUMBER,
+                "numeric mem_limit is schema-accepted but lacks a documented explicit unit",
+                "schema-only numeric memory limit",
+                "use a positive quoted value with `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` for explicit intent",
+            ),
+            MemLimitKind::ProviderDependentString => (
+                MEM_LIMIT_PROVIDER_DEPENDENT_STRING,
+                "string mem_limit is schema-accepted but falls outside the documented lowercase suffix family",
+                "provider-dependent string memory limit",
+                "use an explicit lowercase `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` suffix when that is the intended unit",
+            ),
+            MemLimitKind::Documented { .. } | MemLimitKind::Expression => return,
+        };
+        self.diagnostics.push(
+            Diagnostic::new(code, Severity::Warning, message)
+                .with_label(DiagnosticLabel::primary(limit.raw().span(), label))
+                .with_note(note),
+        );
+    }
+
+    fn parse_pull_policy(&mut self, field: &ParsedField) -> Option<PullPolicy> {
+        let value = self.parse_string(field, "service pull policy")?;
+        let policy = PullPolicy::parse(value);
+        if !policy.is_recognized() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    PULL_POLICY_INVALID,
+                    Severity::Error,
+                    "pull_policy must be a documented Compose policy, the retained `if_not_present` alias, schema-only `refresh`, an `every_` interval matching integer `w`, `d`, `h`, `m`, and `s` components, or interpolation",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    policy.raw().span(),
+                    "invalid or provider-specific service pull policy",
+                )),
+            );
+        }
+        Some(policy)
+    }
+
+    fn parse_stop_grace_period(&mut self, field: &ParsedField) -> Option<Located<StopGracePeriod>> {
+        let value = self.parse_string(field, "service stop grace period")?;
+        let period = StopGracePeriod::parse(value.value);
+        if !period.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    STOP_GRACE_PERIOD_INVALID,
+                    Severity::Error,
+                    "stop_grace_period must match the ComposeLens duration policy using `us`, `ms`, `s`, `m`, or `h`, or contain an interpolation marker",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    value.span,
+                    "invalid service stop grace period",
+                )),
+            );
+        }
+        Some(Located::new(period, value.span))
     }
 
     fn parse_command(&mut self, field: &ParsedField) -> Option<Command> {
@@ -1187,6 +2031,16 @@ impl Parser {
             if self.record_duplicate(&mut seen, &limit) {
                 continue;
             }
+            if !valid_ulimit_name(limit.name.value()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        ULIMIT_INVALID_NAME,
+                        Severity::Error,
+                        "ulimit names must contain only lowercase ASCII letters",
+                    )
+                    .with_label(DiagnosticLabel::primary(limit.name.span, "invalid ulimit name")),
+                );
+            }
             let value = match limit.value.as_ref() {
                 Some(YamlNode::Scalar(_)) => self.parse_limit_value(&limit, "ulimit value").map(UlimitValue::Single),
                 Some(YamlNode::Mapping(range)) => Some(UlimitValue::Range(self.parse_ulimit_range(range))),
@@ -1225,6 +2079,20 @@ impl Parser {
                 _ if duplicate => {}
                 _ => range.push_unknown(field.reference()),
             }
+        }
+        if range.soft().is_none() {
+            self.missing(
+                ULIMIT_MISSING_RANGE_MEMBER,
+                span,
+                "ulimit range is missing required `soft`",
+            );
+        }
+        if range.hard().is_none() {
+            self.missing(
+                ULIMIT_MISSING_RANGE_MEMBER,
+                span,
+                "ulimit range is missing required `hard`",
+            );
         }
         range
     }

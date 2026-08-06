@@ -1,0 +1,21 @@
+services:
+  omitted:
+    image: example.invalid/composelens/sysctls-omitted:1
+  mapping:
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      kernel.shm_rmid_forced: 1
+      fs.protected_hardlinks: true
+      net.ipv6.conf.all.disable_ipv6: null
+  empty-map:
+    sysctls: {}
+  list:
+    sysctls:
+      - net.core.somaxconn=1024
+      - fs.file-max=65536
+  empty-list:
+    sysctls: []
+  duplicate-list:
+    sysctls:
+      - net.core.somaxconn=1024
+      - net.core.somaxconn=1024

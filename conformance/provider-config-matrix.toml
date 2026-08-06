@@ -1,5 +1,5 @@
 schema = 1
-reviewed = "2026-07-31"
+reviewed = "2026-08-06"
 
 [[targets]]
 id = "docker-compose-2-24-3"
@@ -135,6 +135,96 @@ files = ["compose.yaml"]
 fixture_sha256 = "fba0dbf8a1189539c4283986ef90cdbb2e2f1630bb9f7eb19321cbdab87d2013"
 purpose = "Measure rejection or retention of one unknown service field independently."
 
+[[probes]]
+id = "service-init"
+fixture = "fixtures/conformance/service-init"
+files = ["compose.yaml"]
+fixture_sha256 = "25a2581a178737d9f1356024531ad05fc5c2c5db88cb20887d7f2d21276311a3"
+purpose = "Measure whether provider config distinguishes omitted init from explicit true and false without claiming runtime behavior."
+
+[[probes]]
+id = "service-stop-lifecycle"
+fixture = "fixtures/conformance/service-stop-lifecycle"
+files = ["compose.yaml"]
+fixture_sha256 = "6c947f195fee675fff2ec742ea7933f00b25196ebcb47a9d82866e7f3cb2bab3"
+purpose = "Measure provider config retention of named/numeric stop signals and composite, zero, and fractional stop grace periods without claiming runtime equivalence."
+
+[[probes]]
+id = "service-pull-policy"
+fixture = "fixtures/conformance/service-pull-policy"
+files = ["compose.yaml"]
+fixture_sha256 = "ff4673cc54b30a04a1013991533333a504f0a21531fe739703a276ea5fa578e7"
+purpose = "Measure provider config handling of documented, aliased, composite integer interval, schema-valid zero interval, and schema-only pull-policy spellings without claiming runtime behavior or cross-provider equivalence."
+
+[[probes]]
+id = "service-hostname"
+fixture = "fixtures/conformance/service-hostname"
+files = ["compose.yaml"]
+fixture_sha256 = "2d25d810c45614822ff12a11b5a5d21ef6fad2668d5154f19e48748a8cea3666"
+purpose = "Measure provider config handling of omitted, uppercase, digit-leading, and multi-label service hostnames without claiming runtime name-resolution behavior."
+
+[[probes]]
+id = "service-pids-limit"
+fixture = "fixtures/conformance/service-pids-limit"
+files = ["compose.yaml"]
+fixture_sha256 = "9bcba06c358729a003a1ec1323b3e0c853424a8503ce1c2c1aa618d69185c362"
+purpose = "Measure provider config handling of omitted, unlimited, positive integral, arbitrary-precision, ambiguous zero, fractional, and arbitrary-string PID limits without claiming runtime or cgroup behavior."
+
+[[probes]]
+id = "service-shm-size"
+fixture = "fixtures/conformance/service-shm-size"
+files = ["compose.yaml"]
+fixture_sha256 = "ccce70b309cee39a33e9b4c7a33efd1603a682650e67778faff546b720e4b795"
+purpose = "Measure provider config handling of omitted, documented-unit, explicit-byte, leading-zero, numeric, fractional, bare-string, zero, uppercase, and IEC service shared-memory sizes without claiming defaults, normalization, or runtime allocation behavior."
+
+[[probes]]
+id = "service-mem-limit"
+fixture = "fixtures/conformance/service-mem-limit"
+files = ["compose.yaml"]
+fixture_sha256 = "74fe1dcfa4c44608f49424128f117fe151e14ce2de3494c4dbc772315fd7f5b5"
+purpose = "Measure provider config handling of omitted, documented-unit, explicit-byte, leading-zero, numeric, fractional, bare-string, zero, uppercase, and IEC service memory limits without claiming defaults, normalization, runtime enforcement, host or cgroup behavior, or cross-provider equivalence."
+
+[[probes]]
+id = "service-tmpfs"
+fixture = "fixtures/conformance/service-tmpfs"
+files = ["compose.yaml"]
+fixture_sha256 = "711275d4dc868e6011561a28f43373607ebb922e8512c562d5deef85b950f2d0"
+purpose = "Measure provider config handling of omitted, scalar, explicitly empty list, ordered duplicates, colon-delimited documented assignments, and raw provider-specific service-level tmpfs options without claiming runtime mount behavior."
+
+[[probes]]
+id = "service-sysctls"
+fixture = "fixtures/conformance/service-sysctls"
+files = ["compose.yaml"]
+fixture_sha256 = "ec20f1c534e69eb6e044ed90546dc56a3eb1efe2e581b7d6b709ca4bc4fa654b"
+purpose = "Measure provider config handling of omitted, mapping/list, explicit empty, scalar-kind, and duplicate-list service sysctls without claiming runtime application, namespace validity, privilege, or cross-provider equivalence."
+
+[[probes]]
+id = "service-ulimits"
+fixture = "fixtures/conformance/service-ulimits"
+files = ["compose.yaml"]
+fixture_sha256 = "38b0f93e272b3cba69a34c689718bf479e15e474ad8b2b480983168116742584"
+purpose = "Measure provider config handling of omitted, explicit empty, integer/string scalar, unlimited, and soft/hard range service ulimits without claiming runtime enforcement, defaults, resource accounting, or cross-provider equivalence."
+
+[[probes]]
+id = "service-cap-add"
+fixture = "fixtures/conformance/service-cap-add"
+files = ["compose.yaml"]
+fixture_sha256 = "a236c137167cf353a525d7af1f1420e60b6abbe06fc1d5f91228d054d01f1901"
+purpose = "Measure provider config handling of omitted, explicitly empty, ordered, exact-case, and independently coexisting service cap_add sequences without claiming runtime capability behavior."
+
+[[probes]]
+id = "service-cap-drop"
+fixture = "fixtures/conformance/service-cap-drop"
+files = ["compose.yaml"]
+fixture_sha256 = "d93f9b072b7e0c9ceaf32d9f9b72f9049afa85d7ab946257005358f2803cde4c"
+purpose = "Measure provider config handling of omitted, explicitly empty, ordered, and exact-case service cap_drop sequences without claiming runtime capability behavior."
+
+[[probes]]
+id = "service-devices"
+fixture = "fixtures/conformance/service-devices"
+files = ["compose.yaml"]
+fixture_sha256 = "0302e312f553e4d0c49574a0a4148d17b79f4fe38523baea2cb3b79a7091972f"
+purpose = "Measure provider config handling of omitted, explicitly empty, ordered duplicate path forms, CDI-like selectors, and mixed short/long service devices without claiming host existence, permission enforcement, CDI validity, or runtime access."
 
 [[runs]]
 target = "docker-compose-2-24-3"
@@ -423,3 +513,393 @@ target = "podman-compose-1-5-0"
 probe = "unknown-field"
 status = "observed"
 record = "conformance/records/provider-config-2026-07-31/podman-compose-1-5-0/unknown-field/record.toml"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-init"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-init"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-init"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-init"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-init"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-init"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-stop-lifecycle"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-stop-lifecycle"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-stop-lifecycle"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-stop-lifecycle"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-stop-lifecycle"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-stop-lifecycle"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-pull-policy"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-pull-policy"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-pull-policy"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-pull-policy"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-pull-policy"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-pull-policy"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-pids-limit"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-pids-limit"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-pids-limit"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-pids-limit"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-pids-limit"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-pids-limit"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-shm-size"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-shm-size"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-shm-size"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-shm-size"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-shm-size"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-shm-size"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-hostname"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-hostname"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-hostname"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-hostname"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-hostname"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-hostname"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-cap-add"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-cap-add"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-cap-add"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-cap-add"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-cap-add"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-cap-add"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-cap-drop"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-cap-drop"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-cap-drop"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-cap-drop"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-cap-drop"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-cap-drop"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-tmpfs"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-tmpfs"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-tmpfs"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-tmpfs"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-tmpfs"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-tmpfs"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-sysctls"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-sysctls"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-sysctls"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-sysctls"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-sysctls"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-sysctls"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-ulimits"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-ulimits"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-ulimits"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-ulimits"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-ulimits"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-ulimits"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-devices"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-devices"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-devices"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-devices"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-devices"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-devices"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-mem-limit"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-mem-limit"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-mem-limit"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-mem-limit"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-mem-limit"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-mem-limit"
+status = "planned"

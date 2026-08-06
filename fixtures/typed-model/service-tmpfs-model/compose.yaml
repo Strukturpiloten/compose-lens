@@ -1,0 +1,51 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  scalar:
+    tmpfs: /run:mode=1777,uid=1000,gid=1000
+  empty-list:
+    tmpfs: []
+  exact-list:
+    tmpfs:
+      - /cache
+      - /cache
+      - /path,with,commas
+      - /state:uid=User,gid=Group,mode=0700
+      - "${TMPFS_PATH:-/expression}"
+      - /provider:size=64m
+      - /provider:exec,nosuid
+      - /case:Mode=1777
+      - ""
+  scalar-expression:
+    tmpfs: "${TMPFS_PATH:-/run}"
+  scalar-provider:
+    tmpfs: /run:size=64m
+  malformed-items:
+    image: example.invalid/recovery:1
+    tmpfs:
+      - /valid
+      - true
+      - 64
+      - null
+      - { path: /mapping }
+      - [/nested]
+      - /later:mode=0755
+  null:
+    image: example.invalid/null:1
+    tmpfs: null
+  boolean:
+    image: example.invalid/boolean:1
+    tmpfs: true
+  number:
+    image: example.invalid/number:1
+    tmpfs: 64
+  mapping:
+    image: example.invalid/mapping:1
+    tmpfs: { path: /run }
+  nested-list:
+    image: example.invalid/nested:1
+    tmpfs: [[/run]]
+  volume-tmpfs-only:
+    volumes:
+      - type: tmpfs
+        target: /volume-tmpfs

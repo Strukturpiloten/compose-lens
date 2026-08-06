@@ -1,0 +1,62 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  bytes:
+    mem_limit: 1b
+  kilo-short:
+    mem_limit: 2k
+  kilo-long:
+    mem_limit: 3kb
+  mega-short:
+    mem_limit: 4m
+  mega-long:
+    mem_limit: 5mb
+  giga-short:
+    mem_limit: 6g
+  giga-long:
+    mem_limit: 7gb
+  leading-zero-amount:
+    mem_limit: "00064mb"
+  signed-amount:
+    mem_limit: "+64mb"
+  fractional-amount:
+    mem_limit: "1.5mb"
+  arbitrary-amount:
+    mem_limit: "hugemb"
+  zero-number:
+    mem_limit: 0
+  zero-string:
+    mem_limit: "000"
+  zero-unit:
+    mem_limit: "00m"
+  deferred:
+    mem_limit: ${MEM_LIMIT:-64m}
+  numeric-integer:
+    mem_limit: 64
+  numeric-fraction:
+    mem_limit: 1.5
+  numeric-exponent:
+    mem_limit: 1e3
+  string-bare:
+    mem_limit: "64"
+  uppercase-unit:
+    mem_limit: "64M"
+  iec-unit:
+    mem_limit: "64MiB"
+  whitespace:
+    mem_limit: " 64m "
+  boolean:
+    mem_limit: true
+  null:
+    mem_limit: null
+  map:
+    mem_limit:
+      value: 64m
+  flow-list:
+    mem_limit: [64m]
+  sequence:
+    mem_limit:
+      - 64m
+  duplicate:
+    mem_limit: 64m
+    mem_limit: 128m

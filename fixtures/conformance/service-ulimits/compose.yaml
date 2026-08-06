@@ -1,0 +1,19 @@
+services:
+  omitted:
+    image: example.invalid/composelens/ulimits-omitted:1
+  empty:
+    ulimits: {}
+  integer:
+    ulimits:
+      nproc: 1024
+  string:
+    ulimits:
+      nofile: "2048"
+  unlimited:
+    ulimits:
+      core: -1
+  range:
+    ulimits:
+      nofile:
+        soft: "1024"
+        hard: -1

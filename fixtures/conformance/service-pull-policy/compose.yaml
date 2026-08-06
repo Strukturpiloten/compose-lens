@@ -1,0 +1,32 @@
+services:
+  always:
+    image: example.invalid/composelens/pull-always:1
+    pull_policy: always
+  missing:
+    image: example.invalid/composelens/pull-missing:1
+    pull_policy: missing
+  alias:
+    image: example.invalid/composelens/pull-alias:1
+    pull_policy: if_not_present
+  build:
+    build: .
+    pull_policy: build
+  daily:
+    image: example.invalid/composelens/pull-daily:1
+    pull_policy: daily
+  weekly:
+    image: example.invalid/composelens/pull-weekly:1
+    pull_policy: weekly
+  interval:
+    image: example.invalid/composelens/pull-interval:1
+    pull_policy: every_12h
+  composite-interval:
+    image: example.invalid/composelens/pull-composite:1
+    pull_policy: every_1w2d3h4m5s
+  zero-interval:
+    image: example.invalid/composelens/pull-zero:1
+    pull_policy: every_0s
+  schema-refresh:
+    image: example.invalid/composelens/pull-refresh:1
+    pull_policy: refresh
+    pull_refresh_after: 12h

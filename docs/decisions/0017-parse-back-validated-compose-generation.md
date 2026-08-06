@@ -45,6 +45,11 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
 11. Generated service environment files retain ordered short or long syntax. Long entries emit
     only caller-selected `required` and `format: raw` options. Paths use the generated-string
     sensitivity boundary, and generation never resolves, opens, or parses the referenced file.
+12. Generated service devices distinguish omission from an explicit empty vector and retain
+    ordered mixed short/long forms plus exact duplicates. Long source is required; all strings must
+    be safe resolved single-line values. Generation quotes and parse-back validates them without
+    inspecting host devices, parsing colon triples, validating CDI or permissions, or claiming
+    runtime access.
 
 ## Consequences
 

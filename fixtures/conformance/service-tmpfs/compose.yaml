@@ -1,0 +1,14 @@
+services:
+  omitted:
+    image: example.invalid/composelens/tmpfs-omitted:1
+  scalar:
+    tmpfs: /run
+  empty-list:
+    tmpfs: []
+  ordered-list:
+    tmpfs:
+      - /cache
+      - /cache
+      - /state:mode=0700,uid=1000,gid=1000
+  provider-option:
+    tmpfs: /provider:size=64m
