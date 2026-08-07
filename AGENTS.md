@@ -49,6 +49,9 @@ Third-party parsing dependencies require deliberate review. Record choices that 
 - Add conformance and regression fixtures with every parsing or resolution behavior change.
 - Store source, license, implementation version, and environment metadata for external fixtures.
 - Update documentation and compatibility claims with behavior changes.
+- Keep release notes and changelog entries concise: summarize user-visible feature families and
+  link to canonical technical documentation instead of repeating model, fixture, and test details.
+  Follow `docs/releasing.md`.
 - Pin every GitHub Action to its full commit SHA and append its exact release tag as a comment. Verify new pins upstream; Renovate must preserve and update both values.
 
 ## Canonical development commands

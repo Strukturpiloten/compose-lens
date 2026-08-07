@@ -4,23 +4,1499 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, MergedScalarKind, merge_project};
 use compose_lens::model::{
-    BooleanValue, Command, ComposeScalar, DependencyCondition, Entrypoint, EnvironmentFileFormatKind,
-    HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, HostnameKind,
-    IdentityComponent, LimitValue, Port, RestartPolicyKind, SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel, ServiceNetworks,
-    StopGracePeriod, ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceModeKind,
-    VolumeMount,
+    BooleanValue, Command, ComposeScalar, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING, DNS_OPT_DUPLICATE_ITEM,
+    DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING, DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM,
+    DNS_SEARCH_EXPECTED_STRING, DependencyCondition, Entrypoint, EnvironmentFileFormatKind, HealthcheckDuration,
+    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, HostnameKind, IdentityComponent,
+    LimitValue, Port, RestartPolicyKind, SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel, ServiceNetworks, StopGracePeriod,
+    ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceModeKind, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
-    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, PROJECT_MISSING_FIELD, ProjectDependsOn, ProjectDevice,
-    ProjectEnvironmentFile, ProjectGrant, ProjectService, ProjectSysctls, ProjectTmpfs, ProjectUlimitValue,
-    ProjectValue, ProjectView, build_project_view,
+    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, PROJECT_MISSING_FIELD, ProjectDependsOn, ProjectDevice, ProjectDns,
+    ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectService, ProjectSysctls, ProjectTmpfs,
+    ProjectUlimitValue, ProjectValue, ProjectView, build_project_view,
 };
 use compose_lens::resolution::SELECTION_PROJECT_MISMATCH;
 use compose_lens::source::SourceId;
 
 const BASE: &str = include_str!("../fixtures/processing/typed-project-view/compose.yaml");
 const OVERRIDE: &str = include_str!("../fixtures/processing/typed-project-view/compose.override.yaml");
+
+#[test]
+fn exposes_keyed_annotations_with_replacement_raw_evidence_sensitivity_and_ambiguity()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{ANNOTATIONS_DUPLICATE_NAME, ANNOTATIONS_EXPECTED_STRING, ANNOTATIONS_KEY_ONLY};
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(698),
+            DocumentOrigin::new("compose.yaml", "workspace/base"),
+            concat!(
+                "services:\n",
+                "  app:\n    annotations:\n",
+                "      - \"io.example.same=base\"\n",
+                "  ambiguous:\n    annotations:\n",
+                "      - \"io.example.key-only\"\n",
+                "      - 7\n",
+                "  malformed:\n    annotations: [null, [nested]]\n",
+                "  reset:\n    annotations: {io.example.old: old}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(699),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  app:\n    annotations:\n",
+                "      io.example.same: \"${ANNOTATION_SECRET}\"\n",
+                "  reset:\n    annotations: !reset {}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("ANNOTATION_SECRET", "effective-secret");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("partial project view expected")?;
+    let annotations = view
+        .service("app")
+        .and_then(ProjectService::annotations)
+        .ok_or("effective annotations expected")?;
+    let same = annotations
+        .value()
+        .get("io.example.same")
+        .ok_or("same annotation expected")?;
+    assert_eq!(same.name().sources().len(), 2);
+    assert_eq!(same.contributors().len(), 1);
+    assert_eq!(same.contributors()[0].sources().len(), 2);
+    let value = same.value().ok_or("explicit annotation value expected")?;
+    assert!(matches!(value.value().effective(), ComposeScalar::String(value) if value == "effective-secret"));
+    assert_eq!(value.value().authored(), "\"${ANNOTATION_SECRET}\"");
+    assert!(value.is_sensitive());
+    assert!(!format!("{annotations:?}").contains("effective-secret"));
+
+    let ambiguous = view
+        .service("ambiguous")
+        .and_then(ProjectService::annotations)
+        .ok_or("ambiguous annotations expected")?;
+    let key_only = ambiguous
+        .value()
+        .get("io.example.key-only")
+        .ok_or("key-only evidence expected")?;
+    assert_eq!(key_only.syntax(), EntrySyntax::ListKeyOnly);
+    assert!(key_only.value().is_none());
+    assert!(key_only.raw_list_item().is_some());
+    assert!(
+        ambiguous.value().get("7").is_none(),
+        "only valid string key=value entries enter the keyed effective view"
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == ANNOTATIONS_EXPECTED_STRING),
+        "invalid scalar evidence remains in the merged source and is diagnosed"
+    );
+    let reset = view
+        .service("reset")
+        .and_then(ProjectService::annotations)
+        .ok_or("reset annotations expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().entries().is_empty());
+    for code in [ANNOTATIONS_EXPECTED_STRING, ANNOTATIONS_KEY_ONLY] {
+        assert!(
+            result.diagnostics().iter().any(|diagnostic| diagnostic.code() == code),
+            "missing {code}"
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.code() != ANNOTATIONS_DUPLICATE_NAME),
+        "field-specific merge already replaced the cross-file duplicate"
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_merged_expose_identity_provenance_sensitivity_reset_and_recovery() -> Result<(), Box<dyn std::error::Error>>
+{
+    use compose_lens::model::{
+        EXPOSE_DUPLICATE_ITEM, EXPOSE_EXPECTED_SCALAR, EXPOSE_INVALID_ITEM, EXPOSE_PROVIDER_DEPENDENT, ExposeItemKind,
+        ExposeScalarKind,
+    };
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(692),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n",
+                "  merged:\n    expose: [80, \"80\", \"80/tcp\"]\n",
+                "  reset:\n    expose: [90]\n",
+                "  malformed:\n    image: example.invalid/recovery:1\n    expose: [91, true, [92], broken, \"93/sctp\"]\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(693),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  merged:\n    expose: [80, \"80\", \"${EXPOSE_SECRET}\", \"80/udp\"]\n",
+                "  reset:\n    expose: !reset null\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("EXPOSE_SECRET", "443/tcp");
+    let interpolation = loaded.interpolate(&environment);
+    let merged_result = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged_result.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("partial project view expected")?;
+    let expose = view
+        .service("merged")
+        .and_then(ProjectService::expose)
+        .ok_or("expose expected")?;
+    assert_eq!(expose.provenance().operation(), MergeOperation::Merged);
+    assert_eq!(expose.value().len(), 5);
+    assert_eq!(expose.value()[0].value().scalar_kind(), ExposeScalarKind::Number);
+    assert_eq!(expose.value()[1].value().scalar_kind(), ExposeScalarKind::String);
+    assert_eq!(expose.value()[0].provenance().sources().len(), 2);
+    assert_eq!(expose.value()[1].provenance().sources().len(), 2);
+    assert_eq!(expose.value()[2].value().value(), "80/tcp");
+    assert_eq!(expose.value()[3].value().authored(), "\"${EXPOSE_SECRET}\"");
+    assert_eq!(expose.value()[3].value().value(), "443/tcp");
+    assert!(expose.value()[3].is_sensitive());
+    assert!(!format!("{expose:?}").contains("443/tcp"));
+    assert_eq!(expose.value()[4].value().value(), "80/udp");
+
+    let reset = view
+        .service("reset")
+        .and_then(ProjectService::expose)
+        .ok_or("reset expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().is_empty());
+
+    let malformed = view.service("malformed").ok_or("malformed service retained")?;
+    assert!(malformed.image().is_some());
+    let malformed_items = malformed.expose().ok_or("partial expose expected")?.value();
+    assert_eq!(malformed_items.len(), 3);
+    assert!(matches!(malformed_items[1].value().kind(), ExposeItemKind::Malformed));
+    assert!(matches!(malformed_items[2].value().kind(), ExposeItemKind::Sctp { .. }));
+    for code in [EXPOSE_EXPECTED_SCALAR, EXPOSE_INVALID_ITEM, EXPOSE_PROVIDER_DEPENDENT] {
+        assert!(
+            result.diagnostics().iter().any(|diagnostic| diagnostic.code() == code),
+            "missing {code}"
+        );
+    }
+    assert!(
+        !result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == EXPOSE_DUPLICATE_ITEM)
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_merged_dns_search_forms_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(690),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n",
+                "  appended:\n    dns_search: [base.internal, same.internal]\n",
+                "  scalar:\n    dns_search: old.internal\n",
+                "  cross-form:\n    dns_search: old.internal\n",
+                "  reset:\n    dns_search: [old.internal]\n",
+                "  malformed:\n    image: example.invalid/recovery:1\n    dns_search: [valid-before.internal, true, [nested], valid-after.internal]\n",
+                "  bad-form:\n    image: example.invalid/bad:1\n    dns_search: {domain: invalid.internal}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(691),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  appended:\n    dns_search: [same.internal, later.internal]\n",
+                "  scalar:\n    dns_search: \"${DNS_SEARCH_SECRET}\"\n",
+                "  cross-form:\n    dns_search: [new.internal]\n",
+                "  reset:\n    dns_search: !reset null\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("DNS_SEARCH_SECRET", "secret.internal");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("partial project view expected")?;
+
+    let appended = view
+        .service("appended")
+        .and_then(ProjectService::dns_search)
+        .ok_or("appended dns_search expected")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert!(matches!(appended.value(), ProjectDnsSearch::List(items)
+        if items.iter().map(|item| item.value().as_str()).collect::<Vec<_>>()
+            == ["base.internal", "same.internal", "same.internal", "later.internal"]
+        && items.iter().all(|item| item.provenance().sources().len() == 1)));
+
+    let scalar = view
+        .service("scalar")
+        .and_then(ProjectService::dns_search)
+        .ok_or("scalar dns_search expected")?;
+    assert_eq!(scalar.provenance().operation(), MergeOperation::Replaced);
+    assert!(scalar.is_sensitive());
+    assert!(matches!(scalar.value(), ProjectDnsSearch::Scalar(item)
+        if item.value() == "secret.internal" && item.is_sensitive()));
+    assert!(!format!("{scalar:?}").contains("secret.internal"));
+
+    assert!(matches!(
+        view.service("cross-form").and_then(ProjectService::dns_search).map(ProjectValue::value),
+        Some(ProjectDnsSearch::List(items)) if items.len() == 1 && items[0].value() == "new.internal"
+    ));
+    let reset = view
+        .service("reset")
+        .and_then(ProjectService::dns_search)
+        .ok_or("reset dns_search expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.value(), ProjectDnsSearch::List(items) if items.is_empty()));
+
+    let malformed = view.service("malformed").ok_or("malformed service retained")?;
+    assert!(malformed.image().is_some());
+    assert!(
+        matches!(malformed.dns_search().map(ProjectValue::value), Some(ProjectDnsSearch::List(items))
+        if items.iter().map(|item| item.value().as_str()).collect::<Vec<_>>()
+            == ["valid-before.internal", "valid-after.internal"])
+    );
+    assert!(
+        view.service("bad-form")
+            .is_some_and(|service| service.image().is_some())
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == DNS_SEARCH_EXPECTED_STRING)
+            .count(),
+        2
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == DNS_SEARCH_EXPECTED_FORM)
+            .count(),
+        1
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == DNS_SEARCH_DUPLICATE_ITEM)
+            .count(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_replaced_dns_options_with_item_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>>
+{
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(687),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n",
+                "  omitted:\n    image: example.invalid/omitted:1\n",
+                "  replaced:\n    dns_opt: [ndots:2, timeout:1]\n",
+                "  reset:\n    dns_opt: [rotate]\n",
+                "  malformed:\n    image: example.invalid/recovery:1\n    dns_opt: [old]\n",
+                "  bad-form:\n    image: example.invalid/bad:1\n    dns_opt: [old]\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(688),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    dns_opt: [\"${DNS_OPTION}\", attempts:4]\n",
+                "  reset:\n    dns_opt: !reset null\n",
+                "  malformed:\n    dns_opt: [valid-before, true, [nested], valid-after, valid-before]\n",
+                "  bad-form:\n    dns_opt: rotate\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("DNS_OPTION", "timeout:3");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("partial project view expected")?;
+
+    assert!(
+        view.service("omitted")
+            .is_some_and(|service| service.dns_options().is_none())
+    );
+    let replaced = view
+        .service("replaced")
+        .and_then(ProjectService::dns_options)
+        .ok_or("replaced dns_opt expected")?;
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(replaced.provenance().sources().len(), 2);
+    assert!(replaced.is_sensitive());
+    assert_eq!(
+        replaced
+            .value()
+            .iter()
+            .map(|item| item.value().as_str())
+            .collect::<Vec<_>>(),
+        ["timeout:3", "attempts:4"]
+    );
+    assert!(replaced.value()[0].is_sensitive());
+    assert_eq!(replaced.value()[0].provenance().sources().len(), 1);
+    assert!(!format!("{replaced:?}").contains("timeout:3"));
+
+    let reset = view
+        .service("reset")
+        .and_then(ProjectService::dns_options)
+        .ok_or("reset dns_opt expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().is_empty());
+
+    let malformed = view.service("malformed").ok_or("malformed service retained")?;
+    assert!(malformed.image().is_some());
+    assert_eq!(
+        malformed
+            .dns_options()
+            .ok_or("partial dns_opt expected")?
+            .value()
+            .iter()
+            .map(|item| item.value().as_str())
+            .collect::<Vec<_>>(),
+        ["valid-before", "valid-after", "valid-before"]
+    );
+    assert!(
+        view.service("bad-form")
+            .is_some_and(|service| service.image().is_some())
+    );
+    for code in [
+        DNS_OPT_EXPECTED_SEQUENCE,
+        DNS_OPT_EXPECTED_STRING,
+        DNS_OPT_DUPLICATE_ITEM,
+    ] {
+        assert!(result.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    Ok(())
+}
+
+#[test]
+fn exposes_appended_raw_security_options_with_authored_spelling_sensitivity_and_conflicts()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::merge::MergedScalarKind;
+    use compose_lens::model::{
+        SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS, SECURITY_OPT_EMPTY_ITEM,
+        SECURITY_OPT_EXPECTED_STRING, SecurityOptionKind,
+    };
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(697),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n",
+                "  omitted:\n    image: example.invalid/omitted:1\n",
+                "  merged:\n    security_opt: [\"label=disable\", \"${APPARMOR_OPTION}\", \"\"]\n",
+                "  reset:\n    security_opt: [old]\n",
+                "  malformed:\n    image: example.invalid/recovery:1\n    security_opt: [before]\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(698),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  merged:\n    security_opt: [\"apparmor=next\", \"apparmor=next\", \"AppArmor=near\"]\n",
+                "  reset:\n    security_opt: !reset null\n",
+                "  malformed:\n    security_opt: [after, true, [nested]]\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("APPARMOR_OPTION", "apparmor=secret-profile");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("partial project view expected")?;
+
+    assert!(
+        view.service("omitted")
+            .is_some_and(|service| service.security_options().is_none())
+    );
+    let effective = view
+        .service("merged")
+        .and_then(ProjectService::security_options)
+        .ok_or("effective security_opt expected")?;
+    assert_eq!(effective.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(effective.provenance().sources().len(), 2);
+    assert!(effective.is_sensitive());
+    assert_eq!(effective.value().len(), 6);
+    let interpolated = effective.value()[1].value();
+    assert_eq!(interpolated.authored(), "\"${APPARMOR_OPTION}\"");
+    assert_eq!(interpolated.value(), "apparmor=secret-profile");
+    assert_eq!(interpolated.scalar_kind(), MergedScalarKind::String);
+    assert!(matches!(interpolated.kind(), SecurityOptionKind::AppArmor { profile } if profile == "secret-profile"));
+    assert!(effective.value()[1].is_sensitive());
+    assert!(!format!("{effective:?}").contains("secret-profile"));
+    assert!(matches!(effective.value()[2].value().kind(), SecurityOptionKind::Empty));
+    assert!(matches!(
+        effective.value()[5].value().kind(),
+        SecurityOptionKind::AppArmorNearMiss
+    ));
+    assert_eq!(
+        effective.value()[3].value().value(),
+        effective.value()[4].value().value()
+    );
+
+    let reset = view
+        .service("reset")
+        .and_then(ProjectService::security_options)
+        .ok_or("reset security_opt expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().is_empty());
+
+    let malformed = view.service("malformed").ok_or("malformed service retained")?;
+    assert!(malformed.image().is_some());
+    assert_eq!(
+        malformed
+            .security_options()
+            .ok_or("partial security_opt expected")?
+            .value()
+            .iter()
+            .map(|item| item.value().value())
+            .collect::<Vec<_>>(),
+        ["before", "after"]
+    );
+    for code in [
+        SECURITY_OPT_EXPECTED_STRING,
+        SECURITY_OPT_EMPTY_ITEM,
+        SECURITY_OPT_APPARMOR_NEAR_MISS,
+        SECURITY_OPT_APPARMOR_CONFLICT,
+    ] {
+        assert!(result.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    Ok(())
+}
+
+#[test]
+fn retains_every_effective_mask_candidate_without_selecting_or_conflicting() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{SECURITY_OPT_MASK_NEAR_MISS, SecurityOptionKind};
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(730),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"${MASK_OPTION}\"\n",
+                "      - \"mask=/proc/acpi:/proc/kcore\"\n",
+                "      - \"mask:/near-miss\"\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(731),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            "services:\n  app:\n    security_opt: [\"mask=/proc/acpi:/proc/kcore\"]\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("MASK_OPTION", "mask=/proc/acpi:/proc/kcore");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective mask security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 4);
+    for index in [0, 1, 3] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::Mask { paths } if paths == "/proc/acpi:/proc/kcore"
+        ));
+        assert_eq!(options.value()[index].provenance().sources().len(), 1);
+    }
+    assert!(options.value()[0].is_sensitive());
+    assert_eq!(options.value()[0].value().authored(), "\"${MASK_OPTION}\"");
+    assert!(matches!(
+        options.value()[2].value().kind(),
+        SecurityOptionKind::MaskNearMiss
+    ));
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_MASK_NEAR_MISS)
+            .count(),
+        1
+    );
+    assert_eq!(result.diagnostics().len(), 1, "repeatable exact masks do not conflict");
+    assert!(!format!("{options:?}").contains("/proc/acpi:/proc/kcore"));
+    Ok(())
+}
+
+#[test]
+fn retains_every_effective_unmask_candidate_without_selecting_or_conflicting() -> Result<(), Box<dyn std::error::Error>>
+{
+    use compose_lens::model::{SECURITY_OPT_UNMASK_NEAR_MISS, SecurityOptionKind};
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(732),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"${UNMASK_OPTION}\"\n",
+                "      - \"unmask=ALL\"\n",
+                "      - \"unmask=/proc/*\"\n",
+                "      - \"unmask=all\"\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(733),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            "services:\n  app:\n    security_opt: [\"unmask=ALL\", \"unmask=/proc/acpi\"]\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("UNMASK_OPTION", "unmask=/proc/acpi:/sys/firmware");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective unmask security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 6);
+    for (index, expected) in [
+        (0, "/proc/acpi:/sys/firmware"),
+        (1, "ALL"),
+        (2, "/proc/*"),
+        (4, "ALL"),
+        (5, "/proc/acpi"),
+    ] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::Unmask { paths } if paths == expected
+        ));
+        assert_eq!(options.value()[index].provenance().sources().len(), 1);
+    }
+    assert!(options.value()[0].is_sensitive());
+    assert_eq!(options.value()[0].value().authored(), "\"${UNMASK_OPTION}\"");
+    assert!(matches!(
+        options.value()[3].value().kind(),
+        SecurityOptionKind::UnmaskNearMiss
+    ));
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_UNMASK_NEAR_MISS)
+            .count(),
+        1
+    );
+    assert_eq!(
+        result.diagnostics().len(),
+        1,
+        "repeatable exact unmask values do not conflict"
+    );
+    assert!(!format!("{options:?}").contains("/sys/firmware"));
+    Ok(())
+}
+
+#[test]
+fn classifies_effective_no_new_privileges_candidates_without_selecting_a_conflict()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{
+        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS, SecurityOptionKind,
+    };
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(706),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            "services:\n  app:\n    security_opt: [\"${NNP_OPTION}\", \"no-new-privileges:true\"]\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(707),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"no-new-privileges:false\"\n",
+                "      - \"no-new-privileges:true\"\n",
+                "      - \"No-New-Privileges:true\"\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("NNP_OPTION", "no-new-privileges:false");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 5);
+    assert_eq!(options.value()[0].value().authored(), "\"${NNP_OPTION}\"");
+    assert!(options.value()[0].is_sensitive());
+    for (index, enabled) in [(0, false), (1, true), (2, false), (3, true)] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::NoNewPrivileges { enabled: actual } if *actual == enabled
+        ));
+    }
+    assert!(matches!(
+        options.value()[4].value().kind(),
+        SecurityOptionKind::NoNewPrivilegesNearMiss
+    ));
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT)
+            .count(),
+        3
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS)
+    );
+    Ok(())
+}
+
+#[test]
+fn classifies_effective_seccomp_candidates_without_selecting_a_conflict() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{
+        SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_SECCOMP_NEAR_MISS, SecurityOptionKind,
+    };
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(708),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"${SECCOMP_OPTION}\"\n",
+                "      - \"apparmor=one-profile\"\n",
+                "      - \"no-new-privileges:true\"\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(709),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"seccomp=unconfined\"\n",
+                "      - \"seccomp=/workspace/seccomp.json\"\n",
+                "      - \"Seccomp=unconfined\"\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("SECCOMP_OPTION", "seccomp=unconfined");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 6);
+    assert_eq!(options.value()[0].value().authored(), "\"${SECCOMP_OPTION}\"");
+    assert!(options.value()[0].is_sensitive());
+    for (index, profile) in [(0, "unconfined"), (3, "unconfined"), (4, "/workspace/seccomp.json")] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::Seccomp { profile: actual } if actual == profile
+        ));
+    }
+    assert!(matches!(
+        options.value()[5].value().kind(),
+        SecurityOptionKind::SeccompNearMiss
+    ));
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECCOMP_CONFLICT)
+            .count(),
+        2
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == SECURITY_OPT_SECCOMP_NEAR_MISS)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.code() != SECURITY_OPT_APPARMOR_CONFLICT)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.code() != SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT)
+    );
+    Ok(())
+}
+
+#[test]
+fn classifies_effective_security_label_disable_candidates_without_selecting_a_conflict()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{
+        SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS,
+        SecurityOptionKind,
+    };
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(710),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"${LABEL_DISABLE_OPTION}\"\n",
+                "      - \"label:user:USER\"\n",
+                "      - \"label:role:ROLE\"\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(711),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"label:disable\"\n",
+                "      - \"label:disable\"\n",
+                "      - \"label=disable\"\n",
+                "      - \"label:disable:false\"\n",
+                "      - \"Label:disable\"\n",
+                "      - \" label:disable\"\n",
+                "      - \"label\"\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("LABEL_DISABLE_OPTION", "label:disable");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 10);
+    assert_eq!(options.value()[0].value().authored(), "\"${LABEL_DISABLE_OPTION}\"");
+    assert!(options.value()[0].is_sensitive());
+    for index in [0, 3, 4] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelDisable { enabled: true }
+        ));
+    }
+    for index in 5..10 {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelDisableNearMiss
+        ));
+    }
+    for index in [1, 2] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::Other
+        ));
+    }
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT)
+            .count(),
+        2
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS)
+            .count(),
+        5
+    );
+    for code in [
+        SECURITY_OPT_APPARMOR_CONFLICT,
+        SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+    ] {
+        assert!(result.diagnostics().iter().all(|diagnostic| diagnostic.code() != code));
+    }
+    Ok(())
+}
+
+#[test]
+fn classifies_effective_security_label_filetype_candidates_without_selecting_a_conflict()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::SecurityOptionKind;
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(712),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"${LABEL_FILETYPE_OPTION}\"\n",
+                "      - \"apparmor=one-profile\"\n",
+                "      - \"seccomp=unconfined\"\n",
+                "      - \"no-new-privileges:true\"\n",
+                "      - \"label:disable\"\n",
+                "      - \"label:type:TYPE\"\n",
+                "      - \"label:user:USER\"\n",
+                "      - \"label:role:ROLE\"\n",
+                "      - \"label:level:LEVEL\"\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(713),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"label:filetype:container_file_t\"\n",
+                "      - \"label:filetype:container_file_t\"\n",
+                "      - \"label=filetype:container_file_t\"\n",
+                "      - \"label:filetype=container_file_t\"\n",
+                "      - \"Label:filetype:container_file_t\"\n",
+                "      - \"label:FileType:container_file_t\"\n",
+                "      - \" label:filetype:container_file_t\"\n",
+                "      - \"label:filetype:container file t\"\n",
+                "      - \"label:filetype:\"\n",
+                "      - \"label:filetype\"\n",
+                "      - \"${LABEL_FILETYPE_NEAR_MISS}\"\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("LABEL_FILETYPE_OPTION", "label:filetype:container_file_t");
+    let _ = environment.insert_sensitive("LABEL_FILETYPE_NEAR_MISS", "Label:filetype:container_file_t");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 20);
+    assert_eq!(options.value()[0].value().authored(), "\"${LABEL_FILETYPE_OPTION}\"");
+    assert!(options.value()[0].is_sensitive());
+    for index in [0, 9, 10] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelFileType { file_type }
+                if file_type == "container_file_t"
+        ));
+    }
+    for index in 11..20 {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelFileTypeNearMiss
+        ));
+    }
+    assert_eq!(
+        options.value()[19].value().authored(),
+        "\"${LABEL_FILETYPE_NEAR_MISS}\""
+    );
+    assert!(options.value()[19].is_sensitive());
+    assert!(matches!(
+        options.value()[5].value().kind(),
+        SecurityOptionKind::SecurityLabelType { label_type } if label_type == "TYPE"
+    ));
+    for index in 6..8 {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::Other
+        ));
+    }
+    assert!(matches!(
+        options.value()[8].value().kind(),
+        SecurityOptionKind::SecurityLabelLevel { level } if level == "LEVEL"
+    ));
+    assert_effective_security_label_filetype_diagnostics(&result);
+    Ok(())
+}
+
+fn assert_effective_security_label_filetype_diagnostics(result: &compose_lens::project::ProjectViewResult) {
+    use compose_lens::model::{
+        SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS,
+    };
+
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT)
+            .count(),
+        2
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS)
+            .count(),
+        9
+    );
+    for code in [
+        SECURITY_OPT_APPARMOR_CONFLICT,
+        SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+    ] {
+        assert!(result.diagnostics().iter().all(|diagnostic| diagnostic.code() != code));
+    }
+}
+
+#[test]
+fn classifies_effective_security_label_level_candidates_without_selecting_a_conflict()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::SecurityOptionKind;
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(714),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"${LABEL_LEVEL_OPTION}\"\n",
+                "      - \"apparmor=one-profile\"\n",
+                "      - \"seccomp=unconfined\"\n",
+                "      - \"no-new-privileges:true\"\n",
+                "      - \"label:disable\"\n",
+                "      - \"label:filetype:container_file_t\"\n",
+                "      - \"label:type:TYPE\"\n",
+                "      - \"label:user:USER\"\n",
+                "      - \"label:role:ROLE\"\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(715),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"label:level:s0:c1,c2\"\n",
+                "      - \"label:level:s0:c1,c2\"\n",
+                "      - \"label=level:s0:c1,c2\"\n",
+                "      - \"label:level=s0:c1,c2\"\n",
+                "      - \"Label:level:s0:c1,c2\"\n",
+                "      - \"label:Level:s0:c1,c2\"\n",
+                "      - \" label:level:s0:c1,c2\"\n",
+                "      - \"label:level:s0 c1\"\n",
+                "      - \"label:level:\"\n",
+                "      - \"label:level\"\n",
+                "      - \"label=level\"\n",
+                "      - \"${LABEL_LEVEL_NEAR_MISS}\"\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("LABEL_LEVEL_OPTION", "label:level:s0:c1,c2");
+    let _ = environment.insert_sensitive("LABEL_LEVEL_NEAR_MISS", "Label:level:s0:c1,c2");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 21);
+    assert_eq!(options.value()[0].value().authored(), "\"${LABEL_LEVEL_OPTION}\"");
+    assert!(options.value()[0].is_sensitive());
+    for index in [0, 9, 10] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelLevel { level } if level == "s0:c1,c2"
+        ));
+    }
+    for index in 11..21 {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelLevelNearMiss
+        ));
+    }
+    assert_eq!(options.value()[20].value().authored(), "\"${LABEL_LEVEL_NEAR_MISS}\"");
+    assert!(options.value()[20].is_sensitive());
+    assert!(matches!(
+        options.value()[6].value().kind(),
+        SecurityOptionKind::SecurityLabelType { label_type } if label_type == "TYPE"
+    ));
+    for index in 7..9 {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::Other
+        ));
+    }
+    assert_effective_security_label_level_diagnostics(&result);
+    Ok(())
+}
+
+fn assert_effective_security_label_level_diagnostics(result: &compose_lens::project::ProjectViewResult) {
+    use compose_lens::model::{
+        SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT, SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS,
+    };
+
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT)
+            .count(),
+        2
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS)
+            .count(),
+        10
+    );
+    for code in [
+        SECURITY_OPT_APPARMOR_CONFLICT,
+        SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+    ] {
+        assert!(result.diagnostics().iter().all(|diagnostic| diagnostic.code() != code));
+    }
+}
+
+#[test]
+fn classifies_effective_security_label_nested_candidates_without_selecting_a_conflict()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::SecurityOptionKind;
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(716),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"${LABEL_NESTED_OPTION}\"\n",
+                "      - \"apparmor=one-profile\"\n",
+                "      - \"seccomp=unconfined\"\n",
+                "      - \"no-new-privileges:true\"\n",
+                "      - \"label:disable\"\n",
+                "      - \"label:filetype:container_file_t\"\n",
+                "      - \"label:level:s0:c1,c2\"\n",
+                "      - \"label:type:TYPE\"\n",
+                "      - \"label:user:USER\"\n",
+                "      - \"label:role:ROLE\"\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(717),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"label:nested\"\n",
+                "      - \"label:nested\"\n",
+                "      - \"label=nested\"\n",
+                "      - \"Label:nested\"\n",
+                "      - \"label:Nested\"\n",
+                "      - \" label:nested\"\n",
+                "      - \"label : nested\"\n",
+                "      - \"label:nested:true\"\n",
+                "      - \"label:nested=\"\n",
+                "      - \"nested\"\n",
+                "      - \"${LABEL_NESTED_NEAR_MISS}\"\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("LABEL_NESTED_OPTION", "label:nested");
+    let _ = environment.insert_sensitive("LABEL_NESTED_NEAR_MISS", "Label:nested");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 21);
+    assert_eq!(options.value()[0].value().authored(), "\"${LABEL_NESTED_OPTION}\"");
+    assert!(options.value()[0].is_sensitive());
+    for index in [0, 10, 11] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelNested { enabled: true }
+        ));
+    }
+    for index in 12..21 {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelNestedNearMiss
+        ));
+    }
+    assert_eq!(options.value()[20].value().authored(), "\"${LABEL_NESTED_NEAR_MISS}\"");
+    assert!(options.value()[20].is_sensitive());
+    assert!(matches!(
+        options.value()[7].value().kind(),
+        SecurityOptionKind::SecurityLabelType { label_type } if label_type == "TYPE"
+    ));
+    for index in 8..10 {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::Other
+        ));
+    }
+    assert_effective_security_label_nested_diagnostics(&result);
+    Ok(())
+}
+
+fn assert_effective_security_label_nested_diagnostics(result: &compose_lens::project::ProjectViewResult) {
+    use compose_lens::model::{
+        SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT, SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS,
+    };
+
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT)
+            .count(),
+        2
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS)
+            .count(),
+        9
+    );
+    for code in [
+        SECURITY_OPT_APPARMOR_CONFLICT,
+        SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+    ] {
+        assert!(result.diagnostics().iter().all(|diagnostic| diagnostic.code() != code));
+    }
+}
+
+#[test]
+fn classifies_effective_security_label_type_candidates_without_selecting_a_conflict()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::SecurityOptionKind;
+
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(718),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"${LABEL_TYPE_OPTION}\"\n",
+                "      - \"apparmor=one-profile\"\n",
+                "      - \"seccomp=unconfined\"\n",
+                "      - \"no-new-privileges:true\"\n",
+                "      - \"label:disable\"\n",
+                "      - \"label:filetype:container_file_t\"\n",
+                "      - \"label:level:s0:c1,c2\"\n",
+                "      - \"label:nested\"\n",
+                "      - \"label:user:USER\"\n",
+                "      - \"label:role:ROLE\"\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(719),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n  app:\n    security_opt:\n",
+                "      - \"label:type:container_t\"\n",
+                "      - \"label:type:container_t\"\n",
+                "      - \"label=type:container_t\"\n",
+                "      - \"label:type=container_t\"\n",
+                "      - \"label=type=container_t\"\n",
+                "      - \"Label:type:container_t\"\n",
+                "      - \"label:Type:container_t\"\n",
+                "      - \" label:type:container_t\"\n",
+                "      - \"label : type : container_t\"\n",
+                "      - \"label:type:container t\"\n",
+                "      - \"label:type:\"\n",
+                "      - \"label:type\"\n",
+                "      - \"label=type\"\n",
+                "      - \"type\"\n",
+                "      - \"label:type:container_t:extended\"\n",
+                "      - \"label:type:container_t=extended\"\n",
+                "      - \"${LABEL_TYPE_NEAR_MISS}\"\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("LABEL_TYPE_OPTION", "label:type:container_t");
+    let _ = environment.insert_sensitive("LABEL_TYPE_NEAR_MISS", "Label:type:container_t");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::security_options)
+        .ok_or("effective security options expected")?;
+
+    assert_eq!(options.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(options.value().len(), 27);
+    assert_eq!(options.value()[0].value().authored(), "\"${LABEL_TYPE_OPTION}\"");
+    assert!(options.value()[0].is_sensitive());
+    for index in [0, 10, 11] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelType { label_type } if label_type == "container_t"
+        ));
+    }
+    for index in 12..27 {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelTypeNearMiss
+        ));
+    }
+    assert_eq!(options.value()[26].value().authored(), "\"${LABEL_TYPE_NEAR_MISS}\"");
+    assert!(options.value()[26].is_sensitive());
+    for index in 1..8 {
+        assert!(!matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelType { .. } | SecurityOptionKind::SecurityLabelTypeNearMiss
+        ));
+    }
+    assert_effective_security_label_type_diagnostics(&result);
+    Ok(())
+}
+
+fn assert_effective_security_label_type_diagnostics(result: &compose_lens::project::ProjectViewResult) {
+    use compose_lens::model::{
+        SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT, SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS,
+    };
+
+    for (code, expected) in [
+        (SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT, 2),
+        (SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS, 15),
+    ] {
+        assert_eq!(
+            result
+                .diagnostics()
+                .iter()
+                .filter(|diagnostic| diagnostic.code() == code)
+                .count(),
+            expected
+        );
+    }
+    for code in [
+        SECURITY_OPT_APPARMOR_CONFLICT,
+        SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+    ] {
+        assert!(result.diagnostics().iter().all(|diagnostic| diagnostic.code() != code));
+    }
+}
+
+#[test]
+fn exposes_merged_dns_forms_with_item_and_collection_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let result = merged_dns_project_view()?;
+    let view = result.view().ok_or("partial project view expected")?;
+    assert_merged_dns(view)?;
+    assert_replaced_reset_and_malformed_dns(view, &result)?;
+    Ok(())
+}
+
+fn merged_dns_project_view() -> Result<compose_lens::project::ProjectViewResult, Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(685),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n",
+                "  appended:\n    dns: [base.example, same.example]\n",
+                "  scalar:\n    dns: old.example\n",
+                "  cross-form:\n    dns: old.example\n",
+                "  reset:\n    dns: [old.example]\n",
+                "  override:\n    dns: [old.example]\n",
+                "  malformed:\n    image: example.invalid/recovery:1\n    dns: [valid-before.example, true, [nested], valid-after.example]\n",
+                "  bad-form:\n    image: example.invalid/bad:1\n    dns: {server: invalid.example}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(686),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  appended:\n    dns: [same.example, later.example]\n",
+                "  scalar:\n    dns: \"${DNS_SECRET}\"\n",
+                "  cross-form:\n    dns: [new.example]\n",
+                "  reset:\n    dns: !reset []\n",
+                "  override:\n    dns: !override [same.example, same.example]\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("DNS_SECRET", "secret-resolver.example");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    Ok(build_project_view(
+        merged.project().ok_or("merged project expected")?,
+        None,
+    ))
+}
+
+fn assert_merged_dns(view: &ProjectView) -> Result<(), Box<dyn std::error::Error>> {
+    let appended = view
+        .service("appended")
+        .and_then(ProjectService::dns)
+        .ok_or("appended DNS expected")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    let ProjectDns::List(items) = appended.value() else {
+        return Err("DNS list expected".into());
+    };
+    assert_eq!(
+        items.iter().map(|item| item.value().as_str()).collect::<Vec<_>>(),
+        ["base.example", "same.example", "same.example", "later.example"]
+    );
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.provenance().sources().len())
+            .collect::<Vec<_>>(),
+        [1, 1, 1, 1]
+    );
+
+    let scalar = view
+        .service("scalar")
+        .and_then(ProjectService::dns)
+        .ok_or("scalar DNS expected")?;
+    assert_eq!(scalar.provenance().operation(), MergeOperation::Replaced);
+    assert!(scalar.is_sensitive());
+    assert!(matches!(scalar.value(), ProjectDns::Scalar(item)
+        if item.value() == "secret-resolver.example" && item.is_sensitive()));
+    assert!(!format!("{scalar:?}").contains("secret-resolver.example"));
+
+    Ok(())
+}
+
+fn assert_replaced_reset_and_malformed_dns(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let cross_form = view
+        .service("cross-form")
+        .and_then(ProjectService::dns)
+        .ok_or("cross-form DNS expected")?;
+    assert_eq!(cross_form.provenance().operation(), MergeOperation::Replaced);
+    assert!(matches!(cross_form.value(), ProjectDns::List(items)
+        if items.iter().map(|item| item.value().as_str()).collect::<Vec<_>>() == ["new.example"]));
+
+    let reset = view
+        .service("reset")
+        .and_then(ProjectService::dns)
+        .ok_or("reset DNS expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.value(), ProjectDns::List(items) if items.is_empty()));
+    let overridden = view
+        .service("override")
+        .and_then(ProjectService::dns)
+        .ok_or("override DNS expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(overridden.value(), ProjectDns::List(items)
+        if items.iter().map(|item| item.value().as_str()).collect::<Vec<_>>()
+            == ["same.example", "same.example"]));
+
+    let malformed = view.service("malformed").ok_or("malformed service retained")?;
+    assert!(malformed.image().is_some());
+    assert!(
+        matches!(malformed.dns().map(ProjectValue::value), Some(ProjectDns::List(items))
+        if items.iter().map(|item| item.value().as_str()).collect::<Vec<_>>()
+            == ["valid-before.example", "valid-after.example"])
+    );
+    assert!(
+        view.service("bad-form")
+            .is_some_and(|service| service.image().is_some())
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == DNS_EXPECTED_STRING)
+            .count(),
+        2
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == DNS_EXPECTED_FORM)
+            .count(),
+        1
+    );
+    Ok(())
+}
 
 #[test]
 fn exposes_merged_ulimits_with_nested_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,0 +1,30 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty:
+    expose: []
+  exact:
+    expose:
+      - 80
+      - "80"
+      - "80/tcp"
+      - "53/udp"
+      - "080-090/tcp"
+      - "${EXPOSE_PORT:-443}"
+      - "80/sctp"
+      - "80/HTTP"
+      - "broken"
+      - 80
+      - "80"
+  malformed-siblings:
+    image: example.invalid/recovery:1
+    expose:
+      - 90
+      - true
+      - null
+      - [91]
+      - {port: 92}
+      - "93/udp"
+  wrong-form:
+    image: example.invalid/wrong:1
+    expose: 80

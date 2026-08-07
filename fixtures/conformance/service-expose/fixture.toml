@@ -1,0 +1,24 @@
+schema = 1
+id = "service-expose"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, empty, string/number, range, protocol, and duplicate service expose items."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains, normalizes, or specifically rejects each exposed-port spelling; planned rows make no runtime publication, firewall, protocol-default, or cross-format support claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-expose"]
+schema = 1
+reviewed = "2026-08-06"

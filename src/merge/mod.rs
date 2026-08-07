@@ -150,6 +150,7 @@ pub struct MergedEntry {
     key_sources: Vec<SourceSpan>,
     key_sensitive: bool,
     syntax: EntrySyntax,
+    raw_list_item: Option<MergedScalar>,
     value: MergedValue,
 }
 
@@ -161,6 +162,7 @@ impl fmt::Debug for MergedEntry {
             .field("key_sources", &self.key_sources)
             .field("key_sensitive", &self.key_sensitive)
             .field("syntax", &self.syntax)
+            .field("raw_list_item", &self.raw_list_item)
             .field("value", &self.value)
             .finish()
     }
@@ -189,6 +191,12 @@ impl MergedEntry {
     #[must_use]
     pub const fn syntax(&self) -> EntrySyntax {
         self.syntax
+    }
+
+    /// Returns the complete list scalar when a keyed mapping entry came from list syntax.
+    #[must_use]
+    pub const fn raw_list_item(&self) -> Option<&MergedScalar> {
+        self.raw_list_item.as_ref()
     }
 
     /// Returns the merged entry value.
@@ -486,6 +494,7 @@ fn convert_entry(
         key_sources: vec![entry.key.span],
         key_sensitive: false,
         syntax: EntrySyntax::Mapping,
+        raw_list_item: None,
         value: convert_value(entry.value, interpolation, diagnostics),
     }
 }
@@ -582,8 +591,21 @@ fn merge_value(
         return replace_value(base, incoming, MergeOperation::Replaced);
     }
 
+    if is_whole_sequence_replacement(path) {
+        return replace_value(
+            base,
+            activate_tags(incoming, path, diagnostics),
+            MergeOperation::Replaced,
+        );
+    }
+
     if is_keyed_mapping(path) {
-        if let (Some(base), Some(incoming)) = (normalize_keyed(base.clone()), normalize_keyed(incoming.clone())) {
+        let normalize = if is_annotations(path) {
+            normalize_annotations
+        } else {
+            normalize_keyed
+        };
+        if let (Some(base), Some(incoming)) = (normalize(base.clone()), normalize(incoming.clone())) {
             return merge_mappings(base, incoming, path, diagnostics);
         }
     }
@@ -627,6 +649,7 @@ fn merge_mappings(
             extend_sources(&mut existing.key_sources, &incoming_entry.key_sources);
             existing.key_sensitive |= incoming_entry.key_sensitive;
             existing.syntax = incoming_entry.syntax;
+            existing.raw_list_item = incoming_entry.raw_list_item;
         } else {
             let mut incoming_entry = incoming_entry;
             incoming_entry.value = activate_tags(incoming_entry.value, path, diagnostics);
@@ -670,8 +693,8 @@ fn merge_unique_sequences(
     let Some(field) = unique_field(path) else {
         return append_sequences(base, incoming);
     };
-    if field == UniqueField::ExactScalar {
-        return merge_exact_scalar_sequences(base, incoming);
+    if matches!(field, UniqueField::ExactStringScalar | UniqueField::ExactScalar) {
+        return merge_exact_scalar_sequences(base, incoming, field == UniqueField::ExactScalar);
     }
     let MergedValueKind::Sequence(mut base_values) = base.kind else {
         return base;
@@ -705,7 +728,11 @@ fn merge_unique_sequences(
     }
 }
 
-fn merge_exact_scalar_sequences(base: MergedValue, incoming: MergedValue) -> MergedValue {
+fn merge_exact_scalar_sequences(
+    base: MergedValue,
+    incoming: MergedValue,
+    include_all_scalar_kinds: bool,
+) -> MergedValue {
     let MergedValueKind::Sequence(mut values) = base.kind else {
         return base;
     };
@@ -722,14 +749,15 @@ fn merge_exact_scalar_sequences(base: MergedValue, incoming: MergedValue) -> Mer
 
     let mut deduplicated: Vec<MergedValue> = Vec::with_capacity(values.len());
     for value in values {
-        let exact = value
-            .as_scalar()
-            .and_then(|scalar| (scalar.kind == MergedScalarKind::String).then(|| scalar.value.clone()));
-        let existing = exact.as_ref().and_then(|exact| {
+        let exact = value.as_scalar().and_then(|scalar| {
+            (include_all_scalar_kinds || scalar.kind == MergedScalarKind::String)
+                .then(|| (scalar.kind, scalar.value.clone()))
+        });
+        let existing = exact.as_ref().and_then(|(kind, exact)| {
             deduplicated.iter().position(|candidate| {
                 candidate
                     .as_scalar()
-                    .is_some_and(|scalar| scalar.kind == MergedScalarKind::String && scalar.value == *exact)
+                    .is_some_and(|scalar| scalar.kind == *kind && scalar.value == *exact)
             })
         });
         if let Some(index) = existing {
@@ -819,8 +847,32 @@ fn is_shell_command(path: &[String]) -> bool {
         || matches!(path, [services, _, healthcheck, test] if services == "services" && healthcheck == "healthcheck" && test == "test")
 }
 
+fn is_whole_sequence_replacement(path: &[String]) -> bool {
+    matches!(path, [services, _, field] if services == "services" && field == "dns_opt")
+}
+
 fn is_keyed_mapping(path: &[String]) -> bool {
-    matches!(path, [services, _, field] if services == "services" && (field == "environment" || field == "labels"))
+    matches!(path, [services, _, field] if services == "services" && (field == "environment" || field == "labels" || field == "annotations"))
+}
+
+fn is_annotations(path: &[String]) -> bool {
+    matches!(path, [services, _, field] if services == "services" && field == "annotations")
+}
+
+fn normalize_annotations(value: MergedValue) -> Option<MergedValue> {
+    if let MergedValueKind::Sequence(values) = &value.kind {
+        for item in values {
+            let scalar = item.as_scalar()?;
+            if scalar.kind != MergedScalarKind::String {
+                return None;
+            }
+            let (name, _) = scalar.value.split_once('=')?;
+            if name.is_empty() {
+                return None;
+            }
+        }
+    }
+    normalize_keyed(value)
 }
 
 fn normalize_keyed(value: MergedValue) -> Option<MergedValue> {
@@ -854,6 +906,7 @@ fn normalize_keyed(value: MergedValue) -> Option<MergedValue> {
                     key_sources: vec![key_source],
                     key_sensitive: scalar.sensitive,
                     syntax,
+                    raw_list_item: Some(scalar.clone()),
                     value: entry_value,
                 });
             }
@@ -868,6 +921,7 @@ fn normalize_keyed(value: MergedValue) -> Option<MergedValue> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UniqueField {
+    ExactStringScalar,
     ExactScalar,
     Volume,
     Device,
@@ -889,13 +943,15 @@ fn unique_field(path: &[String]) -> Option<UniqueField> {
         "configs" => Some(UniqueField::Config),
         "secrets" => Some(UniqueField::Secret),
         "ports" => Some(UniqueField::Port),
-        "cap_add" | "cap_drop" => Some(UniqueField::ExactScalar),
+        "cap_add" | "cap_drop" => Some(UniqueField::ExactStringScalar),
+        "expose" => Some(UniqueField::ExactScalar),
         _ => None,
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum UniqueKey {
+    Scalar(MergedScalarKind, String),
     Target(String),
     Port {
         ip: String,
@@ -907,9 +963,12 @@ enum UniqueKey {
 
 fn unique_key(value: &MergedValue, field: UniqueField) -> Option<UniqueKey> {
     match field {
-        UniqueField::ExactScalar => value.as_scalar().and_then(|scalar| {
+        UniqueField::ExactStringScalar => value.as_scalar().and_then(|scalar| {
             (scalar.kind == MergedScalarKind::String).then(|| UniqueKey::Target(scalar.value.clone()))
         }),
+        UniqueField::ExactScalar => value
+            .as_scalar()
+            .map(|scalar| UniqueKey::Scalar(scalar.kind, scalar.value.clone())),
         UniqueField::Volume | UniqueField::Device => target_key(value, true).map(UniqueKey::Target),
         UniqueField::Config | UniqueField::Secret => target_key(value, false).map(UniqueKey::Target),
         UniqueField::Port => port_key(value),

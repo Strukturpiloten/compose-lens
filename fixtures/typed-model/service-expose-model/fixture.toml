@@ -1,0 +1,18 @@
+schema = 1
+id = "service-expose-model"
+suite = "typed-model"
+description = "Protects source-aware string/number expose items, classification, duplicates, and sibling recovery."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No environment access occurs; the interpolation-shaped item remains authored data."
+
+[expectations]
+summary = "String and number identity, order, raw protocol evidence, malformed recovery, and spans remain visible."

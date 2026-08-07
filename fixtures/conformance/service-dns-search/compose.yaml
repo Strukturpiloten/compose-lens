@@ -1,0 +1,15 @@
+services:
+  omitted:
+    image: example.invalid/composelens/dns-search-omitted:1
+  scalar:
+    dns_search: example.internal
+  disable-search:
+    dns_search: .
+  empty-list:
+    dns_search: []
+  ordered-list:
+    dns_search:
+      - example.internal
+      - example.internal
+      - corp.internal
+      - .

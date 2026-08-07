@@ -2,21 +2,769 @@
 
 use compose_lens::{
     model::{
-        BooleanValue, Command, ComposeScalar, Entrypoint, Environment, EnvironmentFile, EnvironmentFileFormatKind,
-        ExtraHosts, HostnameKind, Labels, MemLimitKind, MemLimitScalarKind, MemLimitUnit, Port, ServiceNetworks,
-        ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit, StopGracePeriod, SysctlsForm, UlimitValue, VolumeMount,
+        AnnotationsForm, BooleanValue, Command, ComposeScalar, DnsForm, DnsSearchForm, Entrypoint, Environment,
+        EnvironmentFile, EnvironmentFileFormatKind, ExtraHosts, HostnameKind, Labels, MemLimitKind, MemLimitScalarKind,
+        MemLimitUnit, Port, ServiceNetworks, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit, StopGracePeriod, SysctlsForm,
+        UlimitValue, VolumeMount,
     },
     render::{
-        ComposeDocumentBuilder, GeneratedCommand, GeneratedComposeDocument, GeneratedDevice, GeneratedEntrypoint,
-        GeneratedEnvironment, GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat, GeneratedExtraHost,
-        GeneratedHostname, GeneratedLabel, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount,
-        GeneratedNetworkAttachment, GeneratedPidsLimit, GeneratedPort, GeneratedProtocol, GeneratedPullPolicy,
-        GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedShmSize,
-        GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue,
-        GeneratedUlimits, GenerationError,
+        ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument, GeneratedDevice,
+        GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile,
+        GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLongDevice,
+        GeneratedMemLimit, GeneratedMount, GeneratedNetworkAttachment, GeneratedPidsLimit, GeneratedPort,
+        GeneratedProtocol, GeneratedPullPolicy, GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux,
+        GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs,
+        GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GenerationError,
     },
     source::SourceId,
 };
+
+#[test]
+fn generates_safe_unique_annotations_empty_state_sensitivity_and_parse_back() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut omitted = GeneratedService::new("omitted")?;
+    omitted.set_image(plain("example.invalid/omitted:1")?)?;
+    let mut empty = GeneratedService::new("empty")?;
+    empty.set_annotations(Vec::new())?;
+    let mut configured = GeneratedService::new("configured")?;
+    configured.set_annotations(vec![
+        GeneratedAnnotation::new("io.example.empty", plain("")?)?,
+        GeneratedAnnotation::new("io.example.equals", plain("left=right")?)?,
+        GeneratedAnnotation::new("io.example.secret", GeneratedString::sensitive("secret-value")?)?,
+    ])?;
+    assert_eq!(configured.annotations().map(<[GeneratedAnnotation]>::len), Some(3));
+    assert_eq!(
+        configured.set_annotations(Vec::new()),
+        Err(GenerationError::DuplicateField("annotations"))
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(omitted)?;
+    builder.add_service(empty)?;
+    builder.add_service(configured)?;
+    let generated = builder.build(SourceId::new(700))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("secret-value"));
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"omitted\":\n",
+            "    image: \"example.invalid/omitted:1\"\n",
+            "  \"empty\":\n",
+            "    annotations: {}\n",
+            "  \"configured\":\n",
+            "    annotations:\n",
+            "      \"io.example.empty\": \"\"\n",
+            "      \"io.example.equals\": \"left=right\"\n",
+            "      \"io.example.secret\": \"secret-value\"\n",
+        )
+    );
+    assert!(
+        generated
+            .document()
+            .service("omitted")
+            .is_some_and(|service| service.annotations().is_none())
+    );
+    assert!(matches!(
+        generated.document().service("empty").and_then(compose_lens::model::Service::annotations).map(compose_lens::model::Annotations::form),
+        Some(AnnotationsForm::Map(entries)) if entries.is_empty()
+    ));
+    assert!(matches!(
+        generated.document().service("configured").and_then(compose_lens::model::Service::annotations).map(compose_lens::model::Annotations::form),
+        Some(AnnotationsForm::Map(entries)) if entries.len() == 3
+    ));
+    Ok(())
+}
+
+#[test]
+fn generated_annotations_reject_duplicates_deferred_and_malformed_values() -> Result<(), Box<dyn std::error::Error>> {
+    for name in ["", "$NAME", "line\nbreak"] {
+        assert_eq!(
+            GeneratedAnnotation::new(name, plain("value")?),
+            Err(GenerationError::InvalidAnnotationName)
+        );
+    }
+    for value in ["$VALUE", "line\rbreak", "line\nbreak"] {
+        assert_eq!(
+            GeneratedAnnotation::new("io.example.name", plain(value)?),
+            Err(GenerationError::InvalidAnnotationValue)
+        );
+    }
+    let mut duplicate = GeneratedService::new("app")?;
+    assert!(matches!(
+        duplicate.set_annotations(vec![
+            GeneratedAnnotation::new("io.example.same", plain("one")?)?,
+            GeneratedAnnotation::new("io.example.same", plain("two")?)?,
+        ]),
+        Err(GenerationError::DuplicateName { kind: "service annotation", name }) if name == "io.example.same"
+    ));
+    assert!(duplicate.annotations().is_none());
+    Ok(())
+}
+
+#[test]
+fn generates_quoted_unique_expose_items_empty_state_sensitivity_and_parse_back()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{ExposeItemKind, ExposeScalarKind};
+
+    let mut omitted = GeneratedService::new("omitted")?;
+    omitted.set_image(plain("example.invalid/omitted:1")?)?;
+    let mut empty = GeneratedService::new("empty")?;
+    empty.set_expose(Vec::new())?;
+    let mut configured = GeneratedService::new("configured")?;
+    configured.set_expose(vec![
+        plain("80")?,
+        plain("80/tcp")?,
+        GeneratedString::sensitive("53/udp")?,
+        plain("080-090")?,
+    ])?;
+    assert_eq!(configured.expose().map(<[GeneratedString]>::len), Some(4));
+    assert_eq!(
+        configured.set_expose(Vec::new()),
+        Err(GenerationError::DuplicateField("expose"))
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(omitted)?;
+    builder.add_service(empty)?;
+    builder.add_service(configured)?;
+    let generated = builder.build(SourceId::new(692))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("53/udp"));
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"omitted\":\n",
+            "    image: \"example.invalid/omitted:1\"\n",
+            "  \"empty\":\n",
+            "    expose: []\n",
+            "  \"configured\":\n",
+            "    expose:\n",
+            "      - \"80\"\n",
+            "      - \"80/tcp\"\n",
+            "      - \"53/udp\"\n",
+            "      - \"080-090\"\n",
+        )
+    );
+    assert!(
+        generated
+            .document()
+            .service("omitted")
+            .is_some_and(|service| service.expose().is_none())
+    );
+    assert!(
+        generated
+            .document()
+            .service("empty")
+            .and_then(compose_lens::model::Service::expose)
+            .is_some_and(|expose| expose.items().is_empty())
+    );
+    let items = generated
+        .document()
+        .service("configured")
+        .and_then(compose_lens::model::Service::expose)
+        .ok_or("parse-back expose expected")?
+        .items();
+    assert_eq!(
+        items
+            .iter()
+            .map(compose_lens::model::ExposeItem::value)
+            .collect::<Vec<_>>(),
+        ["80", "80/tcp", "53/udp", "080-090"]
+    );
+    assert!(items.iter().all(|item| item.scalar_kind() == ExposeScalarKind::String));
+    assert!(
+        items
+            .iter()
+            .all(|item| matches!(item.kind(), ExposeItemKind::Documented { .. }))
+    );
+    Ok(())
+}
+
+#[test]
+fn generated_expose_rejects_unsafe_malformed_provider_dependent_and_exact_duplicates()
+-> Result<(), Box<dyn std::error::Error>> {
+    for invalid in ["", "$PORT", "80\r90", "80\n90", "port", "80-", "80/sctp", "80/HTTP"] {
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.set_expose(vec![plain(invalid)?]),
+            Err(GenerationError::InvalidExposeValue),
+            "invalid {invalid:?}",
+        );
+        assert!(service.expose().is_none());
+    }
+    let mut duplicate = GeneratedService::new("app")?;
+    assert_eq!(
+        duplicate.set_expose(vec![plain("80")?, plain("80")?]),
+        Err(GenerationError::DuplicateItem("expose"))
+    );
+    assert!(duplicate.expose().is_none());
+    let mut distinct = GeneratedService::new("app")?;
+    distinct.set_expose(vec![plain("80")?, plain("80/tcp")?])?;
+    Ok(())
+}
+
+fn assert_generated_security_option_parse_back(parsed: &compose_lens::model::SecurityOptions) {
+    use compose_lens::model::SecurityOptionKind;
+
+    assert_eq!(
+        parsed
+            .items()
+            .iter()
+            .map(compose_lens::model::SecurityOptionItem::value)
+            .collect::<Vec<_>>(),
+        [
+            "no-new-privileges:true",
+            "no-new-privileges:false",
+            "no-new-privileges:true",
+            "apparmor=profile-a",
+            "label:disable",
+            "label:disable",
+            "label=disable",
+            "label:filetype:container_file_t",
+            "label:filetype:container_file_t",
+            "label:level:s0:c1,c2",
+            "label:level:s0:c1,c2",
+            "label:nested",
+            "label:nested",
+            "label:type:container_t",
+            "label:type:container_t",
+            "label:type:container_t:extended",
+            "mask=/proc/acpi:/proc/kcore",
+            "mask=/proc/acpi:/proc/kcore",
+            "mask=relative:opaque=value",
+            "apparmor=profile-a",
+            "seccomp=unconfined",
+            "seccomp=/workspace/seccomp.json",
+            "seccomp=unconfined",
+        ]
+    );
+    for (index, enabled) in [(0, true), (1, false), (2, true)] {
+        assert!(matches!(
+            parsed.items()[index].kind(),
+            SecurityOptionKind::NoNewPrivileges { enabled: actual } if *actual == enabled
+        ));
+    }
+    assert!(matches!(parsed.items()[3].kind(), SecurityOptionKind::AppArmor { .. }));
+    for index in [4, 5] {
+        assert!(matches!(
+            parsed.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelDisable { enabled: true }
+        ));
+    }
+    assert!(matches!(
+        parsed.items()[6].kind(),
+        SecurityOptionKind::SecurityLabelDisableNearMiss
+    ));
+    for index in [7, 8] {
+        assert!(matches!(
+            parsed.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelFileType { file_type }
+                if file_type == "container_file_t"
+        ));
+    }
+    for index in [9, 10] {
+        assert!(matches!(
+            parsed.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelLevel { level } if level == "s0:c1,c2"
+        ));
+    }
+    for index in [11, 12] {
+        assert!(matches!(
+            parsed.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelNested { enabled: true }
+        ));
+    }
+    for index in [13, 14] {
+        assert!(matches!(
+            parsed.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelType { label_type } if label_type == "container_t"
+        ));
+    }
+    assert!(matches!(
+        parsed.items()[15].kind(),
+        SecurityOptionKind::SecurityLabelTypeNearMiss
+    ));
+    for index in [16, 17] {
+        assert!(matches!(
+            parsed.items()[index].kind(),
+            SecurityOptionKind::Mask { paths } if paths == "/proc/acpi:/proc/kcore"
+        ));
+    }
+    assert!(matches!(
+        parsed.items()[18].kind(),
+        SecurityOptionKind::Mask { paths } if paths == "relative:opaque=value"
+    ));
+    for (index, profile) in [(20, "unconfined"), (21, "/workspace/seccomp.json"), (22, "unconfined")] {
+        assert!(matches!(
+            parsed.items()[index].kind(),
+            SecurityOptionKind::Seccomp { profile: actual } if actual == profile
+        ));
+    }
+}
+
+#[test]
+fn generates_raw_ordered_security_options_with_duplicates_empty_state_and_parse_back()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut omitted = GeneratedService::new("omitted")?;
+    omitted.set_image(plain("example.invalid/omitted:1")?)?;
+    let mut empty = GeneratedService::new("empty")?;
+    empty.set_security_options(Vec::new())?;
+    let mut configured = GeneratedService::new("configured")?;
+    configured.set_security_options(vec![
+        plain("no-new-privileges:true")?,
+        plain("no-new-privileges:false")?,
+        plain("no-new-privileges:true")?,
+        GeneratedString::sensitive("apparmor=profile-a")?,
+        plain("label:disable")?,
+        plain("label:disable")?,
+        plain("label=disable")?,
+        plain("label:filetype:container_file_t")?,
+        plain("label:filetype:container_file_t")?,
+        plain("label:level:s0:c1,c2")?,
+        plain("label:level:s0:c1,c2")?,
+        plain("label:nested")?,
+        plain("label:nested")?,
+        plain("label:type:container_t")?,
+        plain("label:type:container_t")?,
+        plain("label:type:container_t:extended")?,
+        plain("mask=/proc/acpi:/proc/kcore")?,
+        plain("mask=/proc/acpi:/proc/kcore")?,
+        plain("mask=relative:opaque=value")?,
+        plain("apparmor=profile-a")?,
+        plain("seccomp=unconfined")?,
+        plain("seccomp=/workspace/seccomp.json")?,
+        plain("seccomp=unconfined")?,
+    ])?;
+    assert_eq!(configured.security_options().map(<[GeneratedString]>::len), Some(23));
+    assert_eq!(
+        configured.set_security_options(Vec::new()),
+        Err(GenerationError::DuplicateField("security_opt"))
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(omitted)?;
+    builder.add_service(empty)?;
+    builder.add_service(configured)?;
+    let generated = builder.build(SourceId::new(697))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("profile-a"));
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"omitted\":\n",
+            "    image: \"example.invalid/omitted:1\"\n",
+            "  \"empty\":\n",
+            "    security_opt: []\n",
+            "  \"configured\":\n",
+            "    security_opt:\n",
+            "      - \"no-new-privileges:true\"\n",
+            "      - \"no-new-privileges:false\"\n",
+            "      - \"no-new-privileges:true\"\n",
+            "      - \"apparmor=profile-a\"\n",
+            "      - \"label:disable\"\n",
+            "      - \"label:disable\"\n",
+            "      - \"label=disable\"\n",
+            "      - \"label:filetype:container_file_t\"\n",
+            "      - \"label:filetype:container_file_t\"\n",
+            "      - \"label:level:s0:c1,c2\"\n",
+            "      - \"label:level:s0:c1,c2\"\n",
+            "      - \"label:nested\"\n",
+            "      - \"label:nested\"\n",
+            "      - \"label:type:container_t\"\n",
+            "      - \"label:type:container_t\"\n",
+            "      - \"label:type:container_t:extended\"\n",
+            "      - \"mask=/proc/acpi:/proc/kcore\"\n",
+            "      - \"mask=/proc/acpi:/proc/kcore\"\n",
+            "      - \"mask=relative:opaque=value\"\n",
+            "      - \"apparmor=profile-a\"\n",
+            "      - \"seccomp=unconfined\"\n",
+            "      - \"seccomp=/workspace/seccomp.json\"\n",
+            "      - \"seccomp=unconfined\"\n",
+        )
+    );
+    assert!(
+        generated
+            .document()
+            .service("omitted")
+            .is_some_and(|service| service.security_options().is_none())
+    );
+    assert!(
+        generated
+            .document()
+            .service("empty")
+            .and_then(compose_lens::model::Service::security_options)
+            .is_some_and(|options| options.items().is_empty())
+    );
+    let parsed = generated
+        .document()
+        .service("configured")
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("parse-back security_opt expected")?;
+    assert_generated_security_option_parse_back(parsed);
+    Ok(())
+}
+
+#[test]
+fn generates_repeatable_unmask_candidates_without_normalizing_payloads() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::SecurityOptionKind;
+
+    let mut service = GeneratedService::new("app")?;
+    service.set_security_options(vec![
+        plain("unmask=ALL")?,
+        plain("unmask=ALL")?,
+        plain("unmask=/proc/acpi")?,
+        plain("unmask=/proc/acpi:/sys/firmware")?,
+        plain("unmask=/proc/*")?,
+    ])?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(735))?;
+    let parsed = generated
+        .document()
+        .service("app")
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("parse-back unmask options expected")?;
+
+    assert_eq!(
+        parsed
+            .items()
+            .iter()
+            .map(compose_lens::model::SecurityOptionItem::value)
+            .collect::<Vec<_>>(),
+        [
+            "unmask=ALL",
+            "unmask=ALL",
+            "unmask=/proc/acpi",
+            "unmask=/proc/acpi:/sys/firmware",
+            "unmask=/proc/*",
+        ]
+    );
+    for (item, expected) in
+        parsed
+            .items()
+            .iter()
+            .zip(["ALL", "ALL", "/proc/acpi", "/proc/acpi:/sys/firmware", "/proc/*"])
+    {
+        assert!(matches!(
+            item.kind(),
+            SecurityOptionKind::Unmask { paths } if paths == expected
+        ));
+    }
+    assert!(generated.text().contains("      - \"unmask=/proc/*\"\n"));
+    Ok(())
+}
+
+#[test]
+fn generated_security_options_reject_unsafe_values_without_rejecting_duplicates()
+-> Result<(), Box<dyn std::error::Error>> {
+    for invalid in ["", "$SECURITY_OPT", "line\rbreak", "line\nbreak"] {
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.set_security_options(vec![plain(invalid)?]),
+            Err(GenerationError::InvalidSecurityOptionValue)
+        );
+        assert!(service.security_options().is_none());
+    }
+    let mut duplicate = GeneratedService::new("app")?;
+    duplicate.set_security_options(vec![plain("same")?, plain("same")?])?;
+    assert_eq!(duplicate.security_options().map(<[GeneratedString]>::len), Some(2));
+    assert!(matches!(
+        GeneratedString::plain("nul\0option"),
+        Err(GenerationError::ContainsNul("string"))
+    ));
+    Ok(())
+}
+
+#[test]
+fn generates_raw_dns_scalar_list_empty_and_sensitive_forms_with_parse_back() -> Result<(), Box<dyn std::error::Error>> {
+    let mut omitted = GeneratedService::new("omitted")?;
+    omitted.set_image(plain("example.invalid/omitted:1")?)?;
+    let mut scalar = GeneratedService::new("scalar")?;
+    scalar.set_dns(GeneratedDns::Scalar(plain("resolver.internal")?))?;
+    let mut empty = GeneratedService::new("empty")?;
+    empty.set_dns(GeneratedDns::List(Vec::new()))?;
+    let mut listed = GeneratedService::new("listed")?;
+    listed.set_dns(GeneratedDns::List(vec![
+        plain("1.1.1.1")?,
+        plain("1.1.1.1")?,
+        GeneratedString::sensitive("2001:db8::53")?,
+        plain("resolver.internal")?,
+    ]))?;
+    assert!(matches!(listed.dns(), Some(GeneratedDns::List(items)) if items.len() == 4));
+    assert_eq!(
+        listed.set_dns(GeneratedDns::List(Vec::new())),
+        Err(GenerationError::DuplicateField("dns"))
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(omitted)?;
+    builder.add_service(scalar)?;
+    builder.add_service(empty)?;
+    builder.add_service(listed)?;
+    let generated = builder.build(SourceId::new(687))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("2001:db8::53"));
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"omitted\":\n",
+            "    image: \"example.invalid/omitted:1\"\n",
+            "  \"scalar\":\n",
+            "    dns: \"resolver.internal\"\n",
+            "  \"empty\":\n",
+            "    dns: []\n",
+            "  \"listed\":\n",
+            "    dns:\n",
+            "      - \"1.1.1.1\"\n",
+            "      - \"1.1.1.1\"\n",
+            "      - \"2001:db8::53\"\n",
+            "      - \"resolver.internal\"\n",
+        )
+    );
+    assert!(
+        generated
+            .document()
+            .service("omitted")
+            .is_some_and(|service| service.dns().is_none())
+    );
+    assert!(matches!(
+        generated.document().service("scalar").and_then(compose_lens::model::Service::dns).map(compose_lens::model::Dns::form),
+        Some(DnsForm::Scalar(value)) if value.value() == "resolver.internal"
+    ));
+    assert!(matches!(
+        generated.document().service("empty").and_then(compose_lens::model::Service::dns).map(compose_lens::model::Dns::form),
+        Some(DnsForm::List(values)) if values.is_empty()
+    ));
+    assert!(matches!(
+        generated.document().service("listed").and_then(compose_lens::model::Service::dns).map(compose_lens::model::Dns::form),
+        Some(DnsForm::List(values))
+            if values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>()
+                == ["1.1.1.1", "1.1.1.1", "2001:db8::53", "resolver.internal"]
+    ));
+    Ok(())
+}
+
+#[test]
+fn generated_dns_rejects_unresolved_or_physical_line_unsafe_values() -> Result<(), Box<dyn std::error::Error>> {
+    for invalid in ["", "${DNS_SERVER}", "line\nbreak", "line\rbreak"] {
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.set_dns(GeneratedDns::Scalar(plain(invalid)?)),
+            Err(GenerationError::InvalidDnsValue)
+        );
+    }
+    assert!(matches!(
+        GeneratedString::plain("nul\0server"),
+        Err(GenerationError::ContainsNul("string"))
+    ));
+    Ok(())
+}
+
+#[test]
+fn generates_raw_dns_search_forms_duplicates_dot_and_sensitive_values_with_parse_back()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut omitted = GeneratedService::new("omitted")?;
+    omitted.set_image(plain("example.invalid/omitted:1")?)?;
+    let mut scalar = GeneratedService::new("scalar")?;
+    scalar.set_dns_search(GeneratedDnsSearch::Scalar(plain(".")?))?;
+    let mut empty = GeneratedService::new("empty")?;
+    empty.set_dns_search(GeneratedDnsSearch::List(Vec::new()))?;
+    let mut listed = GeneratedService::new("listed")?;
+    listed.set_dns_search(GeneratedDnsSearch::List(vec![
+        plain("example.internal")?,
+        plain("example.internal")?,
+        GeneratedString::sensitive("secret.internal")?,
+        plain(".")?,
+    ]))?;
+    assert!(matches!(listed.dns_search(), Some(GeneratedDnsSearch::List(items)) if items.len() == 4));
+    assert_eq!(
+        listed.set_dns_search(GeneratedDnsSearch::List(Vec::new())),
+        Err(GenerationError::DuplicateField("dns_search"))
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(omitted)?;
+    builder.add_service(scalar)?;
+    builder.add_service(empty)?;
+    builder.add_service(listed)?;
+    let generated = builder.build(SourceId::new(690))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("secret.internal"));
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"omitted\":\n",
+            "    image: \"example.invalid/omitted:1\"\n",
+            "  \"scalar\":\n",
+            "    dns_search: \".\"\n",
+            "  \"empty\":\n",
+            "    dns_search: []\n",
+            "  \"listed\":\n",
+            "    dns_search:\n",
+            "      - \"example.internal\"\n",
+            "      - \"example.internal\"\n",
+            "      - \"secret.internal\"\n",
+            "      - \".\"\n",
+        )
+    );
+    assert!(
+        generated
+            .document()
+            .service("omitted")
+            .is_some_and(|service| service.dns_search().is_none())
+    );
+    assert!(matches!(
+        generated
+            .document()
+            .service("scalar")
+            .and_then(compose_lens::model::Service::dns_search)
+            .map(compose_lens::model::DnsSearch::form),
+        Some(DnsSearchForm::Scalar(value)) if value.value() == "."
+    ));
+    assert!(matches!(
+        generated
+            .document()
+            .service("empty")
+            .and_then(compose_lens::model::Service::dns_search)
+            .map(compose_lens::model::DnsSearch::form),
+        Some(DnsSearchForm::List(values)) if values.is_empty()
+    ));
+    assert!(matches!(
+        generated
+            .document()
+            .service("listed")
+            .and_then(compose_lens::model::Service::dns_search)
+            .map(compose_lens::model::DnsSearch::form),
+        Some(DnsSearchForm::List(values))
+            if values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>()
+                == ["example.internal", "example.internal", "secret.internal", "."]
+    ));
+    Ok(())
+}
+
+#[test]
+fn generated_dns_search_rejects_unresolved_or_physical_line_unsafe_values() -> Result<(), Box<dyn std::error::Error>> {
+    for invalid in ["", "${DNS_SEARCH}", "line\nbreak", "line\rbreak"] {
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.set_dns_search(GeneratedDnsSearch::Scalar(plain(invalid)?)),
+            Err(GenerationError::InvalidDnsSearchValue)
+        );
+        assert!(service.dns_search().is_none());
+    }
+    assert!(matches!(
+        GeneratedString::plain("nul\0domain"),
+        Err(GenerationError::ContainsNul("string"))
+    ));
+    Ok(())
+}
+
+#[test]
+fn generates_ordered_dns_options_with_explicit_empty_and_safe_parse_back() -> Result<(), Box<dyn std::error::Error>> {
+    let mut omitted = GeneratedService::new("omitted")?;
+    omitted.set_image(plain("example.invalid/omitted:1")?)?;
+    let mut empty = GeneratedService::new("empty")?;
+    empty.set_dns_options(Vec::new())?;
+    let mut configured = GeneratedService::new("configured")?;
+    configured.set_dns_options(vec![
+        plain("ndots:5")?,
+        GeneratedString::sensitive("timeout:2")?,
+        plain("attempts:3")?,
+    ])?;
+    assert_eq!(
+        configured
+            .dns_options()
+            .ok_or("configured dns_opt expected")?
+            .iter()
+            .map(GeneratedString::expose)
+            .collect::<Vec<_>>(),
+        ["ndots:5", "timeout:2", "attempts:3"]
+    );
+    assert!(!format!("{configured:?}").contains("timeout:2"));
+    assert_eq!(
+        configured.set_dns_options(Vec::new()),
+        Err(GenerationError::DuplicateField("dns_opt"))
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(omitted)?;
+    builder.add_service(empty)?;
+    builder.add_service(configured)?;
+    let generated = builder.build(SourceId::new(688))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("timeout:2"));
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"omitted\":\n",
+            "    image: \"example.invalid/omitted:1\"\n",
+            "  \"empty\":\n",
+            "    dns_opt: []\n",
+            "  \"configured\":\n",
+            "    dns_opt:\n",
+            "      - \"ndots:5\"\n",
+            "      - \"timeout:2\"\n",
+            "      - \"attempts:3\"\n",
+        )
+    );
+    let parsed = generated
+        .document()
+        .service("configured")
+        .and_then(compose_lens::model::Service::dns_options)
+        .ok_or("parse-back dns_opt expected")?;
+    assert_eq!(
+        parsed
+            .items()
+            .iter()
+            .map(|item| item.value().as_str())
+            .collect::<Vec<_>>(),
+        ["ndots:5", "timeout:2", "attempts:3"]
+    );
+    assert!(
+        generated
+            .document()
+            .service("empty")
+            .and_then(compose_lens::model::Service::dns_options)
+            .is_some_and(|options| options.items().is_empty())
+    );
+    assert!(
+        generated
+            .document()
+            .service("omitted")
+            .is_some_and(|service| service.dns_options().is_none())
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_unsafe_or_duplicate_generated_dns_options() -> Result<(), Box<dyn std::error::Error>> {
+    for invalid in ["", "$DNS_OPTION", "line\rbreak", "line\nbreak"] {
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.set_dns_options(vec![plain(invalid)?]),
+            Err(GenerationError::InvalidDnsOptionValue)
+        );
+        assert!(service.dns_options().is_none());
+    }
+    let mut duplicate = GeneratedService::new("app")?;
+    assert_eq!(
+        duplicate.set_dns_options(vec![plain("rotate")?, plain("rotate")?]),
+        Err(GenerationError::DuplicateItem("dns_opt"))
+    );
+    assert!(duplicate.dns_options().is_none());
+    assert!(matches!(
+        GeneratedString::plain("nul\0option"),
+        Err(GenerationError::ContainsNul("string"))
+    ));
+    Ok(())
+}
 
 #[test]
 fn generates_ordered_ulimits_as_quoted_single_range_and_empty_forms_with_parse_back()

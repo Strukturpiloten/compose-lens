@@ -1,0 +1,22 @@
+schema = 1
+id = "service-dns-search"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, scalar, dot, explicitly empty, ordered, and exact-duplicate raw service dns_search strings."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains or specifically rejects each raw service dns_search form; planned rows make no domain grammar, resolver, runtime, dot-semantics, or cross-provider support claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-dns-search"]

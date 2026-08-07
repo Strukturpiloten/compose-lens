@@ -1,0 +1,18 @@
+schema = 1
+id = "service-dns-model"
+suite = "typed-model"
+description = "Protects raw service dns scalar/list form fidelity, exact order and duplicates, explicit empty state, spans, and malformed-item recovery without resolver interpretation."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is provided; expression-shaped values remain authored evidence."
+
+[expectations]
+summary = "Omission, scalar/list form, explicit empty list, exact strings, duplicates, order, spans, valid siblings, and structured malformed-form recovery remain observable."

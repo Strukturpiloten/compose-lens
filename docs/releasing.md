@@ -54,6 +54,16 @@ For later versions, update only the workspace package version, changelog, and ma
 `docs/releases/<version>.md` release notes in a reviewed pull request. After CI succeeds, run
 the release workflow from the default branch and approve the `release` environment deployment.
 
+### Release-writing style
+
+- Keep the changelog terse and make release notes a short list of user-visible feature families.
+- Put detailed model contracts, merge rules, fixtures, and evidence in their canonical documents;
+  link to them instead of repeating them in release material.
+- State compatibility and evidence boundaries once. Avoid one section or paragraph per field when
+  several fields share the same behavior.
+- If release notes read like a technical chapter, move the detail into the relevant topic document
+  and leave a short summary.
+
 Do not create the tag or GitHub release manually. If a run fails, inspect its draft release and
 rerun from the same commit; the workflow verifies an existing tag, replaces the workflow-owned
 draft and its generated assets, and skips a crate version that is already present on crates.io.

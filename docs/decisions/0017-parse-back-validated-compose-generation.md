@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-04
-- Additive amendments: 2026-08-05, 2026-08-06
+- Additive amendments: 2026-08-05, 2026-08-06, 2026-08-07
 
 ## Context
 
@@ -50,6 +50,15 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
     be safe resolved single-line values. Generation quotes and parse-back validates them without
     inspecting host devices, parsing colon triples, validating CDI or permissions, or claiming
     runtime access.
+13. Generated DNS fields preserve caller-selected form, ordering, and explicit empty state while
+    accepting only resolved physical-line-safe values.
+14. Generated `expose` accepts unique documented decimal port/range forms and does not infer a
+    protocol or runtime publication.
+15. Generated `annotations` accepts unique resolved names with explicit string values.
+16. Generated `security_opt` preserves one ordered raw sequence, including duplicates, without
+    profile, SELinux, path, filesystem, provider, runtime, or cross-format normalization.
+17. Every successful generated document is quoted where required and parsed back through the
+    native model.
 
 ## Consequences
 

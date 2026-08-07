@@ -22,9 +22,9 @@ provenance.
 
 | Coverage | Service fields |
 | --- | --- |
-| Document model and project view | `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Document model and project view | `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Document model only | `build`, `deploy` |
-| Preserved, not typed | 56 exact current service keys; see [Exact service gaps](roadmap.md#exact-service-gaps). |
+| Preserved, not typed | 50 exact current service keys; see [Exact service gaps](roadmap.md#exact-service-gaps). |
 
 The preserved row follows the current Docker documentation grouping. Provider-specific additions
 remain preserved even when they are not part of the compose-spec repository.
@@ -53,6 +53,9 @@ Each effective entry keeps mapping/list syntax and complete merge provenance. Ke
 remain distinguishable while exposing their documented empty-string value. The generated-document
 API emits ordered quoted mappings and rejects duplicate names.
 
+Service annotations cover authored mapping/list syntax, keyed effective merging, and safe generated
+maps. Key-only ambiguity remains diagnosed, and provider/runtime behavior is not claimed.
+
 Explicit `container_name` values now travel through the document model, effective project view,
 and generated-document boundary. Generation enforces the documented portable Compose name grammar;
 authored parsing retains the scalar and leaves provider/runtime acceptance to compatibility policy.
@@ -80,6 +83,18 @@ replacement, reset, and override behavior is retained and its Compose-prose/Comp
 is documented. Generated output validates only safe resolved strings and parse-back fidelity. Six
 provider-config rows remain planned; no host-device, CDI, permissions, GPU, privilege, runtime
 access, or cross-format behavior is claimed.
+
+Service `dns`, `dns_opt`, and `dns_search` cover authored, effective-project, and generated
+boundaries while preserving their respective scalar/list or sequence merge rules. Raw values,
+duplicates, provenance, and reset/override state remain observable without resolver interpretation.
+
+Service `expose` covers ordered string/number scalars with kind-aware uniqueness and safe generated
+documented forms. Unsupported or malformed forms remain raw diagnostics.
+
+Service `security_opt` covers raw append merging and generated output. Exact AppArmor,
+no-new-privileges, seccomp, SELinux-label, Mask, and Unmask shapes are exposed as independent
+diagnostic candidates; near misses and conflicts are not selected. Provider, filesystem, security
+enforcement, and cross-format behavior remain outside this coverage.
 
 Service-level `restart` now travels through the same three boundaries. Authored input retains
 retry-count spelling and interpolation; generated input uses a typed policy that cannot emit an

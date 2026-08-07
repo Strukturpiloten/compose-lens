@@ -4,9 +4,10 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{MergedScalar, MergedValue, merge_project};
 use compose_lens::model::{
-    BooleanValue, ComposeDocument, Located, MountType, SelinuxRelabel, VolumeMount, VolumeSyntax,
+    BooleanValue, ComposeDocument, Located, MountType, SecurityOptionKind, SelinuxRelabel, VolumeMount, VolumeSyntax,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
+use compose_lens::project::{ProjectSecurityOptionItem, ProjectService, ProjectValue, build_project_view};
 use compose_lens::render::render_canonical;
 use compose_lens::resolution::{ReferenceStatus, validate_references};
 use compose_lens::source::SourceId;
@@ -21,6 +22,277 @@ const ADMIN_PASSWORD: &str = "fixture-admin-password";
 const AWESOME_COMPOSE: &str =
     include_str!("../fixtures/real-world/docker-awesome-compose-nginx-golang-mysql/compose.yaml");
 const AWESOME_FIXTURE_DIRECTORY: &str = "fixtures/real-world/docker-awesome-compose-nginx-golang-mysql";
+const TYPO3_SECURITY_OVERRIDE: &str = concat!(
+    "services:\n",
+    "  nginx:\n    security_opt:\n",
+    "      - \"no-new-privileges:true\"\n",
+    "      - \"apparmor=fixture-profile\"\n",
+    "      - \"seccomp=/workspace/seccomp.json\"\n",
+    "      - \"seccomp=/workspace/seccomp.json\"\n",
+    "      - \"label:disable\"\n",
+    "      - \"label:disable\"\n",
+    "      - \"label=disable\"\n",
+    "      - \"label:filetype:container_file_t\"\n",
+    "      - \"label:filetype:container_file_t\"\n",
+    "      - \"label:filetype=container_file_t\"\n",
+    "      - \"label:level:s0:c1,c2\"\n",
+    "      - \"label:level:s0:c1,c2\"\n",
+    "      - \"label:level=s0:c1,c2\"\n",
+    "      - \"label:nested\"\n",
+    "      - \"label:nested\"\n",
+    "      - \"label=nested\"\n",
+    "      - \"label:type:container_t\"\n",
+    "      - \"label:type:container_t\"\n",
+    "      - \"label:type=container_t\"\n",
+    "      - \"mask=/proc/acpi:/proc/kcore\"\n",
+    "      - \"mask=/proc/acpi:/proc/kcore\"\n",
+    "      - \"mask=relative:opaque=value\"\n",
+    "      - \"mask:/proc/acpi\"\n",
+    "      - \"unmask=ALL\"\n",
+    "      - \"unmask=ALL\"\n",
+    "      - \"unmask=/proc/acpi:/sys/firmware\"\n",
+    "      - \"unmask=/proc/*\"\n",
+    "      - \"unmask=all\"\n",
+);
+
+#[test]
+fn appends_raw_security_options_to_the_licensed_typo3_project_without_runtime_interpretation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(410),
+            DocumentOrigin::new("compose.yaml", FIXTURE_DIRECTORY),
+            TYPO3_COMPOSE,
+        ),
+        DocumentInput::new(
+            SourceId::new(411),
+            DocumentOrigin::new("compose.security.yaml", FIXTURE_DIRECTORY),
+            TYPO3_SECURITY_OVERRIDE,
+        ),
+    ])?;
+    let interpolation = loaded.interpolate(&MapEnvironment::new());
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let options = result
+        .view()
+        .and_then(|view| view.service("nginx"))
+        .and_then(ProjectService::security_options)
+        .ok_or("nginx security options expected")?;
+    assert_eq!(
+        options
+            .value()
+            .iter()
+            .map(|item| item.value().value())
+            .collect::<Vec<_>>(),
+        [
+            "no-new-privileges:true",
+            "apparmor=fixture-profile",
+            "seccomp=/workspace/seccomp.json",
+            "seccomp=/workspace/seccomp.json",
+            "label:disable",
+            "label:disable",
+            "label=disable",
+            "label:filetype:container_file_t",
+            "label:filetype:container_file_t",
+            "label:filetype=container_file_t",
+            "label:level:s0:c1,c2",
+            "label:level:s0:c1,c2",
+            "label:level=s0:c1,c2",
+            "label:nested",
+            "label:nested",
+            "label=nested",
+            "label:type:container_t",
+            "label:type:container_t",
+            "label:type=container_t",
+            "mask=/proc/acpi:/proc/kcore",
+            "mask=/proc/acpi:/proc/kcore",
+            "mask=relative:opaque=value",
+            "mask:/proc/acpi",
+            "unmask=ALL",
+            "unmask=ALL",
+            "unmask=/proc/acpi:/sys/firmware",
+            "unmask=/proc/*",
+            "unmask=all",
+        ]
+    );
+    assert!(matches!(
+        options.value()[0].value().kind(),
+        SecurityOptionKind::NoNewPrivileges { enabled: true }
+    ));
+    assert!(matches!(
+        options.value()[2].value().kind(),
+        SecurityOptionKind::Seccomp { profile } if profile == "/workspace/seccomp.json"
+    ));
+    assert!(matches!(
+        options.value()[3].value().kind(),
+        SecurityOptionKind::Seccomp { profile } if profile == "/workspace/seccomp.json"
+    ));
+    for index in [4, 5] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelDisable { enabled: true }
+        ));
+    }
+    assert!(matches!(
+        options.value()[6].value().kind(),
+        SecurityOptionKind::SecurityLabelDisableNearMiss
+    ));
+    for index in [7, 8] {
+        assert!(matches!(
+            options.value()[index].value().kind(),
+            SecurityOptionKind::SecurityLabelFileType { file_type }
+                if file_type == "container_file_t"
+        ));
+    }
+    assert!(matches!(
+        options.value()[9].value().kind(),
+        SecurityOptionKind::SecurityLabelFileTypeNearMiss
+    ));
+    assert_real_world_security_label_level(options.value());
+    assert_real_world_mask_candidates(options.value());
+    assert_real_world_unmask_candidates(options.value());
+    assert_real_world_security_label_conflicts(&result);
+    Ok(())
+}
+
+fn assert_real_world_mask_candidates(options: &[ProjectValue<ProjectSecurityOptionItem>]) {
+    for index in [19, 20] {
+        assert!(matches!(
+            options[index].value().kind(),
+            SecurityOptionKind::Mask { paths } if paths == "/proc/acpi:/proc/kcore"
+        ));
+    }
+    assert!(matches!(
+        options[21].value().kind(),
+        SecurityOptionKind::Mask { paths } if paths == "relative:opaque=value"
+    ));
+    assert!(matches!(options[22].value().kind(), SecurityOptionKind::MaskNearMiss));
+}
+
+fn assert_real_world_unmask_candidates(options: &[ProjectValue<ProjectSecurityOptionItem>]) {
+    for index in [23, 24] {
+        assert!(matches!(
+            options[index].value().kind(),
+            SecurityOptionKind::Unmask { paths } if paths == "ALL"
+        ));
+    }
+    for (index, expected) in [(25, "/proc/acpi:/sys/firmware"), (26, "/proc/*")] {
+        assert!(matches!(
+            options[index].value().kind(),
+            SecurityOptionKind::Unmask { paths } if paths == expected
+        ));
+    }
+    assert!(matches!(options[27].value().kind(), SecurityOptionKind::UnmaskNearMiss));
+}
+
+fn assert_real_world_security_label_level(options: &[ProjectValue<ProjectSecurityOptionItem>]) {
+    for index in [10, 11] {
+        assert!(matches!(
+            options[index].value().kind(),
+            SecurityOptionKind::SecurityLabelLevel { level } if level == "s0:c1,c2"
+        ));
+    }
+    assert!(matches!(
+        options[12].value().kind(),
+        SecurityOptionKind::SecurityLabelLevelNearMiss
+    ));
+    for index in [13, 14] {
+        assert!(matches!(
+            options[index].value().kind(),
+            SecurityOptionKind::SecurityLabelNested { enabled: true }
+        ));
+    }
+    assert!(matches!(
+        options[15].value().kind(),
+        SecurityOptionKind::SecurityLabelNestedNearMiss
+    ));
+    for index in [16, 17] {
+        assert!(matches!(
+            options[index].value().kind(),
+            SecurityOptionKind::SecurityLabelType { label_type } if label_type == "container_t"
+        ));
+    }
+    assert!(matches!(
+        options[18].value().kind(),
+        SecurityOptionKind::SecurityLabelTypeNearMiss
+    ));
+}
+
+fn assert_real_world_security_label_conflicts(result: &compose_lens::project::ProjectViewResult) {
+    use compose_lens::model::{
+        SECURITY_OPT_MASK_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT, SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT,
+        SECURITY_OPT_UNMASK_NEAR_MISS,
+    };
+
+    for code in [
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT,
+    ] {
+        assert_eq!(
+            result
+                .diagnostics()
+                .iter()
+                .filter(|diagnostic| diagnostic.code() == code)
+                .count(),
+            1
+        );
+    }
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_MASK_NEAR_MISS)
+            .count(),
+        1
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_UNMASK_NEAR_MISS)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn applies_an_annotation_override_to_the_licensed_typo3_project_without_reparsing_generated_yaml()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(408),
+            DocumentOrigin::new("compose.yaml", FIXTURE_DIRECTORY),
+            TYPO3_COMPOSE,
+        ),
+        DocumentInput::new(
+            SourceId::new(409),
+            DocumentOrigin::new("compose.annotations.yaml", FIXTURE_DIRECTORY),
+            concat!(
+                "services:\n",
+                "  nginx:\n    annotations:\n",
+                "      io.example.source: \"licensed-regression\"\n",
+                "      io.example.stage: \"${ANNOTATION_STAGE:-test}\"\n",
+            ),
+        ),
+    ])?;
+    let interpolation = loaded.interpolate(&MapEnvironment::new());
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let annotations = result
+        .view()
+        .and_then(|view| view.service("nginx"))
+        .and_then(ProjectService::annotations)
+        .ok_or("nginx annotations expected")?;
+    assert_eq!(annotations.value().entries().len(), 2);
+    assert!(annotations.value().get("io.example.source").is_some());
+    assert!(annotations.value().get("io.example.stage").is_some());
+    Ok(())
+}
 
 #[test]
 fn preserves_and_processes_docker_awesome_compose() -> Result<(), Box<dyn std::error::Error>> {

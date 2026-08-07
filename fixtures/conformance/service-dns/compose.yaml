@@ -1,0 +1,13 @@
+services:
+  omitted:
+    image: example.invalid/composelens/dns-omitted:1
+  scalar:
+    dns: resolver.internal
+  empty-list:
+    dns: []
+  ordered-list:
+    dns:
+      - 1.1.1.1
+      - 1.1.1.1
+      - resolver.internal
+      - "2001:db8::53"

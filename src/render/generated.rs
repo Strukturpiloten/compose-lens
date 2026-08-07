@@ -5,8 +5,9 @@ use std::{collections::BTreeSet, error::Error, fmt};
 use crate::{
     model::{
         ComposeDocument, MemLimitUnit, ShmSizeUnit, StopGracePeriod, valid_generated_device_string,
-        valid_generated_mem_amount, valid_generated_shm_amount, valid_generated_tmpfs_item, valid_hostname,
-        valid_positive_pids_decimal, valid_pull_policy_duration, valid_ulimit_name,
+        valid_generated_expose_item, valid_generated_mem_amount, valid_generated_shm_amount,
+        valid_generated_tmpfs_item, valid_hostname, valid_positive_pids_decimal, valid_pull_policy_duration,
+        valid_ulimit_name,
     },
     source::SourceId,
     syntax::SyntaxDocument,
@@ -38,6 +39,20 @@ pub enum GenerationError {
     InvalidShmSize,
     /// A service memory-limit amount is not a canonical positive ASCII decimal.
     InvalidMemLimit,
+    /// A generated DNS server is empty, multiline, NUL-bearing, or expression-shaped.
+    InvalidDnsValue,
+    /// A generated DNS resolver option is empty, multiline, NUL-bearing, or expression-shaped.
+    InvalidDnsOptionValue,
+    /// A generated DNS search domain is empty, multiline, NUL-bearing, or expression-shaped.
+    InvalidDnsSearchValue,
+    /// A generated exposed-port item is unsafe or outside the documented decimal grammar.
+    InvalidExposeValue,
+    /// A generated security option is empty, deferred, multiline, or NUL-bearing.
+    InvalidSecurityOptionValue,
+    /// A generated annotation name is empty, deferred, multiline, or NUL-bearing.
+    InvalidAnnotationName,
+    /// A generated annotation value is deferred, multiline, or NUL-bearing.
+    InvalidAnnotationValue,
     /// A service-level temporary-filesystem item is deferred, malformed, or provider-dependent.
     InvalidTmpfsItem,
     /// A generated short device or long-device member is empty where required, multiline, or deferred.
@@ -106,6 +121,25 @@ impl fmt::Display for GenerationError {
             Self::InvalidMemLimit => formatter.write_str(
                 "generated memory limit must use a canonical positive ASCII-integer amount and an explicit documented lowercase unit",
             ),
+            Self::InvalidDnsValue => {
+                formatter.write_str("generated DNS server must be a non-empty resolved single-line string")
+            }
+            Self::InvalidDnsOptionValue => {
+                formatter.write_str("generated DNS option must be a non-empty resolved single-line string")
+            }
+            Self::InvalidDnsSearchValue => {
+                formatter.write_str("generated DNS search domain must be a non-empty resolved single-line string")
+            }
+            Self::InvalidExposeValue => formatter.write_str(
+                "generated expose item must be a resolved decimal port or range with an optional `tcp` or `udp` suffix",
+            ),
+            Self::InvalidSecurityOptionValue => {
+                formatter.write_str("generated security option must be a non-empty resolved single-line string")
+            }
+            Self::InvalidAnnotationName => formatter
+                .write_str("generated annotation name must be a non-empty resolved single-line string"),
+            Self::InvalidAnnotationValue => formatter
+                .write_str("generated annotation value must be a resolved single-line string"),
             Self::InvalidTmpfsItem => formatter.write_str(
                 "generated tmpfs item must be a non-empty path optionally followed by a colon and non-empty comma-separated raw options",
             ),
@@ -314,6 +348,26 @@ pub enum GeneratedMemLimit {
 #[non_exhaustive]
 pub enum GeneratedTmpfs {
     /// Emit one quoted scalar item.
+    Scalar(GeneratedString),
+    /// Emit one quoted ordered list, including an explicit empty list.
+    List(Vec<GeneratedString>),
+}
+
+/// The exact service `dns` form selected for generated Compose output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedDns {
+    /// Emit one quoted raw DNS server string.
+    Scalar(GeneratedString),
+    /// Emit one quoted ordered list, including an explicit empty list.
+    List(Vec<GeneratedString>),
+}
+
+/// The exact service `dns_search` form selected for generated Compose output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedDnsSearch {
+    /// Emit one quoted raw DNS search-domain string.
     Scalar(GeneratedString),
     /// Emit one quoted ordered list, including an explicit empty list.
     List(Vec<GeneratedString>),
@@ -631,6 +685,44 @@ pub enum GeneratedEnvironmentFile {
 pub struct GeneratedLabel {
     name: String,
     value: GeneratedString,
+}
+
+/// One generated service annotation with an explicit string value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedAnnotation {
+    name: String,
+    value: GeneratedString,
+}
+
+impl GeneratedAnnotation {
+    /// Creates one resolved mapping-form annotation.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty/deferred/multiline/NUL-bearing names and deferred/multiline/NUL-bearing
+    /// values. Empty explicit values remain representable.
+    pub fn new(name: impl Into<String>, value: GeneratedString) -> Result<Self, GenerationError> {
+        let name = name.into();
+        if name.is_empty() || name.contains(['$', '\r', '\n', '\0']) {
+            return Err(GenerationError::InvalidAnnotationName);
+        }
+        if value.expose().contains(['$', '\r', '\n', '\0']) {
+            return Err(GenerationError::InvalidAnnotationValue);
+        }
+        Ok(Self { name, value })
+    }
+
+    /// Returns the exact resolved annotation name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the explicit annotation value through its sensitivity boundary.
+    #[must_use]
+    pub const fn value(&self) -> &GeneratedString {
+        &self.value
+    }
 }
 
 impl GeneratedLabel {
@@ -1108,12 +1200,18 @@ pub struct GeneratedService {
     environment_files: Vec<GeneratedEnvironmentFile>,
     environment: Vec<GeneratedEnvironment>,
     labels: Vec<GeneratedLabel>,
+    annotations: Option<Vec<GeneratedAnnotation>>,
     user: Option<GeneratedString>,
     userns_mode: Option<GeneratedString>,
     group_add: Vec<GeneratedString>,
     cap_add: Option<Vec<GeneratedString>>,
     cap_drop: Option<Vec<GeneratedString>>,
     devices: Option<Vec<GeneratedDevice>>,
+    dns: Option<GeneratedDns>,
+    dns_options: Option<Vec<GeneratedString>>,
+    dns_search: Option<GeneratedDnsSearch>,
+    expose: Option<Vec<GeneratedString>>,
+    security_options: Option<Vec<GeneratedString>>,
     working_dir: Option<GeneratedString>,
     read_only: Option<bool>,
     pids_limit: Option<GeneratedPidsLimit>,
@@ -1150,12 +1248,18 @@ impl GeneratedService {
             environment_files: Vec::new(),
             environment: Vec::new(),
             labels: Vec::new(),
+            annotations: None,
             user: None,
             userns_mode: None,
             group_add: Vec::new(),
             cap_add: None,
             cap_drop: None,
             devices: None,
+            dns: None,
+            dns_options: None,
+            dns_search: None,
+            expose: None,
+            security_options: None,
             working_dir: None,
             read_only: None,
             pids_limit: None,
@@ -1272,6 +1376,41 @@ impl GeneratedService {
         }
         self.labels.push(label);
         Ok(())
+    }
+
+    /// Sets the complete ordered mapping-form annotation collection exactly once.
+    ///
+    /// Omission remains distinct from an explicit empty mapping. Names must be unique and all
+    /// entries carry explicit resolved string values; key-only and null forms cannot enter this API.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateName`] for duplicate names,
+    /// [`GenerationError::InvalidAnnotationName`] or [`GenerationError::InvalidAnnotationValue`]
+    /// for unsafe values, or [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_annotations(&mut self, annotations: Vec<GeneratedAnnotation>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for annotation in &annotations {
+            if annotation.name.is_empty() || annotation.name.contains(['$', '\r', '\n', '\0']) {
+                return Err(GenerationError::InvalidAnnotationName);
+            }
+            if annotation.value.expose().contains(['$', '\r', '\n', '\0']) {
+                return Err(GenerationError::InvalidAnnotationValue);
+            }
+            if !seen.insert(annotation.name.as_str()) {
+                return Err(GenerationError::DuplicateName {
+                    kind: "service annotation",
+                    name: annotation.name.clone(),
+                });
+            }
+        }
+        set_once(&mut self.annotations, annotations, "annotations")
+    }
+
+    /// Returns configured annotations, distinguishing omission from an explicit empty mapping.
+    #[must_use]
+    pub fn annotations(&self) -> Option<&[GeneratedAnnotation]> {
+        self.annotations.as_deref()
     }
 
     /// Sets the combined Compose `user[:group]` value exactly once.
@@ -1399,6 +1538,163 @@ impl GeneratedService {
             }
         }
         set_once(&mut self.devices, devices, "devices")
+    }
+
+    /// Sets the complete scalar or ordered-list service `dns` form exactly once.
+    ///
+    /// An empty list remains explicit. Values are retained as raw server strings: this API does
+    /// not require an IP address, parse a resolver grammar, or perform network access.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, multiline, NUL-bearing, or dollar-bearing values and duplicate field
+    /// configuration. NUL bytes are normally rejected while constructing [`GeneratedString`].
+    pub fn set_dns(&mut self, dns: GeneratedDns) -> Result<(), GenerationError> {
+        let values = match &dns {
+            GeneratedDns::Scalar(value) => std::slice::from_ref(value),
+            GeneratedDns::List(values) => values.as_slice(),
+        };
+        for value in values {
+            if value.expose().is_empty()
+                || value.expose().contains('$')
+                || value.expose().contains('\r')
+                || value.expose().contains('\n')
+            {
+                return Err(GenerationError::InvalidDnsValue);
+            }
+        }
+        set_once(&mut self.dns, dns, "dns")
+    }
+
+    /// Returns the configured scalar or ordered-list DNS form.
+    #[must_use]
+    pub const fn dns(&self) -> Option<&GeneratedDns> {
+        self.dns.as_ref()
+    }
+
+    /// Sets the complete ordered service `dns_opt` sequence exactly once.
+    ///
+    /// An empty vector remains explicit while leaving this setter unused omits the field. Values
+    /// are treated as raw resolver-option strings; no option grammar or runtime behavior is
+    /// inferred.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, multiline, NUL-bearing, dollar-bearing, or exact-duplicate values and
+    /// duplicate field configuration. NUL bytes are normally rejected while constructing
+    /// [`GeneratedString`].
+    pub fn set_dns_options(&mut self, options: Vec<GeneratedString>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for option in &options {
+            if option.expose().is_empty()
+                || option.expose().contains('$')
+                || option.expose().contains('\r')
+                || option.expose().contains('\n')
+                || option.expose().contains('\0')
+            {
+                return Err(GenerationError::InvalidDnsOptionValue);
+            }
+            if !seen.insert(option.expose()) {
+                return Err(GenerationError::DuplicateItem("dns_opt"));
+            }
+        }
+        set_once(&mut self.dns_options, options, "dns_opt")
+    }
+
+    /// Returns configured DNS resolver options, distinguishing omission from an empty sequence.
+    #[must_use]
+    pub fn dns_options(&self) -> Option<&[GeneratedString]> {
+        self.dns_options.as_deref()
+    }
+
+    /// Sets the complete scalar or ordered-list service `dns_search` form exactly once.
+    ///
+    /// An empty list remains explicit, exact duplicates and `.` are retained, and no domain,
+    /// resolver, provider, or runtime validation is performed.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, multiline, NUL-bearing, or dollar-bearing values and duplicate field
+    /// configuration. NUL bytes are normally rejected while constructing [`GeneratedString`].
+    pub fn set_dns_search(&mut self, search: GeneratedDnsSearch) -> Result<(), GenerationError> {
+        let values = match &search {
+            GeneratedDnsSearch::Scalar(value) => std::slice::from_ref(value),
+            GeneratedDnsSearch::List(values) => values.as_slice(),
+        };
+        for value in values {
+            if value.expose().is_empty()
+                || value.expose().contains('$')
+                || value.expose().contains('\r')
+                || value.expose().contains('\n')
+                || value.expose().contains('\0')
+            {
+                return Err(GenerationError::InvalidDnsSearchValue);
+            }
+        }
+        set_once(&mut self.dns_search, search, "dns_search")
+    }
+
+    /// Returns the configured scalar or ordered-list DNS search-domain form.
+    #[must_use]
+    pub const fn dns_search(&self) -> Option<&GeneratedDnsSearch> {
+        self.dns_search.as_ref()
+    }
+
+    /// Sets the complete ordered service `expose` sequence exactly once.
+    ///
+    /// An empty vector remains explicit. Every output item is quoted, so number and string YAML
+    /// identities are never silently equated. Omitted protocol and explicit `/tcp` remain distinct.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, deferred, multiline, NUL-bearing, malformed, SCTP, unknown-protocol, and
+    /// exact-duplicate values, or duplicate field configuration.
+    pub fn set_expose(&mut self, expose: Vec<GeneratedString>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for item in &expose {
+            if !valid_generated_expose_item(item.expose()) {
+                return Err(GenerationError::InvalidExposeValue);
+            }
+            if !seen.insert(item.expose()) {
+                return Err(GenerationError::DuplicateItem("expose"));
+            }
+        }
+        set_once(&mut self.expose, expose, "expose")
+    }
+
+    /// Returns the configured exposed-port sequence, including an explicit empty sequence.
+    #[must_use]
+    pub fn expose(&self) -> Option<&[GeneratedString]> {
+        self.expose.as_deref()
+    }
+
+    /// Sets the complete ordered raw service `security_opt` sequence exactly once.
+    ///
+    /// An empty vector remains explicit, exact duplicates retain their order, and no option,
+    /// profile, provider, or target-runtime normalization is performed.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, deferred, multiline, or NUL-bearing values and duplicate field
+    /// configuration. NUL bytes are normally rejected while constructing [`GeneratedString`].
+    pub fn set_security_options(&mut self, options: Vec<GeneratedString>) -> Result<(), GenerationError> {
+        for option in &options {
+            if option.expose().is_empty()
+                || option.expose().contains('$')
+                || option.expose().contains('\r')
+                || option.expose().contains('\n')
+                || option.expose().contains('\0')
+            {
+                return Err(GenerationError::InvalidSecurityOptionValue);
+            }
+        }
+        set_once(&mut self.security_options, options, "security_opt")
+    }
+
+    /// Returns configured raw security options, distinguishing omission from an empty sequence.
+    #[must_use]
+    pub fn security_options(&self) -> Option<&[GeneratedString]> {
+        self.security_options.as_deref()
     }
 
     /// Returns configured devices, distinguishing omission from an explicit empty sequence.
@@ -1663,6 +1959,10 @@ impl GeneratedService {
                 .filter_map(GeneratedEnvironment::value)
                 .any(GeneratedString::is_sensitive)
             || self.labels.iter().any(|label| label.value.is_sensitive())
+            || self
+                .annotations
+                .as_ref()
+                .is_some_and(|items| items.iter().any(|annotation| annotation.value.is_sensitive()))
             || matches!(
                 self.pull_policy.as_ref(),
                 Some(GeneratedPullPolicy::Every(duration)) if duration.is_sensitive()
@@ -1680,6 +1980,28 @@ impl GeneratedService {
                 Some(GeneratedTmpfs::List(items)) => items.iter().any(GeneratedString::is_sensitive),
                 None => false,
             }
+            || match self.dns.as_ref() {
+                Some(GeneratedDns::Scalar(value)) => value.is_sensitive(),
+                Some(GeneratedDns::List(values)) => values.iter().any(GeneratedString::is_sensitive),
+                None => false,
+            }
+            || self
+                .dns_options
+                .as_ref()
+                .is_some_and(|items| items.iter().any(GeneratedString::is_sensitive))
+            || match self.dns_search.as_ref() {
+                Some(GeneratedDnsSearch::Scalar(value)) => value.is_sensitive(),
+                Some(GeneratedDnsSearch::List(values)) => values.iter().any(GeneratedString::is_sensitive),
+                None => false,
+            }
+            || self
+                .expose
+                .as_ref()
+                .is_some_and(|items| items.iter().any(GeneratedString::is_sensitive))
+            || self
+                .security_options
+                .as_ref()
+                .is_some_and(|items| items.iter().any(GeneratedString::is_sensitive))
             || match self.sysctls.as_ref() {
                 Some(GeneratedSysctls::Map(entries)) => entries.iter().any(|entry| entry.value.is_sensitive()),
                 Some(GeneratedSysctls::List(items)) => items.iter().any(GeneratedString::is_sensitive),
@@ -1883,6 +2205,9 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     render_environment_files(output, &service.environment_files);
     render_environment(output, &service.environment);
     render_labels(output, &service.labels);
+    if let Some(annotations) = &service.annotations {
+        render_annotations(output, annotations);
+    }
     render_optional_string(output, "user", service.user.as_ref());
     render_optional_string(output, "userns_mode", service.userns_mode.as_ref());
     render_string_sequence(output, "group_add", &service.group_add);
@@ -1908,6 +2233,21 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     }
     if let Some(devices) = &service.devices {
         render_devices(output, devices);
+    }
+    if let Some(dns) = &service.dns {
+        render_dns(output, dns);
+    }
+    if let Some(options) = &service.dns_options {
+        render_configured_string_sequence(output, "dns_opt", options);
+    }
+    if let Some(search) = &service.dns_search {
+        render_dns_search(output, search);
+    }
+    if let Some(expose) = &service.expose {
+        render_configured_string_sequence(output, "expose", expose);
+    }
+    if let Some(options) = &service.security_options {
+        render_configured_string_sequence(output, "security_opt", options);
     }
     if let Some(tmpfs) = &service.tmpfs {
         render_tmpfs(output, tmpfs);
@@ -1986,6 +2326,20 @@ fn render_devices(output: &mut String, devices: &[GeneratedDevice]) {
                 }
             }
         }
+    }
+}
+
+fn render_dns(output: &mut String, dns: &GeneratedDns) {
+    match dns {
+        GeneratedDns::Scalar(value) => render_optional_string(output, "dns", Some(value)),
+        GeneratedDns::List(values) => render_configured_string_sequence(output, "dns", values),
+    }
+}
+
+fn render_dns_search(output: &mut String, search: &GeneratedDnsSearch) {
+    match search {
+        GeneratedDnsSearch::Scalar(value) => render_optional_string(output, "dns_search", Some(value)),
+        GeneratedDnsSearch::List(values) => render_configured_string_sequence(output, "dns_search", values),
     }
 }
 
@@ -2167,6 +2521,21 @@ fn render_labels(output: &mut String, labels: &[GeneratedLabel]) {
         write_quoted(output, &label.name);
         output.push_str(": ");
         write_quoted(output, label.value.expose());
+        output.push('\n');
+    }
+}
+
+fn render_annotations(output: &mut String, annotations: &[GeneratedAnnotation]) {
+    if annotations.is_empty() {
+        output.push_str("    annotations: {}\n");
+        return;
+    }
+    output.push_str("    annotations:\n");
+    for annotation in annotations {
+        output.push_str("      ");
+        write_quoted(output, &annotation.name);
+        output.push_str(": ");
+        write_quoted(output, annotation.value.expose());
         output.push('\n');
     }
 }

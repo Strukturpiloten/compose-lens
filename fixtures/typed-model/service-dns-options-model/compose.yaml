@@ -1,0 +1,20 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty:
+    dns_opt: []
+  exact:
+    dns_opt:
+      - ndots:5
+      - timeout:2
+      - ndots:5
+      - "${DNS_OPTION:-attempts:3}"
+  malformed-items:
+    image: example.invalid/recovery:1
+    dns_opt: [valid-before, true, 3, null, {name: rotate}, [debug], valid-after]
+  scalar:
+    dns_opt: rotate
+  mapping:
+    dns_opt: {rotate: true}
+  null-value:
+    dns_opt:

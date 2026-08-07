@@ -10,10 +10,16 @@ use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use compose_lens::validation::ImplementationVersion;
+use compose_lens::{
+    model::{ComposeDocument, SECURITY_OPT_UNMASK_NEAR_MISS, SecurityOptionKind},
+    source::SourceId,
+    syntax::SyntaxDocument,
+};
 use sha2::{Digest, Sha256};
 use toml::{Table, Value};
 
 const MATRIX_TEXT: &str = include_str!("../conformance/provider-config-matrix.toml");
+const SECURITY_OPTIONS_FIXTURE: &str = include_str!("../fixtures/conformance/service-security-options/compose.yaml");
 
 #[derive(Debug)]
 struct Matrix {
@@ -97,6 +103,45 @@ fn provider_config_matrix_is_exact_complete_and_reproducible() -> Result<(), Str
         "observed" => run.record.is_some(),
         _ => false,
     }));
+    Ok(())
+}
+
+#[test]
+fn security_options_probe_retains_exact_unmask_candidates_and_near_misses() -> Result<(), Box<dyn Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(739), SECURITY_OPTIONS_FIXTURE)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let options = parsed
+        .document()
+        .and_then(|document| document.service("unmask"))
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("unmask conformance service expected")?;
+
+    assert_eq!(options.items().len(), 22);
+    for (index, expected) in [
+        (0, "ALL"),
+        (1, "ALL"),
+        (2, "/proc/acpi"),
+        (3, "/proc/acpi:/sys/firmware"),
+        (4, "/proc/*"),
+    ] {
+        assert!(matches!(
+            options.items()[index].kind(),
+            SecurityOptionKind::Unmask { paths } if paths == expected
+        ));
+    }
+    assert!(
+        options.items()[5..]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::UnmaskNearMiss))
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_UNMASK_NEAR_MISS)
+            .count(),
+        17
+    );
     Ok(())
 }
 

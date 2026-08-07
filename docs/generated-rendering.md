@@ -25,12 +25,15 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - ordered environment-file short and long declarations with optional `required` and `format: raw`;
 - ordered literal and host-resolved environment entries;
 - ordered service metadata labels with explicit, potentially empty string values;
+- an optional complete ordered service annotation mapping, including an explicit empty map and
+  unique resolved non-empty names with explicit resolved string values;
 - combined `user[:group]`, user namespace, supplementary groups, working directory, and explicit
   read-only-root state;
 - independent optional complete ordered `cap_add` and `cap_drop` vectors, including explicitly
   configured empty vectors;
 - an optional complete ordered mixed short/long service `devices` vector, including explicit empty
   state, raw CDI-like strings, exact duplicates, and long source/target/permissions;
+- raw service DNS scalar/list form, including explicit empty lists and exact duplicates;
 - unlimited or positive integral service PID limits;
 - quoted positive canonical service shared-memory sizes with explicit documented lowercase units;
 - quoted positive canonical service memory limits with explicit documented lowercase units;
@@ -49,6 +52,11 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 
 Generated collections retain insertion order and reject duplicate names where Compose mapping
 syntax would otherwise overwrite intent. Singleton service fields reject a second assignment.
+
+`GeneratedService::set_annotations` distinguishes omission from an explicit empty map and accepts
+only unique resolved names with explicit string values. Output is quoted, sensitivity propagates,
+and the native annotation model must parse it back successfully.
+
 Strings are always double-quoted by the private renderer, so YAML scalar inference cannot change
 their type.
 
@@ -114,6 +122,17 @@ assignments are documented Compose options; other well-shaped raw assignments or
 exact so a caller can retain target-only evidence. The renderer quotes every item and parse-back
 recovers its exact form, spelling, order, and duplicates. Leaving the setter unused omits `tmpfs`;
 generation neither selects mount defaults nor conflates this field with volume type `tmpfs`.
+
+`GeneratedDns` and `GeneratedDnsSearch` preserve scalar/list form, explicit empty lists,
+ordering, and duplicates. `set_dns_options` sets one complete unique sequence. All values must be
+resolved, non-empty, and physical-line safe; no resolver grammar is applied.
+
+`set_expose` accepts one complete sequence of unique documented decimal port/range forms with an
+optional `tcp` or `udp` suffix. It does not infer a default protocol or runtime publication.
+
+`set_security_options` preserves one complete ordered raw sequence, including exact duplicates.
+Safe resolved values are quoted and parsed back without option, profile, SELinux, path, provider,
+runtime, or target-format normalization.
 
 `GeneratedSysctls` is non-exhaustive and preserves the selected ordered mapping or list form,
 including explicit empty collections. `GeneratedSysctl` accepts one unique non-empty resolved map
@@ -201,6 +220,8 @@ Generated `tmpfs` items use the same boundary; one sensitive path or raw option 
 and generated document while explicit output access retains the exact scalar/list value.
 Generated device short strings and long source/target/permissions use the same boundary; one
 sensitive member redacts the builder and complete generated document without entering diagnostics.
+Generated DNS server strings use the same boundary; one sensitive item redacts the builder and
+generated document while explicit output access retains exact scalar/list form and duplicates.
 Generated sysctl mapping values and list items use the same boundary; one sensitive value redacts
 the builder and generated document while map names remain ordinary uninterpolated keys.
 Generated ulimit values use the same boundary; one sensitive single, soft, or hard value redacts

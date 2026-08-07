@@ -11,6 +11,7 @@ use compose_lens::merge::{
     EntrySyntax, INTERPOLATION_PROJECT_MISMATCH, MergeOperation, MergedEntry, MergedProject, MergedScalar, MergedValue,
     merge_project,
 };
+use compose_lens::model::{DNS_EXPECTED_FORM, DNS_SEARCH_EXPECTED_FORM};
 use compose_lens::source::{SourceId, SourceSpan};
 use std::path::Path;
 
@@ -33,6 +34,61 @@ fn environment() -> MapEnvironment {
     let _ = environment.insert("EMPTY", "");
     let _ = environment.insert("FALLBACK", "fallback");
     environment
+}
+
+#[test]
+fn merges_annotations_by_effective_key_after_per_file_value_interpolation() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(696),
+            DocumentOrigin::new("compose.yaml", "workspace/base"),
+            concat!(
+                "services:\n",
+                "  app:\n    annotations: [\"io.example.base=base\", \"io.example.same=base\"]\n",
+                "  reset:\n    annotations: [\"io.example.old=old\"]\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(697),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  app:\n    annotations:\n",
+                "      io.example.same: \"${ANNOTATION_SECRET}\"\n",
+                "      io.example.number: 007\n",
+                "  reset:\n    annotations: !reset {}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("ANNOTATION_SECRET", "effective");
+    let interpolation = loaded.interpolate(&environment);
+    let result = merge_project(&loaded, Some(&interpolation));
+    let project = result.project().ok_or("merged project expected")?;
+    let annotations = project
+        .value(&["services", "app", "annotations"])
+        .and_then(MergedValue::as_mapping)
+        .ok_or("keyed annotations mapping expected")?;
+    assert_eq!(annotations.len(), 3);
+    assert_eq!(annotations[0].key(), "io.example.base");
+    assert_eq!(annotations[0].syntax(), EntrySyntax::ListKeyValue);
+    assert!(annotations[0].raw_list_item().is_some());
+    assert_eq!(annotations[1].key(), "io.example.same");
+    assert_eq!(annotations[1].syntax(), EntrySyntax::Mapping);
+    assert_eq!(annotations[1].key_sources().len(), 2);
+    assert_eq!(
+        annotations[1].value().as_scalar().map(MergedScalar::value),
+        Some("effective")
+    );
+    assert!(annotations[1].value().is_sensitive());
+    assert_eq!(annotations[2].value().as_scalar().map(MergedScalar::raw), Some("007"));
+
+    let reset = project
+        .value(&["services", "reset", "annotations"])
+        .ok_or("reset annotations expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.as_mapping().is_some_and(<[MergedEntry]>::is_empty));
+    Ok(())
 }
 
 #[test]
@@ -652,6 +708,392 @@ fn merges_service_tmpfs_as_an_ordinary_sequence_without_cross_file_deduplication
     assert_eq!(
         sequence_strings(overridden.as_sequence().ok_or("override list expected")?),
         ["/same", "/same", "/case", "/CASE"]
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_service_dns_with_ordinary_append_replacement_reset_and_override() -> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  appended:\n    dns: [base.example, same.example]\n",
+        "  scalar:\n    dns: old.example\n",
+        "  cross-form:\n    dns: old.example\n",
+        "  reset:\n    dns: [old.example]\n",
+        "  reset-null:\n    dns: [old.example]\n",
+        "  override:\n    dns: [old.example]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  appended:\n    dns: [same.example, later.example]\n",
+        "  scalar:\n    dns: new.example\n",
+        "  cross-form:\n    dns: [new.example]\n",
+        "  reset:\n    dns: !reset []\n",
+        "  reset-null:\n    dns: !reset null\n",
+        "  override:\n    dns: !override [same.example, same.example]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 685)?;
+    assert!(
+        loaded
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == DNS_EXPECTED_FORM)
+    );
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let appended = merged
+        .value(&["services", "appended", "dns"])
+        .ok_or("appended DNS expected")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(
+        sequence_strings(appended.as_sequence().ok_or("DNS sequence expected")?),
+        ["base.example", "same.example", "same.example", "later.example"]
+    );
+    for service in ["scalar", "cross-form"] {
+        assert_eq!(
+            merged
+                .value(&["services", service, "dns"])
+                .ok_or("replacement DNS expected")?
+                .provenance()
+                .operation(),
+            MergeOperation::Replaced
+        );
+    }
+    assert_eq!(
+        merged
+            .value(&["services", "scalar", "dns"])
+            .and_then(MergedValue::as_scalar)
+            .map(MergedScalar::value),
+        Some("new.example")
+    );
+    for service in ["reset", "reset-null"] {
+        let reset = merged
+            .value(&["services", service, "dns"])
+            .ok_or("reset DNS expected")?;
+        assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+        assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    }
+    let overridden = merged
+        .value(&["services", "override", "dns"])
+        .ok_or("override DNS expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override DNS sequence expected")?),
+        ["same.example", "same.example"]
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_service_dns_search_with_append_replacement_reset_and_override() -> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  appended:\n    dns_search: [base.internal, same.internal]\n",
+        "  scalar:\n    dns_search: old.internal\n",
+        "  cross-form:\n    dns_search: old.internal\n",
+        "  reset:\n    dns_search: [old.internal]\n",
+        "  reset-null:\n    dns_search: [old.internal]\n",
+        "  override:\n    dns_search: [old.internal]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  appended:\n    dns_search: [same.internal, later.internal]\n",
+        "  scalar:\n    dns_search: new.internal\n",
+        "  cross-form:\n    dns_search: [new.internal]\n",
+        "  reset:\n    dns_search: !reset []\n",
+        "  reset-null:\n    dns_search: !reset null\n",
+        "  override:\n    dns_search: !override [same.internal, same.internal, .]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 690)?;
+    assert!(
+        loaded
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == DNS_SEARCH_EXPECTED_FORM)
+    );
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let appended = merged
+        .value(&["services", "appended", "dns_search"])
+        .ok_or("appended dns_search expected")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(
+        sequence_strings(appended.as_sequence().ok_or("dns_search sequence expected")?),
+        ["base.internal", "same.internal", "same.internal", "later.internal"]
+    );
+    for service in ["scalar", "cross-form"] {
+        assert_eq!(
+            merged
+                .value(&["services", service, "dns_search"])
+                .ok_or("replacement dns_search expected")?
+                .provenance()
+                .operation(),
+            MergeOperation::Replaced
+        );
+    }
+    assert_eq!(
+        merged
+            .value(&["services", "scalar", "dns_search"])
+            .and_then(MergedValue::as_scalar)
+            .map(MergedScalar::value),
+        Some("new.internal")
+    );
+    for service in ["reset", "reset-null"] {
+        let reset = merged
+            .value(&["services", service, "dns_search"])
+            .ok_or("reset dns_search expected")?;
+        assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+        assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    }
+    let overridden = merged
+        .value(&["services", "override", "dns_search"])
+        .ok_or("overridden dns_search expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override dns_search expected")?),
+        ["same.internal", "same.internal", "."]
+    );
+    Ok(())
+}
+
+#[test]
+fn replaces_service_dns_options_as_a_whole_and_retains_reset_and_override() -> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  replaced:\n    dns_opt: [ndots:2, timeout:1]\n",
+        "  reset:\n    dns_opt: [rotate]\n",
+        "  reset-null:\n    dns_opt: [attempts:2]\n",
+        "  override:\n    dns_opt: [old]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  replaced:\n    dns_opt: [timeout:3, attempts:4]\n",
+        "  reset:\n    dns_opt: !reset []\n",
+        "  reset-null:\n    dns_opt: !reset null\n",
+        "  override:\n    dns_opt: !override [ndots:5, ndots:5]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 687)?;
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let replaced = merged
+        .value(&["services", "replaced", "dns_opt"])
+        .ok_or("replaced dns_opt expected")?;
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(replaced.provenance().sources().len(), 2);
+    assert_eq!(
+        sequence_strings(replaced.as_sequence().ok_or("dns_opt sequence expected")?),
+        ["timeout:3", "attempts:4"]
+    );
+    assert!(
+        replaced
+            .as_sequence()
+            .is_some_and(|items| items.iter().all(|item| item.provenance().sources().len() == 1))
+    );
+
+    for service in ["reset", "reset-null"] {
+        let reset = merged
+            .value(&["services", service, "dns_opt"])
+            .ok_or("reset dns_opt expected")?;
+        assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+        assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    }
+    let overridden = merged
+        .value(&["services", "override", "dns_opt"])
+        .ok_or("overridden dns_opt expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override dns_opt expected")?),
+        ["ndots:5", "ndots:5"]
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_expose_by_exact_text_and_yaml_scalar_kind_with_reset_and_override() -> Result<(), Box<dyn std::error::Error>>
+{
+    use compose_lens::merge::MergedScalarKind;
+
+    let base = concat!(
+        "services:\n",
+        "  merged:\n    expose: [80, \"80\", \"80/tcp\", 81]\n",
+        "  reset:\n    expose: [90]\n",
+        "  override:\n    expose: [100]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  merged:\n    expose: [80, \"80\", \"80/tcp\", \"81\", \"82/udp\"]\n",
+        "  reset:\n    expose: !reset []\n",
+        "  override:\n    expose: !override [100, 100, \"100\"]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 692)?;
+    let merged_result = merge_project(&loaded, None);
+    let merged = merged_result.project().ok_or("merged project expected")?;
+    let items = merged
+        .value(&["services", "merged", "expose"])
+        .and_then(MergedValue::as_sequence)
+        .ok_or("merged expose expected")?;
+    let identities = items
+        .iter()
+        .map(|item| {
+            let scalar = item.as_scalar().ok_or("scalar expose item expected")?;
+            Ok((scalar.kind(), scalar.value(), item.provenance().sources().len()))
+        })
+        .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+    assert_eq!(
+        identities,
+        [
+            (MergedScalarKind::Number, "80", 2),
+            (MergedScalarKind::String, "80", 2),
+            (MergedScalarKind::String, "80/tcp", 2),
+            (MergedScalarKind::Number, "81", 1),
+            (MergedScalarKind::String, "81", 1),
+            (MergedScalarKind::String, "82/udp", 1),
+        ]
+    );
+    assert_eq!(
+        merged
+            .value(&["services", "merged", "expose"])
+            .ok_or("field expected")?
+            .provenance()
+            .operation(),
+        MergeOperation::Merged
+    );
+    let reset = merged.value(&["services", "reset", "expose"]).ok_or("reset expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    let overridden = merged
+        .value(&["services", "override", "expose"])
+        .ok_or("override expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(overridden.as_sequence().ok_or("override sequence expected")?.len(), 3);
+    Ok(())
+}
+
+#[test]
+fn appends_service_security_options_and_retains_duplicates_reset_and_override() -> Result<(), Box<dyn std::error::Error>>
+{
+    let base = concat!(
+        "services:\n",
+        "  appended:\n    security_opt: [\"label:disable\", \"label:filetype:container_file_t\", \"label:level:s0:c1,c2\", \"label:nested\", \"label:type:container_t\", \"mask=/proc/acpi:/proc/kcore\", \"apparmor=base\", \"no-new-privileges:false\", \"seccomp=base.json\"]\n",
+        "  reset:\n    security_opt: [\"apparmor=old\"]\n",
+        "  reset-null:\n    security_opt: [\"no-new-privileges:true\"]\n",
+        "  override:\n    security_opt: [old]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  appended:\n    security_opt: [\"apparmor=next\", \"label:disable\", \"label:filetype:container_file_t\", \"label:filetype:container_file_t\", \"label:level:s0:c1,c2\", \"label:level:s0:c1,c2\", \"label:nested\", \"label:nested\", \"label:type:container_t\", \"label:type:container_t\", \"mask=/proc/acpi:/proc/kcore\", \"mask=/proc/acpi:/proc/kcore\", \"label=disable\", \"no-new-privileges:true\", \"no-new-privileges:false\", \"seccomp=next.json\", \"seccomp=next.json\"]\n",
+        "  reset:\n    security_opt: !reset []\n",
+        "  reset-null:\n    security_opt: !reset null\n",
+        "  override:\n    security_opt: !override [same, same, next]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 697)?;
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let appended = merged
+        .value(&["services", "appended", "security_opt"])
+        .ok_or("appended security_opt expected")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(appended.provenance().sources().len(), 2);
+    assert_eq!(
+        sequence_strings(appended.as_sequence().ok_or("security_opt sequence expected")?),
+        [
+            "label:disable",
+            "label:filetype:container_file_t",
+            "label:level:s0:c1,c2",
+            "label:nested",
+            "label:type:container_t",
+            "mask=/proc/acpi:/proc/kcore",
+            "apparmor=base",
+            "no-new-privileges:false",
+            "seccomp=base.json",
+            "apparmor=next",
+            "label:disable",
+            "label:filetype:container_file_t",
+            "label:filetype:container_file_t",
+            "label:level:s0:c1,c2",
+            "label:level:s0:c1,c2",
+            "label:nested",
+            "label:nested",
+            "label:type:container_t",
+            "label:type:container_t",
+            "mask=/proc/acpi:/proc/kcore",
+            "mask=/proc/acpi:/proc/kcore",
+            "label=disable",
+            "no-new-privileges:true",
+            "no-new-privileges:false",
+            "seccomp=next.json",
+            "seccomp=next.json",
+        ]
+    );
+
+    for service in ["reset", "reset-null"] {
+        let reset = merged
+            .value(&["services", service, "security_opt"])
+            .ok_or("reset security_opt expected")?;
+        assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+        assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    }
+    let overridden = merged
+        .value(&["services", "override", "security_opt"])
+        .ok_or("overridden security_opt expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override security_opt expected")?),
+        ["same", "same", "next"]
+    );
+    Ok(())
+}
+
+#[test]
+fn appends_repeatable_unmask_options_without_deduplication_or_singleton_selection()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = concat!(
+        "services:\n",
+        "  appended:\n    security_opt: [\"unmask=ALL\", \"unmask=/proc/acpi\"]\n",
+        "  reset:\n    security_opt: [\"unmask=/old\"]\n",
+        "  override:\n    security_opt: [\"unmask=/old\"]\n",
+    );
+    let override_source = concat!(
+        "services:\n",
+        "  appended:\n    security_opt: [\"unmask=ALL\", \"unmask=/proc/acpi:/sys/firmware\"]\n",
+        "  reset:\n    security_opt: !reset []\n",
+        "  override:\n    security_opt: !override [\"unmask=ALL\", \"unmask=ALL\"]\n",
+    );
+    let loaded = merge_fixture_project(base, override_source, 734)?;
+    let result = merge_project(&loaded, None);
+    let merged = result.project().ok_or("merged project expected")?;
+
+    let appended = merged
+        .value(&["services", "appended", "security_opt"])
+        .ok_or("appended security_opt expected")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(
+        sequence_strings(appended.as_sequence().ok_or("security_opt sequence expected")?),
+        [
+            "unmask=ALL",
+            "unmask=/proc/acpi",
+            "unmask=ALL",
+            "unmask=/proc/acpi:/sys/firmware",
+        ]
+    );
+
+    let reset = merged
+        .value(&["services", "reset", "security_opt"])
+        .ok_or("reset security_opt expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+
+    let overridden = merged
+        .value(&["services", "override", "security_opt"])
+        .ok_or("overridden security_opt expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        sequence_strings(overridden.as_sequence().ok_or("override sequence expected")?),
+        ["unmask=ALL", "unmask=ALL"]
     );
     Ok(())
 }

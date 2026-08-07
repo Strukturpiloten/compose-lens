@@ -5,25 +5,39 @@ use crate::merge::{
     EntrySyntax, MergeProvenance, MergedEntry, MergedProject, MergedScalarKind, MergedValue, MergedValueKind,
 };
 use crate::model::{
-    BindOptions, BooleanValue, CAP_ADD_DUPLICATE_ITEM, CAP_DROP_DUPLICATE_ITEM, CapabilityAddItem, CapabilityDropItem,
-    Command, ComposeScalar, ConfigDefinition, DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING, DependencyCondition,
-    Entrypoint, EnvironmentFileFormat, EnvironmentFileFormatKind, HealthcheckDuration, HealthcheckRetries,
-    HealthcheckTest, HealthcheckTestKind, HostAddress, Hostname, HostnameKind, ImageReference, Ipam, IpamConfig,
-    KeyValueEntry, Labels, LimitValue, Located, LongPort, LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO,
-    MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind,
-    MemLimitScalarKind, MountType, NetworkDefinition, PIDS_LIMIT_AMBIGUOUS_ZERO, PidsLimit, PidsLimitKind, Port,
-    PullPolicy, RestartPolicy, SHM_SIZE_AMBIGUOUS_ZERO, SHM_SIZE_EXPECTED_VALUE, SHM_SIZE_PROVIDER_DEPENDENT_NUMBER,
-    SHM_SIZE_PROVIDER_DEPENDENT_STRING, SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM,
-    SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING, SecretDefinition, SelinuxRelabel, ServiceNetwork,
+    ANNOTATIONS_DUPLICATE_NAME, ANNOTATIONS_EMPTY_NAME, ANNOTATIONS_EXPECTED_STRING, ANNOTATIONS_KEY_ONLY, BindOptions,
+    BooleanValue, CAP_ADD_DUPLICATE_ITEM, CAP_DROP_DUPLICATE_ITEM, CapabilityAddItem, CapabilityDropItem, Command,
+    ComposeScalar, ConfigDefinition, DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING, DNS_EXPECTED_FORM,
+    DNS_EXPECTED_STRING, DNS_OPT_DUPLICATE_ITEM, DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING,
+    DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM, DNS_SEARCH_EXPECTED_STRING, DependencyCondition,
+    EXPOSE_DUPLICATE_ITEM, EXPOSE_EXPECTED_SCALAR, EXPOSE_EXPECTED_SEQUENCE, EXPOSE_INVALID_ITEM,
+    EXPOSE_PROVIDER_DEPENDENT, Entrypoint, EnvironmentFileFormat, EnvironmentFileFormatKind, ExposeItemKind,
+    ExposeScalarKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddress,
+    Hostname, HostnameKind, ImageReference, Ipam, IpamConfig, KeyValueEntry, Labels, LimitValue, Located, LongPort,
+    LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO, MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING,
+    MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind, MemLimitScalarKind, MountType, NetworkDefinition,
+    PIDS_LIMIT_AMBIGUOUS_ZERO, PidsLimit, PidsLimitKind, Port, PullPolicy, RestartPolicy,
+    SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS, SECURITY_OPT_EMPTY_ITEM,
+    SECURITY_OPT_EXPECTED_SEQUENCE, SECURITY_OPT_EXPECTED_STRING, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+    SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS, SECURITY_OPT_SECCOMP_CONFLICT, SECURITY_OPT_SECCOMP_NEAR_MISS,
+    SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS,
+    SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS,
+    SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT, SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS,
+    SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT, SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS,
+    SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS, SHM_SIZE_AMBIGUOUS_ZERO,
+    SHM_SIZE_EXPECTED_VALUE, SHM_SIZE_PROVIDER_DEPENDENT_NUMBER, SHM_SIZE_PROVIDER_DEPENDENT_STRING,
+    SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING,
+    SecretDefinition, SecurityOptionCandidateCounts, SecurityOptionKind, SelinuxRelabel, ServiceNetwork,
     ServiceNetworks, ShmSize, ShmSizeKind, ShmSizeScalarKind, ShortDevice, ShortExtraHost, ShortPort, ShortVolumeMount,
     StopGracePeriod, TMPFS_EXPECTED_FORM, TMPFS_EXPECTED_STRING, TMPFS_PROVIDER_DEPENDENT, TmpfsItem, TmpfsItemKind,
     ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceMode, UserSpec,
-    VolumeDefinition, VolumeMount, valid_ulimit_name,
+    VolumeDefinition, VolumeMount, classify_expose_item, classify_security_option, security_path_option_diagnostic,
+    valid_ulimit_name,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
 use crate::source::{SourceId, SourceSpan};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -384,6 +398,91 @@ pub struct ProjectLabels {
     entries: Vec<ProjectLabelEntry>,
 }
 
+/// One raw/effective annotation scalar without erasing authored spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectAnnotationScalar {
+    authored: String,
+    effective: ComposeScalar,
+}
+
+impl ProjectAnnotationScalar {
+    /// Returns the exact authored scalar spelling retained by the merge layer.
+    #[must_use]
+    pub fn authored(&self) -> &str {
+        &self.authored
+    }
+
+    /// Returns the effective scalar after optional per-file interpolation.
+    #[must_use]
+    pub const fn effective(&self) -> &ComposeScalar {
+        &self.effective
+    }
+}
+
+/// One effective service annotation after keyed merge and duplicate replacement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectAnnotationEntry {
+    name: ProjectKey,
+    value: Option<ProjectValue<ProjectAnnotationScalar>>,
+    raw_list_item: Option<ProjectValue<ProjectAnnotationScalar>>,
+    syntax: EntrySyntax,
+    contributors: Vec<MergeProvenance>,
+}
+
+impl ProjectAnnotationEntry {
+    /// Returns the effective annotation name and every contributing key/item location.
+    #[must_use]
+    pub const fn name(&self) -> &ProjectKey {
+        &self.name
+    }
+
+    /// Returns the explicit effective annotation value.
+    ///
+    /// A key-only list item returns `None`; it is diagnosed and never coerced to an empty string.
+    #[must_use]
+    pub const fn value(&self) -> Option<&ProjectValue<ProjectAnnotationScalar>> {
+        self.value.as_ref()
+    }
+
+    /// Returns the complete raw list scalar when list syntax supplied the effective entry.
+    #[must_use]
+    pub const fn raw_list_item(&self) -> Option<&ProjectValue<ProjectAnnotationScalar>> {
+        self.raw_list_item.as_ref()
+    }
+
+    /// Returns the most recent mapping or list syntax contributing this entry.
+    #[must_use]
+    pub const fn syntax(&self) -> EntrySyntax {
+        self.syntax
+    }
+
+    /// Returns every replaced contributor's merge provenance in authored order.
+    #[must_use]
+    pub fn contributors(&self) -> &[MergeProvenance] {
+        &self.contributors
+    }
+}
+
+/// Effective service annotations keyed by semantic name with authored evidence retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectAnnotations {
+    entries: Vec<ProjectAnnotationEntry>,
+}
+
+impl ProjectAnnotations {
+    /// Returns effective annotations in first-key order.
+    #[must_use]
+    pub fn entries(&self) -> &[ProjectAnnotationEntry] {
+        &self.entries
+    }
+
+    /// Finds an effective annotation by name.
+    #[must_use]
+    pub fn get(&self, name: &str) -> Option<&ProjectAnnotationEntry> {
+        self.entries.iter().find(|entry| entry.name.value == name)
+    }
+}
+
 impl ProjectLabels {
     /// Returns labels in effective merge order.
     #[must_use]
@@ -649,6 +748,96 @@ pub enum ProjectTmpfs {
     List(Vec<ProjectValue<TmpfsItem>>),
 }
 
+/// Effective service `dns` syntax with collection and per-item merge provenance retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDns {
+    /// One effective raw scalar server string.
+    Scalar(ProjectValue<String>),
+    /// One effective ordered list, including an explicit empty or reset list.
+    List(Vec<ProjectValue<String>>),
+}
+
+/// Effective service `dns_search` syntax with collection and per-item merge provenance retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDnsSearch {
+    /// One effective raw scalar search-domain string.
+    Scalar(ProjectValue<String>),
+    /// One effective ordered list, including an explicit empty or reset list.
+    List(Vec<ProjectValue<String>>),
+}
+
+/// One effective service `expose` scalar with authored spelling and YAML kind retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectExposeItem {
+    authored: String,
+    value: String,
+    scalar_kind: ExposeScalarKind,
+    kind: ExposeItemKind,
+}
+
+/// One effective raw service security option with authored and interpolated spelling retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectSecurityOptionItem {
+    authored: String,
+    value: String,
+    scalar_kind: MergedScalarKind,
+    kind: SecurityOptionKind,
+}
+
+impl ProjectSecurityOptionItem {
+    /// Returns the exact scalar spelling before optional interpolation.
+    #[must_use]
+    pub fn authored(&self) -> &str {
+        &self.authored
+    }
+
+    /// Returns the effective scalar spelling after optional interpolation.
+    #[must_use]
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    /// Returns the retained YAML scalar category.
+    #[must_use]
+    pub const fn scalar_kind(&self) -> MergedScalarKind {
+        self.scalar_kind
+    }
+
+    /// Returns the narrow classification of the effective spelling.
+    #[must_use]
+    pub const fn kind(&self) -> &SecurityOptionKind {
+        &self.kind
+    }
+}
+
+impl ProjectExposeItem {
+    /// Returns the exact scalar spelling before optional interpolation.
+    #[must_use]
+    pub fn authored(&self) -> &str {
+        &self.authored
+    }
+
+    /// Returns the exact effective scalar spelling after optional interpolation.
+    #[must_use]
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    /// Returns whether the YAML scalar was authored as a string or number.
+    #[must_use]
+    pub const fn scalar_kind(&self) -> ExposeScalarKind {
+        self.scalar_kind
+    }
+
+    /// Returns the conservative classification of the effective spelling.
+    #[must_use]
+    pub const fn kind(&self) -> &ExposeItemKind {
+        &self.kind
+    }
+}
+
 /// One effective ulimit scalar with authored spelling and YAML scalar kind retained.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectUlimitScalar {
@@ -801,6 +990,7 @@ pub struct ProjectService {
     environment: Option<ProjectValue<ProjectEnvironment>>,
     environment_files: Option<ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>>,
     labels: Option<ProjectValue<ProjectLabels>>,
+    annotations: Option<ProjectValue<ProjectAnnotations>>,
     extra_hosts: Option<ProjectValue<ProjectExtraHosts>>,
     user: Option<ProjectValue<UserSpec>>,
     userns_mode: Option<ProjectValue<UserNamespaceMode>>,
@@ -808,6 +998,11 @@ pub struct ProjectService {
     cap_add: Option<ProjectValue<Vec<ProjectValue<CapabilityAddItem>>>>,
     cap_drop: Option<ProjectValue<Vec<ProjectValue<CapabilityDropItem>>>>,
     devices: Option<ProjectValue<Vec<ProjectValue<ProjectDevice>>>>,
+    dns: Option<ProjectValue<ProjectDns>>,
+    dns_options: Option<ProjectValue<Vec<ProjectValue<String>>>>,
+    dns_search: Option<ProjectValue<ProjectDnsSearch>>,
+    expose: Option<ProjectValue<Vec<ProjectValue<ProjectExposeItem>>>>,
+    security_options: Option<ProjectValue<Vec<ProjectValue<ProjectSecurityOptionItem>>>>,
     working_dir: Option<ProjectValue<String>>,
     read_only: Option<ProjectValue<BooleanValue>>,
     pids_limit: Option<ProjectValue<PidsLimit>>,
@@ -845,6 +1040,7 @@ impl ProjectService {
             environment: None,
             environment_files: None,
             labels: None,
+            annotations: None,
             extra_hosts: None,
             user: None,
             userns_mode: None,
@@ -852,6 +1048,11 @@ impl ProjectService {
             cap_add: None,
             cap_drop: None,
             devices: None,
+            dns: None,
+            dns_options: None,
+            dns_search: None,
+            expose: None,
+            security_options: None,
             working_dir: None,
             read_only: None,
             pids_limit: None,
@@ -942,6 +1143,12 @@ impl ProjectService {
         self.labels.as_ref()
     }
 
+    /// Returns effective service annotations keyed by name with ambiguous key-only entries retained.
+    #[must_use]
+    pub const fn annotations(&self) -> Option<&ProjectValue<ProjectAnnotations>> {
+        self.annotations.as_ref()
+    }
+
     /// Returns effective service host mappings with per-entry provenance and syntax.
     #[must_use]
     pub const fn extra_hosts(&self) -> Option<&ProjectValue<ProjectExtraHosts>> {
@@ -990,6 +1197,45 @@ impl ProjectService {
     #[must_use]
     pub const fn devices(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectDevice>>>> {
         self.devices.as_ref()
+    }
+
+    /// Returns effective raw service DNS servers with source form and provenance.
+    #[must_use]
+    pub const fn dns(&self) -> Option<&ProjectValue<ProjectDns>> {
+        self.dns.as_ref()
+    }
+
+    /// Returns the effective ordered service DNS resolver options.
+    ///
+    /// Omission remains `None`; an explicitly empty or reset sequence remains `Some` with no
+    /// items. Exact duplicate items are retained and diagnosed.
+    #[must_use]
+    pub const fn dns_options(&self) -> Option<&ProjectValue<Vec<ProjectValue<String>>>> {
+        self.dns_options.as_ref()
+    }
+
+    /// Returns effective raw DNS search domains with source form and provenance.
+    #[must_use]
+    pub const fn dns_search(&self) -> Option<&ProjectValue<ProjectDnsSearch>> {
+        self.dns_search.as_ref()
+    }
+
+    /// Returns the effective ordered service `expose` sequence.
+    ///
+    /// Omission remains `None`; an explicitly empty or reset sequence remains `Some` with no
+    /// items. Exact scalar identity includes both value text and YAML string/number kind.
+    #[must_use]
+    pub const fn expose(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectExposeItem>>>> {
+        self.expose.as_ref()
+    }
+
+    /// Returns the effective ordered raw service security options.
+    ///
+    /// Omission remains `None`; an explicitly empty or reset sequence remains `Some` with no
+    /// items. Duplicates remain ordered evidence.
+    #[must_use]
+    pub const fn security_options(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectSecurityOptionItem>>>> {
+        self.security_options.as_ref()
     }
 
     /// Returns the effective container working-directory override.
@@ -1387,6 +1633,7 @@ impl<'a> Builder<'a> {
                 "environment" => service.environment = self.environment(field.value()),
                 "env_file" => service.environment_files = self.environment_files(field.value(), &path),
                 "labels" => service.labels = self.service_labels(field.value()),
+                "annotations" => service.annotations = self.service_annotations(field.value()),
                 "extra_hosts" => service.extra_hosts = self.extra_hosts(field.value()),
                 "user" => service.user = self.user(field.value()),
                 "userns_mode" => service.userns_mode = self.userns_mode(field.value()),
@@ -1396,6 +1643,11 @@ impl<'a> Builder<'a> {
                 "cap_add" => service.cap_add = self.capability_add(field.value()),
                 "cap_drop" => service.cap_drop = self.capability_drop(field.value()),
                 "devices" => service.devices = self.devices(field.value(), &path),
+                "dns" => service.dns = self.dns(field.value()),
+                "dns_opt" => service.dns_options = self.dns_options(field.value()),
+                "dns_search" => service.dns_search = self.dns_search(field.value()),
+                "expose" => service.expose = self.expose(field.value()),
+                "security_opt" => service.security_options = self.security_options(field.value()),
                 "working_dir" => service.working_dir = self.project_string(field.value(), "service working directory"),
                 "read_only" => {
                     service.read_only = self
@@ -1606,6 +1858,469 @@ impl<'a> Builder<'a> {
                 .with_note(note),
         );
         Some(ProjectValue::new(limit, value))
+    }
+
+    fn dns(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectDns>> {
+        let form = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                ProjectDns::Scalar(ProjectValue::new(scalar.value().to_owned(), value))
+            }
+            MergedValueKind::Sequence(values) => {
+                let mut items = Vec::new();
+                for item_value in values {
+                    let MergedValueKind::Scalar(scalar) = item_value.kind() else {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                DNS_EXPECTED_STRING,
+                                Severity::Error,
+                                "dns entries must be string scalars",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                effective_span(item_value),
+                                "unexpected DNS server list item",
+                            )),
+                        );
+                        continue;
+                    };
+                    if scalar.kind() != MergedScalarKind::String {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                DNS_EXPECTED_STRING,
+                                Severity::Error,
+                                "dns entries must be string scalars",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                effective_span(item_value),
+                                "unexpected DNS server list item",
+                            )),
+                        );
+                        continue;
+                    }
+                    items.push(ProjectValue::new(scalar.value().to_owned(), item_value));
+                }
+                ProjectDns::List(items)
+            }
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DNS_EXPECTED_FORM,
+                        Severity::Error,
+                        "dns must be a string scalar or a sequence of string scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected service DNS form",
+                    )),
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(form, value))
+    }
+
+    fn dns_options(&mut self, value: &MergedValue) -> Option<ProjectValue<Vec<ProjectValue<String>>>> {
+        let MergedValueKind::Sequence(values) = value.kind() else {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DNS_OPT_EXPECTED_SEQUENCE,
+                    Severity::Error,
+                    "dns_opt must be a sequence of string scalars",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "unexpected service DNS option form",
+                )),
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        let mut seen = BTreeSet::new();
+        for item_value in values {
+            let MergedValueKind::Scalar(scalar) = item_value.kind() else {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DNS_OPT_EXPECTED_STRING,
+                        Severity::Error,
+                        "dns_opt entries must be string scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(item_value),
+                        "unexpected DNS option list item",
+                    )),
+                );
+                continue;
+            };
+            if scalar.kind() != MergedScalarKind::String {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DNS_OPT_EXPECTED_STRING,
+                        Severity::Error,
+                        "dns_opt entries must be string scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(item_value),
+                        "unexpected DNS option list item",
+                    )),
+                );
+                continue;
+            }
+            if !seen.insert(scalar.value().to_owned()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DNS_OPT_DUPLICATE_ITEM,
+                        Severity::Warning,
+                        "dns_opt entries must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(item_value),
+                        "duplicate DNS option retained",
+                    )),
+                );
+            }
+            items.push(ProjectValue::new(scalar.value().to_owned(), item_value));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn dns_search(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectDnsSearch>> {
+        let form = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                ProjectDnsSearch::Scalar(ProjectValue::new(scalar.value().to_owned(), value))
+            }
+            MergedValueKind::Sequence(values) => {
+                let mut items = Vec::new();
+                let mut seen = BTreeSet::new();
+                for item_value in values {
+                    let MergedValueKind::Scalar(scalar) = item_value.kind() else {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                DNS_SEARCH_EXPECTED_STRING,
+                                Severity::Error,
+                                "dns_search entries must be string scalars",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                effective_span(item_value),
+                                "unexpected DNS search-domain list item",
+                            )),
+                        );
+                        continue;
+                    };
+                    if scalar.kind() != MergedScalarKind::String {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                DNS_SEARCH_EXPECTED_STRING,
+                                Severity::Error,
+                                "dns_search entries must be string scalars",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                effective_span(item_value),
+                                "unexpected DNS search-domain list item",
+                            )),
+                        );
+                        continue;
+                    }
+                    if !seen.insert(scalar.value().to_owned()) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                DNS_SEARCH_DUPLICATE_ITEM,
+                                Severity::Warning,
+                                "dns_search schema entries are unique, but duplicate merge behavior is ambiguous",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                effective_span(item_value),
+                                "duplicate DNS search domain retained",
+                            )),
+                        );
+                    }
+                    items.push(ProjectValue::new(scalar.value().to_owned(), item_value));
+                }
+                ProjectDnsSearch::List(items)
+            }
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DNS_SEARCH_EXPECTED_FORM,
+                        Severity::Error,
+                        "dns_search must be a string scalar or a sequence of string scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected service DNS search-domain form",
+                    )),
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(form, value))
+    }
+
+    fn expose(&mut self, value: &MergedValue) -> Option<ProjectValue<Vec<ProjectValue<ProjectExposeItem>>>> {
+        let MergedValueKind::Sequence(values) = value.kind() else {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    EXPOSE_EXPECTED_SEQUENCE,
+                    Severity::Error,
+                    "expose must be a sequence of string or number scalars",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "unexpected service expose form",
+                )),
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        let mut seen = Vec::new();
+        for item_value in values {
+            let MergedValueKind::Scalar(scalar) = item_value.kind() else {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        EXPOSE_EXPECTED_SCALAR,
+                        Severity::Error,
+                        "expose entries must be string or number scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(item_value),
+                        "unexpected exposed-port item",
+                    )),
+                );
+                continue;
+            };
+            let scalar_kind = match scalar.kind() {
+                MergedScalarKind::String => ExposeScalarKind::String,
+                MergedScalarKind::Number => ExposeScalarKind::Number,
+                MergedScalarKind::Boolean => {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            EXPOSE_EXPECTED_SCALAR,
+                            Severity::Error,
+                            "expose entries must be string or number scalars",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            effective_span(item_value),
+                            "unexpected exposed-port item",
+                        )),
+                    );
+                    continue;
+                }
+            };
+            if seen.contains(&(scalar_kind, scalar.value().to_owned())) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        EXPOSE_DUPLICATE_ITEM,
+                        Severity::Warning,
+                        "expose entries must be unique by exact scalar identity",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(item_value),
+                        "duplicate exposed-port item retained",
+                    )),
+                );
+            } else {
+                seen.push((scalar_kind, scalar.value().to_owned()));
+            }
+            let kind = classify_expose_item(scalar.value(), scalar_kind);
+            self.diagnose_expose_item(&kind, item_value);
+            items.push(ProjectValue::new(
+                ProjectExposeItem {
+                    authored: scalar.raw().to_owned(),
+                    value: scalar.value().to_owned(),
+                    scalar_kind,
+                    kind,
+                },
+                item_value,
+            ));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn diagnose_expose_item(&mut self, kind: &ExposeItemKind, value: &MergedValue) {
+        let (code, severity, message, label) = match kind {
+            ExposeItemKind::Documented { .. } | ExposeItemKind::Expression => return,
+            ExposeItemKind::Sctp { .. } | ExposeItemKind::UnknownProtocol { .. } => (
+                EXPOSE_PROVIDER_DEPENDENT,
+                Severity::Warning,
+                "expose protocol is outside the documented portable `tcp` and `udp` set",
+                "provider-dependent exposed-port protocol retained",
+            ),
+            ExposeItemKind::Malformed => (
+                EXPOSE_INVALID_ITEM,
+                Severity::Error,
+                "expose item must be a decimal port or range with an optional protocol",
+                "malformed exposed-port item retained",
+            ),
+        };
+        self.diagnostics.push(
+            Diagnostic::new(code, severity, message).with_label(DiagnosticLabel::primary(effective_span(value), label)),
+        );
+    }
+
+    fn security_options(
+        &mut self,
+        value: &MergedValue,
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectSecurityOptionItem>>>> {
+        let MergedValueKind::Sequence(values) = value.kind() else {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    SECURITY_OPT_EXPECTED_SEQUENCE,
+                    Severity::Error,
+                    "security_opt must be a sequence of string scalars",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "unexpected service security-option form",
+                )),
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        let mut candidates = SecurityOptionCandidateCounts::default();
+        for item_value in values {
+            let MergedValueKind::Scalar(scalar) = item_value.kind() else {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SECURITY_OPT_EXPECTED_STRING,
+                        Severity::Error,
+                        "security_opt entries must be string scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(item_value),
+                        "unexpected security-option item retained in source evidence",
+                    )),
+                );
+                continue;
+            };
+            if scalar.kind() != MergedScalarKind::String {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SECURITY_OPT_EXPECTED_STRING,
+                        Severity::Error,
+                        "security_opt entries must be string scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(item_value),
+                        "unexpected security-option scalar kind retained in source evidence",
+                    )),
+                );
+                continue;
+            }
+            let kind = classify_security_option(scalar.value());
+            self.diagnose_security_option_item(&kind, effective_span(item_value), &mut candidates);
+            items.push(ProjectValue::new(
+                ProjectSecurityOptionItem {
+                    authored: scalar.raw().to_owned(),
+                    value: scalar.value().to_owned(),
+                    scalar_kind: scalar.kind(),
+                    kind,
+                },
+                item_value,
+            ));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn diagnose_security_option_item(
+        &mut self,
+        kind: &SecurityOptionKind,
+        span: SourceSpan,
+        candidates: &mut SecurityOptionCandidateCounts,
+    ) {
+        let diagnostic = match kind {
+            SecurityOptionKind::AppArmor { .. } => {
+                candidates.apparmor += 1;
+                (candidates.apparmor > 1).then(|| {
+                    Diagnostic::new(
+                        SECURITY_OPT_APPARMOR_CONFLICT,
+                        Severity::Warning,
+                        "multiple AppArmor candidates are retained; a consumer must resolve the conflict explicitly",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "additional effective AppArmor candidate retained",
+                    ))
+                })
+            }
+            SecurityOptionKind::AppArmorNearMiss => Some(
+                Diagnostic::new(
+                    SECURITY_OPT_APPARMOR_NEAR_MISS,
+                    Severity::Warning,
+                    "AppArmor candidates require exact lowercase `apparmor=<profile>` spelling without whitespace",
+                )
+                .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+            ),
+            SecurityOptionKind::Seccomp { .. } => {
+                candidates.seccomp += 1;
+                (candidates.seccomp > 1).then(|| {
+                    Diagnostic::new(
+                        SECURITY_OPT_SECCOMP_CONFLICT,
+                        Severity::Warning,
+                        "multiple seccomp candidates are retained; a consumer must resolve the conflict explicitly",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "additional effective seccomp candidate retained",
+                    ))
+                })
+            }
+            SecurityOptionKind::SeccompNearMiss => Some(
+                Diagnostic::new(
+                    SECURITY_OPT_SECCOMP_NEAR_MISS,
+                    Severity::Warning,
+                    "seccomp candidates require exact lowercase `seccomp=<profile>` spelling without whitespace",
+                )
+                .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+            ),
+            SecurityOptionKind::NoNewPrivileges { .. } => {
+                candidates.no_new_privileges += 1;
+                (candidates.no_new_privileges > 1).then(|| {
+                    Diagnostic::new(
+                        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+                        Severity::Warning,
+                        "multiple no-new-privileges candidates are retained; a consumer must resolve the conflict explicitly",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "additional effective no-new-privileges candidate retained",
+                    ))
+                })
+            }
+            SecurityOptionKind::NoNewPrivilegesNearMiss => Some(
+                Diagnostic::new(
+                    SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS,
+                    Severity::Warning,
+                    "no-new-privileges candidates require exact lowercase `no-new-privileges:true` or `no-new-privileges:false` spelling without whitespace",
+                )
+                .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+            ),
+            SecurityOptionKind::Mask { .. }
+            | SecurityOptionKind::MaskNearMiss
+            | SecurityOptionKind::Unmask { .. }
+            | SecurityOptionKind::UnmaskNearMiss => security_path_option_diagnostic(kind, span),
+            SecurityOptionKind::SecurityLabelDisable { .. }
+            | SecurityOptionKind::SecurityLabelDisableNearMiss
+            | SecurityOptionKind::SecurityLabelFileType { .. }
+            | SecurityOptionKind::SecurityLabelFileTypeNearMiss
+            | SecurityOptionKind::SecurityLabelLevel { .. }
+            | SecurityOptionKind::SecurityLabelLevelNearMiss
+            | SecurityOptionKind::SecurityLabelNested { .. }
+            | SecurityOptionKind::SecurityLabelNestedNearMiss
+            | SecurityOptionKind::SecurityLabelType { .. }
+            | SecurityOptionKind::SecurityLabelTypeNearMiss => {
+                effective_security_label_diagnostic(kind, span, candidates)
+            }
+            SecurityOptionKind::Empty => Some(
+                Diagnostic::new(
+                    SECURITY_OPT_EMPTY_ITEM,
+                    Severity::Error,
+                    "security_opt entries must not be empty strings",
+                )
+                .with_label(DiagnosticLabel::primary(span, "empty security option retained")),
+            ),
+            SecurityOptionKind::Expression | SecurityOptionKind::Other => None,
+        };
+        if let Some(diagnostic) = diagnostic {
+            self.diagnostics.push(diagnostic);
+        }
     }
 
     fn tmpfs(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectTmpfs>> {
@@ -2205,6 +2920,219 @@ impl<'a> Builder<'a> {
         Some(ProjectValue::new(ProjectLabels { entries }, value))
     }
 
+    fn service_annotations(&mut self, value: &MergedValue) -> Option<ProjectValue<ProjectAnnotations>> {
+        let entries = match value.kind() {
+            MergedValueKind::Mapping(values) => self.annotation_mapping(values),
+            MergedValueKind::Sequence(values) => self.annotation_sequence(values),
+            _ => {
+                self.expected(value, "annotations must be a mapping or sequence");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(ProjectAnnotations { entries }, value))
+    }
+
+    fn annotation_mapping(&mut self, values: &[MergedEntry]) -> Vec<ProjectAnnotationEntry> {
+        let mut entries = Vec::new();
+        for entry in values {
+            if entry.key().is_empty() {
+                self.annotation_finding(
+                    ANNOTATIONS_EMPTY_NAME,
+                    Severity::Error,
+                    entry.value(),
+                    "service annotation name must not be empty",
+                    "empty annotation name",
+                );
+            }
+            if entry
+                .raw_list_item()
+                .is_some_and(|raw| raw.kind() != MergedScalarKind::String)
+            {
+                self.annotation_finding(
+                    ANNOTATIONS_EXPECTED_STRING,
+                    Severity::Error,
+                    entry.value(),
+                    "annotation list entries must be string scalars",
+                    "non-string annotation item retained",
+                );
+            }
+            let raw_list_item = entry.raw_list_item().map(|raw| ProjectValue {
+                value: ProjectAnnotationScalar {
+                    authored: raw.raw().to_owned(),
+                    effective: compose_scalar_from_merged(raw),
+                },
+                provenance: entry.value().provenance().clone(),
+                sensitive: raw.is_sensitive(),
+            });
+            let value = self.annotation_mapping_value(entry);
+            let candidate = ProjectAnnotationEntry {
+                name: ProjectKey::from_entry(entry),
+                value,
+                raw_list_item,
+                syntax: entry.syntax(),
+                contributors: vec![entry.value().provenance().clone()],
+            };
+            self.upsert_annotation(&mut entries, candidate, entry.value());
+        }
+        entries
+    }
+
+    fn annotation_mapping_value(&mut self, entry: &MergedEntry) -> Option<ProjectValue<ProjectAnnotationScalar>> {
+        if entry.syntax() == EntrySyntax::ListKeyOnly {
+            self.annotation_finding(
+                ANNOTATIONS_KEY_ONLY,
+                Severity::Warning,
+                entry.value(),
+                "key-only service annotation has no explicit value",
+                "ambiguous key-only annotation",
+            );
+            return None;
+        }
+        self.annotation_scalar(entry.value()).map(|scalar| ProjectValue {
+            value: scalar,
+            provenance: entry.value().provenance().clone(),
+            sensitive: entry.value().is_sensitive(),
+        })
+    }
+
+    fn annotation_sequence(&mut self, values: &[MergedValue]) -> Vec<ProjectAnnotationEntry> {
+        let mut entries = Vec::new();
+        for item in values {
+            let Some(candidate) = self.annotation_list_item(item) else {
+                continue;
+            };
+            self.upsert_annotation(&mut entries, candidate, item);
+        }
+        entries
+    }
+
+    fn annotation_list_item(&mut self, item: &MergedValue) -> Option<ProjectAnnotationEntry> {
+        let Some(scalar) = item.as_scalar() else {
+            self.invalid_annotation_list_item(item);
+            return None;
+        };
+        if scalar.kind() != MergedScalarKind::String {
+            self.invalid_annotation_list_item(item);
+            return None;
+        }
+        let raw_list_item = Some(ProjectValue {
+            value: ProjectAnnotationScalar {
+                authored: scalar.raw().to_owned(),
+                effective: ComposeScalar::String(scalar.value().to_owned()),
+            },
+            provenance: item.provenance().clone(),
+            sensitive: scalar.is_sensitive(),
+        });
+        let (name, value, syntax) = if let Some((name, value)) = scalar.value().split_once('=') {
+            (
+                name.to_owned(),
+                Some(ProjectValue {
+                    value: ProjectAnnotationScalar {
+                        authored: scalar.raw().to_owned(),
+                        effective: ComposeScalar::String(value.to_owned()),
+                    },
+                    provenance: item.provenance().clone(),
+                    sensitive: scalar.is_sensitive(),
+                }),
+                EntrySyntax::ListKeyValue,
+            )
+        } else {
+            self.annotation_finding(
+                ANNOTATIONS_KEY_ONLY,
+                Severity::Warning,
+                item,
+                "key-only service annotation has no explicit value",
+                "ambiguous key-only annotation",
+            );
+            (scalar.value().to_owned(), None, EntrySyntax::ListKeyOnly)
+        };
+        if name.is_empty() {
+            self.annotation_finding(
+                ANNOTATIONS_EMPTY_NAME,
+                Severity::Error,
+                item,
+                "service annotation name must not be empty",
+                "empty annotation name",
+            );
+        }
+        Some(ProjectAnnotationEntry {
+            name: ProjectKey::from_value(name, item),
+            value,
+            raw_list_item,
+            syntax,
+            contributors: vec![item.provenance().clone()],
+        })
+    }
+
+    fn invalid_annotation_list_item(&mut self, item: &MergedValue) {
+        self.annotation_finding(
+            ANNOTATIONS_EXPECTED_STRING,
+            Severity::Error,
+            item,
+            "annotation list entries must be string scalars",
+            "non-string annotation item retained in merged source",
+        );
+    }
+
+    fn annotation_scalar(&mut self, value: &MergedValue) -> Option<ProjectAnnotationScalar> {
+        let effective = self.compose_scalar(
+            value,
+            "annotation mapping values must be scalar strings, numbers, booleans, or null",
+        )?;
+        let authored = match value.kind() {
+            MergedValueKind::Null(crate::merge::NullStyle::Empty) => String::new(),
+            MergedValueKind::Null(crate::merge::NullStyle::Explicit) => "null".to_owned(),
+            MergedValueKind::Scalar(scalar) => scalar.raw().to_owned(),
+            _ => unreachable!("compose_scalar accepted only scalar or null"),
+        };
+        Some(ProjectAnnotationScalar { authored, effective })
+    }
+
+    fn upsert_annotation(
+        &mut self,
+        entries: &mut Vec<ProjectAnnotationEntry>,
+        mut candidate: ProjectAnnotationEntry,
+        source: &MergedValue,
+    ) {
+        if let Some(existing) = entries
+            .iter_mut()
+            .find(|entry| entry.name.value == candidate.name.value)
+        {
+            self.annotation_finding(
+                ANNOTATIONS_DUPLICATE_NAME,
+                Severity::Error,
+                source,
+                "service annotation names must be unique",
+                "later annotation value replaces earlier effective value",
+            );
+            for span in candidate.name.sources.drain(..) {
+                if !existing.name.sources.contains(&span) {
+                    existing.name.sources.push(span);
+                }
+            }
+            existing.name.sensitive |= candidate.name.sensitive;
+            existing.contributors.append(&mut candidate.contributors);
+            existing.value = candidate.value;
+            existing.raw_list_item = candidate.raw_list_item;
+            existing.syntax = candidate.syntax;
+        } else {
+            entries.push(candidate);
+        }
+    }
+
+    fn annotation_finding(
+        &mut self,
+        code: DiagnosticCode,
+        severity: Severity,
+        value: &MergedValue,
+        message: &'static str,
+        label: &'static str,
+    ) {
+        self.diagnostics.push(
+            Diagnostic::new(code, severity, message).with_label(DiagnosticLabel::primary(effective_span(value), label)),
+        );
+    }
+
     fn healthcheck(&mut self, value: &MergedValue, parent_path: &[String]) -> Option<ProjectValue<ProjectHealthcheck>> {
         let fields = self.mapping(value, "healthcheck must be a mapping")?;
         let mut healthcheck = ProjectHealthcheck {
@@ -2680,6 +3608,191 @@ impl<'a> Builder<'a> {
 
     fn record_pending_unmodeled(&mut self, path: &[String], entry: &MergedEntry) {
         self.pending_unmodeled.push(field_reference(path, entry));
+    }
+}
+
+fn effective_security_label_diagnostic(
+    kind: &SecurityOptionKind,
+    span: SourceSpan,
+    candidates: &mut SecurityOptionCandidateCounts,
+) -> Option<Diagnostic> {
+    match kind {
+        SecurityOptionKind::SecurityLabelDisable { .. } | SecurityOptionKind::SecurityLabelDisableNearMiss => {
+            security_label_disable_diagnostic(kind, span, &mut candidates.security_label_disable)
+        }
+        SecurityOptionKind::SecurityLabelFileType { .. } | SecurityOptionKind::SecurityLabelFileTypeNearMiss => {
+            security_label_filetype_diagnostic(kind, span, &mut candidates.security_label_filetype)
+        }
+        SecurityOptionKind::SecurityLabelLevel { .. } | SecurityOptionKind::SecurityLabelLevelNearMiss => {
+            security_label_level_diagnostic(kind, span, &mut candidates.security_label_level)
+        }
+        SecurityOptionKind::SecurityLabelNested { .. } | SecurityOptionKind::SecurityLabelNestedNearMiss => {
+            security_label_nested_diagnostic(kind, span, &mut candidates.security_label_nested)
+        }
+        SecurityOptionKind::SecurityLabelType { .. } | SecurityOptionKind::SecurityLabelTypeNearMiss => {
+            security_label_type_diagnostic(kind, span, &mut candidates.security_label_type)
+        }
+        _ => None,
+    }
+}
+
+fn security_label_disable_diagnostic(
+    kind: &SecurityOptionKind,
+    span: SourceSpan,
+    candidates: &mut usize,
+) -> Option<Diagnostic> {
+    match kind {
+        SecurityOptionKind::SecurityLabelDisable { .. } => {
+            *candidates += 1;
+            (*candidates > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-disable candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional effective SELinux label-disable candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelDisableNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-disable candidates require exact lowercase `label:disable` spelling without whitespace",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        _ => None,
+    }
+}
+
+fn security_label_filetype_diagnostic(
+    kind: &SecurityOptionKind,
+    span: SourceSpan,
+    candidates: &mut usize,
+) -> Option<Diagnostic> {
+    match kind {
+        SecurityOptionKind::SecurityLabelFileType { .. } => {
+            *candidates += 1;
+            (*candidates > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-filetype candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional effective SELinux label-filetype candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelFileTypeNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-filetype candidates require exact lowercase `label:filetype:<type>` spelling without whitespace",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        _ => None,
+    }
+}
+
+fn security_label_level_diagnostic(
+    kind: &SecurityOptionKind,
+    span: SourceSpan,
+    candidates: &mut usize,
+) -> Option<Diagnostic> {
+    match kind {
+        SecurityOptionKind::SecurityLabelLevel { .. } => {
+            *candidates += 1;
+            (*candidates > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-level candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional effective SELinux label-level candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelLevelNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-level candidates require exact lowercase `label:level:<level>` spelling without whitespace",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        _ => None,
+    }
+}
+
+fn security_label_nested_diagnostic(
+    kind: &SecurityOptionKind,
+    span: SourceSpan,
+    candidates: &mut usize,
+) -> Option<Diagnostic> {
+    match kind {
+        SecurityOptionKind::SecurityLabelNested { .. } => {
+            *candidates += 1;
+            (*candidates > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-nested candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional effective SELinux label-nested candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelNestedNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-nested candidates require exact lowercase `label:nested` spelling without whitespace",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        _ => None,
+    }
+}
+
+fn security_label_type_diagnostic(
+    kind: &SecurityOptionKind,
+    span: SourceSpan,
+    candidates: &mut usize,
+) -> Option<Diagnostic> {
+    match kind {
+        SecurityOptionKind::SecurityLabelType { .. } => {
+            *candidates += 1;
+            (*candidates > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-type candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional effective SELinux label-type candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelTypeNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-type candidates require exact lowercase `label:type:<type>` spelling with one non-empty whitespace-free type",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        _ => None,
     }
 }
 
@@ -3394,6 +4507,14 @@ impl Builder<'_> {
                 None
             }
         }
+    }
+}
+
+fn compose_scalar_from_merged(scalar: &crate::merge::MergedScalar) -> ComposeScalar {
+    match scalar.kind() {
+        MergedScalarKind::String => ComposeScalar::String(scalar.value().to_owned()),
+        MergedScalarKind::Boolean => ComposeScalar::Boolean(scalar.value().eq_ignore_ascii_case("true")),
+        MergedScalarKind::Number => ComposeScalar::Number(scalar.value().to_owned()),
     }
 }
 

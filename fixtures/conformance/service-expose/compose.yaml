@@ -1,0 +1,13 @@
+services:
+  omitted:
+    image: example.invalid/composelens/expose-omitted:1
+  empty:
+    expose: []
+  scalar-kinds:
+    expose: [80, "80", "80/tcp"]
+  documented:
+    expose: ["53/udp", "8000-8005", "080-090/tcp"]
+  schema-protocol:
+    expose: ["5000/sctp"]
+  duplicate:
+    expose: ["443", "443"]

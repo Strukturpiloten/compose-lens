@@ -2,6 +2,11 @@
 
 The real-world suite checks ComposeLens against licensed projects that were created for actual deployment needs. It complements minimal authored fixtures: small cases isolate one rule, while real projects expose interactions among syntax, typed fields, implementation extensions, processing, diagnostics, and rendering.
 
+The licensed Strukturpiloten TYPO3 regression receives an in-memory overlay with annotations and
+representative exact, duplicate, conflicting, and near-miss security options. It protects merge,
+interpolation, classification, and project-view access without modifying the upstream fixture or
+invoking a provider, filesystem, or runtime.
+
 ## Admission policy
 
 A real-world fixture must:

@@ -1,0 +1,18 @@
+schema = 1
+id = "service-security-options-model"
+suite = "typed-model"
+description = "Protects raw ordered service security options, eight conflict-aware lanes, repeatable mask and unmask lanes, diagnostics, and sibling recovery."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No environment access occurs; the interpolation-shaped item remains authored data."
+
+[expectations]
+summary = "Order, duplicates, empty strings, independent AppArmor, seccomp, no-new-privileges, SELinux label-disable/filetype/level/nested/type candidates, repeatable mask and exact ALL/absolute-looking unmask payloads, separator/case/whitespace/extended variants, unrelated label options, spans, and malformed source evidence remain visible without filesystem or SELinux type validation."

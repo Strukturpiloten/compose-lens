@@ -1,0 +1,36 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  scalar:
+    dns: local-resolver.example
+  empty-list:
+    dns: []
+  exact-list:
+    dns:
+      - 1.1.1.1
+      - 1.1.1.1
+      - local-resolver.example
+      - "${DNS_SERVER:-resolver.internal}"
+      - "2001:db8::53"
+  malformed-items:
+    image: example.invalid/recovery:1
+    dns:
+      - valid-before.example
+      - true
+      - 53
+      - null
+      - { server: invalid.example }
+      - [nested.example]
+      - valid-after.example
+  null:
+    image: example.invalid/null:1
+    dns: null
+  boolean:
+    image: example.invalid/boolean:1
+    dns: false
+  number:
+    image: example.invalid/number:1
+    dns: 53
+  mapping:
+    image: example.invalid/mapping:1
+    dns: { server: resolver.example }

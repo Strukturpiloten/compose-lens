@@ -1,0 +1,24 @@
+schema = 1
+id = "service-security-options"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, empty, raw, exact AppArmor, seccomp, no-new-privileges, SELinux label-disable/filetype/level/nested/type, and repeatable mask/unmask candidates plus near misses."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains, normalizes, or specifically rejects each raw option spelling; planned rows make no portable AppArmor, seccomp, no-new-privileges, SELinux label-disable/filetype/level/nested/type, mask/unmask path, profile, runtime, filesystem, or cross-format support claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-security-options"]
+schema = 1
+reviewed = "2026-08-07"
