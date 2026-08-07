@@ -11,15 +11,19 @@ use compose_lens::model::{
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
-    ProjectDevice, ProjectDns, ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectSysctls, ProjectTmpfs,
+    ProjectDevice, ProjectDns, ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectLogging,
+    ProjectLoggingOption, ProjectLoggingOptionValue, ProjectLoggingOptions, ProjectSysctls, ProjectTmpfs,
     ProjectUlimit, ProjectUlimitRange, ProjectUlimitScalar, ProjectUlimitValue, ProjectUlimits, build_project_view,
 };
 use compose_lens::render::{
     ComposeDocumentBuilder, GeneratedAnnotation, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
-    GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel, GeneratedLongDevice,
-    GeneratedMemLimit, GeneratedPidsLimit, GeneratedPullPolicy, GeneratedRestartPolicy, GeneratedService,
-    GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit,
-    GeneratedUlimitValue, GeneratedUlimits, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
+    GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel, GeneratedLogging,
+    GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit,
+    GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
+    GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPullPolicy, GeneratedRestartPolicy,
+    GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs,
+    GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption,
+    GeneratedVolumeDriverOptionValue, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
 
 #[test]
@@ -69,6 +73,178 @@ fn exposes_authored_effective_and_generated_annotations_contracts() -> Result<()
         GeneratedString::plain("platform")?,
     )?])?;
     assert_eq!(service.annotations().map(<[GeneratedAnnotation]>::len), Some(1));
+    Ok(())
+}
+
+#[test]
+fn exposes_generated_volume_definition_driver_options_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let mut volume = GeneratedVolumeDefinition::application("data")?;
+    volume.set_driver(GeneratedString::plain("opaque-driver")?)?;
+    volume.set_driver_opts(vec![
+        GeneratedVolumeDriverOption::new(
+            "quoted",
+            GeneratedVolumeDriverOptionValue::String(GeneratedString::plain("2")?),
+        )?,
+        GeneratedVolumeDriverOption::new(
+            "number",
+            GeneratedVolumeDriverOptionValue::Number(GeneratedString::plain("2")?),
+        )?,
+    ])?;
+    volume.set_labels(vec![GeneratedLabel::new(
+        "com.example.owner",
+        GeneratedString::plain("strukturpiloten")?,
+    )?])?;
+    assert_eq!(volume.driver().map(GeneratedString::expose), Some("opaque-driver"));
+    assert_eq!(volume.driver_opts().map(<[GeneratedVolumeDriverOption]>::len), Some(2));
+    assert_eq!(volume.labels().map(<[GeneratedLabel]>::len), Some(1));
+
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(GeneratedString::plain("example/app")?)?;
+    builder.add_service(service)?;
+    builder.add_volume_definition(volume)?;
+    let generated = builder.build(SourceId::new(820))?;
+    let volume = generated
+        .document()
+        .volumes()
+        .first()
+        .ok_or("generated volume expected")?;
+    assert!(matches!(
+        volume.driver_opts()[0].value().value(),
+        compose_lens::model::ComposeScalar::String(value) if value == "2"
+    ));
+    assert!(matches!(
+        volume.driver_opts()[1].value().value(),
+        compose_lens::model::ComposeScalar::Number(value) if value == "2"
+    ));
+    assert!(matches!(
+        volume.labels(),
+        Some(compose_lens::model::Labels::Map { entries, .. })
+            if entries[0].key().value() == "com.example.owner"
+                && matches!(entries[0].value().value(), compose_lens::model::ComposeScalar::String(value) if value == "strukturpiloten")
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_effective_and_generated_logging_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    logging:\n",
+        "      driver: custom\n",
+        "      options:\n",
+        "        text: \"01\"\n",
+        "        count: 2\n",
+        "        empty: null\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(816), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored: &compose_lens::model::Logging = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::logging)
+        .ok_or("authored logging expected")?;
+    let authored_options: &compose_lens::model::LoggingOptions =
+        authored.options().ok_or("authored options expected")?;
+    let _: &compose_lens::model::LoggingOption = &authored_options.entries()[0];
+    assert!(
+        matches!(authored_options.entries()[0].value().value(), compose_lens::model::LoggingOptionValue::String(value) if value == "01")
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(817),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let logging: &ProjectLogging = project
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::logging)
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective logging expected")?;
+    let options: &ProjectLoggingOptions = logging
+        .options()
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective options expected")?;
+    let option: &ProjectLoggingOption = options.entries()[0].value();
+    assert!(matches!(option.value().value(), ProjectLoggingOptionValue::String { value, .. } if value == "01"));
+
+    let generated_option = GeneratedLoggingOption::new("empty", GeneratedLoggingOptionValue::Null)?;
+    let generated = GeneratedLogging::new(GeneratedString::plain("custom")?, vec![generated_option])?;
+    let mut service = GeneratedService::new("app")?;
+    service.set_logging(generated)?;
+    assert_eq!(
+        service.logging().map(GeneratedLogging::options).map(<[_]>::len),
+        Some(1)
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_generated_network_definition_driver_options_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let mut network = GeneratedNetworkDefinition::application("frontend")?;
+    network.set_driver(GeneratedString::plain("opaque-driver")?)?;
+    network.set_driver_opts(vec![
+        GeneratedNetworkDriverOption::new(
+            "quoted",
+            GeneratedNetworkDriverOptionValue::String(GeneratedString::plain("2")?),
+        )?,
+        GeneratedNetworkDriverOption::new(
+            "number",
+            GeneratedNetworkDriverOptionValue::Number(GeneratedString::plain("2")?),
+        )?,
+    ])?;
+    network.set_enable_ipv6(false)?;
+    network.set_internal(true)?;
+    network.set_labels(vec![GeneratedLabel::new(
+        "com.example.owner",
+        GeneratedString::plain("strukturpiloten")?,
+    )?])?;
+    assert_eq!(network.driver().map(GeneratedString::expose), Some("opaque-driver"));
+    assert_eq!(
+        network.driver_opts().map(<[GeneratedNetworkDriverOption]>::len),
+        Some(2)
+    );
+    assert_eq!(network.enable_ipv6(), Some(false));
+    assert_eq!(network.internal(), Some(true));
+    assert_eq!(network.labels().map(<[GeneratedLabel]>::len), Some(1));
+
+    let mut service = GeneratedService::new("app")?;
+    service.add_network(GeneratedNetworkAttachment::new("frontend")?)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    builder.add_network_definition(network)?;
+    let generated = builder.build(SourceId::new(819))?;
+    let network = generated
+        .document()
+        .networks()
+        .first()
+        .ok_or("generated network expected")?;
+    assert!(matches!(
+        network.driver_opts()[0].value().value(),
+        compose_lens::model::ComposeScalar::String(value) if value == "2"
+    ));
+    assert!(matches!(
+        network.driver_opts()[1].value().value(),
+        compose_lens::model::ComposeScalar::Number(value) if value == "2"
+    ));
+    assert!(matches!(
+        network.labels(),
+        Some(compose_lens::model::Labels::Map { entries, .. })
+            if entries[0].key().value() == "com.example.owner"
+                && matches!(entries[0].value().value(), compose_lens::model::ComposeScalar::String(value) if value == "strukturpiloten")
+    ));
+    assert_eq!(
+        network.enable_ipv6().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        network.internal().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
     Ok(())
 }
 
@@ -823,6 +999,37 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
     ));
     assert_generated_controls(&generated)?;
     assert_generated_document_text(&generated);
+    Ok(())
+}
+
+#[test]
+fn generated_network_attachment_addresses_are_additive_public_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let mut attachment = GeneratedNetworkAttachment::new("frontend")?;
+    attachment.add_alias("app")?;
+    attachment.set_ipv4_address(GeneratedString::plain("192.0.2.40")?)?;
+    attachment.set_ipv6_address(GeneratedString::plain("2001:db8::40")?)?;
+    assert_eq!(
+        attachment.ipv4_address().map(GeneratedString::expose),
+        Some("192.0.2.40")
+    );
+    assert_eq!(
+        attachment.ipv6_address().map(GeneratedString::expose),
+        Some("2001:db8::40")
+    );
+
+    let mut service = GeneratedService::new("app")?;
+    service.add_network(attachment)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(818))?;
+    assert!(matches!(
+        generated.document().service("app").and_then(compose_lens::model::Service::networks),
+        Some(compose_lens::model::ServiceNetworks::Long { networks, .. })
+            if networks.first().is_some_and(|network| {
+                network.ipv4_address().is_some_and(|value| value.value() == "192.0.2.40")
+                    && network.ipv6_address().is_some_and(|value| value.value() == "2001:db8::40")
+            })
+    ));
     Ok(())
 }
 

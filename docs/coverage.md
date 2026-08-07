@@ -22,9 +22,9 @@ provenance.
 
 | Coverage | Service fields |
 | --- | --- |
-| Document model and project view | `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Document model and project view | `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Document model only | `build`, `deploy` |
-| Preserved, not typed | 50 exact current service keys; see [Exact service gaps](roadmap.md#exact-service-gaps). |
+| Preserved, not typed | 49 exact current service keys; see [Exact service gaps](roadmap.md#exact-service-gaps). |
 
 The preserved row follows the current Docker documentation grouping. Provider-specific additions
 remain preserved even when they are not part of the compose-spec repository.
@@ -55,6 +55,12 @@ API emits ordered quoted mappings and rejects duplicate names.
 
 Service annotations cover authored mapping/list syntax, keyed effective merging, and safe generated
 maps. Key-only ambiguity remains diagnosed, and provider/runtime behavior is not claimed.
+
+Service `logging` covers authored, effective-project, and generated boundaries. Its driver remains
+an uninterpreted string; ordered options retain exact string/number/null kind, value-only
+interpolation, nested provenance, extensions, unknowns, malformed recovery, and explicit empty
+maps. Generic recursive merge, reset, and override remain visible. Generation validates only safe
+YAML construction and applies no logging defaults, option normalization, or provider semantics.
 
 Explicit `container_name` values now travel through the document model, effective project view,
 and generated-document boundary. Generation enforces the documented portable Compose name grammar;
@@ -87,6 +93,10 @@ access, or cross-format behavior is claimed.
 Service `dns`, `dns_opt`, and `dns_search` cover authored, effective-project, and generated
 boundaries while preserving their respective scalar/list or sequence merge rules. Raw values,
 duplicates, provenance, and reset/override state remain observable without resolver interpretation.
+
+Generated service-network attachments now close the existing native-model gap for optional
+per-network `ipv4_address` and `ipv6_address`. Long-form output retains aliases, omission, raw
+spelling, sensitivity, and named-network scope without validating IP grammar or IPAM pools.
 
 Service `expose` covers ordered string/number scalars with kind-aware uniqueness and safe generated
 documented forms. Unsupported or malformed forms remain raw diagnostics.

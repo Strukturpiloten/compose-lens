@@ -16,6 +16,7 @@ mod hostname;
 mod identity;
 mod image;
 mod lifecycle;
+mod logging;
 mod memory;
 mod network;
 mod pids;
@@ -57,6 +58,7 @@ pub use hostname::{Hostname, HostnameKind};
 pub use identity::{IdentityComponent, UserNamespaceMode, UserNamespaceModeKind, UserSpec};
 pub use image::{ImageDigest, ImageReference};
 pub use lifecycle::StopGracePeriod;
+pub use logging::{Logging, LoggingOption, LoggingOptionValue, LoggingOptions};
 pub(crate) use memory::valid_generated_mem_amount;
 pub use memory::{MemLimit, MemLimitKind, MemLimitScalarKind, MemLimitUnit};
 pub use network::{Ipam, IpamConfig, NetworkDefinition, ServiceNetwork, ServiceNetworks};
@@ -129,6 +131,19 @@ pub const GRANT_MISSING_SOURCE: DiagnosticCode = DiagnosticCode::new("compose.gr
 
 /// A top-level resource definition must be a mapping or an explicit null.
 pub const RESOURCE_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.resource.expected-mapping-or-null");
+
+/// An external volume also configures a local driver or driver options.
+///
+/// Both authored values remain available for diagnosis; `ComposeLens` does not silently select one.
+pub const VOLUME_EXTERNAL_DRIVER_CONFIGURATION: DiagnosticCode =
+    DiagnosticCode::new("compose.volume.external-driver-configuration");
+
+/// An external volume also configures labels.
+///
+/// The authored labels remain available for diagnosis; `ComposeLens` does not silently discard
+/// them or repurpose the driver-configuration diagnostic.
+pub const VOLUME_EXTERNAL_LABELS_CONFIGURATION: DiagnosticCode =
+    DiagnosticCode::new("compose.volume.external-labels-configuration");
 
 /// A service-volume item is neither short nor long syntax.
 pub const VOLUME_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.volume.expected-short-or-long");
@@ -554,6 +569,24 @@ pub const SYSCTLS_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose
 /// A service `sysctls` list contains an exact duplicate string.
 pub const SYSCTLS_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.sysctls.duplicate-item");
 
+/// A service `logging` value is not a mapping.
+pub const LOGGING_EXPECTED_MAPPING: DiagnosticCode = DiagnosticCode::new("compose.logging.expected-mapping");
+
+/// A service logging driver is not a YAML string scalar.
+pub const LOGGING_DRIVER_EXPECTED_STRING: DiagnosticCode =
+    DiagnosticCode::new("compose.logging.driver.expected-string");
+
+/// A service logging options value is not a mapping.
+pub const LOGGING_OPTIONS_EXPECTED_MAPPING: DiagnosticCode =
+    DiagnosticCode::new("compose.logging.options.expected-mapping");
+
+/// A service logging option has an empty key.
+pub const LOGGING_OPTION_EMPTY_KEY: DiagnosticCode = DiagnosticCode::new("compose.logging.option.empty-key");
+
+/// A service logging option is not a YAML string, number, or null scalar.
+pub const LOGGING_OPTION_EXPECTED_SCALAR: DiagnosticCode =
+    DiagnosticCode::new("compose.logging.option.expected-scalar");
+
 /// A service environment-file item is neither scalar short syntax nor mapping long syntax.
 pub const ENVIRONMENT_FILE_EXPECTED_FORM: DiagnosticCode =
     DiagnosticCode::new("compose.environment-file.expected-short-or-long");
@@ -676,6 +709,7 @@ pub struct Service {
     mem_limit: Option<MemLimit>,
     tmpfs: Option<Tmpfs>,
     sysctls: Option<Sysctls>,
+    logging: Option<Logging>,
     pull_policy: Option<PullPolicy>,
     restart: Option<RestartPolicy>,
     stop_signal: Option<Located<String>>,
@@ -729,6 +763,7 @@ impl Service {
             mem_limit: None,
             tmpfs: None,
             sysctls: None,
+            logging: None,
             pull_policy: None,
             restart: None,
             stop_signal: None,
@@ -933,6 +968,12 @@ impl Service {
     #[must_use]
     pub const fn sysctls(&self) -> Option<&Sysctls> {
         self.sysctls.as_ref()
+    }
+
+    /// Returns service logging configuration with an uninterpreted driver and ordered options.
+    #[must_use]
+    pub const fn logging(&self) -> Option<&Logging> {
+        self.logging.as_ref()
     }
 
     /// Returns the raw-preserving service image pull policy.
@@ -1459,6 +1500,7 @@ impl Parser {
                 "mem_limit" if !duplicate => service.mem_limit = self.parse_mem_limit(&service_field),
                 "tmpfs" if !duplicate => service.tmpfs = self.parse_tmpfs(&service_field),
                 "sysctls" if !duplicate => service.sysctls = self.parse_sysctls(&service_field),
+                "logging" if !duplicate => service.logging = self.parse_logging(&service_field),
                 "pull_policy" if !duplicate => service.pull_policy = self.parse_pull_policy(&service_field),
                 "restart" if !duplicate => service.restart = self.parse_restart_policy(&service_field),
                 "stop_signal" if !duplicate => {
@@ -2344,6 +2386,141 @@ impl Parser {
                 None
             }
         }
+    }
+
+    fn parse_logging(&mut self, field: &ParsedField) -> Option<Logging> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                LOGGING_EXPECTED_MAPPING,
+                field,
+                "logging must be a mapping with optional driver and options fields",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut logging = Logging::new(span);
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &member);
+            match member.name.value.as_str() {
+                "driver" if !duplicate => {
+                    if let Some(driver) = self.parse_logging_driver(&member) {
+                        logging.set_driver(driver);
+                    }
+                }
+                "options" if !duplicate => {
+                    if let Some(options) = self.parse_logging_options(&member) {
+                        logging.set_options(options);
+                    }
+                }
+                name if name.starts_with("x-") => logging.push_extension(member.reference()),
+                _ if duplicate => {}
+                _ => logging.push_unknown(member.reference()),
+            }
+        }
+        Some(logging)
+    }
+
+    fn parse_logging_driver(&mut self, field: &ParsedField) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                LOGGING_DRIVER_EXPECTED_STRING,
+                field,
+                "logging driver must be a YAML string scalar",
+            );
+            return None;
+        };
+        if !matches!(
+            ScalarValue::from_scalar(scalar).scalar_type(),
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+        ) {
+            self.expected(
+                LOGGING_DRIVER_EXPECTED_STRING,
+                field,
+                "logging driver must be a YAML string scalar",
+            );
+            return None;
+        }
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        Some(Located::new(scalar_string_from_source(&self.source, scalar), span))
+    }
+
+    fn parse_logging_options(&mut self, field: &ParsedField) -> Option<LoggingOptions> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                LOGGING_OPTIONS_EXPECTED_MAPPING,
+                field,
+                "logging options must be a mapping",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut entries = Vec::new();
+        let mut unmodeled_entries = Vec::new();
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            if option.name.value.is_empty() {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        LOGGING_OPTION_EMPTY_KEY,
+                        Severity::Error,
+                        "logging option keys must not be empty",
+                    )
+                    .with_label(DiagnosticLabel::primary(option.name.span, "empty logging option key")),
+                );
+                unmodeled_entries.push(option.reference());
+                continue;
+            }
+            let Some(value) = self.parse_logging_option_scalar(&option) else {
+                unmodeled_entries.push(option.reference());
+                continue;
+            };
+            entries.push(LoggingOption::new(option.name, value, option.span));
+        }
+        Some(LoggingOptions::new(span, entries, unmodeled_entries))
+    }
+
+    fn parse_logging_option_scalar(&mut self, field: &ParsedField) -> Option<Located<LoggingOptionValue>> {
+        let Some(node) = field.value.as_ref() else {
+            return Some(Located::new(LoggingOptionValue::Null, field.name.span));
+        };
+        let Some(scalar) = node.as_scalar() else {
+            self.expected(
+                LOGGING_OPTION_EXPECTED_SCALAR,
+                field,
+                "logging option values must be YAML string, number, or null scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let value = match scalar_value.scalar_type() {
+            ScalarType::Null => LoggingOptionValue::Null,
+            ScalarType::Integer | ScalarType::Float => {
+                LoggingOptionValue::Number(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                LoggingOptionValue::String(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::Boolean => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        LOGGING_OPTION_EXPECTED_SCALAR,
+                        Severity::Error,
+                        "logging option values must be YAML string, number, or null scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "boolean logging option retained as malformed",
+                    )),
+                );
+                return None;
+            }
+        };
+        Some(Located::new(value, span))
     }
 
     fn parse_restart_policy(&mut self, field: &ParsedField) -> Option<RestartPolicy> {
@@ -3748,9 +3925,52 @@ impl Parser {
                     _ => volume.push_unknown(option.reference()),
                 }
             }
+            self.validate_external_volume_driver_configuration(&volume);
+            self.validate_external_volume_labels_configuration(&volume);
             definitions.push(volume);
         }
         definitions
+    }
+
+    fn validate_external_volume_driver_configuration(&mut self, volume: &VolumeDefinition) {
+        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
+            || (volume.driver().is_none() && volume.driver_opts().is_empty())
+        {
+            return;
+        }
+        let span = volume
+            .driver()
+            .map(Located::span)
+            .or_else(|| volume.driver_opts().first().map(KeyValueEntry::span))
+            .unwrap_or_else(|| volume.span());
+        self.diagnostics.push(
+            Diagnostic::new(
+                VOLUME_EXTERNAL_DRIVER_CONFIGURATION,
+                Severity::Error,
+                "external volume cannot also configure `driver` or `driver_opts`",
+            )
+            .with_label(DiagnosticLabel::primary(
+                span,
+                "driver configuration remains retained for review",
+            )),
+        );
+    }
+
+    fn validate_external_volume_labels_configuration(&mut self, volume: &VolumeDefinition) {
+        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
+            || volume.labels().is_none()
+        {
+            return;
+        }
+        let span = volume.labels().map_or_else(|| volume.span(), Labels::span);
+        self.diagnostics.push(
+            Diagnostic::new(
+                VOLUME_EXTERNAL_LABELS_CONFIGURATION,
+                Severity::Error,
+                "external volume cannot also configure `labels`",
+            )
+            .with_label(DiagnosticLabel::primary(span, "labels remain retained for review")),
+        );
     }
 
     fn parse_config_definitions(&mut self, field: &ParsedField) -> Vec<ConfigDefinition> {
@@ -4000,8 +4220,11 @@ impl Parser {
         match field.value.as_ref() {
             Some(YamlNode::Sequence(sequence)) => {
                 let span = span_from_position(self.source_id, sequence.byte_range());
-                let values =
-                    self.parse_scalar_nodes(sequence.values(), field.span, "label list entries must be scalars");
+                let values = self.parse_string_scalar_nodes(
+                    sequence.values(),
+                    field.span,
+                    "label list entries must be string scalars",
+                );
                 Some(Labels::List { span, values })
             }
             Some(YamlNode::Mapping(mapping)) => {
@@ -4014,6 +4237,32 @@ impl Parser {
                 None
             }
         }
+    }
+
+    fn parse_string_scalar_nodes(
+        &mut self,
+        nodes: impl Iterator<Item = YamlNode>,
+        fallback_span: SourceSpan,
+        message: impl Into<String>,
+    ) -> Vec<Located<String>> {
+        let message = message.into();
+        let mut values = Vec::new();
+        for node in nodes {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(EXPECTED_SCALAR, &node, fallback_span, &message);
+                continue;
+            };
+            if !matches!(
+                ScalarValue::from_scalar(&scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(EXPECTED_SCALAR, &YamlNode::Scalar(scalar), fallback_span, &message);
+                continue;
+            }
+            let span = span_from_position(self.source_id, scalar.byte_range());
+            values.push(Located::new(scalar_string_from_source(&self.source, &scalar), span));
+        }
+        values
     }
 
     fn parse_annotations(&mut self, field: &ParsedField) -> Option<Annotations> {

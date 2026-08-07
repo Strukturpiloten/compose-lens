@@ -92,6 +92,11 @@ Service `annotations` retains mapping/list syntax, scalar evidence, raw list ite
 effective contributors. Mapping keys do not interpolate, and key-only list items remain explicit
 ambiguity rather than becoming empty label values.
 
+Service `logging` retains an optional uninterpreted YAML string `driver`, an ordered `options`
+mapping including explicit empty state, and exact string/number/null option kinds. Option keys are
+non-empty and never interpolate; extensions, unknown fields, malformed entries, and valid siblings
+remain source-addressable.
+
 An explicit `container_name` is a source-aware scalar at both layers. The effective project view
 retains ordinary Compose scalar replacement provenance across files. The parser does not confuse
 the custom runtime name with the service key or infer one when the field is absent.
@@ -210,7 +215,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -253,6 +258,9 @@ Field-specific variants retain forms whose behavior or meaning can differ:
   exact duplicates, colon-delimited documented assignments, and retained raw target options;
 - service sysctls: omitted, ordered mapping or ordered list form with explicit empty collections,
   exact scalar kind/spelling, uninterpolated map keys, and retained duplicate list evidence;
+- service logging: omitted or mapping form, optional uninterpreted string driver, ordered
+  string/number/null options including explicit empty state, extensions, unknowns, and malformed
+  sibling recovery;
 - restart policy: a known literal, optional raw-preserving `on-failure` retry count, deferred
   expression, or retained invalid/provider-specific scalar;
 - pull policy: documented literals, a retained alias, exact custom interval spelling, deferred

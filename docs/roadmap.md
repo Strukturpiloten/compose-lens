@@ -33,7 +33,7 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 | Surface | Project typed | Document typed only | Syntax-preserved only |
 | --- | ---: | ---: | ---: |
 | Top level | 6 | 0 | 3 |
-| Service | 34 | 3 | 56 |
+| Service | 35 | 3 | 55 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
@@ -79,14 +79,14 @@ Build and deploy field recognition is not a claim that every nested value is sem
 
 ### Syntax-preserved-only service keys
 
-The following 50 current service keys do not yet have a dedicated typed model:
+The following 49 current service keys do not yet have a dedicated typed model:
 
 `attach`, `blkio_config`, `cgroup`, `cgroup_parent`,
 `cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `cpu_rt_runtime`,
 `cpu_shares`, `cpus`, `cpuset`, `credential_spec`, `develop`, `device_cgroup_rules`,
 `domainname`, `extends`,
 `external_links`, `gpus`, `ipc`, `isolation`, `label_file`, `links`,
-`logging`, `mac_address`, `mem_limit`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
+`mac_address`, `mem_limit`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
 `models`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `platform`,
 `post_start`, `pre_start`, `pre_stop`, `privileged`, `provider`, `pull_refresh_after`, `runtime`,
 `scale`, `stdin_open`,
@@ -115,6 +115,7 @@ claimed.
 The 93-key service ledger above classifies immediate service keys. The following closed nested
 keys also remain without dedicated semantic value types. Open-ended user maps such as labels,
 environment variables, driver options, and extension fields are intentionally not enumerated.
+Service logging's `driver` and ordered scalar `options` are typed.
 
 - `blkio_config`: `device_read_bps`, `device_read_iops`, `device_write_bps`,
   `device_write_iops`, `weight`, and `weight_device`; each rate entry has `path` and `rate`, and
@@ -122,7 +123,6 @@ environment variables, driver options, and extension fields are intentionally no
 - `credential_spec`: `config`, `file`, and `registry`;
 - GPU/device-reservation entries: `capabilities`, `count`, `device_ids`, `driver`, and `options`;
 - `extends`: `file` and `service`;
-- `logging`: `driver` and `options`;
 - service `models` entries: `endpoint_var` and `model_var`;
 - `provider`: `options` and `type`;
 - long volume mounts: `consistency`, `image`, `tmpfs`, and `volume`; additionally
@@ -164,10 +164,33 @@ hiding a nested semantic gap.
 ## Generated-document boundary
 
 Generated documents currently cover project `name`, services, networks, and volumes. Generated
-services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `env_file`, `environment`, `labels`, `annotations`, `user`,
+services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `env_file`, `environment`, `labels`, `annotations`, `logging`, `user`,
 `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`,
 `stop_grace_period`, `extra_hosts`, `ports`,
 `volumes`, and `networks`.
+Generated long-form service-network attachments retain aliases plus optional raw `ipv4_address`
+and `ipv6_address` values with omission, sensitivity, and named-network scope intact.
+Generated top-level network definitions add optional opaque `driver` and ordered unique
+string-or-number `driver_opts` without changing the shared basic/external `GeneratedResource`
+network API. They are application-owned; external definitions remain `GeneratedResource::external`
+because Compose permits only `name` alongside `external`. Driver/plugin and provider-specific option
+semantics remain outside generation.
+
+Generated top-level volume definitions use a separate application-owned API with optional opaque
+`driver` and ordered unique string-or-number `driver_opts`. It preserves explicit empty maps and
+scalar shape without accepting driver-configured external volumes; `GeneratedResource::external`
+remains the compatible external lifecycle API. BoxFerry owns conversion outcomes for general
+volume driver options, image drivers, external lifecycle, and platform names.
+Application-owned generated volume definitions also retain ordered unique explicit-string `labels`,
+including omission, explicit empty maps, deterministic parse-back output, and sensitivity. Literal
+external volumes that retain labels have distinct source-aware diagnostics; external lifecycle
+remains unavailable on the application-owned definition API.
+
+Generated application-owned network definitions also retain optional literal `enable_ipv6` and
+`internal` choices, including omission versus explicit `false` or `true`, without defaults or
+driver/IPAM/provider/runtime validation. `enable_ipv4` remains deliberately absent from this
+generated API because it has no native Quadlet/Podman network-create counterpart; BoxFerry owns
+the non-representable diagnostic.
 
 All other typed or preserved service/resource keys remain open for generated construction. A key
 is generated only after syntax-form choice, validation, sensitivity, deterministic rendering, and
@@ -229,12 +252,19 @@ parse-back tests are defined.
   invalid authored states, complete merge provenance, and planned-only provider evidence.
 - [x] Type and generate service DNS settings with their documented merge rules and raw evidence.
 - [x] Type and generate exposed ports with scalar-kind-aware uniqueness.
+- [x] Generate optional raw per-attachment IPv4/IPv6 addresses in deterministic long-form service
+  networks without inferring IPAM defaults or validating address/pool relationships.
+- [x] Generate top-level network drivers and scalar-kind-aware ordered driver options without
+  changing the shared basic/external resource API, while keeping external networks on its
+  name-only-compatible path and not validating plugins or provider semantics.
 - [x] Preserve and generate raw service security options with non-selecting diagnostic candidates.
 - [ ] Type domain name, MAC addresses, network modes,
   external links, and links.
 - [x] Type service annotations through authored mapping/list syntax, keyed effective merge,
   provenance-preserving diagnostics, and safe generated mapping output.
-- [ ] Type `label_file`, logging, and remaining config/secret metadata fields.
+- [x] Type service `logging` through authored, recursively merged, effective-project, and generated
+  boundaries with uninterpreted drivers, ordered string/number/null options, and no provider policy.
+- [ ] Type `label_file` and remaining config/secret metadata fields.
 - [ ] Preserve provider/runtime-specific value spellings and attach compatibility evidence instead
   of enforcing one implementation's grammar globally.
 

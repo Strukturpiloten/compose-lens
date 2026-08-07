@@ -12,12 +12,15 @@ use compose_lens::model::{
     EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Entrypoint, Environment, EnvironmentFile, EnvironmentFileFormatKind,
     ExtraHostSeparator, ExtraHosts, GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE, HEALTHCHECK_INVALID_DURATION,
     HEALTHCHECK_INVALID_RETRIES, HEALTHCHECK_INVALID_TEST, HealthcheckTestKind, HostAddressKind, HostnameKind,
-    IdentityComponent, Labels, LimitValue, Located, MountType, PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port,
-    RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY, RestartPolicyKind, STOP_GRACE_PERIOD_INVALID,
-    SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING,
-    SecretGrant, SelinuxRelabel, ServiceNetworks, StopGracePeriod, SysctlsForm, ULIMIT_INVALID_NAME,
-    ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UlimitValue, UserNamespaceModeKind, VOLUME_EXPECTED_FORM,
-    VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE, VolumeMount, VolumeSyntax,
+    IdentityComponent, LOGGING_DRIVER_EXPECTED_STRING, LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY,
+    LOGGING_OPTION_EXPECTED_SCALAR, LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue, Located, LoggingOptionValue,
+    MountType, PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY,
+    RestartPolicyKind, STOP_GRACE_PERIOD_INVALID, SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM,
+    SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING, SecretGrant, SelinuxRelabel, ServiceNetworks, StopGracePeriod,
+    SysctlsForm, ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UlimitValue,
+    UserNamespaceModeKind, VOLUME_EXPECTED_FORM, VOLUME_EXTERNAL_DRIVER_CONFIGURATION,
+    VOLUME_EXTERNAL_LABELS_CONFIGURATION, VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE,
+    VolumeMount, VolumeSyntax,
 };
 
 #[test]
@@ -84,6 +87,9 @@ const POST_01_INVALID: &str = include_str!("../fixtures/typed-model/post-01-inva
 const SERVICE_LABEL_FORMS: &str = include_str!("../fixtures/typed-model/service-label-forms/compose.yaml");
 const INVALID_SERVICE_LABEL_FORMS: &str =
     include_str!("../fixtures/typed-model/invalid-service-label-forms/compose.yaml");
+const NETWORK_LABEL_FORMS: &str = include_str!("../fixtures/typed-model/network-label-forms/compose.yaml");
+const INVALID_NETWORK_LABEL_FORMS: &str =
+    include_str!("../fixtures/typed-model/invalid-network-label-forms/compose.yaml");
 const TRAILING_EMPTY_VALUE: &str = include_str!("../fixtures/roundtrip/canonical-merged/compose.yaml");
 const COMMA_PLAIN_SCALAR: &str = include_str!("../fixtures/syntax/comma-plain-scalar/compose.yaml");
 const SERVICE_HOSTNAME: &str = include_str!("../fixtures/typed-model/service-hostname-model/compose.yaml");
@@ -95,6 +101,7 @@ const SERVICE_CAP_ADD: &str = include_str!("../fixtures/typed-model/service-cap-
 const SERVICE_CAP_DROP: &str = include_str!("../fixtures/typed-model/service-cap-drop-model/compose.yaml");
 const SERVICE_TMPFS: &str = include_str!("../fixtures/typed-model/service-tmpfs-model/compose.yaml");
 const SERVICE_SYSCTLS: &str = include_str!("../fixtures/typed-model/service-sysctls-model/compose.yaml");
+const SERVICE_LOGGING: &str = include_str!("../fixtures/typed-model/service-logging-model/compose.yaml");
 const SERVICE_DEVICES: &str = include_str!("../fixtures/typed-model/service-devices-model/compose.yaml");
 const SERVICE_DNS: &str = include_str!("../fixtures/typed-model/service-dns-model/compose.yaml");
 const SERVICE_DNS_OPTIONS: &str = include_str!("../fixtures/typed-model/service-dns-options-model/compose.yaml");
@@ -912,6 +919,120 @@ fn types_service_sysctls_without_normalizing_form_scalars_or_invalid_siblings() 
     assert_typed_sysctls_mapping(document, source_id)?;
     assert_typed_sysctls_collections(document, source_id)?;
     assert_typed_sysctls_recovery(document, &parsed)?;
+    Ok(())
+}
+
+#[test]
+fn types_service_logging_without_interpreting_drivers_or_losing_malformed_siblings()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source_id = SourceId::new(812);
+    let syntax = SyntaxDocument::parse(source_id, SERVICE_LOGGING)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial logging document expected")?;
+
+    assert!(
+        document
+            .service("omitted")
+            .is_some_and(|service| service.logging().is_none())
+    );
+    assert!(
+        document
+            .service("empty")
+            .and_then(compose_lens::model::Service::logging)
+            .is_some_and(|logging| logging.driver().is_none() && logging.options().is_none())
+    );
+    let logging = document
+        .service("configured")
+        .and_then(compose_lens::model::Service::logging)
+        .ok_or("configured logging expected")?;
+    assert_eq!(
+        logging.driver().map(Located::value).map(String::as_str),
+        Some("vendor-driver:${DRIVER_SUFFIX}")
+    );
+    assert_eq!(logging.extension_fields().len(), 1);
+    assert_eq!(logging.unknown_fields().len(), 1);
+    let options = logging.options().ok_or("logging options expected")?;
+    assert_eq!(
+        options
+            .entries()
+            .iter()
+            .map(|entry| entry.name().value().as_str())
+            .collect::<Vec<_>>(),
+        ["string-option", "number-option", "null-option", "expression-option"]
+    );
+    assert!(matches!(options.entries()[0].value().value(), LoggingOptionValue::String(value) if value == "01"));
+    assert!(matches!(options.entries()[1].value().value(), LoggingOptionValue::Number(value) if value == "0001"));
+    assert!(matches!(options.entries()[2].value().value(), LoggingOptionValue::Null));
+    assert!(
+        options
+            .entries()
+            .iter()
+            .all(|entry| entry.span().source_id() == source_id)
+    );
+    assert!(
+        document
+            .service("empty-options")
+            .and_then(compose_lens::model::Service::logging)
+            .and_then(compose_lens::model::Logging::options)
+            .is_some_and(|options| options.entries().is_empty())
+    );
+
+    assert_typed_logging_recovery(document)?;
+
+    for code in [
+        LOGGING_DRIVER_EXPECTED_STRING,
+        LOGGING_OPTIONS_EXPECTED_MAPPING,
+        LOGGING_OPTION_EMPTY_KEY,
+        LOGGING_OPTION_EXPECTED_SCALAR,
+        LOGGING_EXPECTED_MAPPING,
+    ] {
+        assert!(
+            parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code),
+            "missing {code}"
+        );
+    }
+    Ok(())
+}
+
+fn assert_typed_logging_recovery(document: &ComposeDocument) -> Result<(), Box<dyn std::error::Error>> {
+    let malformed_driver = document
+        .service("malformed-driver")
+        .ok_or("malformed driver service expected")?;
+    let logging = malformed_driver
+        .logging()
+        .ok_or("partially recovered logging expected")?;
+    assert!(logging.driver().is_none());
+    assert!(logging.options().is_some_and(|options| options.entries().len() == 1));
+    assert!(malformed_driver.image().is_some());
+    let malformed_options = document
+        .service("malformed-options")
+        .and_then(compose_lens::model::Service::logging)
+        .ok_or("malformed options logging expected")?;
+    assert_eq!(
+        malformed_options.driver().map(Located::value).map(String::as_str),
+        Some("retained-driver")
+    );
+    let recovered = malformed_options.options().ok_or("recovered options expected")?;
+    assert_eq!(
+        recovered
+            .entries()
+            .iter()
+            .map(|entry| entry.name().value().as_str())
+            .collect::<Vec<_>>(),
+        ["valid-before", "valid-after"]
+    );
+    assert_eq!(recovered.unmodeled_entries().len(), 3);
+    assert!(
+        document
+            .service("malformed-options-field")
+            .and_then(compose_lens::model::Service::logging)
+            .is_some_and(|logging| logging.driver().is_some() && logging.options().is_none())
+    );
+    assert!(
+        document
+            .service("malformed-logging")
+            .is_some_and(|service| service.logging().is_none() && service.image().is_some())
+    );
     Ok(())
 }
 
@@ -2454,6 +2575,90 @@ fn reports_invalid_service_label_forms_without_losing_services() -> Result<(), B
 }
 
 #[test]
+fn retains_network_label_mapping_and_sequence_forms() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(SourceId::new(31), NETWORK_LABEL_FORMS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+    let mapping = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "mapping")
+        .ok_or("mapping network expected")?;
+    let sequence = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "sequence")
+        .ok_or("sequence network expected")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    let Some(Labels::Map { entries, .. }) = mapping.labels() else {
+        return Err("mapping network labels expected".into());
+    };
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].key().value(), "com.example.empty");
+    assert_eq!(entries[0].value().value(), &ComposeScalar::String(String::new()));
+    assert_eq!(
+        entries[1].value().value(),
+        &ComposeScalar::String("left=right".to_owned())
+    );
+
+    let Some(Labels::List { values, .. }) = sequence.labels() else {
+        return Err("sequence network labels expected".into());
+    };
+    assert_eq!(
+        values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>(),
+        [
+            "com.example.value=sequence",
+            "com.example.empty",
+            "com.example.equals=left=right",
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn reports_invalid_network_label_forms_without_losing_networks() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::DUPLICATE_FIELD;
+
+    let syntax = SyntaxDocument::parse(SourceId::new(32), INVALID_NETWORK_LABEL_FORMS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial typed document expected")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(!parsed.is_valid());
+    assert_eq!(document.networks().len(), 5);
+    for code in [EXPECTED_FIELD_FORM, EXPECTED_SCALAR, DUPLICATE_FIELD] {
+        assert!(parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == EXPECTED_SCALAR)
+            .count(),
+        4
+    );
+    assert!(
+        document
+            .networks()
+            .iter()
+            .find(|network| network.name().value() == "invalid-list-item")
+            .is_some_and(|network| matches!(network.labels(), Some(Labels::List { values, .. }) if values.is_empty()))
+    );
+    let empty_key = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "empty-map-key")
+        .and_then(compose_lens::model::NetworkDefinition::labels)
+        .ok_or("empty-key network labels expected")?;
+    assert!(
+        matches!(empty_key, Labels::Map { entries, .. } if entries.len() == 1 && entries[0].key().value().is_empty())
+    );
+    Ok(())
+}
+
+#[test]
 fn types_a_complete_unquoted_short_volume_with_comma_options() -> Result<(), Box<dyn std::error::Error>> {
     let syntax = SyntaxDocument::parse(SourceId::new(30), COMMA_PLAIN_SCALAR)?;
     let parsed = ComposeDocument::parse(syntax.document());
@@ -2770,6 +2975,10 @@ fn types_top_level_network_and_volume_definitions() -> Result<(), Box<dyn std::e
         network.enable_ipv6().map(Located::value),
         Some(&BooleanValue::Literal(false))
     );
+    assert_eq!(
+        network.internal().map(Located::value),
+        Some(&BooleanValue::Expression("${INTERNAL:-false}".to_owned()))
+    );
     let ipam = network.ipam().ok_or("network IPAM is missing")?;
     assert_eq!(ipam.config().len(), 1);
     assert_eq!(ipam.config()[0].aux_addresses().len(), 1);
@@ -2789,6 +2998,365 @@ fn types_top_level_network_and_volume_definitions() -> Result<(), Box<dyn std::e
     assert_eq!(volume.extension_fields().len(), 1);
     assert_eq!(volume.unknown_fields().len(), 1);
     assert_eq!(implicit_volume.driver(), None);
+    Ok(())
+}
+
+#[test]
+fn retains_volume_driver_option_scalar_kinds_and_external_driver_conflicts() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app\n",
+        "volumes:\n",
+        "  implicit:\n",
+        "  scalar-kinds:\n",
+        "    driver: opaque\n",
+        "    driver_opts:\n",
+        "      string: \"2\"\n",
+        "      number: 2\n",
+        "      boolean: true\n",
+        "      null:\n",
+        "  external-driver:\n",
+        "    external: true\n",
+        "    driver: opaque\n",
+        "    driver_opts: {o: bind}\n",
+        "  malformed-external:\n",
+        "    external:\n",
+        "    driver_opts: {boolean: false, null: null}\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(821), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+    let scalar_kinds = document
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "scalar-kinds")
+        .ok_or("scalar kinds volume expected")?;
+    assert!(matches!(scalar_kinds.driver_opts()[0].value().value(), ComposeScalar::String(value) if value == "2"));
+    assert!(matches!(scalar_kinds.driver_opts()[1].value().value(), ComposeScalar::Number(value) if value == "2"));
+    assert!(matches!(
+        scalar_kinds.driver_opts()[2].value().value(),
+        ComposeScalar::Boolean(true)
+    ));
+    assert!(matches!(
+        scalar_kinds.driver_opts()[3].value().value(),
+        ComposeScalar::Null
+    ));
+    assert!(
+        document
+            .volumes()
+            .iter()
+            .any(|volume| volume.name().value() == "implicit")
+    );
+    let external = document
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "external-driver")
+        .ok_or("external driver volume expected")?;
+    assert_eq!(external.driver().map(|driver| driver.value().as_str()), Some("opaque"));
+    assert_eq!(external.driver_opts().len(), 1);
+    assert!(
+        parsed
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == VOLUME_EXTERNAL_DRIVER_CONFIGURATION)
+    );
+    assert!(
+        parsed
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == EXPECTED_BOOLEAN)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_volume_label_forms_and_diagnoses_literal_external_labels_without_discarding_them()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "volumes:\n",
+        "  mapping:\n",
+        "    labels:\n",
+        "      com.example.empty: \"\"\n",
+        "      com.example.equals: left=right\n",
+        "  sequence:\n",
+        "    labels: [com.example.value=sequence, com.example.key-only]\n",
+        "  external-empty-map:\n",
+        "    external: true\n",
+        "    labels: {}\n",
+        "  external-empty-list:\n",
+        "    external: true\n",
+        "    labels: []\n",
+        "  external-both:\n",
+        "    external: true\n",
+        "    driver: opaque\n",
+        "    labels: {retained: value}\n",
+        "  deferred-external:\n",
+        "    external: \"${EXTERNAL}\"\n",
+        "    labels: {retained: value}\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(824), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+
+    let mapping = document
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "mapping")
+        .and_then(compose_lens::model::VolumeDefinition::labels)
+        .ok_or("mapping volume labels expected")?;
+    assert!(matches!(
+        mapping,
+        Labels::Map { entries, .. }
+            if entries.len() == 2
+                && entries[0].key().value() == "com.example.empty"
+                && matches!(entries[0].value().value(), ComposeScalar::String(value) if value.is_empty())
+                && entries[1].key().value() == "com.example.equals"
+                && matches!(entries[1].value().value(), ComposeScalar::String(value) if value == "left=right")
+    ));
+    let sequence = document
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "sequence")
+        .and_then(compose_lens::model::VolumeDefinition::labels)
+        .ok_or("sequence volume labels expected")?;
+    assert!(matches!(
+        sequence,
+        Labels::List { values, .. }
+            if values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>()
+                == ["com.example.value=sequence", "com.example.key-only"]
+    ));
+    for name in [
+        "external-empty-map",
+        "external-empty-list",
+        "external-both",
+        "deferred-external",
+    ] {
+        assert!(
+            document
+                .volumes()
+                .iter()
+                .find(|volume| volume.name().value() == name)
+                .and_then(compose_lens::model::VolumeDefinition::labels)
+                .is_some(),
+            "{name} labels should remain available"
+        );
+    }
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == VOLUME_EXTERNAL_LABELS_CONFIGURATION)
+            .count(),
+        3
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == VOLUME_EXTERNAL_DRIVER_CONFIGURATION)
+            .count(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn preserves_opaque_ipam_strings_ordered_configs_and_scalar_mappings_without_defaults()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "networks:\n",
+        "  opaque:\n",
+        "    ipam:\n",
+        "      driver: opaque-driver\n",
+        "      config:\n",
+        "        - subnet: not-a-cidr\n",
+        "          ip_range: not-a-range\n",
+        "          gateway: not-an-address\n",
+        "          aux_addresses:\n",
+        "            number: 7\n",
+        "            boolean: false\n",
+        "            null:\n",
+        "            string: opaque\n",
+        "        - subnet: second-opaque-subnet\n",
+        "      options:\n",
+        "        number: 9\n",
+        "        boolean: true\n",
+        "        null:\n",
+        "        string: opaque\n",
+        "  empty:\n",
+        "    ipam: {}\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(771), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+    let opaque = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "opaque")
+        .and_then(compose_lens::model::NetworkDefinition::ipam)
+        .ok_or("opaque IPAM expected")?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(
+        opaque.driver().map(Located::value).map(String::as_str),
+        Some("opaque-driver")
+    );
+    assert_eq!(
+        &source[opaque.driver().ok_or("driver expected")?.span().range()],
+        "opaque-driver"
+    );
+    assert_eq!(opaque.config().len(), 2);
+    assert_eq!(
+        opaque
+            .config()
+            .iter()
+            .map(|config| config.subnet().map(Located::value).map(String::as_str))
+            .collect::<Vec<_>>(),
+        [Some("not-a-cidr"), Some("second-opaque-subnet")]
+    );
+    let first = &opaque.config()[0];
+    assert_eq!(
+        first.ip_range().map(Located::value).map(String::as_str),
+        Some("not-a-range")
+    );
+    assert_eq!(
+        first.gateway().map(Located::value).map(String::as_str),
+        Some("not-an-address")
+    );
+    assert_eq!(
+        first
+            .aux_addresses()
+            .iter()
+            .map(|entry| entry.key().value().as_str())
+            .collect::<Vec<_>>(),
+        ["number", "boolean", "null", "string"]
+    );
+    assert!(matches!(first.aux_addresses()[0].value().value(), ComposeScalar::Number(value) if value == "7"));
+    assert!(matches!(
+        first.aux_addresses()[1].value().value(),
+        ComposeScalar::Boolean(false)
+    ));
+    assert!(matches!(first.aux_addresses()[2].value().value(), ComposeScalar::Null));
+    assert!(matches!(first.aux_addresses()[3].value().value(), ComposeScalar::String(value) if value == "opaque"));
+    assert_eq!(
+        opaque
+            .options()
+            .iter()
+            .map(|entry| entry.key().value().as_str())
+            .collect::<Vec<_>>(),
+        ["number", "boolean", "null", "string"]
+    );
+    assert!(matches!(opaque.options()[0].value().value(), ComposeScalar::Number(value) if value == "9"));
+    assert!(matches!(
+        opaque.options()[1].value().value(),
+        ComposeScalar::Boolean(true)
+    ));
+    assert!(matches!(opaque.options()[2].value().value(), ComposeScalar::Null));
+    assert!(matches!(opaque.options()[3].value().value(), ComposeScalar::String(value) if value == "opaque"));
+
+    let empty = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "empty")
+        .and_then(compose_lens::model::NetworkDefinition::ipam)
+        .ok_or("empty IPAM expected")?;
+    assert!(empty.driver().is_none() && empty.config().is_empty() && empty.options().is_empty());
+    Ok(())
+}
+
+#[test]
+fn diagnoses_invalid_ipam_shapes_while_retaining_valid_siblings_extensions_and_unknown_fields()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{DUPLICATE_FIELD, EXPECTED_MAPPING, EXPECTED_SCALAR, EXPECTED_SEQUENCE};
+
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(772),
+        concat!(
+            "networks:\n",
+            "  mixed:\n",
+            "    ipam:\n",
+            "      driver: first\n",
+            "      driver: second\n",
+            "      config:\n",
+            "        - subnet: retained\n",
+            "          x-config-evidence: retained\n",
+            "          unknown-config: retained\n",
+            "        - subnet: 7\n",
+            "          ip_range: false\n",
+            "          gateway:\n",
+            "          aux_addresses: scalar\n",
+            "      x-ipam-evidence: retained\n",
+            "      unknown-ipam: retained\n",
+            "  bad-driver:\n",
+            "    ipam: {driver: 7}\n",
+            "  bad-config:\n",
+            "    ipam: {config: {not: a-sequence}}\n",
+            "  bad-entries:\n",
+            "    ipam: {config: [scalar, true, null]}\n",
+        ),
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial typed document expected")?;
+    let mixed = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "mixed")
+        .and_then(compose_lens::model::NetworkDefinition::ipam)
+        .ok_or("mixed IPAM expected")?;
+
+    assert!(!parsed.is_valid());
+    assert_eq!(mixed.driver().map(Located::value).map(String::as_str), Some("first"));
+    assert_eq!(
+        mixed.config().len(),
+        2,
+        "invalid members retain their configuration entry"
+    );
+    assert_eq!(mixed.config()[0].extension_fields().len(), 1);
+    assert_eq!(mixed.config()[0].unknown_fields().len(), 1);
+    assert_eq!(
+        mixed.config()[1].subnet().map(Located::value).map(String::as_str),
+        Some("7")
+    );
+    assert_eq!(
+        mixed.config()[1].ip_range().map(Located::value).map(String::as_str),
+        Some("false")
+    );
+    assert!(mixed.config()[1].gateway().is_none());
+    assert!(mixed.config()[1].aux_addresses().is_empty());
+    assert_eq!(mixed.extension_fields().len(), 1);
+    assert_eq!(mixed.unknown_fields().len(), 1);
+    assert!(
+        document
+            .networks()
+            .iter()
+            .find(|network| network.name().value() == "bad-driver")
+            .and_then(compose_lens::model::NetworkDefinition::ipam)
+            .is_some_and(|ipam| ipam.driver().is_some_and(|driver| driver.value() == "7"))
+    );
+    assert!(
+        document
+            .networks()
+            .iter()
+            .find(|network| network.name().value() == "bad-config")
+            .and_then(compose_lens::model::NetworkDefinition::ipam)
+            .is_some_and(|ipam| ipam.config().is_empty())
+    );
+    assert!(
+        document
+            .networks()
+            .iter()
+            .find(|network| network.name().value() == "bad-entries")
+            .and_then(compose_lens::model::NetworkDefinition::ipam)
+            .is_some_and(|ipam| ipam.config().is_empty())
+    );
+    for code in [DUPLICATE_FIELD, EXPECTED_SCALAR, EXPECTED_SEQUENCE, EXPECTED_MAPPING] {
+        assert!(
+            parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code),
+            "expected IPAM diagnostic {code}; got {:#?}",
+            parsed.diagnostics()
+        );
+    }
     Ok(())
 }
 

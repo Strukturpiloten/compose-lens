@@ -76,6 +76,10 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
     candidates; conflicts and near misses remain unselected.
 19. These views perform no resolver, profile, path, filesystem, provider, runtime, or cross-format
     interpretation.
+20. Effective service `logging` retains an uninterpreted optional string driver and optional
+    ordered options mapping. String/number/null option kinds, authored and interpolated spelling,
+    nested recursive-merge and replacement provenance, empty/reset/override state, sensitivity,
+    extensions, unknowns, and malformed entries remain source-aware without provider semantics.
 
 The generic `MergedProject` remains public for advanced analysis, validation, rendering, and future
 native-boundary expansion. The new view is additive within the 0.1.x compatibility line.

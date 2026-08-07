@@ -12,6 +12,7 @@ use crate::{
     source::SourceId,
     syntax::SyntaxDocument,
 };
+use yaml_edit::{ScalarType, ScalarValue, YamlFile};
 
 use super::write_quoted;
 
@@ -61,6 +62,12 @@ pub enum GenerationError {
     InvalidSysctlName,
     /// A generated sysctl value or list item is multiline, NUL-bearing, or expression-shaped.
     InvalidSysctlValue,
+    /// A generated logging option number is not one complete YAML number scalar.
+    InvalidLoggingOptionNumber,
+    /// A generated network driver option number is not one complete YAML number scalar.
+    InvalidNetworkDriverOptionNumber,
+    /// A generated volume driver option number is not one complete YAML number scalar.
+    InvalidVolumeDriverOptionNumber,
     /// A generated ulimit name is outside the portable lowercase ASCII grammar.
     InvalidUlimitName,
     /// A generated ulimit value is outside the supported portable decimal or unlimited set.
@@ -156,6 +163,12 @@ impl fmt::Display for GenerationError {
                 .write_str("generated sysctl name must be a non-empty resolved single-line string"),
             Self::InvalidSysctlValue => formatter
                 .write_str("generated sysctl value must be a resolved single-line string"),
+            Self::InvalidLoggingOptionNumber => formatter
+                .write_str("generated logging option number must be one complete YAML number scalar"),
+            Self::InvalidNetworkDriverOptionNumber => formatter
+                .write_str("generated network driver option number must be one complete YAML number scalar"),
+            Self::InvalidVolumeDriverOptionNumber => formatter
+                .write_str("generated volume driver option number must be one complete YAML number scalar"),
             Self::InvalidUlimitName => formatter
                 .write_str("generated ulimit name must match lowercase ASCII `[a-z]+`"),
             Self::InvalidUlimitValue => formatter
@@ -443,6 +456,535 @@ pub enum GeneratedDevice {
     Long(GeneratedLongDevice),
 }
 
+/// A generated logging-option value with an explicit YAML scalar kind.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedLoggingOptionValue {
+    /// Emit one quoted YAML string.
+    String(GeneratedString),
+    /// Emit one validated unquoted YAML number with exact spelling retained.
+    Number(GeneratedString),
+    /// Emit an explicit YAML null.
+    Null,
+}
+
+impl GeneratedLoggingOptionValue {
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::String(value) | Self::Number(value) => value.is_sensitive(),
+            Self::Null => false,
+        }
+    }
+}
+
+/// One ordered generated logging option.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedLoggingOption {
+    name: String,
+    value: GeneratedLoggingOptionValue,
+}
+
+impl GeneratedLoggingOption {
+    /// Creates one option with a non-empty key and a string, number, or null value.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty or NUL-bearing key and number spellings that are not exactly one YAML
+    /// number scalar. No driver-specific option semantics are applied.
+    pub fn new(name: impl Into<String>, value: GeneratedLoggingOptionValue) -> Result<Self, GenerationError> {
+        let name = required("logging option key", name.into())?;
+        if let GeneratedLoggingOptionValue::Number(number) = &value {
+            if !valid_yaml_number(number.expose()) {
+                return Err(GenerationError::InvalidLoggingOptionNumber);
+            }
+        }
+        Ok(Self { name, value })
+    }
+
+    /// Returns the exact non-empty option key.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the selected string, number, or null value.
+    #[must_use]
+    pub const fn value(&self) -> &GeneratedLoggingOptionValue {
+        &self.value
+    }
+}
+
+/// Explicit service logging configuration for generated output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedLogging {
+    driver: GeneratedString,
+    options: Vec<GeneratedLoggingOption>,
+}
+
+impl GeneratedLogging {
+    /// Creates an explicit uninterpreted string driver and ordered unique-key options mapping.
+    ///
+    /// An empty options vector is retained as `options: {}`. Driver and option values are not
+    /// normalized, defaulted, or interpreted for any provider.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate option keys.
+    pub fn new(driver: GeneratedString, options: Vec<GeneratedLoggingOption>) -> Result<Self, GenerationError> {
+        let mut seen = BTreeSet::new();
+        for option in &options {
+            if !seen.insert(option.name()) {
+                return Err(GenerationError::DuplicateName {
+                    kind: "logging option",
+                    name: option.name().to_owned(),
+                });
+            }
+        }
+        Ok(Self { driver, options })
+    }
+
+    /// Returns the exact uninterpreted string driver.
+    #[must_use]
+    pub const fn driver(&self) -> &GeneratedString {
+        &self.driver
+    }
+
+    /// Returns options in generated mapping order.
+    #[must_use]
+    pub fn options(&self) -> &[GeneratedLoggingOption] {
+        &self.options
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.driver.is_sensitive() || self.options.iter().any(|option| option.value.is_sensitive())
+    }
+}
+
+/// A generated network driver-option value with an explicit YAML scalar kind.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedNetworkDriverOptionValue {
+    /// Emit one quoted YAML string.
+    String(GeneratedString),
+    /// Emit one validated unquoted YAML number with exact spelling retained.
+    Number(GeneratedString),
+}
+
+impl GeneratedNetworkDriverOptionValue {
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::String(value) | Self::Number(value) => value.is_sensitive(),
+        }
+    }
+}
+
+/// One ordered generated network driver option.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedNetworkDriverOption {
+    name: String,
+    value: GeneratedNetworkDriverOptionValue,
+}
+
+impl GeneratedNetworkDriverOption {
+    /// Creates one driver option with a non-empty key and a string or number value.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty or NUL-bearing key and number spellings that are not exactly one YAML
+    /// number scalar. Driver-option semantics remain uninterpreted.
+    pub fn new(name: impl Into<String>, value: GeneratedNetworkDriverOptionValue) -> Result<Self, GenerationError> {
+        let name = required("network driver option key", name.into())?;
+        if let GeneratedNetworkDriverOptionValue::Number(number) = &value {
+            if !valid_yaml_number(number.expose()) {
+                return Err(GenerationError::InvalidNetworkDriverOptionNumber);
+            }
+        }
+        Ok(Self { name, value })
+    }
+
+    /// Returns the exact non-empty option key.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the selected string or number value.
+    #[must_use]
+    pub const fn value(&self) -> &GeneratedNetworkDriverOptionValue {
+        &self.value
+    }
+}
+
+/// A generated volume driver-option value with an explicit YAML scalar kind.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedVolumeDriverOptionValue {
+    /// Emit one quoted YAML string.
+    String(GeneratedString),
+    /// Emit one validated unquoted YAML number with exact spelling retained.
+    Number(GeneratedString),
+}
+
+impl GeneratedVolumeDriverOptionValue {
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::String(value) | Self::Number(value) => value.is_sensitive(),
+        }
+    }
+}
+
+/// One ordered generated volume driver option.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedVolumeDriverOption {
+    name: String,
+    value: GeneratedVolumeDriverOptionValue,
+}
+
+impl GeneratedVolumeDriverOption {
+    /// Creates one driver option with a non-empty key and a string or number value.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty or NUL-bearing key and number spellings that are not exactly one YAML
+    /// number scalar. Driver-option semantics remain uninterpreted.
+    pub fn new(name: impl Into<String>, value: GeneratedVolumeDriverOptionValue) -> Result<Self, GenerationError> {
+        let name = required("volume driver option key", name.into())?;
+        if let GeneratedVolumeDriverOptionValue::Number(number) = &value {
+            if !valid_yaml_number(number.expose()) {
+                return Err(GenerationError::InvalidVolumeDriverOptionNumber);
+            }
+        }
+        Ok(Self { name, value })
+    }
+
+    /// Returns the exact non-empty option key.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the selected string or number value.
+    #[must_use]
+    pub const fn value(&self) -> &GeneratedVolumeDriverOptionValue {
+        &self.value
+    }
+}
+
+/// A top-level application-owned volume definition with optional driver configuration.
+///
+/// This type is intentionally distinct from [`GeneratedResource`], which remains the compatible
+/// basic/external lifecycle API shared by top-level networks and volumes. External volumes cannot
+/// use this driver-configured API.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedVolumeDefinition {
+    name: String,
+    custom_name: Option<String>,
+    driver: Option<GeneratedString>,
+    driver_opts: Option<Vec<GeneratedVolumeDriverOption>>,
+    labels: Option<Vec<GeneratedLabel>>,
+}
+
+impl GeneratedVolumeDefinition {
+    /// Creates an application-owned volume definition.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty or NUL-bearing name.
+    pub fn application(name: impl Into<String>) -> Result<Self, GenerationError> {
+        Ok(Self {
+            name: required("volume name", name.into())?,
+            custom_name: None,
+            driver: None,
+            driver_opts: None,
+            labels: None,
+        })
+    }
+
+    /// Sets the exact platform-level volume name once.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty/NUL-bearing name and duplicate configuration.
+    pub fn set_custom_name(&mut self, name: impl Into<String>) -> Result<(), GenerationError> {
+        let name = required("custom volume name", name.into())?;
+        set_once(&mut self.custom_name, name, "volume name")
+    }
+
+    /// Sets one opaque volume driver exactly once.
+    ///
+    /// No driver, plugin, provider, runtime, default, or image semantics validation is applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_driver(&mut self, driver: GeneratedString) -> Result<(), GenerationError> {
+        set_once(&mut self.driver, driver, "volume driver")
+    }
+
+    /// Sets the complete ordered unique volume driver-options mapping exactly once.
+    ///
+    /// An empty mapping remains explicit. String and number YAML scalar identities are selected
+    /// by [`GeneratedVolumeDriverOptionValue`] and are never inferred from their text.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate option names and duplicate field configuration. No driver-specific
+    /// option, plugin, provider, runtime, default, or image semantics are validated.
+    pub fn set_driver_opts(&mut self, driver_opts: Vec<GeneratedVolumeDriverOption>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for option in &driver_opts {
+            if !seen.insert(option.name()) {
+                return Err(GenerationError::DuplicateName {
+                    kind: "volume driver option",
+                    name: option.name().to_owned(),
+                });
+            }
+        }
+        set_once(&mut self.driver_opts, driver_opts, "volume driver_opts")
+    }
+
+    /// Sets the complete ordered unique volume-label mapping exactly once.
+    ///
+    /// An empty mapping remains explicit. Labels use the same explicit string-value contract as
+    /// generated service labels, so neither key-only nor non-string label forms are generated.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate label names and duplicate field configuration. No provider, runtime, or
+    /// injected-label equivalence is inferred.
+    pub fn set_labels(&mut self, labels: Vec<GeneratedLabel>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for label in &labels {
+            if !seen.insert(label.name()) {
+                return Err(GenerationError::DuplicateName {
+                    kind: "volume label",
+                    name: label.name().to_owned(),
+                });
+            }
+        }
+        set_once(&mut self.labels, labels, "volume labels")
+    }
+
+    /// Returns the generated volume name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the optional exact platform-level volume name.
+    #[must_use]
+    pub fn custom_name(&self) -> Option<&str> {
+        self.custom_name.as_deref()
+    }
+
+    /// Returns the optional opaque volume driver.
+    #[must_use]
+    pub const fn driver(&self) -> Option<&GeneratedString> {
+        self.driver.as_ref()
+    }
+
+    /// Returns the optional ordered driver-options mapping, including an explicit empty map.
+    #[must_use]
+    pub fn driver_opts(&self) -> Option<&[GeneratedVolumeDriverOption]> {
+        self.driver_opts.as_deref()
+    }
+
+    /// Returns the optional ordered volume-label mapping, including an explicit empty map.
+    #[must_use]
+    pub fn labels(&self) -> Option<&[GeneratedLabel]> {
+        self.labels.as_deref()
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.driver.as_ref().is_some_and(GeneratedString::is_sensitive)
+            || self
+                .driver_opts
+                .as_ref()
+                .is_some_and(|options| options.iter().any(|option| option.value.is_sensitive()))
+            || self
+                .labels
+                .as_ref()
+                .is_some_and(|labels| labels.iter().any(|label| label.value.is_sensitive()))
+    }
+}
+
+/// A top-level network definition with optional driver configuration.
+///
+/// This type is intentionally distinct from [`GeneratedResource`], which remains the compatible
+/// basic/external lifecycle API shared by top-level networks and volumes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GeneratedNetworkDefinition {
+    name: String,
+    custom_name: Option<String>,
+    driver: Option<GeneratedString>,
+    driver_opts: Option<Vec<GeneratedNetworkDriverOption>>,
+    enable_ipv6: Option<bool>,
+    internal: Option<bool>,
+    labels: Option<Vec<GeneratedLabel>>,
+}
+
+impl GeneratedNetworkDefinition {
+    /// Creates an application-owned network definition.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty or NUL-bearing name.
+    pub fn application(name: impl Into<String>) -> Result<Self, GenerationError> {
+        Ok(Self {
+            name: required("network name", name.into())?,
+            custom_name: None,
+            driver: None,
+            driver_opts: None,
+            enable_ipv6: None,
+            internal: None,
+            labels: None,
+        })
+    }
+
+    /// Sets the exact platform-level network name once.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty/NUL-bearing name and duplicate configuration.
+    pub fn set_custom_name(&mut self, name: impl Into<String>) -> Result<(), GenerationError> {
+        let name = required("custom network name", name.into())?;
+        set_once(&mut self.custom_name, name, "network name")
+    }
+
+    /// Sets one opaque network driver exactly once.
+    ///
+    /// No driver, plugin, provider, or runtime availability validation is applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_driver(&mut self, driver: GeneratedString) -> Result<(), GenerationError> {
+        set_once(&mut self.driver, driver, "network driver")
+    }
+
+    /// Sets the complete ordered unique network driver-options mapping exactly once.
+    ///
+    /// An empty mapping remains explicit. String and number YAML scalar identities are selected
+    /// by [`GeneratedNetworkDriverOptionValue`] and are never inferred from their text.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate option names and duplicate field configuration. No driver-specific
+    /// option, plugin, provider, or runtime semantics are validated.
+    pub fn set_driver_opts(&mut self, driver_opts: Vec<GeneratedNetworkDriverOption>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for option in &driver_opts {
+            if !seen.insert(option.name()) {
+                return Err(GenerationError::DuplicateName {
+                    kind: "network driver option",
+                    name: option.name().to_owned(),
+                });
+            }
+        }
+        set_once(&mut self.driver_opts, driver_opts, "network driver_opts")
+    }
+
+    /// Sets the literal IPv6-enable choice exactly once.
+    ///
+    /// Omission remains distinct from an explicit `false` or `true`. Generation does not infer
+    /// defaults or validate driver, IPAM, provider, or runtime behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_enable_ipv6(&mut self, enable_ipv6: bool) -> Result<(), GenerationError> {
+        set_once(&mut self.enable_ipv6, enable_ipv6, "network enable_ipv6")
+    }
+
+    /// Sets the literal internal-network choice exactly once.
+    ///
+    /// Omission remains distinct from an explicit `false` or `true`. Generation does not infer
+    /// defaults or validate driver, IPAM, provider, or runtime behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_internal(&mut self, internal: bool) -> Result<(), GenerationError> {
+        set_once(&mut self.internal, internal, "network internal")
+    }
+
+    /// Sets the complete ordered unique network-label mapping exactly once.
+    ///
+    /// An empty mapping remains explicit. Labels use the same explicit string-value contract as
+    /// generated service labels, so neither key-only nor non-string label forms are generated.
+    ///
+    /// # Errors
+    ///
+    /// Rejects duplicate label names and duplicate field configuration. No provider, runtime, or
+    /// injected-label equivalence is inferred.
+    pub fn set_labels(&mut self, labels: Vec<GeneratedLabel>) -> Result<(), GenerationError> {
+        let mut seen = BTreeSet::new();
+        for label in &labels {
+            if !seen.insert(label.name()) {
+                return Err(GenerationError::DuplicateName {
+                    kind: "network label",
+                    name: label.name().to_owned(),
+                });
+            }
+        }
+        set_once(&mut self.labels, labels, "network labels")
+    }
+
+    /// Returns the generated network name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the optional exact platform-level network name.
+    #[must_use]
+    pub fn custom_name(&self) -> Option<&str> {
+        self.custom_name.as_deref()
+    }
+
+    /// Returns the optional opaque network driver.
+    #[must_use]
+    pub const fn driver(&self) -> Option<&GeneratedString> {
+        self.driver.as_ref()
+    }
+
+    /// Returns the optional ordered driver-options mapping, including an explicit empty map.
+    #[must_use]
+    pub fn driver_opts(&self) -> Option<&[GeneratedNetworkDriverOption]> {
+        self.driver_opts.as_deref()
+    }
+
+    /// Returns the explicitly selected IPv6-enable choice.
+    #[must_use]
+    pub const fn enable_ipv6(&self) -> Option<bool> {
+        self.enable_ipv6
+    }
+
+    /// Returns the explicitly selected internal-network choice.
+    #[must_use]
+    pub const fn internal(&self) -> Option<bool> {
+        self.internal
+    }
+
+    /// Returns the optional ordered network-label mapping, including an explicit empty map.
+    #[must_use]
+    pub fn labels(&self) -> Option<&[GeneratedLabel]> {
+        self.labels.as_deref()
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.driver.as_ref().is_some_and(GeneratedString::is_sensitive)
+            || self
+                .driver_opts
+                .as_ref()
+                .is_some_and(|options| options.iter().any(|option| option.value.is_sensitive()))
+            || self
+                .labels
+                .as_ref()
+                .is_some_and(|labels| labels.iter().any(|label| label.value.is_sensitive()))
+    }
+}
+
 impl GeneratedDevice {
     fn is_sensitive(&self) -> bool {
         match self {
@@ -680,7 +1222,7 @@ pub enum GeneratedEnvironmentFile {
     },
 }
 
-/// One generated service metadata label.
+/// One generated Compose metadata label.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedLabel {
     name: String,
@@ -1083,10 +1625,12 @@ impl GeneratedMount {
 pub struct GeneratedNetworkAttachment {
     name: String,
     aliases: Vec<String>,
+    ipv4_address: Option<GeneratedString>,
+    ipv6_address: Option<GeneratedString>,
 }
 
 impl GeneratedNetworkAttachment {
-    /// Creates an attachment without aliases.
+    /// Creates an attachment without aliases or per-network addresses.
     ///
     /// # Errors
     ///
@@ -1095,6 +1639,8 @@ impl GeneratedNetworkAttachment {
         Ok(Self {
             name: required("network name", name.into())?,
             aliases: Vec::new(),
+            ipv4_address: None,
+            ipv6_address: None,
         })
     }
 
@@ -1108,6 +1654,28 @@ impl GeneratedNetworkAttachment {
         Ok(())
     }
 
+    /// Sets one raw per-attachment IPv4 address exactly once.
+    ///
+    /// No IP grammar, top-level IPAM pool, provider, or runtime validation is applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_ipv4_address(&mut self, address: GeneratedString) -> Result<(), GenerationError> {
+        set_once(&mut self.ipv4_address, address, "ipv4_address")
+    }
+
+    /// Sets one raw per-attachment IPv6 address exactly once.
+    ///
+    /// No IP grammar, top-level IPAM pool, provider, or runtime validation is applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_ipv6_address(&mut self, address: GeneratedString) -> Result<(), GenerationError> {
+        set_once(&mut self.ipv6_address, address, "ipv6_address")
+    }
+
     /// Returns the network name.
     #[must_use]
     pub fn name(&self) -> &str {
@@ -1118,6 +1686,23 @@ impl GeneratedNetworkAttachment {
     #[must_use]
     pub fn aliases(&self) -> &[String] {
         &self.aliases
+    }
+
+    /// Returns the optional raw per-attachment IPv4 address.
+    #[must_use]
+    pub const fn ipv4_address(&self) -> Option<&GeneratedString> {
+        self.ipv4_address.as_ref()
+    }
+
+    /// Returns the optional raw per-attachment IPv6 address.
+    #[must_use]
+    pub const fn ipv6_address(&self) -> Option<&GeneratedString> {
+        self.ipv6_address.as_ref()
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.ipv4_address.as_ref().is_some_and(GeneratedString::is_sensitive)
+            || self.ipv6_address.as_ref().is_some_and(GeneratedString::is_sensitive)
     }
 }
 
@@ -1219,6 +1804,7 @@ pub struct GeneratedService {
     mem_limit: Option<GeneratedMemLimit>,
     tmpfs: Option<GeneratedTmpfs>,
     sysctls: Option<GeneratedSysctls>,
+    logging: Option<GeneratedLogging>,
     ulimits: Option<GeneratedUlimits>,
     pull_policy: Option<GeneratedPullPolicy>,
     restart: Option<GeneratedRestartPolicy>,
@@ -1267,6 +1853,7 @@ impl GeneratedService {
             mem_limit: None,
             tmpfs: None,
             sysctls: None,
+            logging: None,
             ulimits: None,
             pull_policy: None,
             restart: None,
@@ -1845,6 +2432,22 @@ impl GeneratedService {
         self.sysctls.as_ref()
     }
 
+    /// Sets explicit logging configuration exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured. Driver spelling and
+    /// option semantics are otherwise left uninterpreted.
+    pub fn set_logging(&mut self, logging: GeneratedLogging) -> Result<(), GenerationError> {
+        set_once(&mut self.logging, logging, "logging")
+    }
+
+    /// Returns configured logging, distinguishing omission from explicit empty options.
+    #[must_use]
+    pub const fn logging(&self) -> Option<&GeneratedLogging> {
+        self.logging.as_ref()
+    }
+
     /// Sets the complete ordered service `ulimits` mapping exactly once.
     ///
     /// An empty mapping remains explicit. Values are already validated while constructing
@@ -2007,6 +2610,7 @@ impl GeneratedService {
                 Some(GeneratedSysctls::List(items)) => items.iter().any(GeneratedString::is_sensitive),
                 None => false,
             }
+            || self.logging.as_ref().is_some_and(GeneratedLogging::is_sensitive)
             || self
                 .ulimits
                 .as_ref()
@@ -2034,6 +2638,51 @@ impl GeneratedService {
                 .devices
                 .as_ref()
                 .is_some_and(|items| items.iter().any(GeneratedDevice::is_sensitive))
+            || self.networks.iter().any(GeneratedNetworkAttachment::is_sensitive)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GeneratedNetwork {
+    Basic(GeneratedResource),
+    Definition(GeneratedNetworkDefinition),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum GeneratedVolume {
+    Basic(GeneratedResource),
+    Definition(GeneratedVolumeDefinition),
+}
+
+impl GeneratedVolume {
+    fn name(&self) -> &str {
+        match self {
+            Self::Basic(volume) => volume.name(),
+            Self::Definition(volume) => volume.name(),
+        }
+    }
+
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::Basic(_) => false,
+            Self::Definition(volume) => volume.is_sensitive(),
+        }
+    }
+}
+
+impl GeneratedNetwork {
+    fn name(&self) -> &str {
+        match self {
+            Self::Basic(network) => network.name(),
+            Self::Definition(network) => network.name(),
+        }
+    }
+
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::Basic(_) => false,
+            Self::Definition(network) => network.is_sensitive(),
+        }
     }
 }
 
@@ -2042,8 +2691,8 @@ impl GeneratedService {
 pub struct ComposeDocumentBuilder {
     name: Option<String>,
     services: Vec<GeneratedService>,
-    networks: Vec<GeneratedResource>,
-    volumes: Vec<GeneratedResource>,
+    networks: Vec<GeneratedNetwork>,
+    volumes: Vec<GeneratedVolume>,
 }
 
 impl ComposeDocumentBuilder {
@@ -2083,7 +2732,30 @@ impl ComposeDocumentBuilder {
     ///
     /// Returns [`GenerationError::DuplicateName`] for a duplicate network name.
     pub fn add_network(&mut self, network: GeneratedResource) -> Result<(), GenerationError> {
-        insert_named(&mut self.networks, network, "network", GeneratedResource::name)
+        insert_named(
+            &mut self.networks,
+            GeneratedNetwork::Basic(network),
+            "network",
+            GeneratedNetwork::name,
+        )
+    }
+
+    /// Adds one uniquely named top-level network definition in output order.
+    ///
+    /// This is additive to [`Self::add_network`], which retains the existing basic/external
+    /// [`GeneratedResource`] API for compatibility.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateName`] for a duplicate network name across basic and
+    /// driver-configured network definitions.
+    pub fn add_network_definition(&mut self, network: GeneratedNetworkDefinition) -> Result<(), GenerationError> {
+        insert_named(
+            &mut self.networks,
+            GeneratedNetwork::Definition(network),
+            "network",
+            GeneratedNetwork::name,
+        )
     }
 
     /// Adds one uniquely named top-level volume in output order.
@@ -2092,7 +2764,31 @@ impl ComposeDocumentBuilder {
     ///
     /// Returns [`GenerationError::DuplicateName`] for a duplicate volume name.
     pub fn add_volume(&mut self, volume: GeneratedResource) -> Result<(), GenerationError> {
-        insert_named(&mut self.volumes, volume, "volume", GeneratedResource::name)
+        insert_named(
+            &mut self.volumes,
+            GeneratedVolume::Basic(volume),
+            "volume",
+            GeneratedVolume::name,
+        )
+    }
+
+    /// Adds one uniquely named top-level application-owned volume definition in output order.
+    ///
+    /// This is additive to [`Self::add_volume`], which retains the existing basic/external
+    /// [`GeneratedResource`] API for compatibility. Driver-configured external volumes are not
+    /// representable: use `GeneratedResource::external` for that lifecycle.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateName`] for a duplicate volume name across basic and
+    /// driver-configured volume definitions.
+    pub fn add_volume_definition(&mut self, volume: GeneratedVolumeDefinition) -> Result<(), GenerationError> {
+        insert_named(
+            &mut self.volumes,
+            GeneratedVolume::Definition(volume),
+            "volume",
+            GeneratedVolume::name,
+        )
     }
 
     /// Generates YAML and parses it back through `ComposeLens`'s syntax and typed-model boundaries.
@@ -2105,7 +2801,9 @@ impl ComposeDocumentBuilder {
         if self.services.is_empty() {
             return Err(GenerationError::MissingService);
         }
-        let sensitive = self.services.iter().any(GeneratedService::is_sensitive);
+        let sensitive = self.services.iter().any(GeneratedService::is_sensitive)
+            || self.networks.iter().any(GeneratedNetwork::is_sensitive)
+            || self.volumes.iter().any(GeneratedVolume::is_sensitive);
         let text = render_document(&self);
         let syntax = SyntaxDocument::parse(source_id, text.clone())
             .map_err(|_| GenerationError::InternalInvariant("syntax-tree"))?;
@@ -2181,8 +2879,8 @@ fn render_document(project: &ComposeDocumentBuilder) -> String {
         output.push_str(":\n");
         render_service(&mut output, service);
     }
-    render_resources(&mut output, "networks", &project.networks);
-    render_resources(&mut output, "volumes", &project.volumes);
+    render_network_definitions(&mut output, &project.networks);
+    render_volume_definitions(&mut output, &project.volumes);
     output
 }
 
@@ -2254,6 +2952,9 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     }
     if let Some(sysctls) = &service.sysctls {
         render_sysctls(output, sysctls);
+    }
+    if let Some(logging) = &service.logging {
+        render_logging(output, logging);
     }
     if let Some(ulimits) = &service.ulimits {
         render_ulimits(output, ulimits);
@@ -2364,6 +3065,28 @@ fn render_sysctls(output: &mut String, sysctls: &GeneratedSysctls) {
             }
         }
         GeneratedSysctls::List(items) => render_configured_string_sequence(output, "sysctls", items),
+    }
+}
+
+fn render_logging(output: &mut String, logging: &GeneratedLogging) {
+    output.push_str("    logging:\n      driver: ");
+    write_quoted(output, logging.driver.expose());
+    output.push('\n');
+    if logging.options.is_empty() {
+        output.push_str("      options: {}\n");
+        return;
+    }
+    output.push_str("      options:\n");
+    for option in &logging.options {
+        write_indent(output, 4);
+        write_quoted(output, option.name());
+        output.push_str(": ");
+        match option.value() {
+            GeneratedLoggingOptionValue::String(value) => write_quoted(output, value.expose()),
+            GeneratedLoggingOptionValue::Number(value) => output.push_str(value.expose()),
+            GeneratedLoggingOptionValue::Null => output.push_str("null"),
+        }
+        output.push('\n');
     }
 }
 
@@ -2686,41 +3409,199 @@ fn render_networks(output: &mut String, networks: &[GeneratedNetworkAttachment])
     for network in networks {
         output.push_str("      ");
         write_quoted(output, &network.name);
-        if network.aliases.is_empty() {
+        if network.aliases.is_empty() && network.ipv4_address.is_none() && network.ipv6_address.is_none() {
             output.push_str(": {}\n");
-        } else {
-            output.push_str(":\n        aliases:\n");
+            continue;
+        }
+        output.push_str(":\n");
+        if !network.aliases.is_empty() {
+            output.push_str("        aliases:\n");
             for alias in &network.aliases {
                 output.push_str("          - ");
                 write_quoted(output, alias);
                 output.push('\n');
             }
         }
+        for (field, address) in [
+            ("ipv4_address", network.ipv4_address.as_ref()),
+            ("ipv6_address", network.ipv6_address.as_ref()),
+        ] {
+            if let Some(address) = address {
+                output.push_str("        ");
+                output.push_str(field);
+                output.push_str(": ");
+                write_quoted(output, address.expose());
+                output.push('\n');
+            }
+        }
     }
 }
 
-fn render_resources(output: &mut String, section: &str, resources: &[GeneratedResource]) {
-    if resources.is_empty() {
+fn render_network_definitions(output: &mut String, networks: &[GeneratedNetwork]) {
+    if networks.is_empty() {
         return;
     }
-    output.push_str(section);
+    output.push_str("networks:\n");
+    for network in networks {
+        match network {
+            GeneratedNetwork::Basic(network) => render_basic_resource(output, network),
+            GeneratedNetwork::Definition(network) => render_network_definition(output, network),
+        }
+    }
+}
+
+fn render_network_definition(output: &mut String, network: &GeneratedNetworkDefinition) {
+    output.push_str("  ");
+    write_quoted(output, &network.name);
+    if network.custom_name.is_none()
+        && network.driver.is_none()
+        && network.driver_opts.is_none()
+        && network.enable_ipv6.is_none()
+        && network.internal.is_none()
+        && network.labels.is_none()
+    {
+        output.push_str(": {}\n");
+        return;
+    }
     output.push_str(":\n");
-    for resource in resources {
-        output.push_str("  ");
-        write_quoted(output, &resource.name);
-        if !resource.external && resource.custom_name.is_none() {
-            output.push_str(": {}\n");
-            continue;
+    if let Some(custom_name) = &network.custom_name {
+        output.push_str("    name: ");
+        write_quoted(output, custom_name);
+        output.push('\n');
+    }
+    if let Some(driver) = &network.driver {
+        output.push_str("    driver: ");
+        write_quoted(output, driver.expose());
+        output.push('\n');
+    }
+    if let Some(driver_opts) = &network.driver_opts {
+        if driver_opts.is_empty() {
+            output.push_str("    driver_opts: {}\n");
+        } else {
+            output.push_str("    driver_opts:\n");
+            for option in driver_opts {
+                output.push_str("      ");
+                write_quoted(output, option.name());
+                output.push_str(": ");
+                match option.value() {
+                    GeneratedNetworkDriverOptionValue::String(value) => {
+                        write_quoted(output, value.expose());
+                    }
+                    GeneratedNetworkDriverOptionValue::Number(value) => {
+                        output.push_str(value.expose());
+                    }
+                }
+                output.push('\n');
+            }
         }
-        output.push_str(":\n");
-        if let Some(custom_name) = &resource.custom_name {
-            output.push_str("    name: ");
-            write_quoted(output, custom_name);
-            output.push('\n');
+    }
+    if let Some(enable_ipv6) = network.enable_ipv6 {
+        output.push_str("    enable_ipv6: ");
+        output.push_str(if enable_ipv6 { "true\n" } else { "false\n" });
+    }
+    if let Some(internal) = network.internal {
+        output.push_str("    internal: ");
+        output.push_str(if internal { "true\n" } else { "false\n" });
+    }
+    if let Some(labels) = &network.labels {
+        if labels.is_empty() {
+            output.push_str("    labels: {}\n");
+        } else {
+            output.push_str("    labels:\n");
+            for label in labels {
+                output.push_str("      ");
+                write_quoted(output, label.name());
+                output.push_str(": ");
+                write_quoted(output, label.value().expose());
+                output.push('\n');
+            }
         }
-        if resource.external {
-            output.push_str("    external: true\n");
+    }
+}
+
+fn render_volume_definitions(output: &mut String, volumes: &[GeneratedVolume]) {
+    if volumes.is_empty() {
+        return;
+    }
+    output.push_str("volumes:\n");
+    for volume in volumes {
+        match volume {
+            GeneratedVolume::Basic(volume) => render_basic_resource(output, volume),
+            GeneratedVolume::Definition(volume) => render_volume_definition(output, volume),
         }
+    }
+}
+
+fn render_volume_definition(output: &mut String, volume: &GeneratedVolumeDefinition) {
+    output.push_str("  ");
+    write_quoted(output, &volume.name);
+    if volume.custom_name.is_none()
+        && volume.driver.is_none()
+        && volume.driver_opts.is_none()
+        && volume.labels.is_none()
+    {
+        output.push_str(": {}\n");
+        return;
+    }
+    output.push_str(":\n");
+    if let Some(custom_name) = &volume.custom_name {
+        output.push_str("    name: ");
+        write_quoted(output, custom_name);
+        output.push('\n');
+    }
+    if let Some(driver) = &volume.driver {
+        output.push_str("    driver: ");
+        write_quoted(output, driver.expose());
+        output.push('\n');
+    }
+    if let Some(driver_opts) = &volume.driver_opts {
+        if driver_opts.is_empty() {
+            output.push_str("    driver_opts: {}\n");
+        } else {
+            output.push_str("    driver_opts:\n");
+            for option in driver_opts {
+                output.push_str("      ");
+                write_quoted(output, option.name());
+                output.push_str(": ");
+                match option.value() {
+                    GeneratedVolumeDriverOptionValue::String(value) => write_quoted(output, value.expose()),
+                    GeneratedVolumeDriverOptionValue::Number(value) => output.push_str(value.expose()),
+                }
+                output.push('\n');
+            }
+        }
+    }
+    if let Some(labels) = &volume.labels {
+        if labels.is_empty() {
+            output.push_str("    labels: {}\n");
+        } else {
+            output.push_str("    labels:\n");
+            for label in labels {
+                output.push_str("      ");
+                write_quoted(output, label.name());
+                output.push_str(": ");
+                write_quoted(output, label.value().expose());
+                output.push('\n');
+            }
+        }
+    }
+}
+
+fn render_basic_resource(output: &mut String, resource: &GeneratedResource) {
+    output.push_str("  ");
+    write_quoted(output, &resource.name);
+    if !resource.external && resource.custom_name.is_none() {
+        output.push_str(": {}\n");
+        return;
+    }
+    output.push_str(":\n");
+    if let Some(custom_name) = &resource.custom_name {
+        output.push_str("    name: ");
+        write_quoted(output, custom_name);
+        output.push('\n');
+    }
+    if resource.external {
+        output.push_str("    external: true\n");
     }
 }
 
@@ -2773,6 +3654,53 @@ fn validate_generated_ulimit_value(value: &GeneratedString) -> Result<(), Genera
         return Err(GenerationError::InvalidUlimitValue);
     }
     Ok(())
+}
+
+fn valid_yaml_number(value: &str) -> bool {
+    let ordinary = !value.is_empty()
+        && value.bytes().any(|byte| byte.is_ascii_digit())
+        && value.bytes().all(|byte| {
+            byte.is_ascii_digit()
+                || matches!(
+                    byte,
+                    b'+' | b'-'
+                        | b'.'
+                        | b'_'
+                        | b'e'
+                        | b'E'
+                        | b'x'
+                        | b'X'
+                        | b'o'
+                        | b'O'
+                        | b'a'..=b'f'
+                        | b'A'..=b'F'
+                )
+        });
+    let special = matches!(
+        value,
+        ".inf" | ".Inf" | ".INF" | "+.inf" | "+.Inf" | "+.INF" | "-.inf" | "-.Inf" | "-.INF" | ".nan" | ".NaN" | ".NAN"
+    );
+    if !ordinary && !special {
+        return false;
+    }
+    let parse = YamlFile::parse(value);
+    if !parse.ok() {
+        return false;
+    }
+    let file = parse.tree();
+    let Some(document) = file.document() else {
+        return false;
+    };
+    let Some(scalar) = document.as_scalar() else {
+        return false;
+    };
+    let position = scalar.byte_range();
+    position.start == 0
+        && position.end as usize == value.len()
+        && matches!(
+            ScalarValue::from_scalar(&scalar).scalar_type(),
+            ScalarType::Integer | ScalarType::Float
+        )
 }
 
 fn environment_name(value: String) -> Result<String, GenerationError> {

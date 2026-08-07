@@ -47,6 +47,8 @@ It is designed for tools that need more than strict deserialization: source-awar
   resolver, network, or runtime access.
 - Preserve and safely generate keyed service annotations without losing mapping/list syntax or
   ambiguous key-only entries.
+- Preserve, recursively merge, inspect, and safely generate service logging drivers and ordered
+  string/number/null options without interpreting provider semantics.
 - Preserve raw service security options and expose conflict-aware lexical candidates without
   selecting policy, inspecting the host, or claiming runtime behavior.
 - Preserve, inspect, and generate ordered service `env_file` short/long syntax and options; retain
@@ -99,6 +101,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
+- [0.1.16 release notes](docs/releases/0.1.16.md) — logging and generated network and volume configuration
 - [0.1.15 release notes](docs/releases/0.1.15.md) — DNS, expose, annotations, and security options
 - [0.1.14 release notes](docs/releases/0.1.14.md)
 - [Release process](docs/releasing.md)

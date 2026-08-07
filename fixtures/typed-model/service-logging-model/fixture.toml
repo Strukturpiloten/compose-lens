@@ -1,0 +1,18 @@
+schema = 1
+id = "service-logging-model"
+suite = "typed-model"
+description = "Protects service logging driver/options scalar fidelity, empty mappings, retained extensions and unknowns, and malformed sibling recovery."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation environment is provided; dollar-bearing logging values remain authored evidence and keys remain literal."
+
+[expectations]
+summary = "Omission, explicit empty mappings, exact string/number/null option kinds, order, spans, extensions, unknowns, and partial malformed recovery remain observable without driver/provider interpretation."

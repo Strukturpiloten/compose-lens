@@ -81,6 +81,12 @@ sensitivity, replacement, and override. Existing authored `Ulimits` types and di
 remain available. `GeneratedUlimits`/`GeneratedUlimit` preserve order and explicit empty maps,
 emit only quoted `-1` or non-negative ASCII decimals, and reject duplicate or non-lowercase names,
 missing range members, deferred/multiline/NUL values, and arbitrary schema strings such as `host`.
+Additive `Logging`, `LoggingOptions`, and `LoggingOptionValue` getters retain empty mappings,
+uninterpreted string drivers, ordered non-empty option keys, exact string/number/null scalar kinds,
+source spans, extensions, unknowns, and malformed-entry recovery. `ProjectLogging` retains nested
+replacement/recursive-merge/reset/override provenance, authored/effective string spelling, and
+sensitivity. `GeneratedLogging` requires an explicit string driver, emits ordered unique-key
+string/validated-number/null options, and performs no defaulting or provider interpretation.
 Additive `Hostname` getters retain the exact YAML string scalar and classify resolved RFC-1123
 literals, deferred dollar-bearing expressions, and invalid literals without deleting the service.
 `HostnameKind` and `GeneratedHostname` are non-exhaustive; generated output accepts only a
@@ -110,6 +116,41 @@ Additive `SecurityOptions` APIs preserve the raw ordered sequence and expose non
 candidates for AppArmor, no-new-privileges, seccomp, SELinux labels, Mask, and Unmask. Near misses,
 duplicates, and conflicts stay observable; no profile, filesystem, provider, runtime, or
 cross-format policy is inferred.
+Additive `GeneratedNetworkAttachment` IPv4/IPv6 setters preserve omission, raw `GeneratedString`
+spelling, sensitivity, aliases, and named-network scope. Each address is set at most once, and
+generation applies no IP grammar, IPAM-pool, default, provider, or runtime validation.
+Additive `GeneratedNetworkDefinition`, `GeneratedNetworkDriverOption`, and
+`GeneratedNetworkDriverOptionValue` preserve the existing `GeneratedResource` basic/external
+network API while adding application-owned optional opaque drivers and ordered unique
+string-or-number `driver_opts`. External networks remain `GeneratedResource::external` because
+their only allowed attribute is `name`. Number spelling is validated without coercing quoted string
+values, and no driver/plugin or option semantics are inferred.
+
+Additive `GeneratedVolumeDefinition`, `GeneratedVolumeDriverOption`, and
+`GeneratedVolumeDriverOptionValue` use a distinct public contract rather than reusing network
+driver-option types. They represent application-owned volumes only, retain optional exact names,
+opaque drivers, ordered unique string-or-number `driver_opts`, explicit empty maps, scalar spelling,
+and sensitivity. The compatible `GeneratedResource` API remains the sole generated external-volume
+path; driver/plugin/provider/runtime/default/image semantics are not inferred.
+
+The same additive `GeneratedVolumeDefinition` API accepts ordered unique volume `labels` through
+the existing `GeneratedLabel` type. They preserve omission versus an explicitly empty mapping, set
+once, render deterministically, and propagate sensitivity. Authored literal `external: true` plus
+any `labels` attribute, including an explicit empty mapping or list, reports the distinct stable
+`compose.volume.external-labels-configuration` diagnostic while retaining both values. This does
+not replace the existing driver-configuration diagnostic, so each violation remains independently
+actionable when both fields are present.
+
+The same additive `GeneratedNetworkDefinition` API accepts ordered unique network `labels` through
+the existing `GeneratedLabel` type. They preserve omission versus an explicitly empty mapping,
+set once, and propagate sensitivity; key-only, null, number, boolean, provider-injected, and
+runtime-equivalence forms are outside this generated subset. The resolved unique `key=value`
+subset is the cross-format exactness boundary, not an extra restriction on this Compose-native
+constructor.
+
+The same additive `GeneratedNetworkDefinition` API supports set-once literal `enable_ipv6` and
+`internal` choices. Their `Option<bool>` accessors preserve omission versus explicit `false` and
+`true`; generation injects no default and exposes no generated `enable_ipv4` counterpart.
 
 ## Changes before 1.0
 

@@ -14,7 +14,7 @@ Cover every field in the documented [typed boundary](typed-model.md), all suppor
 unknown fields, extensions, image references, ports, volumes, host/container path separation,
 environment values, environment-file short/long forms and options, service-label forms,
 entrypoints, commands,
-extra hosts, service hostnames, service annotations, ordered service capability additions and drops, ordered mixed service devices, raw service DNS scalar/list forms, raw service security options, raw identities, service-level PID limits, service shared-memory sizes, service memory limits, service-level temporary filesystems, service sysctls, restart and image pull policies, independent stop signals and raw
+extra hosts, service hostnames, service annotations, service logging drivers and options, ordered service capability additions and drops, ordered mixed service devices, raw service DNS scalar/list forms, raw service security options, raw identities, service-level PID limits, service shared-memory sizes, service memory limits, service-level temporary filesystems, service sysctls, restart and image pull policies, independent stop signals and raw
 lifecycle grace periods, ulimits, health checks, dependency conditions, field-level build/deploy identities, networks,
 profiles, configs, secrets, top-level resources, and discriminated unions.
 
@@ -40,7 +40,8 @@ ordered capability-add and capability-drop omission, explicit empty output, exac
 duplicate and multiline rejection, independent coexistence, parse-back fidelity, and sensitivity
 redaction,
 long TCP/UDP ports, short SCTP ports,
-ordinary mounts, deliberate short `SELinux` bind syntax, network aliases,
+ordinary mounts, deliberate short `SELinux` bind syntax, network aliases and raw per-attachment
+IPv4/IPv6 address omission, ordering, duplicate-set rejection, sensitivity, and parse-back,
 all service-level restart-policy forms and optional maximum retries,
 all documented pull-policy forms, alias, integer `w`/`d`/`h`/`m`/`s` interval components,
 schema-valid zero, and fractional or subsecond interval rejection,
@@ -62,6 +63,9 @@ ordered exact-unique list strings, unsafe/deferred rejection, sensitivity, and t
 service `ulimits` omission/empty/single/range forms, ordered unique lowercase names, quoted
 non-negative decimal or `-1` values, missing-member and unsafe-value rejection, sensitivity, and
 typed parse-back,
+service `logging` omission/empty/configured/malformed authored forms, recursive option merge,
+replacement/reset/override provenance, interpolation sensitivity, generated scalar kinds,
+duplicate/unsafe rejection, deterministic bytes, and typed parse-back,
 service `devices` omission/explicit-empty/mixed short/long forms, exact duplicates, order, CDI-like
 and opaque raw strings, required long source, optional raw target/permissions, unsafe/deferred
 rejection, sensitivity, deterministic bytes, and exact typed parse-back,
@@ -74,6 +78,11 @@ service annotation syntax, keyed merge, ambiguity diagnostics, generation, and t
 application/external resource lifecycle, duplicate
 rejection, label duplicate rejection, empty and embedded-equals label values, ambiguous short-form
 failures, and sensitive debug redaction.
+
+Top-level volume-label regressions cover authored mapping/list fidelity, literal external-label
+diagnostics including explicit empty collections, simultaneous external driver and label findings,
+interpolation, generic map/list merge behavior, reset/override provenance, deterministic generated
+maps, duplicate rejection, and parse-back sensitivity redaction.
 
 Preservation-editing tests compare exact authored and expected files after changing typed scalar
 spans. They prove that comments, whitespace, ordering, unknown fields, extensions, flow syntax, and
@@ -126,6 +135,9 @@ The initial syntax corpus exercises comments, anchors, aliases, duplicate keys, 
 
 DNS regressions protect authored forms, merge/reset behavior, provenance, generation safety, and
 typed parse-back.
+
+Logging regressions protect empty mappings, scalar-kind fidelity, malformed sibling recovery,
+recursive merge provenance, value-only interpolation, generation safety, and typed parse-back.
 
 The built-in compatibility rules are unit/integration evidence, not a substitute for the runtime
 conformance tier. Phase 5 expands the exact Docker Compose, `podman-compose`, Docker Engine, and

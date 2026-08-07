@@ -1,0 +1,18 @@
+networks:
+  scalar:
+    labels: com.example.invalid=value
+  null:
+    labels: null
+  invalid-list-item:
+    labels:
+      - nested: value
+      - 7
+      - true
+      - null
+  duplicate-map-key:
+    labels:
+      com.example.same: first
+      com.example.same: second
+  empty-map-key:
+    labels:
+      "": retained-for-diagnostic

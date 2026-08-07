@@ -7,21 +7,643 @@ use compose_lens::model::{
     BooleanValue, Command, ComposeScalar, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING, DNS_OPT_DUPLICATE_ITEM,
     DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING, DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM,
     DNS_SEARCH_EXPECTED_STRING, DependencyCondition, Entrypoint, EnvironmentFileFormatKind, HealthcheckDuration,
-    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, HostnameKind, IdentityComponent,
+    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, HostnameKind, IdentityComponent, Labels,
     LimitValue, Port, RestartPolicyKind, SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel, ServiceNetworks, StopGracePeriod,
-    ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceModeKind, VolumeMount,
+    ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceModeKind,
+    VOLUME_EXTERNAL_DRIVER_CONFIGURATION, VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
     PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, PROJECT_MISSING_FIELD, ProjectDependsOn, ProjectDevice, ProjectDns,
-    ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectService, ProjectSysctls, ProjectTmpfs,
-    ProjectUlimitValue, ProjectValue, ProjectView, build_project_view,
+    ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectLoggingOptionValue, ProjectService, ProjectSysctls,
+    ProjectTmpfs, ProjectUlimitValue, ProjectValue, ProjectView, build_project_view,
 };
 use compose_lens::resolution::SELECTION_PROJECT_MISMATCH;
 use compose_lens::source::SourceId;
 
 const BASE: &str = include_str!("../fixtures/processing/typed-project-view/compose.yaml");
 const OVERRIDE: &str = include_str!("../fixtures/processing/typed-project-view/compose.override.yaml");
+
+#[test]
+fn retains_merged_interpolated_and_reset_network_boolean_definitions() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(820),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "networks:\n",
+                "  retained:\n",
+                "    driver: \"${NETWORK_DRIVER}\"\n",
+                "    internal: true\n",
+                "    enable_ipv4: true\n",
+                "    enable_ipv6: false\n",
+                "  reset:\n",
+                "    internal: true\n",
+                "    enable_ipv4: true\n",
+                "    enable_ipv6: true\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(821),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            concat!(
+                "networks:\n",
+                "  retained:\n",
+                "    driver: \"${NETWORK_DRIVER_OVERRIDE}\"\n",
+                "    internal: false\n",
+                "    enable_ipv4: false\n",
+                "    enable_ipv6: true\n",
+                "  reset: !reset {}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("NETWORK_DRIVER", "base-driver");
+    let _ = environment.insert("NETWORK_DRIVER_OVERRIDE", "override-driver");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    let retained = view
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "retained")
+        .ok_or("retained network expected")?;
+    assert_eq!(retained.definition().provenance().operation(), MergeOperation::Merged);
+    let retained = retained.definition().value();
+    assert_eq!(
+        retained.driver().map(|value| value.value().as_str()),
+        Some("override-driver")
+    );
+    assert_eq!(
+        retained.internal().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        retained.enable_ipv4().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        retained.enable_ipv6().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+
+    let reset = view
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "reset")
+        .ok_or("reset network expected")?;
+    assert_eq!(reset.definition().provenance().operation(), MergeOperation::Reset);
+    let reset = reset.definition().value();
+    assert!(reset.internal().is_none() && reset.enable_ipv4().is_none() && reset.enable_ipv6().is_none());
+    Ok(())
+}
+
+#[test]
+fn retains_merged_volume_driver_options_and_reports_external_driver_configuration()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(824),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n  app:\n    image: example.invalid/app\n",
+                "volumes:\n",
+                "  data:\n",
+                "    driver: \"${VOLUME_DRIVER}\"\n",
+                "    driver_opts: {string: \"2\", inherited: base}\n",
+                "  reset: {driver: base}\n",
+                "  override: {driver: base}\n",
+                "  external: {external: true, driver: opaque}\n",
+                "  implicit:\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(825),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            concat!(
+                "volumes:\n",
+                "  data:\n",
+                "    driver_opts: {number: 2, inherited: override}\n",
+                "  reset: !reset {}\n",
+                "  override: !override {driver_opts: {}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("VOLUME_DRIVER", "opaque-driver");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+    let data = view
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "data")
+        .ok_or("data volume expected")?;
+    assert_eq!(data.definition().provenance().operation(), MergeOperation::Merged);
+    assert_eq!(
+        data.definition().value().driver().map(|driver| driver.value().as_str()),
+        Some("opaque-driver")
+    );
+    assert!(matches!(
+        data.definition().value().driver_opts()[0].value().value(),
+        ComposeScalar::String(value) if value == "2"
+    ));
+    assert!(matches!(
+        data.definition().value().driver_opts()[1].value().value(),
+        ComposeScalar::String(value) if value == "override"
+    ));
+    assert!(matches!(
+        data.definition().value().driver_opts()[2].value().value(),
+        ComposeScalar::Number(value) if value == "2"
+    ));
+    assert!(
+        view.volumes()
+            .iter()
+            .find(|volume| volume.name().value() == "reset")
+            .is_some_and(|volume| volume.definition().provenance().operation() == MergeOperation::Reset)
+    );
+    assert!(
+        view.volumes()
+            .iter()
+            .find(|volume| volume.name().value() == "override")
+            .is_some_and(|volume| volume.definition().provenance().operation() == MergeOperation::Override)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == VOLUME_EXTERNAL_DRIVER_CONFIGURATION)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_network_label_interpolation_and_generic_merge_operations() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(822),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "networks:\n",
+                "  mapping:\n    labels: {\"${NETWORK_LABEL_KEY}\": \"${NETWORK_LABEL_VALUE}\", plain: base}\n",
+                "  sequence:\n    labels: [\"base=one\"]\n",
+                "  map-to-list:\n    labels: {old: old}\n",
+                "  list-to-map:\n    labels: [\"old=old\"]\n",
+                "  reset:\n    labels: {old: old}\n",
+                "  override:\n    labels: {old: old}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(823),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            concat!(
+                "networks:\n",
+                "  mapping:\n    labels: {plain: override, later: later}\n",
+                "  sequence:\n    labels: [\"later=two\"]\n",
+                "  map-to-list:\n    labels: [\"new=two\"]\n",
+                "  list-to-map:\n    labels: {new: two}\n",
+                "  reset:\n    labels: !reset {}\n",
+                "  override:\n    labels: !override {replacement: override}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("NETWORK_LABEL_KEY", "must-not-change-a-mapping-key");
+    let _ = environment.insert_sensitive("NETWORK_LABEL_VALUE", "effective-sensitive-value");
+    let interpolation = loaded.interpolate(&environment);
+    let merged_result = merge_project(&loaded, Some(&interpolation));
+    let merged = merged_result.project().ok_or("merged project expected")?;
+    let result = build_project_view(merged, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    let mapping = view
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "mapping")
+        .ok_or("mapped network expected")?;
+    assert!(mapping.definition().is_sensitive());
+    let Some(Labels::Map { entries, .. }) = mapping.definition().value().labels() else {
+        return Err("mapped labels expected".into());
+    };
+    assert_eq!(entries.len(), 3);
+    assert_eq!(entries[0].key().value(), "${NETWORK_LABEL_KEY}");
+    assert_eq!(
+        entries[0].value().value(),
+        &ComposeScalar::String("effective-sensitive-value".to_owned())
+    );
+    assert_eq!(
+        entries[1].value().value(),
+        &ComposeScalar::String("override".to_owned())
+    );
+    assert_eq!(entries[2].key().value(), "later");
+
+    let sequence = view
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "sequence")
+        .and_then(|network| network.definition().value().labels())
+        .ok_or("sequence labels expected")?;
+    assert!(
+        matches!(sequence, Labels::List { values, .. } if values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>() == ["base=one", "later=two"])
+    );
+
+    for (network_name, expected) in [("map-to-list", "new=two"), ("list-to-map", "new")] {
+        let labels = view
+            .networks()
+            .iter()
+            .find(|network| network.name().value() == network_name)
+            .and_then(|network| network.definition().value().labels())
+            .ok_or("cross-form labels expected")?;
+        assert!(match (network_name, labels) {
+            ("map-to-list", Labels::List { values, .. }) => values[0].value() == expected,
+            ("list-to-map", Labels::Map { entries, .. }) => entries[0].key().value() == expected,
+            _ => false,
+        });
+    }
+
+    let reset = merged
+        .value(&["networks", "reset", "labels"])
+        .ok_or("reset labels expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.as_mapping().is_some_and(<[_]>::is_empty));
+    let overridden = merged
+        .value(&["networks", "override", "labels"])
+        .ok_or("override labels expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(
+        overridden
+            .as_mapping()
+            .is_some_and(|entries| entries.len() == 1 && entries[0].key() == "replacement")
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_volume_label_interpolation_and_generic_merge_operations() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(824),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "volumes:\n",
+                "  mapping:\n    labels: {plain: base, secret: \"${VOLUME_LABEL_VALUE}\"}\n",
+                "  sequence:\n    labels: [base=one]\n",
+                "  map-to-list:\n    labels: {old: old}\n",
+                "  list-to-map:\n    labels: [old=old]\n",
+                "  reset:\n    labels: {old: old}\n",
+                "  override:\n    labels: {old: old}\n",
+                "  external-empty:\n    external: true\n    labels: {}\n",
+                "  external-both:\n    external: true\n    driver: opaque\n    labels: {retained: value}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(825),
+            DocumentOrigin::new("compose.override.yaml", "workspace/project"),
+            concat!(
+                "volumes:\n",
+                "  mapping:\n    labels: {plain: override, later: later}\n",
+                "  sequence:\n    labels: [later=two]\n",
+                "  map-to-list:\n    labels: [new=two]\n",
+                "  list-to-map:\n    labels: {new: two}\n",
+                "  reset:\n    labels: !reset {}\n",
+                "  override:\n    labels: !override {replacement: override}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("VOLUME_LABEL_VALUE", "effective-sensitive-value");
+    let interpolation = loaded.interpolate(&environment);
+    let merged_result = merge_project(&loaded, Some(&interpolation));
+    let merged = merged_result.project().ok_or("merged project expected")?;
+    let result = build_project_view(merged, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_volume_label_merge_view(view)?;
+    assert_volume_label_merge_operations(merged)?;
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == VOLUME_EXTERNAL_LABELS_CONFIGURATION)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == VOLUME_EXTERNAL_DRIVER_CONFIGURATION)
+    );
+    Ok(())
+}
+
+fn assert_volume_label_merge_view(view: &ProjectView) -> Result<(), Box<dyn std::error::Error>> {
+    let mapping = view
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "mapping")
+        .ok_or("mapped volume expected")?;
+    assert!(mapping.definition().is_sensitive());
+    let Some(Labels::Map { entries, .. }) = mapping.definition().value().labels() else {
+        return Err("mapped labels expected".into());
+    };
+    assert_eq!(entries.len(), 3);
+    assert_eq!(entries[0].key().value(), "plain");
+    assert_eq!(
+        entries[0].value().value(),
+        &ComposeScalar::String("override".to_owned())
+    );
+    assert_eq!(entries[1].key().value(), "secret");
+    assert_eq!(
+        entries[1].value().value(),
+        &ComposeScalar::String("effective-sensitive-value".to_owned())
+    );
+    assert_eq!(entries[2].key().value(), "later");
+
+    let sequence = view
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "sequence")
+        .and_then(|volume| volume.definition().value().labels())
+        .ok_or("sequence labels expected")?;
+    assert!(
+        matches!(sequence, Labels::List { values, .. } if values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>() == ["base=one", "later=two"])
+    );
+
+    for (volume_name, expected) in [("map-to-list", "new=two"), ("list-to-map", "new")] {
+        let labels = view
+            .volumes()
+            .iter()
+            .find(|volume| volume.name().value() == volume_name)
+            .and_then(|volume| volume.definition().value().labels())
+            .ok_or("cross-form labels expected")?;
+        assert!(match (volume_name, labels) {
+            ("map-to-list", Labels::List { values, .. }) => values[0].value() == expected,
+            ("list-to-map", Labels::Map { entries, .. }) => entries[0].key().value() == expected,
+            _ => false,
+        });
+    }
+    Ok(())
+}
+
+fn assert_volume_label_merge_operations(
+    merged: &compose_lens::merge::MergedProject,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let reset = merged
+        .value(&["volumes", "reset", "labels"])
+        .ok_or("reset labels expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.as_mapping().is_some_and(<[_]>::is_empty));
+    let overridden = merged
+        .value(&["volumes", "override", "labels"])
+        .ok_or("override labels expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(
+        overridden
+            .as_mapping()
+            .is_some_and(|entries| entries.len() == 1 && entries[0].key() == "replacement")
+    );
+    Ok(())
+}
+
+const IPAM_BASE: &str = concat!(
+    "x-aux: &aux\n",
+    "  inherited: opaque-inherited-address\n",
+    "  shared: opaque-default-address\n",
+    "networks:\n",
+    "  merged:\n",
+    "    ipam:\n",
+    "      driver: \"${IPAM_DRIVER}\"\n",
+    "      config:\n",
+    "        - subnet: opaque-base-subnet\n",
+    "          aux_addresses:\n",
+    "            <<: *aux\n",
+    "            shared: opaque-effective-address\n",
+    "      options:\n",
+    "        shared: base\n",
+    "        inherited: base\n",
+    "  reset:\n",
+    "    ipam:\n",
+    "      config: [{subnet: old}]\n",
+    "  overridden:\n",
+    "    ipam:\n",
+    "      config: [{subnet: old}]\n",
+);
+
+const IPAM_OVERRIDE: &str = concat!(
+    "networks:\n",
+    "  merged:\n",
+    "    ipam:\n",
+    "      driver: \"${IPAM_DRIVER_OVERRIDE}\"\n",
+    "      config:\n",
+    "        - subnet: \"${SECOND_SUBNET}\"\n",
+    "          ip_range: opaque-second-range\n",
+    "          gateway: opaque-second-gateway\n",
+    "          aux_addresses: {second: opaque-second-address}\n",
+    "      options:\n",
+    "        shared: override\n",
+    "        secret: \"${IPAM_OPTION_SECRET}\"\n",
+    "  reset:\n",
+    "    ipam:\n",
+    "      config: !reset []\n",
+    "  overridden:\n",
+    "    ipam:\n",
+    "      config: !override [{subnet: opaque-replacement}, {subnet: opaque-replacement}]\n",
+);
+
+#[test]
+fn exposes_effective_ipam_append_tags_nested_mapping_merges_and_interpolation_sources()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = ipam_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let ipam = assert_effective_ipam_network(&result, view)?;
+    assert_ipam_configs_and_aux_addresses(ipam)?;
+    assert_ipam_options(ipam);
+    assert_ipam_config_tags(view)?;
+    assert!(result.is_valid(), "{:#?}", result.diagnostics());
+    Ok(())
+}
+
+fn ipam_project_view() -> Result<compose_lens::project::ProjectViewResult, Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(822);
+    let override_id = SourceId::new(823);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            IPAM_BASE,
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            IPAM_OVERRIDE,
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("IPAM_DRIVER", "opaque-base-driver");
+    let _ = environment.insert("IPAM_DRIVER_OVERRIDE", "opaque-override-driver");
+    let _ = environment.insert("SECOND_SUBNET", "opaque-interpolated-subnet");
+    let _ = environment.insert_sensitive("IPAM_OPTION_SECRET", "effective-secret");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let project = merged.project().ok_or("merged project expected")?;
+    assert_eq!(
+        project
+            .value(&["networks", "merged", "ipam", "config"])
+            .map(|value| value.provenance().operation()),
+        Some(MergeOperation::Appended)
+    );
+    assert_eq!(
+        project
+            .value(&["networks", "merged", "ipam", "options"])
+            .map(|value| value.provenance().operation()),
+        Some(MergeOperation::Merged)
+    );
+    for (network, operation) in [
+        ("reset", MergeOperation::Reset),
+        ("overridden", MergeOperation::Override),
+    ] {
+        assert_eq!(
+            project
+                .value(&["networks", network, "ipam", "config"])
+                .map(|value| value.provenance().operation()),
+            Some(operation)
+        );
+    }
+    Ok(build_project_view(project, None))
+}
+
+fn assert_effective_ipam_network<'a>(
+    result: &compose_lens::project::ProjectViewResult,
+    view: &'a ProjectView,
+) -> Result<&'a compose_lens::model::Ipam, Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(822);
+    let override_id = SourceId::new(823);
+    let merged_network = view
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "merged")
+        .ok_or("merged network expected")?;
+    assert_eq!(
+        merged_network.definition().provenance().operation(),
+        MergeOperation::Merged
+    );
+    assert_source_ids(
+        merged_network.definition().provenance().sources(),
+        &[base_id, override_id],
+    );
+    assert!(merged_network.definition().is_sensitive());
+    assert!(!format!("{result:?}").contains("effective-secret"));
+
+    let ipam = merged_network
+        .definition()
+        .value()
+        .ipam()
+        .ok_or("effective IPAM expected")?;
+    let driver = ipam.driver().ok_or("effective driver expected")?;
+    assert_eq!(driver.value(), "opaque-override-driver");
+    assert_eq!(driver.span().source_id(), override_id);
+    Ok(ipam)
+}
+
+fn assert_ipam_configs_and_aux_addresses(ipam: &compose_lens::model::Ipam) -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(
+        ipam.config().len(),
+        2,
+        "ordinary IPAM configuration merge appends in source order"
+    );
+    assert_eq!(
+        ipam.config()
+            .iter()
+            .map(|config| config
+                .subnet()
+                .map(compose_lens::model::Located::value)
+                .map(String::as_str))
+            .collect::<Vec<_>>(),
+        [Some("opaque-base-subnet"), Some("opaque-interpolated-subnet")]
+    );
+    assert_eq!(
+        ipam.config()[0]
+            .subnet()
+            .ok_or("base subnet expected")?
+            .span()
+            .source_id(),
+        SourceId::new(822)
+    );
+    assert_eq!(
+        ipam.config()[1]
+            .subnet()
+            .ok_or("interpolated subnet expected")?
+            .span()
+            .source_id(),
+        SourceId::new(823)
+    );
+    assert_eq!(
+        ipam.config()[0]
+            .aux_addresses()
+            .iter()
+            .map(|entry| entry.key().value().as_str())
+            .collect::<Vec<_>>(),
+        ["shared", "inherited"]
+    );
+    assert_eq!(
+        ipam.config()[0].aux_addresses()[0].value().value(),
+        &ComposeScalar::String("opaque-effective-address".to_owned())
+    );
+    Ok(())
+}
+
+fn assert_ipam_options(ipam: &compose_lens::model::Ipam) {
+    assert_eq!(
+        ipam.options()
+            .iter()
+            .map(|entry| entry.key().value().as_str())
+            .collect::<Vec<_>>(),
+        ["shared", "inherited", "secret"]
+    );
+    let shared = &ipam.options()[0];
+    assert_eq!(shared.value().value(), &ComposeScalar::String("override".to_owned()));
+    assert_eq!(shared.value().span().source_id(), SourceId::new(823));
+    let secret = &ipam.options()[2];
+    assert_eq!(
+        secret.value().value(),
+        &ComposeScalar::String("effective-secret".to_owned())
+    );
+    assert_eq!(secret.value().span().source_id(), SourceId::new(823));
+    assert_eq!(
+        &IPAM_OVERRIDE[secret.value().span().range()],
+        "\"${IPAM_OPTION_SECRET}\""
+    );
+}
+
+fn assert_ipam_config_tags(view: &ProjectView) -> Result<(), Box<dyn std::error::Error>> {
+    let reset = view
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "reset")
+        .and_then(|network| network.definition().value().ipam())
+        .ok_or("reset IPAM expected")?;
+    assert!(reset.config().is_empty());
+    let overridden = view
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "overridden")
+        .and_then(|network| network.definition().value().ipam())
+        .ok_or("overridden IPAM expected")?;
+    assert_eq!(
+        overridden
+            .config()
+            .iter()
+            .map(|config| config
+                .subnet()
+                .map(compose_lens::model::Located::value)
+                .map(String::as_str))
+            .collect::<Vec<_>>(),
+        [Some("opaque-replacement"), Some("opaque-replacement")]
+    );
+    Ok(())
+}
 
 #[test]
 fn exposes_keyed_annotations_with_replacement_raw_evidence_sensitivity_and_ambiguity()
@@ -1733,6 +2355,166 @@ fn exposes_merged_sysctls_forms_provenance_sensitivity_and_duplicate_recovery() 
     assert!(mapping.is_sensitive());
     assert!(!format!("{result:?}").contains("project-secret"));
     assert_project_sysctls_list(view, &result)?;
+    Ok(())
+}
+
+#[test]
+fn exposes_recursively_merged_logging_with_replacement_provenance_reset_override_and_sensitivity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = logging_project_view()?;
+    let view = result.view().ok_or("logging project view expected")?;
+
+    assert_merged_logging(view, &result)?;
+    assert_reset_override_and_malformed_logging(view)?;
+    Ok(())
+}
+
+fn logging_project_view() -> Result<compose_lens::project::ProjectViewResult, Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(813),
+            DocumentOrigin::new("compose.yaml", "workspace/project"),
+            concat!(
+                "services:\n",
+                "  app:\n    logging:\n",
+                "      driver: \"driver-${DRIVER}\"\n",
+                "      options:\n",
+                "        max-size: \"10m\"\n",
+                "        max-file: 3\n",
+                "        secret: \"${SECRET}\"\n",
+                "        literal-${KEY}: base\n",
+                "      x-evidence: base\n",
+                "  reset:\n    logging: {driver: old, options: {old: value}}\n",
+                "  override:\n    logging: {driver: old, options: {old: value}}\n",
+                "  malformed:\n    logging: {driver: kept, options: {valid: yes, invalid: true}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(814),
+            DocumentOrigin::new("compose.override.yaml", "workspace/override"),
+            concat!(
+                "services:\n",
+                "  app:\n    logging:\n",
+                "      driver: local\n",
+                "      options:\n",
+                "        max-size: \"20m\"\n",
+                "        added: null\n",
+                "      unknown: retained\n",
+                "  reset:\n    logging: !reset {}\n",
+                "  override:\n    logging: !override {driver: replacement, options: {only: \"1\"}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("DRIVER", "json-file");
+    let _ = environment.insert_sensitive("SECRET", "logging-secret");
+    let _ = environment.insert("KEY", "must-not-change-key");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    Ok(build_project_view(
+        merged.project().ok_or("merged logging project expected")?,
+        None,
+    ))
+}
+
+fn assert_merged_logging(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let logging = view
+        .service("app")
+        .and_then(ProjectService::logging)
+        .ok_or("effective logging expected")?;
+    assert_eq!(logging.provenance().operation(), MergeOperation::Merged);
+    let driver = logging.value().driver().ok_or("effective driver expected")?;
+    assert_eq!(driver.value(), "local");
+    assert_eq!(driver.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(driver.provenance().sources(), &[SourceId::new(813), SourceId::new(814)]);
+    let options = logging.value().options().ok_or("effective options expected")?;
+    assert_eq!(options.provenance().operation(), MergeOperation::Merged);
+    let entries = options.value().entries();
+    assert_eq!(
+        entries
+            .iter()
+            .map(|entry| entry.value().name().value())
+            .collect::<Vec<_>>(),
+        ["max-size", "max-file", "secret", "literal-${KEY}", "added"]
+    );
+    let max_size = entries
+        .iter()
+        .find(|entry| entry.value().name().value() == "max-size")
+        .ok_or("max-size option expected")?;
+    assert_eq!(
+        max_size.value().value().provenance().operation(),
+        MergeOperation::Replaced
+    );
+    assert_source_ids(
+        max_size.value().value().provenance().sources(),
+        &[SourceId::new(813), SourceId::new(814)],
+    );
+    assert!(
+        matches!(max_size.value().value().value(), ProjectLoggingOptionValue::String { authored, value }
+        if authored == "\"20m\"" && value == "20m")
+    );
+    let max_file = entries
+        .iter()
+        .find(|entry| entry.value().name().value() == "max-file")
+        .ok_or("max-file option expected")?;
+    assert!(matches!(max_file.value().value().value(), ProjectLoggingOptionValue::Number(value) if value == "3"));
+    let secret = entries
+        .iter()
+        .find(|entry| entry.value().name().value() == "secret")
+        .ok_or("secret option expected")?;
+    assert!(secret.is_sensitive());
+    assert!(
+        matches!(secret.value().value().value(), ProjectLoggingOptionValue::String { authored, value }
+        if authored == "\"${SECRET}\"" && value == "logging-secret")
+    );
+    assert!(!format!("{result:?}").contains("logging-secret"));
+    assert_eq!(logging.value().unmodeled_fields().len(), 2);
+    Ok(())
+}
+
+fn assert_reset_override_and_malformed_logging(view: &ProjectView) -> Result<(), Box<dyn std::error::Error>> {
+    let reset = view
+        .service("reset")
+        .and_then(ProjectService::logging)
+        .ok_or("reset logging expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().driver().is_none() && reset.value().options().is_none());
+    let overridden = view
+        .service("override")
+        .and_then(ProjectService::logging)
+        .ok_or("override logging expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        overridden.value().driver().map(ProjectValue::value).map(String::as_str),
+        Some("replacement")
+    );
+    let malformed = view
+        .service("malformed")
+        .and_then(ProjectService::logging)
+        .ok_or("malformed logging expected")?;
+    assert_eq!(
+        malformed.value().driver().map(ProjectValue::value).map(String::as_str),
+        Some("kept")
+    );
+    assert_eq!(
+        malformed
+            .value()
+            .options()
+            .map(ProjectValue::value)
+            .map(|options| options.entries().len()),
+        Some(1)
+    );
+    assert_eq!(
+        malformed
+            .value()
+            .options()
+            .map(ProjectValue::value)
+            .map(|options| options.unmodeled_entries().len()),
+        Some(1)
+    );
     Ok(())
 }
 

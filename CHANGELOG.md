@@ -6,6 +6,17 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-08-07
+
+### Added
+
+- Loss-aware service `logging` with merged provenance and parse-back-validated generation.
+- Generated service-network attachments with optional raw IPv4 and IPv6 identities.
+- Top-level networks retain authored and merged IPAM; generated application-owned networks add
+  drivers, scalar-kind-aware options, `internal`/IPv6 booleans, and labels.
+- Generated application-owned volumes with drivers, scalar-kind-aware options, and labels; authored
+  external-volume configuration conflicts now receive actionable diagnostics.
+
 ## [0.1.15] - 2026-08-07
 
 ### Added

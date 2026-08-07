@@ -13,26 +13,28 @@ use crate::model::{
     EXPOSE_DUPLICATE_ITEM, EXPOSE_EXPECTED_SCALAR, EXPOSE_EXPECTED_SEQUENCE, EXPOSE_INVALID_ITEM,
     EXPOSE_PROVIDER_DEPENDENT, Entrypoint, EnvironmentFileFormat, EnvironmentFileFormatKind, ExposeItemKind,
     ExposeScalarKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddress,
-    Hostname, HostnameKind, ImageReference, Ipam, IpamConfig, KeyValueEntry, Labels, LimitValue, Located, LongPort,
-    LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO, MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING,
-    MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind, MemLimitScalarKind, MountType, NetworkDefinition,
-    PIDS_LIMIT_AMBIGUOUS_ZERO, PidsLimit, PidsLimitKind, Port, PullPolicy, RestartPolicy,
-    SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS, SECURITY_OPT_EMPTY_ITEM,
-    SECURITY_OPT_EXPECTED_SEQUENCE, SECURITY_OPT_EXPECTED_STRING, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
-    SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS, SECURITY_OPT_SECCOMP_CONFLICT, SECURITY_OPT_SECCOMP_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT, SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT, SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS, SHM_SIZE_AMBIGUOUS_ZERO,
-    SHM_SIZE_EXPECTED_VALUE, SHM_SIZE_PROVIDER_DEPENDENT_NUMBER, SHM_SIZE_PROVIDER_DEPENDENT_STRING,
-    SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING,
-    SecretDefinition, SecurityOptionCandidateCounts, SecurityOptionKind, SelinuxRelabel, ServiceNetwork,
-    ServiceNetworks, ShmSize, ShmSizeKind, ShmSizeScalarKind, ShortDevice, ShortExtraHost, ShortPort, ShortVolumeMount,
-    StopGracePeriod, TMPFS_EXPECTED_FORM, TMPFS_EXPECTED_STRING, TMPFS_PROVIDER_DEPENDENT, TmpfsItem, TmpfsItemKind,
+    Hostname, HostnameKind, ImageReference, Ipam, IpamConfig, KeyValueEntry, LOGGING_DRIVER_EXPECTED_STRING,
+    LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY, LOGGING_OPTION_EXPECTED_SCALAR,
+    LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue, Located, LongPort, LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO,
+    MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind,
+    MemLimitScalarKind, MountType, NetworkDefinition, PIDS_LIMIT_AMBIGUOUS_ZERO, PidsLimit, PidsLimitKind, Port,
+    PullPolicy, RestartPolicy, SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS,
+    SECURITY_OPT_EMPTY_ITEM, SECURITY_OPT_EXPECTED_SEQUENCE, SECURITY_OPT_EXPECTED_STRING,
+    SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS, SECURITY_OPT_SECCOMP_CONFLICT,
+    SECURITY_OPT_SECCOMP_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS, SHM_SIZE_AMBIGUOUS_ZERO, SHM_SIZE_EXPECTED_VALUE,
+    SHM_SIZE_PROVIDER_DEPENDENT_NUMBER, SHM_SIZE_PROVIDER_DEPENDENT_STRING, SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY,
+    SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING, SecretDefinition,
+    SecurityOptionCandidateCounts, SecurityOptionKind, SelinuxRelabel, ServiceNetwork, ServiceNetworks, ShmSize,
+    ShmSizeKind, ShmSizeScalarKind, ShortDevice, ShortExtraHost, ShortPort, ShortVolumeMount, StopGracePeriod,
+    TMPFS_EXPECTED_FORM, TMPFS_EXPECTED_STRING, TMPFS_PROVIDER_DEPENDENT, TmpfsItem, TmpfsItemKind,
     ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceMode, UserSpec,
-    VolumeDefinition, VolumeMount, classify_expose_item, classify_security_option, security_path_option_diagnostic,
-    valid_ulimit_name,
+    VOLUME_EXTERNAL_DRIVER_CONFIGURATION, VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeDefinition, VolumeMount,
+    classify_expose_item, classify_security_option, security_path_option_diagnostic, valid_ulimit_name,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -976,6 +978,99 @@ pub enum ProjectSysctls {
     List(Vec<ProjectValue<String>>),
 }
 
+/// One effective logging-option scalar with authored and interpolated spelling retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectLoggingOptionValue {
+    /// A YAML string scalar before and after optional per-file interpolation.
+    String {
+        /// Exact authored string before interpolation.
+        authored: String,
+        /// Effective string after interpolation.
+        value: String,
+    },
+    /// A YAML number scalar with exact spelling retained.
+    Number(String),
+    /// An explicit or empty YAML null.
+    Null,
+}
+
+/// One ordered effective logging option with complete key and value provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLoggingOption {
+    name: ProjectKey,
+    value: ProjectValue<ProjectLoggingOptionValue>,
+}
+
+impl ProjectLoggingOption {
+    /// Returns the non-empty option name and every authored key location.
+    #[must_use]
+    pub const fn name(&self) -> &ProjectKey {
+        &self.name
+    }
+
+    /// Returns the exact string, number, or null option value with merge provenance.
+    #[must_use]
+    pub const fn value(&self) -> &ProjectValue<ProjectLoggingOptionValue> {
+        &self.value
+    }
+}
+
+/// Effective ordered logging options, including an explicitly empty or reset mapping.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLoggingOptions {
+    entries: Vec<ProjectValue<ProjectLoggingOption>>,
+    unmodeled_entries: Vec<ProjectFieldReference>,
+}
+
+impl ProjectLoggingOptions {
+    /// Returns valid option entries in effective mapping order.
+    #[must_use]
+    pub fn entries(&self) -> &[ProjectValue<ProjectLoggingOption>] {
+        &self.entries
+    }
+
+    /// Returns malformed entries retained outside the typed string/number/null boundary.
+    #[must_use]
+    pub fn unmodeled_entries(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_entries
+    }
+
+    /// Reports whether the effective options mapping has no valid or malformed entries.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty() && self.unmodeled_entries.is_empty()
+    }
+}
+
+/// Effective service logging configuration with nested merge provenance retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLogging {
+    driver: Option<ProjectValue<String>>,
+    options: Option<ProjectValue<ProjectLoggingOptions>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectLogging {
+    /// Returns the uninterpreted effective YAML string driver.
+    #[must_use]
+    pub const fn driver(&self) -> Option<&ProjectValue<String>> {
+        self.driver.as_ref()
+    }
+
+    /// Returns the ordered options mapping, including an explicitly empty one.
+    #[must_use]
+    pub const fn options(&self) -> Option<&ProjectValue<ProjectLoggingOptions>> {
+        self.options.as_ref()
+    }
+
+    /// Returns extensions, unknown fields, and malformed known siblings retained in the mapping.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
 /// One selected service with the native fields needed by the first conversion boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectService {
@@ -1010,6 +1105,7 @@ pub struct ProjectService {
     mem_limit: Option<ProjectValue<MemLimit>>,
     tmpfs: Option<ProjectValue<ProjectTmpfs>>,
     sysctls: Option<ProjectValue<ProjectSysctls>>,
+    logging: Option<ProjectValue<ProjectLogging>>,
     ulimits: Option<ProjectValue<ProjectUlimits>>,
     pull_policy: Option<ProjectValue<PullPolicy>>,
     restart: Option<ProjectValue<RestartPolicy>>,
@@ -1060,6 +1156,7 @@ impl ProjectService {
             mem_limit: None,
             tmpfs: None,
             sysctls: None,
+            logging: None,
             ulimits: None,
             pull_policy: None,
             restart: None,
@@ -1278,6 +1375,12 @@ impl ProjectService {
     #[must_use]
     pub const fn sysctls(&self) -> Option<&ProjectValue<ProjectSysctls>> {
         self.sysctls.as_ref()
+    }
+
+    /// Returns effective service logging configuration with nested provenance and recovery data.
+    #[must_use]
+    pub const fn logging(&self) -> Option<&ProjectValue<ProjectLogging>> {
+        self.logging.as_ref()
     }
 
     /// Returns effective ordered service limits with nested and field-level merge provenance.
@@ -1659,6 +1762,12 @@ impl<'a> Builder<'a> {
                 "mem_limit" => service.mem_limit = self.mem_limit(field.value()),
                 "tmpfs" => service.tmpfs = self.tmpfs(field.value()),
                 "sysctls" => service.sysctls = self.sysctls(field.value()),
+                "logging" => {
+                    service.logging = self.logging(field.value(), &path);
+                    if service.logging.is_none() {
+                        service.unmodeled_fields.push(field_reference(&path, field));
+                    }
+                }
                 "ulimits" => service.ulimits = self.ulimits(field.value(), &path),
                 "pull_policy" => service.pull_policy = self.pull_policy(field.value()),
                 "restart" => service.restart = self.restart_policy(field.value()),
@@ -2422,6 +2531,158 @@ impl<'a> Builder<'a> {
             }
         };
         Some(ProjectValue::new(form, value))
+    }
+
+    fn logging(&mut self, value: &MergedValue, service_path: &[String]) -> Option<ProjectValue<ProjectLogging>> {
+        let Some(fields) = value.as_mapping() else {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    LOGGING_EXPECTED_MAPPING,
+                    Severity::Error,
+                    "logging must be a mapping with optional driver and options fields",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "unexpected logging form",
+                )),
+            );
+            return None;
+        };
+        let mut driver = None;
+        let mut options = None;
+        let mut unmodeled_fields = Vec::new();
+        let mut path = service_path.to_vec();
+        path.push("logging".to_owned());
+        for field in fields {
+            match field.key() {
+                "driver" => {
+                    let Some(scalar) = field.value().as_scalar() else {
+                        self.logging_driver_finding(field.value());
+                        unmodeled_fields.push(field_reference(&path, field));
+                        continue;
+                    };
+                    if scalar.kind() != MergedScalarKind::String {
+                        self.logging_driver_finding(field.value());
+                        unmodeled_fields.push(field_reference(&path, field));
+                        continue;
+                    }
+                    driver = Some(ProjectValue::new(scalar.value().to_owned(), field.value()));
+                }
+                "options" => {
+                    let Some(entries) = field.value().as_mapping() else {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                LOGGING_OPTIONS_EXPECTED_MAPPING,
+                                Severity::Error,
+                                "logging options must be a mapping",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                effective_span(field.value()),
+                                "unexpected logging options form",
+                            )),
+                        );
+                        unmodeled_fields.push(field_reference(&path, field));
+                        continue;
+                    };
+                    options = Some(self.logging_options(field.value(), entries, &path));
+                }
+                _ => unmodeled_fields.push(field_reference(&path, field)),
+            }
+        }
+        Some(ProjectValue::new(
+            ProjectLogging {
+                driver,
+                options,
+                unmodeled_fields,
+            },
+            value,
+        ))
+    }
+
+    fn logging_driver_finding(&mut self, value: &MergedValue) {
+        self.diagnostics.push(
+            Diagnostic::new(
+                LOGGING_DRIVER_EXPECTED_STRING,
+                Severity::Error,
+                "logging driver must be a YAML string scalar",
+            )
+            .with_label(DiagnosticLabel::primary(
+                effective_span(value),
+                "non-string logging driver retained as unmodeled evidence",
+            )),
+        );
+    }
+
+    fn logging_options(
+        &mut self,
+        source: &MergedValue,
+        entries: &[MergedEntry],
+        logging_path: &[String],
+    ) -> ProjectValue<ProjectLoggingOptions> {
+        let mut values = Vec::new();
+        let mut unmodeled_entries = Vec::new();
+        let mut path = logging_path.to_vec();
+        path.push("options".to_owned());
+        for entry in entries {
+            if entry.key().is_empty() {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        LOGGING_OPTION_EMPTY_KEY,
+                        Severity::Error,
+                        "logging option keys must not be empty",
+                    )
+                    .with_label(DiagnosticLabel::primary(entry_span(entry), "empty logging option key")),
+                );
+                unmodeled_entries.push(field_reference(&path, entry));
+                continue;
+            }
+            let Some(value) = self.logging_option_value(entry.value()) else {
+                unmodeled_entries.push(field_reference(&path, entry));
+                continue;
+            };
+            let option = ProjectLoggingOption {
+                name: ProjectKey::from_entry(entry),
+                value: ProjectValue::new(value, entry.value()),
+            };
+            values.push(ProjectValue::new(option, entry.value()));
+        }
+        ProjectValue::new(
+            ProjectLoggingOptions {
+                entries: values,
+                unmodeled_entries,
+            },
+            source,
+        )
+    }
+
+    fn logging_option_value(&mut self, value: &MergedValue) -> Option<ProjectLoggingOptionValue> {
+        let parsed = match value.kind() {
+            MergedValueKind::Null(_) => ProjectLoggingOptionValue::Null,
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                ProjectLoggingOptionValue::String {
+                    authored: scalar.raw().to_owned(),
+                    value: scalar.value().to_owned(),
+                }
+            }
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::Number => {
+                ProjectLoggingOptionValue::Number(scalar.value().to_owned())
+            }
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        LOGGING_OPTION_EXPECTED_SCALAR,
+                        Severity::Error,
+                        "logging option values must be YAML string, number, or null scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unsupported logging option value retained as unmodeled evidence",
+                    )),
+                );
+                return None;
+            }
+        };
+        Some(parsed)
     }
 
     fn sysctls_map(&mut self, entries: &[MergedEntry]) -> Vec<ProjectValue<ProjectSysctl>> {
@@ -4380,7 +4641,50 @@ impl Builder<'_> {
                 _ => self.record_root_unmodeled(&path, field),
             }
         }
+        self.validate_external_volume_driver_configuration(&volume);
+        self.validate_external_volume_labels_configuration(&volume);
         Some(volume)
+    }
+
+    fn validate_external_volume_driver_configuration(&mut self, volume: &VolumeDefinition) {
+        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
+            || (volume.driver().is_none() && volume.driver_opts().is_empty())
+        {
+            return;
+        }
+        let span = volume
+            .driver()
+            .map(Located::span)
+            .or_else(|| volume.driver_opts().first().map(KeyValueEntry::span))
+            .unwrap_or_else(|| volume.span());
+        self.diagnostics.push(
+            Diagnostic::new(
+                VOLUME_EXTERNAL_DRIVER_CONFIGURATION,
+                Severity::Error,
+                "external volume cannot also configure `driver` or `driver_opts`",
+            )
+            .with_label(DiagnosticLabel::primary(
+                span,
+                "driver configuration remains retained for review",
+            )),
+        );
+    }
+
+    fn validate_external_volume_labels_configuration(&mut self, volume: &VolumeDefinition) {
+        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
+            || volume.labels().is_none()
+        {
+            return;
+        }
+        let span = volume.labels().map_or_else(|| volume.span(), Labels::span);
+        self.diagnostics.push(
+            Diagnostic::new(
+                VOLUME_EXTERNAL_LABELS_CONFIGURATION,
+                Severity::Error,
+                "external volume cannot also configure `labels`",
+            )
+            .with_label(DiagnosticLabel::primary(span, "labels remain retained for review")),
+        );
     }
 
     fn config_definitions(&mut self, value: &MergedValue) -> Vec<ProjectResource<ConfigDefinition>> {

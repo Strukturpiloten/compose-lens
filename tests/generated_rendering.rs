@@ -10,14 +10,649 @@ use compose_lens::{
     render::{
         ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument, GeneratedDevice,
         GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile,
-        GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLongDevice,
-        GeneratedMemLimit, GeneratedMount, GeneratedNetworkAttachment, GeneratedPidsLimit, GeneratedPort,
-        GeneratedProtocol, GeneratedPullPolicy, GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux,
-        GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs,
-        GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GenerationError,
+        GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLogging,
+        GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount,
+        GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
+        GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPort, GeneratedProtocol, GeneratedPullPolicy,
+        GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedShmSize,
+        GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue,
+        GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue,
+        GenerationError,
     },
     source::SourceId,
 };
+
+#[test]
+fn generates_network_definition_boolean_omission_combinations_with_drivers_and_parse_back()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut configured = GeneratedNetworkDefinition::application("configured")?;
+    configured.set_custom_name("observed-configured")?;
+    configured.set_driver(GeneratedString::sensitive("vendor-driver")?)?;
+    configured.set_driver_opts(vec![
+        GeneratedNetworkDriverOption::new(
+            "string-shaped-number",
+            GeneratedNetworkDriverOptionValue::String(plain("2")?),
+        )?,
+        GeneratedNetworkDriverOption::new("numeric", GeneratedNetworkDriverOptionValue::Number(plain("2")?))?,
+    ])?;
+    configured.set_enable_ipv6(false)?;
+    configured.set_internal(true)?;
+    configured.set_labels(vec![
+        GeneratedLabel::new("com.example.equals", plain("left=right")?)?,
+        GeneratedLabel::new("com.example.secret", GeneratedString::sensitive("private-label")?)?,
+    ])?;
+    assert_eq!(configured.driver().map(GeneratedString::expose), Some("vendor-driver"));
+    assert_eq!(
+        configured.driver_opts().map(<[GeneratedNetworkDriverOption]>::len),
+        Some(2)
+    );
+    assert_eq!(configured.enable_ipv6(), Some(false));
+    assert_eq!(configured.internal(), Some(true));
+    assert_eq!(configured.labels().map(<[GeneratedLabel]>::len), Some(2));
+
+    let mut empty_options = GeneratedNetworkDefinition::application("empty-options")?;
+    empty_options.set_driver_opts(Vec::new())?;
+    empty_options.set_enable_ipv6(true)?;
+    empty_options.set_internal(false)?;
+    empty_options.set_labels(Vec::new())?;
+
+    let mut service = GeneratedService::new("app")?;
+    service.add_network(GeneratedNetworkAttachment::new("configured")?)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    builder.add_network(GeneratedResource::application("basic")?)?;
+    builder.add_network_definition(configured)?;
+    builder.add_network_definition(empty_options)?;
+    let generated = builder.build(SourceId::new(819))?;
+
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"app\":\n",
+            "    networks:\n",
+            "      \"configured\": {}\n",
+            "networks:\n",
+            "  \"basic\": {}\n",
+            "  \"configured\":\n",
+            "    name: \"observed-configured\"\n",
+            "    driver: \"vendor-driver\"\n",
+            "    driver_opts:\n",
+            "      \"string-shaped-number\": \"2\"\n",
+            "      \"numeric\": 2\n",
+            "    enable_ipv6: false\n",
+            "    internal: true\n",
+            "    labels:\n",
+            "      \"com.example.equals\": \"left=right\"\n",
+            "      \"com.example.secret\": \"private-label\"\n",
+            "  \"empty-options\":\n",
+            "    driver_opts: {}\n",
+            "    enable_ipv6: true\n",
+            "    internal: false\n",
+            "    labels: {}\n",
+        )
+    );
+    assert!(!generated.text().contains("enable_ipv4"));
+    assert!(generated.is_sensitive());
+    assert!(format!("{generated:?}").contains("<redacted>"));
+    assert!(!format!("{generated:?}").contains("vendor-driver"));
+    assert!(!format!("{generated:?}").contains("private-label"));
+
+    assert_generated_network_definition_parse_back(generated.document())
+}
+
+#[test]
+fn generates_application_owned_volume_driver_options_with_scalar_fidelity_and_parse_back()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut configured = GeneratedVolumeDefinition::application("configured")?;
+    configured.set_custom_name("observed-configured")?;
+    configured.set_driver(plain("opaque-driver")?)?;
+    configured.set_driver_opts(vec![
+        GeneratedVolumeDriverOption::new(
+            "string-shaped-number",
+            GeneratedVolumeDriverOptionValue::String(plain("2")?),
+        )?,
+        GeneratedVolumeDriverOption::new("numeric", GeneratedVolumeDriverOptionValue::Number(plain("2")?))?,
+    ])?;
+    configured.set_labels(vec![
+        GeneratedLabel::new("com.example.equals", plain("left=right")?)?,
+        GeneratedLabel::new("com.example.secret", GeneratedString::sensitive("private-label")?)?,
+    ])?;
+    assert_eq!(configured.driver().map(GeneratedString::expose), Some("opaque-driver"));
+    assert_eq!(
+        configured.driver_opts().map(<[GeneratedVolumeDriverOption]>::len),
+        Some(2)
+    );
+    assert_eq!(configured.labels().map(<[GeneratedLabel]>::len), Some(2));
+
+    let mut empty_options = GeneratedVolumeDefinition::application("empty-options")?;
+    empty_options.set_driver_opts(Vec::new())?;
+    empty_options.set_labels(Vec::new())?;
+
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(plain("example/app")?)?;
+    builder.add_service(service)?;
+    builder.add_volume_definition(configured)?;
+    builder.add_volume_definition(empty_options)?;
+    let generated = builder.build(SourceId::new(820))?;
+
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"app\":\n",
+            "    image: \"example/app\"\n",
+            "volumes:\n",
+            "  \"configured\":\n",
+            "    name: \"observed-configured\"\n",
+            "    driver: \"opaque-driver\"\n",
+            "    driver_opts:\n",
+            "      \"string-shaped-number\": \"2\"\n",
+            "      \"numeric\": 2\n",
+            "    labels:\n",
+            "      \"com.example.equals\": \"left=right\"\n",
+            "      \"com.example.secret\": \"private-label\"\n",
+            "  \"empty-options\":\n",
+            "    driver_opts: {}\n",
+            "    labels: {}\n",
+        )
+    );
+    assert!(generated.is_sensitive());
+    assert!(format!("{generated:?}").contains("<redacted>"));
+    assert!(!format!("{generated:?}").contains("opaque-driver"));
+    assert!(!format!("{generated:?}").contains("private-label"));
+
+    let configured = generated
+        .document()
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "configured")
+        .ok_or("configured volume expected")?;
+    assert_eq!(
+        configured.driver().map(|driver| driver.value().as_str()),
+        Some("opaque-driver")
+    );
+    assert!(matches!(
+        configured.driver_opts()[0].value().value(),
+        ComposeScalar::String(value) if value == "2"
+    ));
+    assert!(matches!(
+        configured.driver_opts()[1].value().value(),
+        ComposeScalar::Number(value) if value == "2"
+    ));
+    assert!(matches!(
+        configured.labels(),
+        Some(Labels::Map { entries, .. })
+            if entries.len() == 2
+                && entries[0].key().value() == "com.example.equals"
+                && matches!(entries[0].value().value(), ComposeScalar::String(value) if value == "left=right")
+                && entries[1].key().value() == "com.example.secret"
+                && matches!(entries[1].value().value(), ComposeScalar::String(value) if value == "private-label")
+    ));
+    assert!(
+        generated
+            .document()
+            .volumes()
+            .iter()
+            .find(|volume| volume.name().value() == "empty-options")
+            .is_some_and(|volume| {
+                volume.driver_opts().is_empty()
+                    && matches!(volume.labels(), Some(Labels::Map { entries, .. }) if entries.is_empty())
+            })
+    );
+    Ok(())
+}
+
+#[test]
+fn volume_definition_rejects_invalid_or_duplicate_driver_configuration() -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(
+        GeneratedVolumeDriverOption::new(
+            "count",
+            GeneratedVolumeDriverOptionValue::Number(plain("not-a-number")?),
+        ),
+        Err(GenerationError::InvalidVolumeDriverOptionNumber)
+    );
+
+    let first = GeneratedVolumeDriverOption::new("same", GeneratedVolumeDriverOptionValue::String(plain("first")?))?;
+    let replacement = GeneratedVolumeDriverOption::new("same", GeneratedVolumeDriverOptionValue::Number(plain("2")?))?;
+    let mut volume = GeneratedVolumeDefinition::application("configured")?;
+    volume.set_driver(plain("unrecognized-driver")?)?;
+    assert_eq!(
+        volume.set_driver(plain("replacement")?),
+        Err(GenerationError::DuplicateField("volume driver"))
+    );
+    assert_eq!(
+        volume.set_driver_opts(vec![first, replacement]),
+        Err(GenerationError::DuplicateName {
+            kind: "volume driver option",
+            name: "same".to_owned(),
+        })
+    );
+    volume.set_driver_opts(Vec::new())?;
+    assert_eq!(
+        volume.set_driver_opts(Vec::new()),
+        Err(GenerationError::DuplicateField("volume driver_opts"))
+    );
+    volume.set_labels(Vec::new())?;
+    assert_eq!(
+        volume.set_labels(Vec::new()),
+        Err(GenerationError::DuplicateField("volume labels"))
+    );
+
+    let duplicate = GeneratedLabel::new("com.example.same", plain("first")?)?;
+    let replacement = GeneratedLabel::new("com.example.same", plain("second")?)?;
+    let mut duplicate_labels = GeneratedVolumeDefinition::application("duplicate-labels")?;
+    assert_eq!(
+        duplicate_labels.set_labels(vec![duplicate, replacement]),
+        Err(GenerationError::DuplicateName {
+            kind: "volume label",
+            name: "com.example.same".to_owned(),
+        })
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(plain("example/app")?)?;
+    builder.add_service(service)?;
+    builder.add_volume(GeneratedResource::external("configured")?)?;
+    assert_eq!(
+        builder.add_volume_definition(volume),
+        Err(GenerationError::DuplicateName {
+            kind: "volume",
+            name: "configured".to_owned(),
+        })
+    );
+    Ok(())
+}
+
+fn assert_generated_network_definition_parse_back(
+    document: &compose_lens::model::ComposeDocument,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let configured = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "configured")
+        .ok_or("configured network expected")?;
+    assert_eq!(
+        configured.driver().map(|driver| driver.value().as_str()),
+        Some("vendor-driver")
+    );
+    assert!(matches!(
+        configured.driver_opts()[0].value().value(),
+        ComposeScalar::String(value) if value == "2"
+    ));
+    assert!(matches!(
+        configured.driver_opts()[1].value().value(),
+        ComposeScalar::Number(value) if value == "2"
+    ));
+    assert_eq!(
+        configured.enable_ipv6().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        configured.internal().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    let labels = configured.labels().ok_or("configured network labels expected")?;
+    let Labels::Map { entries, .. } = labels else {
+        return Err("generated network labels should parse as a mapping".into());
+    };
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].key().value(), "com.example.equals");
+    assert_eq!(
+        entries[0].value().value(),
+        &ComposeScalar::String("left=right".to_owned())
+    );
+    assert_eq!(
+        entries[1].value().value(),
+        &ComposeScalar::String("private-label".to_owned())
+    );
+    assert!(
+        document
+            .networks()
+            .iter()
+            .find(|network| network.name().value() == "empty-options")
+            .is_some_and(|network| {
+                network.driver_opts().is_empty()
+                    && network
+                        .enable_ipv6()
+                        .is_some_and(|value| value.value() == &BooleanValue::Literal(true))
+                    && network
+                        .internal()
+                        .is_some_and(|value| value.value() == &BooleanValue::Literal(false))
+                    && matches!(network.labels(), Some(Labels::Map { entries, .. }) if entries.is_empty())
+            })
+    );
+    Ok(())
+}
+
+#[test]
+fn network_definition_driver_options_reject_duplicates_and_invalid_numbers_without_plugin_validation()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(
+        GeneratedNetworkDriverOption::new(
+            "count",
+            GeneratedNetworkDriverOptionValue::Number(plain("not-a-number")?),
+        ),
+        Err(GenerationError::InvalidNetworkDriverOptionNumber)
+    );
+
+    let option = GeneratedNetworkDriverOption::new("same", GeneratedNetworkDriverOptionValue::String(plain("first")?))?;
+    let replacement =
+        GeneratedNetworkDriverOption::new("same", GeneratedNetworkDriverOptionValue::Number(plain("2")?))?;
+    let mut network = GeneratedNetworkDefinition::application("custom")?;
+    network.set_driver(plain("unrecognized-plugin")?)?;
+    assert_eq!(
+        network.set_driver(plain("replacement")?),
+        Err(GenerationError::DuplicateField("network driver"))
+    );
+    assert_eq!(
+        network.set_driver_opts(vec![option, replacement]),
+        Err(GenerationError::DuplicateName {
+            kind: "network driver option",
+            name: "same".to_owned(),
+        })
+    );
+    network.set_driver_opts(Vec::new())?;
+    assert_eq!(
+        network.set_driver_opts(Vec::new()),
+        Err(GenerationError::DuplicateField("network driver_opts"))
+    );
+    network.set_enable_ipv6(false)?;
+    assert_eq!(
+        network.set_enable_ipv6(true),
+        Err(GenerationError::DuplicateField("network enable_ipv6"))
+    );
+    network.set_internal(false)?;
+    assert_eq!(
+        network.set_internal(true),
+        Err(GenerationError::DuplicateField("network internal"))
+    );
+    network.set_labels(Vec::new())?;
+    assert_eq!(
+        network.set_labels(Vec::new()),
+        Err(GenerationError::DuplicateField("network labels"))
+    );
+
+    let duplicate = GeneratedLabel::new("com.example.same", plain("first")?)?;
+    let replacement = GeneratedLabel::new("com.example.same", plain("second")?)?;
+    let mut duplicate_labels = GeneratedNetworkDefinition::application("duplicate-labels")?;
+    assert_eq!(
+        duplicate_labels.set_labels(vec![duplicate, replacement]),
+        Err(GenerationError::DuplicateName {
+            kind: "network label",
+            name: "com.example.same".to_owned(),
+        })
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(GeneratedService::new("app")?)?;
+    builder.add_network(GeneratedResource::application("custom")?)?;
+    assert_eq!(
+        builder.add_network_definition(network),
+        Err(GenerationError::DuplicateName {
+            kind: "network",
+            name: "custom".to_owned(),
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn generates_network_attachment_address_omission_combinations_with_aliases_and_parse_back()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut omitted = GeneratedService::new("omitted")?;
+    omitted.add_network(GeneratedNetworkAttachment::new("frontend")?)?;
+
+    let mut ipv4_only = GeneratedService::new("ipv4-only")?;
+    let mut ipv4 = GeneratedNetworkAttachment::new("frontend")?;
+    ipv4.set_ipv4_address(plain("192.0.2.10")?)?;
+    assert_eq!(ipv4.ipv4_address().map(GeneratedString::expose), Some("192.0.2.10"));
+    assert!(ipv4.ipv6_address().is_none());
+    ipv4_only.add_network(ipv4)?;
+
+    let mut ipv6_only = GeneratedService::new("ipv6-only")?;
+    let mut ipv6 = GeneratedNetworkAttachment::new("frontend")?;
+    ipv6.set_ipv6_address(plain("2001:db8::10")?)?;
+    assert!(ipv6.ipv4_address().is_none());
+    assert_eq!(ipv6.ipv6_address().map(GeneratedString::expose), Some("2001:db8::10"));
+    ipv6_only.add_network(ipv6)?;
+
+    let mut both = GeneratedService::new("both")?;
+    let mut addresses = GeneratedNetworkAttachment::new("frontend")?;
+    addresses.add_alias("web")?;
+    addresses.add_alias("api")?;
+    addresses.set_ipv4_address(plain("198.51.100.20")?)?;
+    addresses.set_ipv6_address(plain("2001:db8::20")?)?;
+    both.add_network(addresses)?;
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(omitted)?;
+    builder.add_service(ipv4_only)?;
+    builder.add_service(ipv6_only)?;
+    builder.add_service(both)?;
+    let generated = builder.build(SourceId::new(816))?;
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"omitted\":\n",
+            "    networks:\n",
+            "      \"frontend\": {}\n",
+            "  \"ipv4-only\":\n",
+            "    networks:\n",
+            "      \"frontend\":\n",
+            "        ipv4_address: \"192.0.2.10\"\n",
+            "  \"ipv6-only\":\n",
+            "    networks:\n",
+            "      \"frontend\":\n",
+            "        ipv6_address: \"2001:db8::10\"\n",
+            "  \"both\":\n",
+            "    networks:\n",
+            "      \"frontend\":\n",
+            "        aliases:\n",
+            "          - \"web\"\n",
+            "          - \"api\"\n",
+            "        ipv4_address: \"198.51.100.20\"\n",
+            "        ipv6_address: \"2001:db8::20\"\n",
+        )
+    );
+
+    let omitted = generated_network(&generated, "omitted")?;
+    assert!(omitted.aliases().is_empty());
+    assert!(omitted.ipv4_address().is_none());
+    assert!(omitted.ipv6_address().is_none());
+    let ipv4 = generated_network(&generated, "ipv4-only")?;
+    assert_eq!(
+        ipv4.ipv4_address().map(|value| value.value().as_str()),
+        Some("192.0.2.10")
+    );
+    assert!(ipv4.ipv6_address().is_none());
+    let ipv6 = generated_network(&generated, "ipv6-only")?;
+    assert!(ipv6.ipv4_address().is_none());
+    assert_eq!(
+        ipv6.ipv6_address().map(|value| value.value().as_str()),
+        Some("2001:db8::10")
+    );
+    let both = generated_network(&generated, "both")?;
+    assert_eq!(
+        both.aliases()
+            .iter()
+            .map(|alias| alias.value().as_str())
+            .collect::<Vec<_>>(),
+        ["web", "api"]
+    );
+    assert_eq!(
+        both.ipv4_address().map(|value| value.value().as_str()),
+        Some("198.51.100.20")
+    );
+    assert_eq!(
+        both.ipv6_address().map(|value| value.value().as_str()),
+        Some("2001:db8::20")
+    );
+    Ok(())
+}
+
+#[test]
+fn network_attachment_addresses_keep_generated_string_safety_redaction_and_duplicate_rules()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut attachment = GeneratedNetworkAttachment::new("frontend")?;
+    attachment.set_ipv4_address(GeneratedString::sensitive("not-an-ip\n${STATIC_V4}")?)?;
+    attachment.set_ipv6_address(plain("")?)?;
+    assert_eq!(
+        attachment.set_ipv4_address(plain("192.0.2.1")?),
+        Err(GenerationError::DuplicateField("ipv4_address"))
+    );
+    assert_eq!(
+        attachment.set_ipv6_address(plain("2001:db8::1")?),
+        Err(GenerationError::DuplicateField("ipv6_address"))
+    );
+    assert_eq!(
+        GeneratedString::plain("192.0.2.1\0hidden"),
+        Err(GenerationError::ContainsNul("string"))
+    );
+
+    let mut service = GeneratedService::new("app")?;
+    service.add_network(attachment)?;
+    assert_eq!(
+        service.add_network(GeneratedNetworkAttachment::new("frontend")?),
+        Err(GenerationError::DuplicateName {
+            kind: "service network",
+            name: "frontend".to_owned(),
+        })
+    );
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(817))?;
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"app\":\n",
+            "    networks:\n",
+            "      \"frontend\":\n",
+            "        ipv4_address: \"not-an-ip\\n${STATIC_V4}\"\n",
+            "        ipv6_address: \"\"\n",
+        )
+    );
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("not-an-ip"));
+    let parsed = generated_network(&generated, "app")?;
+    assert_eq!(
+        parsed.ipv4_address().map(|value| value.value().as_str()),
+        Some("not-an-ip\n${STATIC_V4}")
+    );
+    assert_eq!(parsed.ipv6_address().map(|value| value.value().as_str()), Some(""));
+    Ok(())
+}
+
+#[test]
+fn generates_explicit_logging_with_ordered_scalar_kinds_empty_options_parse_back_and_redaction()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut empty = GeneratedService::new("empty")?;
+    empty.set_logging(GeneratedLogging::new(plain("custom-driver")?, Vec::new())?)?;
+
+    let mut configured = GeneratedService::new("configured")?;
+    configured.set_logging(GeneratedLogging::new(
+        plain("vendor-driver")?,
+        vec![
+            GeneratedLoggingOption::new(
+                "string-option",
+                GeneratedLoggingOptionValue::String(GeneratedString::sensitive("01")?),
+            )?,
+            GeneratedLoggingOption::new("number-option", GeneratedLoggingOptionValue::Number(plain("0001")?))?,
+            GeneratedLoggingOption::new("null-option", GeneratedLoggingOptionValue::Null)?,
+        ],
+    )?)?;
+    assert_eq!(
+        configured
+            .logging()
+            .map(GeneratedLogging::driver)
+            .map(GeneratedString::expose),
+        Some("vendor-driver")
+    );
+    assert_eq!(
+        configured.logging().map(GeneratedLogging::options).map(<[_]>::len),
+        Some(3)
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(empty)?;
+    builder.add_service(configured)?;
+    let generated = builder.build(SourceId::new(815))?;
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"empty\":\n",
+            "    logging:\n",
+            "      driver: \"custom-driver\"\n",
+            "      options: {}\n",
+            "  \"configured\":\n",
+            "    logging:\n",
+            "      driver: \"vendor-driver\"\n",
+            "      options:\n",
+            "        \"string-option\": \"01\"\n",
+            "        \"number-option\": 0001\n",
+            "        \"null-option\": null\n",
+        )
+    );
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("01"));
+    let logging = generated
+        .document()
+        .service("configured")
+        .and_then(compose_lens::model::Service::logging)
+        .ok_or("generated logging parse-back expected")?;
+    assert_eq!(
+        logging
+            .driver()
+            .map(compose_lens::model::Located::value)
+            .map(String::as_str),
+        Some("vendor-driver")
+    );
+    let options = logging.options().ok_or("generated logging options expected")?;
+    assert!(
+        matches!(options.entries()[0].value().value(), compose_lens::model::LoggingOptionValue::String(value) if value == "01")
+    );
+    assert!(
+        matches!(options.entries()[1].value().value(), compose_lens::model::LoggingOptionValue::Number(value) if value == "0001")
+    );
+    assert!(matches!(
+        options.entries()[2].value().value(),
+        compose_lens::model::LoggingOptionValue::Null
+    ));
+    Ok(())
+}
+
+#[test]
+fn rejects_invalid_or_duplicate_generated_logging_without_driver_semantics() -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(
+        GeneratedLoggingOption::new("", GeneratedLoggingOptionValue::Null),
+        Err(GenerationError::EmptyValue("logging option key"))
+    );
+    assert_eq!(
+        GeneratedLoggingOption::new("bad-number", GeneratedLoggingOptionValue::Number(plain("1 trailing")?),),
+        Err(GenerationError::InvalidLoggingOptionNumber)
+    );
+    let first = GeneratedLoggingOption::new("same", GeneratedLoggingOptionValue::Null)?;
+    let second = GeneratedLoggingOption::new("same", GeneratedLoggingOptionValue::String(plain("value")?))?;
+    assert_eq!(
+        GeneratedLogging::new(plain("")?, vec![first, second]),
+        Err(GenerationError::DuplicateName {
+            kind: "logging option",
+            name: "same".to_owned(),
+        })
+    );
+    let mut service = GeneratedService::new("app")?;
+    service.set_logging(GeneratedLogging::new(plain("uninterpreted:${DRIVER}")?, Vec::new())?)?;
+    assert_eq!(
+        service.set_logging(GeneratedLogging::new(plain("second")?, Vec::new())?),
+        Err(GenerationError::DuplicateField("logging"))
+    );
+    Ok(())
+}
 
 #[test]
 fn generates_safe_unique_annotations_empty_state_sensitivity_and_parse_back() -> Result<(), Box<dyn std::error::Error>>
@@ -1914,6 +2549,20 @@ fn complete_project() -> Result<ComposeDocumentBuilder, Box<dyn std::error::Erro
 
 fn plain(value: &str) -> Result<GeneratedString, GenerationError> {
     GeneratedString::plain(value)
+}
+
+fn generated_network<'a>(
+    generated: &'a GeneratedComposeDocument,
+    service_name: &str,
+) -> Result<&'a compose_lens::model::ServiceNetwork, &'static str> {
+    match generated
+        .document()
+        .service(service_name)
+        .and_then(compose_lens::model::Service::networks)
+    {
+        Some(ServiceNetworks::Long { networks, .. }) => networks.first().ok_or("generated network expected"),
+        _ => Err("generated long-form service networks expected"),
+    }
 }
 
 fn expected_document() -> &'static str {

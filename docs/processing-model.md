@@ -97,6 +97,16 @@ Service `ulimits` uses the same generic recursive mapping merge, including indep
 range-member values use the explicit per-file interpolation overlay. Reset produces an explicit
 empty mapping, and override replaces the complete mapping with its operation retained.
 
+Service `logging` is likewise an ordinary recursively merged mapping. Driver and colliding option
+values replace with full provenance; mapping keys remain uninterpolated while string values use
+each file's explicit interpolation overlay. Reset and override retain their generic operations.
+
+Top-level network `labels` retain their authored list or mapping form and use the generic
+Compose Specification map/sequence merge rules, including `!reset` and `!override`. Current
+Compose-Go's observed `mergeToSequence` special case is an implementation divergence, not
+normative behavior; ComposeLens does not adopt it without separately versioned evidence and a
+decision.
+
 The operation accepts an optional set of matching per-file interpolation overlays. Omitting them is
 an explicit request to merge authored expressions. A mismatched project/overlay pair is rejected.
 Implementation compatibility classification remains a later stage. The evidence and remaining
@@ -125,7 +135,7 @@ used by the other post-merge operations.
 
 The native view covers project name, services, service hostnames, explicit container names, images, entrypoints,
 commands, init-process choices, merged environment, service labels, extra host
-mappings, service annotations, ordered service capability additions and drops, ordered mixed service devices, raw service DNS servers, ordered service exposed ports, raw service security options, raw service PID limits, raw service shared-memory sizes, raw service memory limits, service-level temporary filesystems, service sysctls, ordered service ulimits, image pull policies, health checks, service dependencies, independent stop signals and stop grace periods,
+mappings, service annotations, service logging configuration, ordered service capability additions and drops, ordered mixed service devices, raw service DNS servers, ordered service exposed ports, raw service security options, raw service PID limits, raw service shared-memory sizes, raw service memory limits, service-level temporary filesystems, service sysctls, ordered service ulimits, image pull policies, health checks, service dependencies, independent stop signals and stop grace periods,
 ports, volume mounts, service config and secret grants, service networks, profiles, and top-level
 network, volume, config, and secret definitions.
 Environment and service-label values are keyed after field-specific Compose merging, while each
