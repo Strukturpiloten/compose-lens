@@ -1,0 +1,18 @@
+schema = 1
+id = "service-annotations-model"
+suite = "typed-model"
+description = "Protects service annotation mapping/list fidelity, scalar spelling, duplicates, ambiguous key-only entries, malformed evidence, and sibling recovery."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No environment access occurs; interpolation-shaped annotation values remain authored evidence."
+
+[expectations]
+summary = "Mapping scalar kinds and raw list items remain source-aware while invalid and ambiguous forms are diagnosed without erasing valid siblings."

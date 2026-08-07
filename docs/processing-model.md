@@ -69,6 +69,22 @@ Matching targets replace or recursively merge in place and retain all contributo
 deferred, opaque, colon-delimited, and permissions spelling remains raw. Current Compose merge prose
 does not list `devices` among the ordinary append exclusions, while Compose-Go's `extends` metadata
 does; ComposeLens records that discrepancy without silently changing its compatibility behavior.
+Service `dns` and `dns_search` retain scalar/list form: list-to-list updates append,
+cross-form updates replace, and reset/override stay explicit. `dns_opt` uses whole-sequence
+replacement. Exact values, duplicates, provenance, and sensitivity remain visible without resolver
+interpretation.
+
+Service `expose` uses exact scalar text and YAML kind for unique-sequence merging. No implicit
+protocol or runtime publication is inferred.
+
+Service `security_opt` appends raw values without deduplication. Exact AppArmor,
+no-new-privileges, seccomp, SELinux-label, Mask, and Unmask shapes become independent diagnostic
+candidates after interpolation; conflicts and near misses remain unselected.
+
+Service `annotations` accepts mapping and list syntax and merges valid entries by name after each
+file's value interpolation. Raw list evidence and ambiguous or malformed entries remain
+source-addressable.
+
 Service-level `tmpfs` list-to-list merging uses the ordinary append rule with no cross-file
 deduplication. Scalar/list mismatches use ordinary replacement; reset and override retain their
 explicit operations.
@@ -109,7 +125,7 @@ used by the other post-merge operations.
 
 The native view covers project name, services, service hostnames, explicit container names, images, entrypoints,
 commands, init-process choices, merged environment, service labels, extra host
-mappings, ordered service capability additions and drops, ordered mixed service devices, raw service PID limits, raw service shared-memory sizes, raw service memory limits, service-level temporary filesystems, service sysctls, ordered service ulimits, image pull policies, health checks, service dependencies, independent stop signals and stop grace periods,
+mappings, service annotations, ordered service capability additions and drops, ordered mixed service devices, raw service DNS servers, ordered service exposed ports, raw service security options, raw service PID limits, raw service shared-memory sizes, raw service memory limits, service-level temporary filesystems, service sysctls, ordered service ulimits, image pull policies, health checks, service dependencies, independent stop signals and stop grace periods,
 ports, volume mounts, service config and secret grants, service networks, profiles, and top-level
 network, volume, config, and secret definitions.
 Environment and service-label values are keyed after field-specific Compose merging, while each

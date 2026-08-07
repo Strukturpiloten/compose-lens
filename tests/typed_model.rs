@@ -5,18 +5,19 @@ use compose_lens::model::{
     CAP_DROP_DUPLICATE_ITEM, CAP_DROP_EXPECTED_SEQUENCE, CAP_DROP_EXPECTED_STRING, Command, ComposeDocument,
     ComposeScalar, ConfigGrant, ContainerPathKind, DEPENDENCY_HEALTHCHECK_UNVERIFIED, DEPENDENCY_INVALID_CONDITION,
     DEPENDENCY_MISSING_HEALTHCHECK, DEPENDENCY_MISSING_SERVICE, DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING,
-    DEVICE_MISSING_SOURCE, DEVICES_EXPECTED_SEQUENCE, DependencyCondition, DeployFieldKind, Device,
-    ENVIRONMENT_FILE_EXPECTED_FORM, ENVIRONMENT_FILE_INVALID_FORMAT, ENVIRONMENT_FILE_MISSING_PATH, EXPECTED_BOOLEAN,
-    EXPECTED_FIELD_FORM, EXPECTED_MAPPING, EXPECTED_SCALAR, EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Entrypoint,
-    Environment, EnvironmentFile, EnvironmentFileFormatKind, ExtraHostSeparator, ExtraHosts, GRANT_EXPECTED_FORM,
-    GRANT_MISSING_SOURCE, HEALTHCHECK_INVALID_DURATION, HEALTHCHECK_INVALID_RETRIES, HEALTHCHECK_INVALID_TEST,
-    HealthcheckTestKind, HostAddressKind, HostnameKind, IdentityComponent, Labels, LimitValue, Located, MountType,
-    PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY, RestartPolicyKind,
-    STOP_GRACE_PERIOD_INVALID, SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM,
-    SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING, SecretGrant, SelinuxRelabel, ServiceNetworks, StopGracePeriod,
-    SysctlsForm, ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UlimitValue,
-    UserNamespaceModeKind, VOLUME_EXPECTED_FORM, VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE,
-    VolumeMount, VolumeSyntax,
+    DEVICE_MISSING_SOURCE, DEVICES_EXPECTED_SEQUENCE, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING,
+    DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM, DNS_SEARCH_EXPECTED_STRING, DependencyCondition,
+    DeployFieldKind, Device, DnsForm, DnsSearchForm, ENVIRONMENT_FILE_EXPECTED_FORM, ENVIRONMENT_FILE_INVALID_FORMAT,
+    ENVIRONMENT_FILE_MISSING_PATH, EXPECTED_BOOLEAN, EXPECTED_FIELD_FORM, EXPECTED_MAPPING, EXPECTED_SCALAR,
+    EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Entrypoint, Environment, EnvironmentFile, EnvironmentFileFormatKind,
+    ExtraHostSeparator, ExtraHosts, GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE, HEALTHCHECK_INVALID_DURATION,
+    HEALTHCHECK_INVALID_RETRIES, HEALTHCHECK_INVALID_TEST, HealthcheckTestKind, HostAddressKind, HostnameKind,
+    IdentityComponent, Labels, LimitValue, Located, MountType, PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port,
+    RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY, RestartPolicyKind, STOP_GRACE_PERIOD_INVALID,
+    SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING,
+    SecretGrant, SelinuxRelabel, ServiceNetworks, StopGracePeriod, SysctlsForm, ULIMIT_INVALID_NAME,
+    ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UlimitValue, UserNamespaceModeKind, VOLUME_EXPECTED_FORM,
+    VOLUME_INVALID_SELINUX, VOLUME_MISSING_TARGET, VOLUME_MISSING_TYPE, VolumeMount, VolumeSyntax,
 };
 
 #[test]
@@ -95,6 +96,698 @@ const SERVICE_CAP_DROP: &str = include_str!("../fixtures/typed-model/service-cap
 const SERVICE_TMPFS: &str = include_str!("../fixtures/typed-model/service-tmpfs-model/compose.yaml");
 const SERVICE_SYSCTLS: &str = include_str!("../fixtures/typed-model/service-sysctls-model/compose.yaml");
 const SERVICE_DEVICES: &str = include_str!("../fixtures/typed-model/service-devices-model/compose.yaml");
+const SERVICE_DNS: &str = include_str!("../fixtures/typed-model/service-dns-model/compose.yaml");
+const SERVICE_DNS_OPTIONS: &str = include_str!("../fixtures/typed-model/service-dns-options-model/compose.yaml");
+const SERVICE_DNS_SEARCH: &str = include_str!("../fixtures/typed-model/service-dns-search-model/compose.yaml");
+const SERVICE_EXPOSE: &str = include_str!("../fixtures/typed-model/service-expose-model/compose.yaml");
+const SERVICE_ANNOTATIONS: &str = include_str!("../fixtures/typed-model/service-annotations-model/compose.yaml");
+const SERVICE_SECURITY_OPTIONS: &str =
+    include_str!("../fixtures/typed-model/service-security-options-model/compose.yaml");
+
+fn assert_security_option_candidate_kinds(exact: &compose_lens::model::SecurityOptions) {
+    use compose_lens::model::SecurityOptionKind;
+
+    assert_eq!(exact.items().len(), 128);
+    assert!(matches!(
+        exact.items()[0].kind(),
+        SecurityOptionKind::AppArmor { profile } if profile == "profile-a"
+    ));
+    for (index, enabled) in [(1, true), (2, false), (3, true)] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::NoNewPrivileges { enabled: actual } if *actual == enabled
+        ));
+    }
+    assert!(matches!(
+        exact.items()[4].kind(),
+        SecurityOptionKind::SecurityLabelDisableNearMiss
+    ));
+    assert!(matches!(exact.items()[7].kind(), SecurityOptionKind::Expression));
+    assert!(matches!(exact.items()[8].kind(), SecurityOptionKind::Empty));
+    assert!(
+        exact.items()[9..13]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::AppArmorNearMiss))
+    );
+    assert!(
+        exact.items()[13..18]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::NoNewPrivilegesNearMiss))
+    );
+    for (index, profile) in [(18, "unconfined"), (19, "/workspace/seccomp.json"), (20, "unconfined")] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::Seccomp { profile: actual } if actual == profile
+        ));
+    }
+    assert!(matches!(exact.items()[21].kind(), SecurityOptionKind::Expression));
+    assert!(
+        exact.items()[22..28]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::SeccompNearMiss))
+    );
+    for index in [28, 29] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelDisable { enabled: true }
+        ));
+    }
+    assert!(
+        exact.items()[30..35]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::SecurityLabelDisableNearMiss))
+    );
+    assert!(
+        exact.items()[35..37]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::Other))
+    );
+    assert!(matches!(exact.items()[37].kind(), SecurityOptionKind::Expression));
+    for index in [38, 39] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelFileType { file_type }
+                if file_type == "container_file_t"
+        ));
+    }
+    assert!(
+        exact.items()[40..48]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::SecurityLabelFileTypeNearMiss))
+    );
+    assert!(matches!(
+        exact.items()[48].kind(),
+        SecurityOptionKind::SecurityLabelType { label_type } if label_type == "TYPE"
+    ));
+    assert!(
+        exact.items()[49..51]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::Other))
+    );
+    assert!(matches!(
+        exact.items()[51].kind(),
+        SecurityOptionKind::SecurityLabelLevel { level } if level == "LEVEL"
+    ));
+    assert!(matches!(exact.items()[52].kind(), SecurityOptionKind::Expression));
+    for index in [53, 54] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelLevel { level } if level == "s0:c1,c2"
+        ));
+    }
+    assert!(
+        exact.items()[55..64]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::SecurityLabelLevelNearMiss))
+    );
+    assert!(matches!(exact.items()[64].kind(), SecurityOptionKind::Expression));
+    assert_security_label_nested_candidate_kinds(exact);
+}
+
+fn assert_security_label_nested_candidate_kinds(exact: &compose_lens::model::SecurityOptions) {
+    use compose_lens::model::SecurityOptionKind;
+
+    for index in [65, 66] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelNested { enabled: true }
+        ));
+    }
+    assert!(
+        exact.items()[67..75]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::SecurityLabelNestedNearMiss))
+    );
+    assert!(matches!(exact.items()[75].kind(), SecurityOptionKind::Expression));
+    assert_security_label_type_candidate_kinds(exact);
+}
+
+fn assert_security_label_type_candidate_kinds(exact: &compose_lens::model::SecurityOptions) {
+    use compose_lens::model::SecurityOptionKind;
+
+    for index in [76, 77] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::SecurityLabelType { label_type } if label_type == "container_t"
+        ));
+    }
+    assert!(
+        exact.items()[78..92]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::SecurityLabelTypeNearMiss))
+    );
+    assert!(matches!(exact.items()[92].kind(), SecurityOptionKind::Expression));
+    assert_mask_candidate_kinds(exact);
+}
+
+fn assert_mask_candidate_kinds(exact: &compose_lens::model::SecurityOptions) {
+    use compose_lens::model::SecurityOptionKind;
+
+    for index in [93, 94] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::Mask { paths } if paths == "/proc/acpi:/proc/kcore"
+        ));
+    }
+    assert!(matches!(
+        exact.items()[95].kind(),
+        SecurityOptionKind::Mask { paths } if paths == "relative:opaque=value"
+    ));
+    assert!(matches!(exact.items()[96].kind(), SecurityOptionKind::Expression));
+    assert!(
+        exact.items()[97..105]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::MaskNearMiss))
+    );
+    assert_unmask_candidate_kinds(exact);
+}
+
+fn assert_unmask_candidate_kinds(exact: &compose_lens::model::SecurityOptions) {
+    use compose_lens::model::SecurityOptionKind;
+
+    for index in [105, 106] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::Unmask { paths } if paths == "ALL"
+        ));
+    }
+    for (index, expected) in [(107, "/proc/acpi"), (108, "/proc/acpi:/sys/firmware"), (109, "/proc/*")] {
+        assert!(matches!(
+            exact.items()[index].kind(),
+            SecurityOptionKind::Unmask { paths } if paths == expected
+        ));
+    }
+    assert!(matches!(exact.items()[110].kind(), SecurityOptionKind::Expression));
+    assert!(
+        exact.items()[111..128]
+            .iter()
+            .all(|item| matches!(item.kind(), SecurityOptionKind::UnmaskNearMiss))
+    );
+}
+
+fn assert_unmask_near_miss_diagnostics(parsed: &compose_lens::model::ModelParse) {
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == compose_lens::model::SECURITY_OPT_UNMASK_NEAR_MISS)
+            .count(),
+        17
+    );
+}
+
+#[test]
+fn types_raw_security_options_and_narrow_candidates_with_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{
+        SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS, SECURITY_OPT_EMPTY_ITEM,
+        SECURITY_OPT_EXPECTED_SEQUENCE, SECURITY_OPT_EXPECTED_STRING, SECURITY_OPT_MASK_NEAR_MISS,
+        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS,
+        SECURITY_OPT_SECCOMP_CONFLICT, SECURITY_OPT_SECCOMP_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS, SECURITY_OPT_UNMASK_NEAR_MISS,
+    };
+
+    let syntax = SyntaxDocument::parse(SourceId::new(697), SERVICE_SECURITY_OPTIONS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial security_opt document expected")?;
+
+    assert!(
+        document
+            .service("omitted")
+            .is_some_and(|service| service.security_options().is_none())
+    );
+    let empty = document
+        .service("empty-sequence")
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("explicit empty security_opt expected")?;
+    assert!(empty.items().is_empty());
+    assert!(!empty.span().range().is_empty());
+
+    let exact = document
+        .service("exact")
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("typed security_opt expected")?;
+    assert_security_option_candidate_kinds(exact);
+    assert!(exact.items().iter().all(|item| !item.span().range().is_empty()));
+
+    let recovered = document
+        .service("malformed-siblings")
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("partially recovered security_opt expected")?;
+    assert_eq!(
+        recovered
+            .items()
+            .iter()
+            .map(compose_lens::model::SecurityOptionItem::value)
+            .collect::<Vec<_>>(),
+        ["valid-before", "valid-after"]
+    );
+    assert!(
+        document
+            .service("malformed-siblings")
+            .is_some_and(|service| service.image().is_some())
+    );
+    for code in [
+        SECURITY_OPT_EXPECTED_SEQUENCE,
+        SECURITY_OPT_EXPECTED_STRING,
+        SECURITY_OPT_EMPTY_ITEM,
+        SECURITY_OPT_APPARMOR_NEAR_MISS,
+        SECURITY_OPT_APPARMOR_CONFLICT,
+        SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS,
+        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+        SECURITY_OPT_SECCOMP_NEAR_MISS,
+        SECURITY_OPT_SECCOMP_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS,
+        SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS,
+        SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS,
+        SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS,
+        SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+        SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS,
+        SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT,
+        SECURITY_OPT_MASK_NEAR_MISS,
+        SECURITY_OPT_UNMASK_NEAR_MISS,
+    ] {
+        assert!(parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_EXPECTED_STRING)
+            .count(),
+        5
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_SECCOMP_CONFLICT)
+            .count(),
+        2
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == SECURITY_OPT_MASK_NEAR_MISS)
+            .count(),
+        8
+    );
+    assert_unmask_near_miss_diagnostics(&parsed);
+    Ok(())
+}
+
+#[test]
+fn types_annotation_forms_scalar_kinds_duplicates_ambiguity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{
+        ANNOTATIONS_DUPLICATE_NAME, ANNOTATIONS_EMPTY_NAME, ANNOTATIONS_EXPECTED_FORM, ANNOTATIONS_EXPECTED_STRING,
+        ANNOTATIONS_KEY_ONLY, AnnotationsForm,
+    };
+
+    let syntax = SyntaxDocument::parse(SourceId::new(696), SERVICE_ANNOTATIONS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial annotations document expected")?;
+    assert!(
+        document
+            .service("omitted")
+            .is_some_and(|service| service.annotations().is_none())
+    );
+    assert!(matches!(
+        document.service("empty-map").and_then(compose_lens::model::Service::annotations).map(compose_lens::model::Annotations::form),
+        Some(AnnotationsForm::Map(entries)) if entries.is_empty()
+    ));
+    assert!(matches!(
+        document.service("empty-list").and_then(compose_lens::model::Service::annotations).map(compose_lens::model::Annotations::form),
+        Some(AnnotationsForm::List(items)) if items.is_empty()
+    ));
+
+    let mapping = document
+        .service("mapping")
+        .and_then(compose_lens::model::Service::annotations)
+        .ok_or("mapping annotations expected")?;
+    let AnnotationsForm::Map(entries) = mapping.form() else {
+        return Err("mapping form expected".into());
+    };
+    assert_eq!(entries.len(), 7, "authored duplicate mapping entries stay visible");
+    assert!(matches!(entries[0].value().value(), ComposeScalar::String(value) if value.contains("STRING_VALUE")));
+    assert!(matches!(entries[1].value().value(), ComposeScalar::Number(value) if value == "001"));
+    assert!(matches!(entries[2].value().value(), ComposeScalar::Boolean(true)));
+    assert!(matches!(entries[3].value().value(), ComposeScalar::Null));
+    assert_eq!(entries[4].key().value(), entries[5].key().value());
+    assert!(entries.iter().all(|entry| !entry.span().range().is_empty()));
+
+    let list = document
+        .service("list")
+        .and_then(compose_lens::model::Service::annotations)
+        .ok_or("list annotations expected")?;
+    let AnnotationsForm::List(items) = list.form() else {
+        return Err("list form expected".into());
+    };
+    assert_eq!(items.len(), 9, "scalar invalid items remain authored evidence");
+    assert!(matches!(&items[1].value(), ComposeScalar::String(value) if value == "io.example.equals=left=right"));
+    assert!(matches!(items[6].value(), ComposeScalar::Number(value) if value == "7"));
+    assert!(matches!(items[7].value(), ComposeScalar::Boolean(true)));
+    assert!(matches!(items[8].value(), ComposeScalar::Null));
+    assert!(
+        document
+            .service("wrong-form")
+            .is_some_and(|service| service.annotations().is_none())
+    );
+    for code in [
+        ANNOTATIONS_DUPLICATE_NAME,
+        ANNOTATIONS_EMPTY_NAME,
+        ANNOTATIONS_EXPECTED_FORM,
+        ANNOTATIONS_EXPECTED_STRING,
+        ANNOTATIONS_KEY_ONLY,
+    ] {
+        assert!(
+            parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code),
+            "missing {code}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn types_expose_string_and_number_identity_classification_and_sibling_recovery()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{
+        EXPOSE_DUPLICATE_ITEM, EXPOSE_EXPECTED_SCALAR, EXPOSE_EXPECTED_SEQUENCE, EXPOSE_INVALID_ITEM,
+        EXPOSE_PROVIDER_DEPENDENT, ExposeItemKind, ExposeScalarKind,
+    };
+
+    let syntax = SyntaxDocument::parse(SourceId::new(690), SERVICE_EXPOSE)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial typed document expected")?;
+    assert!(
+        document
+            .service("omitted")
+            .is_some_and(|service| service.expose().is_none())
+    );
+    assert!(
+        document
+            .service("empty")
+            .and_then(compose_lens::model::Service::expose)
+            .is_some_and(|expose| expose.items().is_empty())
+    );
+
+    let items = document
+        .service("exact")
+        .and_then(compose_lens::model::Service::expose)
+        .ok_or("typed expose expected")?
+        .items();
+    assert_eq!(items.len(), 11);
+    assert_eq!(items[0].value(), "80");
+    assert_eq!(items[0].scalar_kind(), ExposeScalarKind::Number);
+    assert_eq!(items[1].scalar_kind(), ExposeScalarKind::String);
+    assert!(matches!(items[2].kind(), ExposeItemKind::Documented { .. }));
+    assert!(matches!(items[5].kind(), ExposeItemKind::Expression));
+    assert!(matches!(items[6].kind(), ExposeItemKind::Sctp { .. }));
+    assert!(matches!(items[7].kind(), ExposeItemKind::UnknownProtocol { protocol, .. } if protocol == "HTTP"));
+    assert!(matches!(items[8].kind(), ExposeItemKind::Malformed));
+    assert!(items.iter().all(|item| !item.span().range().is_empty()));
+
+    let recovered = document
+        .service("malformed-siblings")
+        .and_then(compose_lens::model::Service::expose)
+        .ok_or("partial expose expected")?;
+    assert_eq!(
+        recovered
+            .items()
+            .iter()
+            .map(compose_lens::model::ExposeItem::value)
+            .collect::<Vec<_>>(),
+        ["90", "93/udp"]
+    );
+    assert!(
+        document
+            .service("wrong-form")
+            .is_some_and(|service| service.expose().is_none())
+    );
+    for code in [
+        EXPOSE_EXPECTED_SCALAR,
+        EXPOSE_EXPECTED_SEQUENCE,
+        EXPOSE_INVALID_ITEM,
+        EXPOSE_PROVIDER_DEPENDENT,
+        EXPOSE_DUPLICATE_ITEM,
+    ] {
+        assert!(
+            parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code),
+            "missing {code}"
+        );
+    }
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == EXPOSE_DUPLICATE_ITEM)
+            .count(),
+        2
+    );
+    Ok(())
+}
+
+#[test]
+fn types_raw_dns_search_scalar_and_list_forms_and_recovers_valid_siblings() -> Result<(), Box<dyn std::error::Error>> {
+    let source_id = SourceId::new(689);
+    let syntax = SyntaxDocument::parse(source_id, SERVICE_DNS_SEARCH)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial typed document expected")?;
+
+    assert!(
+        document
+            .service("omitted")
+            .is_some_and(|service| service.dns_search().is_none())
+    );
+    let scalar = document
+        .service("scalar")
+        .and_then(compose_lens::model::Service::dns_search)
+        .ok_or("scalar dns_search expected")?;
+    assert!(matches!(scalar.form(), DnsSearchForm::Scalar(value) if value.value() == "."));
+    assert!(!scalar.span().range().is_empty());
+
+    let empty = document
+        .service("empty-list")
+        .and_then(compose_lens::model::Service::dns_search)
+        .ok_or("empty dns_search expected")?;
+    assert!(matches!(empty.form(), DnsSearchForm::List(values) if values.is_empty()));
+
+    let exact = document
+        .service("exact-list")
+        .and_then(compose_lens::model::Service::dns_search)
+        .ok_or("dns_search list expected")?;
+    let DnsSearchForm::List(values) = exact.form() else {
+        return Err("dns_search list form expected".into());
+    };
+    assert_eq!(
+        values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>(),
+        [
+            "example.internal",
+            "example.internal",
+            ".",
+            "${DNS_SEARCH:-corp.internal}"
+        ]
+    );
+    assert!(values.iter().all(|value| !value.span().range().is_empty()));
+
+    let recovered = document
+        .service("malformed-items")
+        .and_then(compose_lens::model::Service::dns_search)
+        .ok_or("partial dns_search list expected")?;
+    assert!(matches!(recovered.form(), DnsSearchForm::List(values)
+        if values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>()
+            == ["valid-before.internal", "valid-after.internal"]));
+    assert!(
+        document
+            .service("malformed-items")
+            .is_some_and(|service| service.image().is_some())
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|item| item.code() == DNS_SEARCH_EXPECTED_STRING)
+            .count(),
+        5
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|item| item.code() == DNS_SEARCH_EXPECTED_FORM)
+            .count(),
+        4
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|item| item.code() == DNS_SEARCH_DUPLICATE_ITEM)
+            .count(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn types_dns_options_as_an_ordered_unique_string_sequence_with_loss_aware_recovery()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{DNS_OPT_DUPLICATE_ITEM, DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING};
+
+    let syntax = SyntaxDocument::parse(SourceId::new(687), SERVICE_DNS_OPTIONS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial typed document expected")?;
+
+    assert!(
+        document
+            .service("omitted")
+            .is_some_and(|service| service.dns_options().is_none())
+    );
+    let empty = document
+        .service("empty")
+        .and_then(compose_lens::model::Service::dns_options)
+        .ok_or("explicit empty dns_opt expected")?;
+    assert!(empty.items().is_empty());
+    assert!(!empty.span().range().is_empty());
+
+    let exact = document
+        .service("exact")
+        .and_then(compose_lens::model::Service::dns_options)
+        .ok_or("typed dns_opt expected")?;
+    assert_eq!(
+        exact
+            .items()
+            .iter()
+            .map(|item| item.value().as_str())
+            .collect::<Vec<_>>(),
+        ["ndots:5", "timeout:2", "ndots:5", "${DNS_OPTION:-attempts:3}"]
+    );
+    assert!(exact.items().iter().all(|item| !item.span().range().is_empty()));
+
+    let recovered = document
+        .service("malformed-items")
+        .and_then(compose_lens::model::Service::dns_options)
+        .ok_or("partially recovered dns_opt expected")?;
+    assert_eq!(
+        recovered
+            .items()
+            .iter()
+            .map(|item| item.value().as_str())
+            .collect::<Vec<_>>(),
+        ["valid-before", "valid-after"]
+    );
+    assert!(
+        document
+            .service("malformed-items")
+            .is_some_and(|service| service.image().is_some())
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|item| item.code() == DNS_OPT_DUPLICATE_ITEM)
+            .count(),
+        1
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|item| item.code() == DNS_OPT_EXPECTED_STRING)
+            .count(),
+        5
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|item| item.code() == DNS_OPT_EXPECTED_SEQUENCE)
+            .count(),
+        3
+    );
+    Ok(())
+}
+
+#[test]
+fn types_raw_dns_scalar_and_list_forms_and_recovers_valid_siblings() -> Result<(), Box<dyn std::error::Error>> {
+    let source_id = SourceId::new(684);
+    let syntax = SyntaxDocument::parse(source_id, SERVICE_DNS)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("partial typed document expected")?;
+
+    assert!(
+        document
+            .service("omitted")
+            .is_some_and(|service| service.dns().is_none())
+    );
+    let scalar = document
+        .service("scalar")
+        .and_then(compose_lens::model::Service::dns)
+        .ok_or("scalar dns expected")?;
+    assert!(matches!(scalar.form(), DnsForm::Scalar(value) if value.value() == "local-resolver.example"));
+    assert!(!scalar.span().range().is_empty());
+
+    let empty = document
+        .service("empty-list")
+        .and_then(compose_lens::model::Service::dns)
+        .ok_or("empty dns expected")?;
+    assert!(matches!(empty.form(), DnsForm::List(values) if values.is_empty()));
+
+    let exact = document
+        .service("exact-list")
+        .and_then(compose_lens::model::Service::dns)
+        .ok_or("dns list expected")?;
+    let DnsForm::List(values) = exact.form() else {
+        return Err("dns list form expected".into());
+    };
+    assert_eq!(
+        values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>(),
+        [
+            "1.1.1.1",
+            "1.1.1.1",
+            "local-resolver.example",
+            "${DNS_SERVER:-resolver.internal}",
+            "2001:db8::53",
+        ]
+    );
+    assert!(values.iter().all(|value| !value.span().range().is_empty()));
+
+    let recovered = document
+        .service("malformed-items")
+        .and_then(compose_lens::model::Service::dns)
+        .ok_or("partial DNS list expected")?;
+    assert!(matches!(recovered.form(), DnsForm::List(values)
+        if values.iter().map(|value| value.value().as_str()).collect::<Vec<_>>()
+            == ["valid-before.example", "valid-after.example"]));
+    assert!(
+        document
+            .service("malformed-items")
+            .is_some_and(|service| service.image().is_some())
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == DNS_EXPECTED_STRING)
+            .count(),
+        5
+    );
+    assert_eq!(
+        parsed
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == DNS_EXPECTED_FORM)
+            .count(),
+        4
+    );
+    Ok(())
+}
 
 #[test]
 fn types_ordered_mixed_devices_and_recovers_invalid_forms_without_runtime_validation()

@@ -37,7 +37,9 @@ Short and long syntax remain distinct field-specific variants. They are not norm
 
 The completed native boundary types images, build field identities, commands, environment,
 environment-file declarations, service hostnames, explicit container names, labels, extra hosts, service capability additions and drops, raw user and
-user-namespace values, ordered mixed service devices, PID limits, shared-memory sizes, service-level temporary filesystems, service sysctls, image pull policies, independent stop signals and stop grace periods, ulimits, health checks,
+user-namespace values, ordered mixed service devices, raw service DNS servers and resolver options,
+ordered service exposed ports, raw service security options, PID limits, shared-memory sizes, service-level temporary filesystems,
+service sysctls, image pull policies, independent stop signals and stop grace periods, ulimits, health checks,
 dependencies, deploy field identities, ports, volumes, service networks, profiles, config and secret grants, and the
 corresponding top-level network, volume, config, and secret definitions. Deferred interpolation
 expressions, empty values, extensions, and unknown fields remain distinguishable. Container paths
@@ -82,6 +84,22 @@ normalized. The current Compose merge prose's ordinary append exclusion does not
 while Compose-Go's `extends` metadata does; this discrepancy is documented as evidence rather than
 silently changing existing behavior.
 
+Service `dns` and `dns_search` retain scalar/list form and use duplicate-preserving list
+append; cross-form updates replace. `dns_opt` retains an ordered sequence and uses whole-sequence
+replacement. None of these rules interprets resolver data.
+
+Service `expose` uses exact text plus YAML scalar kind as its merge identity. Documented decimal
+forms are classified without fixed-width parsing; unsupported and malformed forms remain raw.
+
+Service `security_opt` uses raw sequence append. Exact AppArmor, no-new-privileges, seccomp,
+SELinux-label, Mask, and Unmask shapes are exposed as independent lexical candidates. Near misses
+and conflicts remain evidence, and no profile, path, provider, runtime, or cross-format policy is
+selected.
+
+Service `annotations` retains mapping/list syntax and uses keyed effective merging. Mapping keys do
+not interpolate, contributors remain visible, and key-only list items stay diagnosed rather than
+receiving label semantics.
+
 Service-level `tmpfs` is an ordinary sequence when both files use list form: entries append without
 deduplication so ordering, exact duplicates, item provenance, `!reset`, and `!override` remain
 observable. Scalar/list shape mismatches use the normal replacement rule.
@@ -109,6 +127,9 @@ Service labels are normalized by semantic key only in this effective view. Each 
 mapping, `KEY=VALUE`, or key-only list syntax and all contributing spans. A key-only list label has
 an explicit empty-string semantic value; this differs from a key-only environment variable, which
 requests host-environment resolution.
+Service annotations are likewise keyed in the effective view, but retain authored/effective
+scalar evidence, complete raw list items, contributor provenance, and sensitivity. Unlike labels,
+a key-only annotation has no invented value and remains diagnosed.
 
 Service environment-file declarations remain ordered and do not trigger I/O. The document model
 retains scalar/list and long syntax; the project view preserves append order, item provenance, and
@@ -184,6 +205,14 @@ merged project or run compatibility validation. ADR 0017 records the
 Generated service labels use ordered mapping syntax with explicit quoted string values. This keeps
 empty values and values containing `=` unambiguous, rejects duplicate names, and propagates
 caller-marked value sensitivity to the complete generated document.
+Generated service annotations use ordered mapping syntax and distinguish omission from an explicit
+empty mapping. Only unique resolved non-empty names with explicit resolved quoted string values
+are accepted; deferred, multiline, key-only, null, and malformed construction cannot succeed.
+Generated service security options distinguish omission from one complete configured sequence,
+including empty. Resolved non-empty single-line strings are quoted in order, exact duplicates are
+retained, including exact duplicate seccomp, `label:disable`, `label:filetype:<type>`,
+`label:level:<level>`, `label:nested`, `label:type:<type>`, `mask=<paths>`, and valid `unmask=<paths>` strings. No option, profile, JSON,
+SELinux type, provider, runtime, or target-format normalization is applied.
 Generated environment-file declarations preserve caller-selected short or long syntax and ordered
 `required`/`format: raw` options. Paths use the same sensitivity boundary and are never opened,
 resolved, or parsed during generation.
@@ -195,6 +224,9 @@ Generated service devices distinguish omission from an explicit empty vector and
 short/long order and duplicates. Every value is a quoted resolved single-line string; long source
 is required. Generation does not inspect host devices, parse short colon triples, validate CDI or
 permissions, or claim runtime access.
+Generated service DNS values retain caller-selected scalar/list form, ordered duplicates, and
+explicit empty lists. Non-empty resolved single-line strings are quoted and parse-back validated
+without enforcing an IP/DNS grammar or performing resolver or network access.
 Generated stop signals remain unconstrained raw strings because Compose defines no normative
 signal-token grammar; quoted empty strings are retained as distinct from null. Generated stop
 grace periods retain caller spelling under a `ComposeLens` policy based on the documented `us`,

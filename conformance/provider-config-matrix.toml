@@ -1,5 +1,5 @@
 schema = 1
-reviewed = "2026-08-06"
+reviewed = "2026-08-07"
 
 [[targets]]
 id = "docker-compose-2-24-3"
@@ -190,6 +190,48 @@ fixture = "fixtures/conformance/service-tmpfs"
 files = ["compose.yaml"]
 fixture_sha256 = "711275d4dc868e6011561a28f43373607ebb922e8512c562d5deef85b950f2d0"
 purpose = "Measure provider config handling of omitted, scalar, explicitly empty list, ordered duplicates, colon-delimited documented assignments, and raw provider-specific service-level tmpfs options without claiming runtime mount behavior."
+
+[[probes]]
+id = "service-dns"
+fixture = "fixtures/conformance/service-dns"
+files = ["compose.yaml"]
+fixture_sha256 = "3de83a71503dd3e73fa83b78c44926cce4b24335d30840444eed8202d0f92947"
+purpose = "Measure provider config handling of omitted, scalar, explicitly empty list, ordered duplicate, hostname-like, IPv4-like, and IPv6-like raw service dns strings without claiming resolver, network, rootless, runtime, or cross-provider behavior."
+
+[[probes]]
+id = "service-dns-options"
+fixture = "fixtures/conformance/service-dns-options"
+files = ["compose.yaml"]
+fixture_sha256 = "62a8274a66643cc086e0ee25ea3d62002e917781fe127fd142f8d4dc9fb72170"
+purpose = "Measure provider config handling of omitted, explicitly empty, ordered, and exact-duplicate raw service dns_opt strings without claiming option grammar, resolver, runtime, or cross-provider behavior."
+
+[[probes]]
+id = "service-dns-search"
+fixture = "fixtures/conformance/service-dns-search"
+files = ["compose.yaml"]
+fixture_sha256 = "ebfce45f650f08ad75c6519dc045477a86700cd6fa2c374b1cc45bf418b23711"
+purpose = "Measure provider config handling of omitted, scalar, dot, explicitly empty list, ordered, and exact-duplicate raw service dns_search strings without claiming domain grammar, resolver, dot semantics, runtime, or cross-provider behavior."
+
+[[probes]]
+id = "service-expose"
+fixture = "fixtures/conformance/service-expose"
+files = ["compose.yaml"]
+fixture_sha256 = "ec729b4c7c1ef3acc3c686e75e15ef189fb9014d165322e0232fddf6486f993f"
+purpose = "Measure provider config handling of omitted, explicitly empty, YAML number/string identity, decimal range, explicit protocol, SCTP, leading-zero, and duplicate service expose items without claiming protocol defaults, runtime port publication, firewall behavior, or cross-format equivalence."
+
+[[probes]]
+id = "service-security-options"
+fixture = "fixtures/conformance/service-security-options"
+files = ["compose.yaml"]
+fixture_sha256 = "d069752690ba08eee72f9c0bd7b0e75bf82ecd16855feb24815e6fe757f6284f"
+purpose = "Measure provider config handling of omitted, explicitly empty, raw, duplicate, exact AppArmor, seccomp, no-new-privileges, SELinux label-disable/filetype/level/nested/type, and repeatable mask/unmask candidates plus separator, case, empty, relative, mixed-ALL, extended, delimiter, and whitespace near misses without claiming profile/path existence or validity, JSON validity, MLS/MCS or SELinux type validity, provider portability, runtime enforcement, filesystem access, or cross-format equivalence."
+
+[[probes]]
+id = "service-annotations"
+fixture = "fixtures/conformance/service-annotations"
+files = ["compose.yaml"]
+fixture_sha256 = "c6569983317e5214f21c0ba85361e0a57bba09453aeb62d6acf2d537bad47735"
+purpose = "Measure provider config handling of omitted, explicitly empty, mapping/list, scalar-kind, key-only, embedded-equals, and duplicate service annotations without claiming runtime metadata propagation, target semantics, or cross-format equivalence."
 
 [[probes]]
 id = "service-sysctls"
@@ -902,4 +944,184 @@ status = "planned"
 [[runs]]
 target = "podman-compose-1-5-0"
 probe = "service-mem-limit"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-dns"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-dns"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-dns"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-dns"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-dns"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-dns"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-dns-options"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-dns-options"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-dns-options"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-dns-options"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-dns-options"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-dns-options"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-dns-search"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-dns-search"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-dns-search"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-dns-search"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-dns-search"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-dns-search"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-expose"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-expose"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-expose"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-expose"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-expose"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-expose"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-annotations"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-annotations"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-annotations"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-annotations"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-annotations"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-annotations"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-3"
+probe = "service-security-options"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-24-4"
+probe = "service-security-options"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-2-40-3"
+probe = "service-security-options"
+status = "planned"
+
+[[runs]]
+target = "docker-compose-5-3-1"
+probe = "service-security-options"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-3-0"
+probe = "service-security-options"
+status = "planned"
+
+[[runs]]
+target = "podman-compose-1-5-0"
+probe = "service-security-options"
 status = "planned"

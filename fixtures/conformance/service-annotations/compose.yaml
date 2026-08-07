@@ -1,0 +1,22 @@
+services:
+  omitted:
+    image: example.invalid/composelens/annotations-omitted:1
+  empty-map:
+    annotations: {}
+  empty-list:
+    annotations: []
+  mapping:
+    annotations:
+      io.example.string: "value"
+      io.example.number: 7
+      io.example.boolean: true
+      io.example.null: null
+  list:
+    annotations:
+      - "io.example.one=first"
+      - "io.example.equals=left=right"
+      - "io.example.key-only"
+  duplicate:
+    annotations:
+      - "io.example.same=first"
+      - "io.example.same=second"

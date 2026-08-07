@@ -11,22 +11,525 @@ use compose_lens::model::{
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
-    ProjectDevice, ProjectEnvironmentFile, ProjectGrant, ProjectSysctls, ProjectTmpfs, ProjectUlimit,
-    ProjectUlimitRange, ProjectUlimitScalar, ProjectUlimitValue, ProjectUlimits, build_project_view,
+    ProjectDevice, ProjectDns, ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectSysctls, ProjectTmpfs,
+    ProjectUlimit, ProjectUlimitRange, ProjectUlimitScalar, ProjectUlimitValue, ProjectUlimits, build_project_view,
 };
 use compose_lens::render::{
-    ComposeDocumentBuilder, GeneratedDevice, GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname,
-    GeneratedLabel, GeneratedLongDevice, GeneratedMemLimit, GeneratedPidsLimit, GeneratedPullPolicy,
-    GeneratedRestartPolicy, GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls,
-    GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, ReplacementScalar, ScalarEdit,
-    apply_preservation_edits, render_canonical,
+    ComposeDocumentBuilder, GeneratedAnnotation, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
+    GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel, GeneratedLongDevice,
+    GeneratedMemLimit, GeneratedPidsLimit, GeneratedPullPolicy, GeneratedRestartPolicy, GeneratedService,
+    GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit,
+    GeneratedUlimitValue, GeneratedUlimits, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
+
+#[test]
+fn exposes_authored_effective_and_generated_annotations_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n    annotations: [\"io.example.owner=platform\", \"io.example.key-only\"]\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(700), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert!(matches!(
+        parsed
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::annotations)
+            .map(compose_lens::model::Annotations::form),
+        Some(compose_lens::model::AnnotationsForm::List(items)) if items.len() == 2
+    ));
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(701),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let annotations = project
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::annotations)
+        .ok_or("effective annotations expected")?;
+    let owner: &compose_lens::project::ProjectAnnotationEntry = annotations
+        .value()
+        .get("io.example.owner")
+        .ok_or("owner annotation expected")?;
+    assert!(owner.value().is_some());
+    assert!(
+        annotations
+            .value()
+            .get("io.example.key-only")
+            .is_some_and(|entry| entry.value().is_none())
+    );
+
+    let mut service = GeneratedService::new("app")?;
+    service.set_annotations(vec![GeneratedAnnotation::new(
+        "io.example.owner",
+        GeneratedString::plain("platform")?,
+    )?])?;
+    assert_eq!(service.annotations().map(<[GeneratedAnnotation]>::len), Some(1));
+    Ok(())
+}
+
+#[test]
+fn exposes_repeatable_unmask_security_option_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n    security_opt: [\"unmask=ALL\", \"${UNMASK}\", \"unmask=all\"]\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(736), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("authored unmask security options expected")?;
+    assert!(matches!(
+        authored.items()[0].kind(),
+        compose_lens::model::SecurityOptionKind::Unmask { paths } if paths == "ALL"
+    ));
+    assert!(matches!(
+        authored.items()[1].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert_eq!(
+        parsed.diagnostics()[0].code(),
+        compose_lens::model::SECURITY_OPT_UNMASK_NEAR_MISS
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(737),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("UNMASK", "unmask=/proc/acpi:/sys/firmware");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let project = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let effective: &compose_lens::project::ProjectSecurityOptionItem = project
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(1))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective unmask option expected")?;
+    assert!(matches!(
+        effective.kind(),
+        compose_lens::model::SecurityOptionKind::Unmask { paths }
+            if paths == "/proc/acpi:/sys/firmware"
+    ));
+
+    let mut service = GeneratedService::new("app")?;
+    service.set_security_options(vec![
+        GeneratedString::plain("unmask=ALL")?,
+        GeneratedString::plain("unmask=ALL")?,
+        GeneratedString::plain("unmask=/proc/*")?,
+    ])?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(738))?;
+    let generated_options = generated
+        .document()
+        .service("app")
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("generated unmask options expected")?;
+    assert_eq!(generated_options.items().len(), 3);
+    assert!(matches!(
+        generated_options.items()[2].kind(),
+        compose_lens::model::SecurityOptionKind::Unmask { paths } if paths == "/proc/*"
+    ));
+    Ok(())
+}
 use compose_lens::resolution::validate_references;
 use compose_lens::source::SourceId;
 use compose_lens::syntax::SyntaxDocument;
 use compose_lens::validation::{
     CompatibilityFeature, CompatibilityProfile, ImplementationVersion, validate_compatibility,
 };
+
+fn assert_generated_seccomp_public_contract(options: &compose_lens::model::SecurityOptions) {
+    assert_eq!(options.items().len(), 21);
+    for index in [1, 2] {
+        assert!(matches!(
+            options.items()[index].kind(),
+            compose_lens::model::SecurityOptionKind::SecurityLabelDisable { enabled: true }
+        ));
+    }
+    for index in [3, 4] {
+        assert!(matches!(
+            options.items()[index].kind(),
+            compose_lens::model::SecurityOptionKind::SecurityLabelFileType { file_type }
+                if file_type == "container_file_t"
+        ));
+    }
+    for index in [5, 6] {
+        assert!(matches!(
+            options.items()[index].kind(),
+            compose_lens::model::SecurityOptionKind::SecurityLabelLevel { level }
+                if level == "s0:c1,c2"
+        ));
+    }
+    for index in [7, 8] {
+        assert!(matches!(
+            options.items()[index].kind(),
+            compose_lens::model::SecurityOptionKind::SecurityLabelNested { enabled: true }
+        ));
+    }
+    for index in [9, 10] {
+        assert!(matches!(
+            options.items()[index].kind(),
+            compose_lens::model::SecurityOptionKind::SecurityLabelType { label_type }
+                if label_type == "container_t"
+        ));
+    }
+    for index in [11, 12] {
+        assert!(matches!(
+            options.items()[index].kind(),
+            compose_lens::model::SecurityOptionKind::Mask { paths }
+                if paths == "/proc/acpi:/proc/kcore"
+        ));
+    }
+    for (index, profile) in [(14, "unconfined"), (15, "/workspace/seccomp.json"), (16, "unconfined")] {
+        assert!(matches!(
+            options.items()[index].kind(),
+            compose_lens::model::SecurityOptionKind::Seccomp { profile: actual } if actual == profile
+        ));
+    }
+}
+
+fn assert_generated_security_option_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let mut service = GeneratedService::new("app")?;
+    service.set_security_options(vec![
+        GeneratedString::plain("apparmor=public-api")?,
+        GeneratedString::plain("label:disable")?,
+        GeneratedString::plain("label:disable")?,
+        GeneratedString::plain("label:filetype:container_file_t")?,
+        GeneratedString::plain("label:filetype:container_file_t")?,
+        GeneratedString::plain("label:level:s0:c1,c2")?,
+        GeneratedString::plain("label:level:s0:c1,c2")?,
+        GeneratedString::plain("label:nested")?,
+        GeneratedString::plain("label:nested")?,
+        GeneratedString::plain("label:type:container_t")?,
+        GeneratedString::plain("label:type:container_t")?,
+        GeneratedString::plain("mask=/proc/acpi:/proc/kcore")?,
+        GeneratedString::plain("mask=/proc/acpi:/proc/kcore")?,
+        GeneratedString::plain("no-new-privileges:true")?,
+        GeneratedString::plain("seccomp=unconfined")?,
+        GeneratedString::plain("seccomp=/workspace/seccomp.json")?,
+        GeneratedString::plain("seccomp=unconfined")?,
+        GeneratedString::plain("no-new-privileges:false")?,
+        GeneratedString::plain("no-new-privileges:true")?,
+        GeneratedString::plain("label:user:USER")?,
+        GeneratedString::plain("label=disable")?,
+    ])?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(704))?;
+    let generated_options = generated
+        .document()
+        .service("app")
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("generated security options expected")?;
+    assert_generated_seccomp_public_contract(generated_options);
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_effective_and_generated_security_option_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n    security_opt: [\"apparmor=${PROFILE}\", \"label:disable\", \"label:disable\", \"${NNP}\", \"${SECCOMP}\", \"${LABEL_DISABLE}\", \"${LABEL_FILETYPE}\", \"${LABEL_LEVEL}\", \"${LABEL_NESTED}\", \"${LABEL_TYPE}\", \"${MASK}\"]\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(702), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored: &compose_lens::model::SecurityOptions = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::security_options)
+        .ok_or("authored security options expected")?;
+    assert_authored_security_option_contract(authored);
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(703),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("PROFILE", "public-api");
+    let _ = environment.insert("NNP", "no-new-privileges:false");
+    let _ = environment.insert("SECCOMP", "seccomp=/workspace/seccomp.json");
+    let _ = environment.insert("LABEL_DISABLE", "label:disable");
+    let _ = environment.insert("LABEL_FILETYPE", "label:filetype:container_file_t");
+    let _ = environment.insert("LABEL_LEVEL", "label:level:s0:c1,c2");
+    let _ = environment.insert("LABEL_NESTED", "label:nested");
+    let _ = environment.insert("LABEL_TYPE", "label:type:container_t");
+    let _ = environment.insert("MASK", "mask=/proc/acpi:/proc/kcore");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let effective = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let item: &compose_lens::project::ProjectSecurityOptionItem = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().first())
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective security option expected")?;
+    assert_eq!(item.authored(), "\"apparmor=${PROFILE}\"");
+    assert_eq!(item.value(), "apparmor=public-api");
+    let no_new_privileges = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(3))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective no-new-privileges option expected")?;
+    assert!(matches!(
+        no_new_privileges.kind(),
+        compose_lens::model::SecurityOptionKind::NoNewPrivileges { enabled: false }
+    ));
+    let seccomp = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(4))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective seccomp option expected")?;
+    assert!(matches!(
+        seccomp.kind(),
+        compose_lens::model::SecurityOptionKind::Seccomp { profile } if profile == "/workspace/seccomp.json"
+    ));
+    let label_disable = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(5))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective SELinux label-disable option expected")?;
+    assert!(matches!(
+        label_disable.kind(),
+        compose_lens::model::SecurityOptionKind::SecurityLabelDisable { enabled: true }
+    ));
+    assert_effective_label_filetype_contract(&effective)?;
+    assert_effective_label_level_contract(&effective)?;
+    assert_effective_label_nested_contract(&effective)?;
+    assert_effective_label_type_contract(&effective)?;
+    assert_effective_mask_contract(&effective)?;
+
+    assert_generated_security_option_contract()
+}
+
+fn assert_authored_security_option_contract(authored: &compose_lens::model::SecurityOptions) {
+    assert!(matches!(
+        authored.items()[0].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert!(matches!(
+        authored.items()[3].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert!(matches!(
+        authored.items()[4].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert!(matches!(
+        authored.items()[1].kind(),
+        compose_lens::model::SecurityOptionKind::SecurityLabelDisable { enabled: true }
+    ));
+    assert!(matches!(
+        authored.items()[5].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert!(matches!(
+        authored.items()[6].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert!(matches!(
+        authored.items()[7].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert!(matches!(
+        authored.items()[8].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert!(matches!(
+        authored.items()[9].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+    assert!(matches!(
+        authored.items()[10].kind(),
+        compose_lens::model::SecurityOptionKind::Expression
+    ));
+}
+
+fn assert_effective_mask_contract(
+    effective: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mask = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(10))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective mask option expected")?;
+    assert!(matches!(
+        mask.kind(),
+        compose_lens::model::SecurityOptionKind::Mask { paths }
+            if paths == "/proc/acpi:/proc/kcore"
+    ));
+    Ok(())
+}
+
+fn assert_effective_label_type_contract(
+    effective: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let label_type = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(9))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective SELinux label-type option expected")?;
+    assert!(matches!(
+        label_type.kind(),
+        compose_lens::model::SecurityOptionKind::SecurityLabelType { label_type }
+            if label_type == "container_t"
+    ));
+    Ok(())
+}
+
+fn assert_effective_label_nested_contract(
+    effective: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let label_nested = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(8))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective SELinux label-nested option expected")?;
+    assert!(matches!(
+        label_nested.kind(),
+        compose_lens::model::SecurityOptionKind::SecurityLabelNested { enabled: true }
+    ));
+    Ok(())
+}
+
+fn assert_effective_label_level_contract(
+    effective: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let label_level = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(7))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective SELinux label-level option expected")?;
+    assert!(matches!(
+        label_level.kind(),
+        compose_lens::model::SecurityOptionKind::SecurityLabelLevel { level }
+            if level == "s0:c1,c2"
+    ));
+    Ok(())
+}
+
+fn assert_effective_label_filetype_contract(
+    effective: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let label_filetype = effective
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::security_options)
+        .and_then(|options| options.value().get(6))
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective SELinux label-filetype option expected")?;
+    assert!(matches!(
+        label_filetype.kind(),
+        compose_lens::model::SecurityOptionKind::SecurityLabelFileType { file_type }
+            if file_type == "container_file_t"
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_effective_and_generated_expose_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    expose: [80, \"80\", \"80/tcp\"]\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(694), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::expose)
+        .ok_or("authored expose expected")?;
+    assert_eq!(
+        authored.items()[0].scalar_kind(),
+        compose_lens::model::ExposeScalarKind::Number
+    );
+    assert_eq!(
+        authored.items()[1].scalar_kind(),
+        compose_lens::model::ExposeScalarKind::String
+    );
+    assert!(matches!(
+        authored.items()[2].kind(),
+        compose_lens::model::ExposeItemKind::Documented { .. }
+    ));
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(695),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let effective = project
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::expose)
+        .ok_or("effective expose expected")?;
+    assert_eq!(effective.value().len(), 3);
+    let _: &compose_lens::project::ProjectExposeItem = effective.value()[0].value();
+
+    let mut service = GeneratedService::new("app")?;
+    service.set_expose(vec![GeneratedString::plain("80")?, GeneratedString::plain("80/tcp")?])?;
+    assert_eq!(service.expose().map(<[GeneratedString]>::len), Some(2));
+    Ok(())
+}
+
+#[test]
+fn exposes_dns_search_authored_project_and_generated_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    dns_search: [example.internal, example.internal, .]\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(692), source)?;
+    let document = ComposeDocument::parse(syntax.document());
+    assert!(matches!(
+        document
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::dns_search)
+            .map(compose_lens::model::DnsSearch::form),
+        Some(compose_lens::model::DnsSearchForm::List(items)) if items.len() == 3
+    ));
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(693),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    assert!(matches!(
+        view.view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::dns_search)
+            .map(compose_lens::project::ProjectValue::value),
+        Some(ProjectDnsSearch::List(items)) if items.len() == 3
+    ));
+
+    let mut service = GeneratedService::new("app")?;
+    service.set_dns_search(GeneratedDnsSearch::Scalar(GeneratedString::plain(".")?))?;
+    assert!(matches!(service.dns_search(), Some(GeneratedDnsSearch::Scalar(value)) if value.expose() == "."));
+    Ok(())
+}
 
 const PUBLIC_SOURCE: &str = concat!(
     "services:\n",
@@ -40,6 +543,8 @@ const PUBLIC_SOURCE: &str = concat!(
     "    cap_add: [SYS_TIME, sys_time]\n",
     "    cap_drop: [NET_ADMIN, net_admin]\n",
     "    devices: [/dev/dri:/dev/dri:rwm, {source: /dev/video0, target: /dev/camera, permissions: rw}]\n",
+    "    dns: [1.1.1.1, 1.1.1.1, resolver.internal]\n",
+    "    dns_opt: [ndots:5, timeout:2]\n",
     "    working_dir: /srv/app\n",
     "    read_only: true\n    pids_limit: 00064\n    shm_size: 64mb\n    mem_limit: 128b\n",
     "    tmpfs: [/run, /cache:mode=0700]\n",
@@ -249,6 +754,7 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
             Some(GeneratedString::plain("rw")?),
         )?),
     ])?;
+    set_generated_dns(&mut service)?;
     let mut builder = ComposeDocumentBuilder::new();
     builder.set_name("example")?;
     builder.add_service(service)?;
@@ -257,6 +763,8 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
     assert_generated_hostname(&generated)?;
     assert_generated_capabilities(&generated)?;
     assert_generated_devices(&generated)?;
+    assert_generated_dns(&generated)?;
+    assert_generated_dns_options(&generated)?;
     assert_generated_tmpfs(&generated)?;
     assert_generated_kernel_controls(&generated)?;
     assert_eq!(
@@ -387,6 +895,13 @@ fn assert_generated_document_text(generated: &compose_lens::render::GeneratedCom
             "      - source: \"/dev/video0\"\n",
             "        target: \"/dev/camera\"\n",
             "        permissions: \"rw\"\n",
+            "    dns:\n",
+            "      - \"1.1.1.1\"\n",
+            "      - \"1.1.1.1\"\n",
+            "      - \"resolver.internal\"\n",
+            "    dns_opt:\n",
+            "      - \"ndots:5\"\n",
+            "      - \"timeout:2\"\n",
             "    tmpfs:\n",
             "      - \"/run\"\n",
             "      - \"/cache:mode=0700\"\n",
@@ -430,6 +945,18 @@ fn set_generated_limits(service: &mut GeneratedService) -> Result<(), compose_le
         },
     )?])?)?;
     service.set_pull_policy(GeneratedPullPolicy::Every(GeneratedString::plain("12h")?))
+}
+
+fn set_generated_dns(service: &mut GeneratedService) -> Result<(), compose_lens::render::GenerationError> {
+    service.set_dns(GeneratedDns::List(vec![
+        GeneratedString::plain("1.1.1.1")?,
+        GeneratedString::plain("1.1.1.1")?,
+        GeneratedString::plain("resolver.internal")?,
+    ]))?;
+    service.set_dns_options(vec![
+        GeneratedString::plain("ndots:5")?,
+        GeneratedString::plain("timeout:2")?,
+    ])
 }
 
 fn assert_sysctls(project_view: &compose_lens::project::ProjectViewResult) -> Result<(), &'static str> {
@@ -778,6 +1305,18 @@ fn assert_execution_identity(project_view: &compose_lens::project::ProjectViewRe
     assert_shm_size(project_view)?;
     assert_mem_limit(project_view)?;
     assert_tmpfs(project_view)?;
+    let dns = service.dns().ok_or("native project DNS expected")?;
+    assert!(matches!(dns.value(), ProjectDns::List(items)
+        if items.iter().map(|item| item.value().as_str()).collect::<Vec<_>>()
+            == ["1.1.1.1", "1.1.1.1", "resolver.internal"]));
+    assert_eq!(
+        service.dns_options().map(|options| options
+            .value()
+            .iter()
+            .map(|item| item.value().as_str())
+            .collect::<Vec<_>>()),
+        Some(vec!["ndots:5", "timeout:2"])
+    );
     let devices = service.devices().ok_or("native project devices expected")?;
     assert_eq!(devices.value().len(), 2);
     assert!(
@@ -798,6 +1337,37 @@ fn assert_generated_devices(generated: &compose_lens::render::GeneratedComposeDo
         compose_lens::model::Device::Long(device)
             if device.source().is_some_and(|source| source.value() == "/dev/video0")
     ));
+    Ok(())
+}
+
+fn assert_generated_dns(generated: &compose_lens::render::GeneratedComposeDocument) -> Result<(), &'static str> {
+    let dns = generated
+        .document()
+        .service("app")
+        .and_then(compose_lens::model::Service::dns)
+        .ok_or("generated DNS expected")?;
+    assert!(matches!(dns.form(), compose_lens::model::DnsForm::List(items)
+        if items.iter().map(|item| item.value().as_str()).collect::<Vec<_>>()
+            == ["1.1.1.1", "1.1.1.1", "resolver.internal"]));
+    Ok(())
+}
+
+fn assert_generated_dns_options(
+    generated: &compose_lens::render::GeneratedComposeDocument,
+) -> Result<(), &'static str> {
+    let options = generated
+        .document()
+        .service("app")
+        .and_then(compose_lens::model::Service::dns_options)
+        .ok_or("generated DNS options expected")?;
+    assert_eq!(
+        options
+            .items()
+            .iter()
+            .map(|item| item.value().as_str())
+            .collect::<Vec<_>>(),
+        ["ndots:5", "timeout:2"]
+    );
     Ok(())
 }
 

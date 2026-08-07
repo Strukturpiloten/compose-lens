@@ -43,6 +43,12 @@ It is designed for tools that need more than strict deserialization: source-awar
 - Preserve, target-key merge, inspect, and safely generate ordered mixed short/long service
   `devices`, including raw CDI/deferred/opaque short forms, explicit empty state, duplicates,
   nested provenance, and no host-device, permissions, or runtime-access validation.
+- Preserve, merge, inspect, and safely generate raw service DNS settings and exposed ports without
+  resolver, network, or runtime access.
+- Preserve and safely generate keyed service annotations without losing mapping/list syntax or
+  ambiguous key-only entries.
+- Preserve raw service security options and expose conflict-aware lexical candidates without
+  selecting policy, inspecting the host, or claiming runtime behavior.
 - Preserve, inspect, and generate ordered service `env_file` short/long syntax and options; retain
   interpolation and multi-file provenance without reading environment files.
 - Allow callers to choose strict, implementation-specific, or tolerant validation profiles.
@@ -93,6 +99,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
+- [0.1.15 release notes](docs/releases/0.1.15.md) — DNS, expose, annotations, and security options
 - [0.1.14 release notes](docs/releases/0.1.14.md)
 - [Release process](docs/releasing.md)
 - [Changelog](CHANGELOG.md)

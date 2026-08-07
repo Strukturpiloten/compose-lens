@@ -1,11 +1,16 @@
 //! Source-aware native Compose document types.
 
+mod annotation;
 mod capability;
 mod command;
 mod dependency;
 mod device;
+mod dns;
+mod dns_option;
+mod dns_search;
 mod entrypoint;
 mod environment;
+mod expose;
 mod host;
 mod hostname;
 mod identity;
@@ -19,6 +24,7 @@ mod pull;
 mod resource;
 mod restart;
 mod sections;
+mod security_option;
 mod shm;
 mod sysctl;
 mod tmpfs;
@@ -26,6 +32,7 @@ mod ulimit;
 mod value;
 mod volume;
 
+pub use annotation::{Annotations, AnnotationsForm};
 pub use capability::{CapabilityAdd, CapabilityAddItem, CapabilityDrop, CapabilityDropItem};
 pub use command::Command;
 pub use dependency::{
@@ -34,11 +41,16 @@ pub use dependency::{
 };
 pub(crate) use device::valid_generated_device_string;
 pub use device::{Device, Devices, LongDevice, ShortDevice, ShortDeviceKind};
+pub use dns::{Dns, DnsForm};
+pub use dns_option::DnsOptions;
+pub use dns_search::{DnsSearch, DnsSearchForm};
 pub use entrypoint::Entrypoint;
 pub use environment::{
     Environment, EnvironmentFile, EnvironmentFileFormat, EnvironmentFileFormatKind, EnvironmentListEntry,
     EnvironmentMapEntry, LongEnvironmentFile,
 };
+pub use expose::{Expose, ExposeItem, ExposeItemKind, ExposePort, ExposeProtocol, ExposeScalarKind};
+pub(crate) use expose::{classify_expose_item, valid_generated_expose_item};
 pub use host::{ExtraHostSeparator, ExtraHosts, HostAddress, HostAddressKind, LongExtraHost, ShortExtraHost};
 pub(crate) use hostname::valid_hostname;
 pub use hostname::{Hostname, HostnameKind};
@@ -58,6 +70,8 @@ pub use restart::{RestartPolicy, RestartPolicyKind};
 pub use sections::{
     Build, BuildDefinition, BuildField, BuildFieldKind, DeployDefinition, DeployField, DeployFieldKind,
 };
+pub(crate) use security_option::{SecurityOptionCandidateCounts, classify_security_option};
+pub use security_option::{SecurityOptionItem, SecurityOptionKind, SecurityOptions};
 pub(crate) use shm::valid_generated_shm_amount;
 pub use shm::{ShmSize, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit};
 pub use sysctl::{Sysctls, SysctlsForm};
@@ -232,6 +246,290 @@ pub const DEVICE_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.
 /// A long-syntax service device is missing its required `source` string.
 pub const DEVICE_MISSING_SOURCE: DiagnosticCode = DiagnosticCode::new("compose.devices.long.missing-source");
 
+/// A service `dns` value is neither a YAML string scalar nor a sequence.
+pub const DNS_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.dns.expected-string-or-list");
+
+/// A service `dns` list item is not a YAML string scalar.
+pub const DNS_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.dns.expected-string");
+
+/// A service `dns_opt` value is not a YAML sequence.
+pub const DNS_OPT_EXPECTED_SEQUENCE: DiagnosticCode = DiagnosticCode::new("compose.dns-opt.expected-sequence");
+
+/// A service `dns_opt` item is not a YAML string scalar.
+pub const DNS_OPT_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.dns-opt.expected-string");
+
+/// A service `dns_opt` sequence contains an exact duplicate string.
+pub const DNS_OPT_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.dns-opt.duplicate-item");
+
+/// A service `dns_search` value is neither a YAML string scalar nor a sequence.
+pub const DNS_SEARCH_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.dns-search.expected-string-or-list");
+
+/// A service `dns_search` list item is not a YAML string scalar.
+pub const DNS_SEARCH_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.dns-search.expected-string");
+
+/// A service `dns_search` list contains an exact duplicate string.
+pub const DNS_SEARCH_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.dns-search.duplicate-item");
+
+/// A service `expose` value is not a YAML sequence.
+pub const EXPOSE_EXPECTED_SEQUENCE: DiagnosticCode = DiagnosticCode::new("compose.expose.expected-sequence");
+
+/// A service `expose` item is not a YAML string or number scalar.
+pub const EXPOSE_EXPECTED_SCALAR: DiagnosticCode = DiagnosticCode::new("compose.expose.expected-string-or-number");
+
+/// A service `expose` item does not match the documented decimal port/range grammar.
+pub const EXPOSE_INVALID_ITEM: DiagnosticCode = DiagnosticCode::new("compose.expose.invalid-item");
+
+/// A service `expose` item uses a protocol outside the documented portable set.
+pub const EXPOSE_PROVIDER_DEPENDENT: DiagnosticCode = DiagnosticCode::new("compose.expose.provider-dependent-protocol");
+
+/// A service `expose` sequence contains an exact duplicate scalar identity.
+pub const EXPOSE_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.expose.duplicate-item");
+
+/// A service `security_opt` value is not a YAML sequence.
+pub const SECURITY_OPT_EXPECTED_SEQUENCE: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.expected-sequence");
+
+/// A service `security_opt` item is not a YAML string scalar.
+pub const SECURITY_OPT_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.security-opt.expected-string");
+
+/// A service `security_opt` item is an explicitly empty string.
+pub const SECURITY_OPT_EMPTY_ITEM: DiagnosticCode = DiagnosticCode::new("compose.security-opt.empty-item");
+
+/// An AppArmor-shaped service `security_opt` item is not the exact narrow candidate form.
+pub const SECURITY_OPT_APPARMOR_NEAR_MISS: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.apparmor-near-miss");
+
+/// More than one exact `AppArmor` candidate remains in a service `security_opt` sequence.
+pub const SECURITY_OPT_APPARMOR_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.apparmor-conflict");
+
+/// A seccomp-shaped service `security_opt` item is not the exact narrow candidate form.
+pub const SECURITY_OPT_SECCOMP_NEAR_MISS: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.seccomp-near-miss");
+
+/// More than one exact seccomp candidate remains in a service `security_opt` sequence.
+pub const SECURITY_OPT_SECCOMP_CONFLICT: DiagnosticCode = DiagnosticCode::new("compose.security-opt.seccomp-conflict");
+
+/// A no-new-privileges-shaped item is not an exact lowercase boolean candidate.
+pub const SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.no-new-privileges-near-miss");
+
+/// More than one exact no-new-privileges candidate remains in one effective sequence.
+pub const SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.no-new-privileges-conflict");
+
+/// A mask-shaped service `security_opt` item is not the exact narrow candidate form.
+pub const SECURITY_OPT_MASK_NEAR_MISS: DiagnosticCode = DiagnosticCode::new("compose.security-opt.mask-near-miss");
+
+/// An unmask-shaped service `security_opt` item is not the exact narrow candidate form.
+pub const SECURITY_OPT_UNMASK_NEAR_MISS: DiagnosticCode = DiagnosticCode::new("compose.security-opt.unmask-near-miss");
+
+pub(crate) fn security_path_option_diagnostic(kind: &SecurityOptionKind, span: SourceSpan) -> Option<Diagnostic> {
+    let (code, message) = match kind {
+        SecurityOptionKind::MaskNearMiss => (
+            SECURITY_OPT_MASK_NEAR_MISS,
+            "mask candidates require exact lowercase `mask=<paths>` spelling with a non-empty whitespace-free payload",
+        ),
+        SecurityOptionKind::UnmaskNearMiss => (
+            SECURITY_OPT_UNMASK_NEAR_MISS,
+            "unmask candidates require exact lowercase `unmask=ALL` or colon-separated slash-prefixed paths without whitespace",
+        ),
+        _ => return None,
+    };
+    Some(
+        Diagnostic::new(code, Severity::Warning, message)
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+    )
+}
+
+/// A `SELinux` label-disable-shaped item is not the exact lowercase candidate.
+pub const SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-disable-near-miss");
+
+/// More than one exact `SELinux` label-disable candidate remains in one effective sequence.
+pub const SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-disable-conflict");
+
+/// A `SELinux` label-filetype-shaped item is not the exact lowercase candidate.
+pub const SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-filetype-near-miss");
+
+/// More than one exact `SELinux` label-filetype candidate remains in one effective sequence.
+pub const SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-filetype-conflict");
+
+/// A `SELinux` label-level-shaped item is not the exact lowercase candidate.
+pub const SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-level-near-miss");
+
+/// More than one exact `SELinux` label-level candidate remains in one effective sequence.
+pub const SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-level-conflict");
+
+/// A `SELinux` label-nested-shaped item is not the exact lowercase candidate.
+pub const SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-nested-near-miss");
+
+/// More than one exact `SELinux` label-nested candidate remains in one effective sequence.
+pub const SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-nested-conflict");
+
+/// A `SELinux` label-type-shaped item is not the exact lowercase candidate.
+pub const SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-type-near-miss");
+
+/// More than one exact `SELinux` label-type candidate remains in one effective sequence.
+pub const SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.security-opt.security-label-type-conflict");
+
+fn authored_security_label_diagnostic(
+    kind: &SecurityOptionKind,
+    span: SourceSpan,
+    candidates: &mut SecurityOptionCandidateCounts,
+) -> Option<Diagnostic> {
+    match kind {
+        SecurityOptionKind::SecurityLabelDisable { .. } => {
+            candidates.security_label_disable += 1;
+            (candidates.security_label_disable > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-disable candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional SELinux label-disable candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelDisableNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-disable candidates require exact lowercase `label:disable` spelling without whitespace",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        SecurityOptionKind::SecurityLabelFileType { .. } => {
+            candidates.security_label_filetype += 1;
+            (candidates.security_label_filetype > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-filetype candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional SELinux label-filetype candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelFileTypeNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-filetype candidates require exact lowercase `label:filetype:<type>` spelling without whitespace",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        SecurityOptionKind::SecurityLabelLevel { .. } => {
+            candidates.security_label_level += 1;
+            (candidates.security_label_level > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-level candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional SELinux label-level candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelLevelNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-level candidates require exact lowercase `label:level:<level>` spelling without whitespace",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        SecurityOptionKind::SecurityLabelNested { .. } => {
+            candidates.security_label_nested += 1;
+            (candidates.security_label_nested > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-nested candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional SELinux label-nested candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelNestedNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-nested candidates require exact lowercase `label:nested` spelling without whitespace",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        SecurityOptionKind::SecurityLabelType { .. } | SecurityOptionKind::SecurityLabelTypeNearMiss => {
+            authored_security_label_type_diagnostic(kind, span, &mut candidates.security_label_type)
+        }
+        _ => None,
+    }
+}
+
+fn authored_security_label_type_diagnostic(
+    kind: &SecurityOptionKind,
+    span: SourceSpan,
+    candidates: &mut usize,
+) -> Option<Diagnostic> {
+    match kind {
+        SecurityOptionKind::SecurityLabelType { .. } => {
+            *candidates += 1;
+            (*candidates > 1).then(|| {
+                Diagnostic::new(
+                    SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT,
+                    Severity::Warning,
+                    "multiple SELinux label-type candidates are retained; a consumer must resolve the conflict explicitly",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "additional SELinux label-type candidate retained",
+                ))
+            })
+        }
+        SecurityOptionKind::SecurityLabelTypeNearMiss => Some(
+            Diagnostic::new(
+                SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS,
+                Severity::Warning,
+                "SELinux label-type candidates require exact lowercase `label:type:<type>` spelling with one non-empty whitespace-free type",
+            )
+            .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+        ),
+        _ => None,
+    }
+}
+
+/// A service `annotations` value is neither mapping nor list syntax.
+pub const ANNOTATIONS_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.annotations.expected-map-or-list");
+
+/// A service annotation list item is not a YAML string scalar.
+pub const ANNOTATIONS_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose.annotations.expected-string");
+
+/// A service annotation has an empty semantic name.
+pub const ANNOTATIONS_EMPTY_NAME: DiagnosticCode = DiagnosticCode::new("compose.annotations.empty-name");
+
+/// A key-only service annotation list item has no defined explicit value.
+pub const ANNOTATIONS_KEY_ONLY: DiagnosticCode = DiagnosticCode::new("compose.annotations.key-only");
+
+/// More than one authored service annotation resolves to the same semantic name.
+pub const ANNOTATIONS_DUPLICATE_NAME: DiagnosticCode = DiagnosticCode::new("compose.annotations.duplicate-name");
+
 /// A service-level `tmpfs` value is neither a string scalar nor a sequence.
 pub const TMPFS_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.tmpfs.expected-string-or-list");
 
@@ -358,6 +656,7 @@ pub struct Service {
     environment: Option<Environment>,
     environment_files: Vec<EnvironmentFile>,
     labels: Option<Labels>,
+    annotations: Option<Annotations>,
     extra_hosts: Option<ExtraHosts>,
     user: Option<UserSpec>,
     userns_mode: Option<UserNamespaceMode>,
@@ -365,6 +664,11 @@ pub struct Service {
     cap_add: Option<CapabilityAdd>,
     cap_drop: Option<CapabilityDrop>,
     devices: Option<Devices>,
+    dns: Option<Dns>,
+    dns_options: Option<DnsOptions>,
+    dns_search: Option<DnsSearch>,
+    expose: Option<Expose>,
+    security_options: Option<SecurityOptions>,
     working_dir: Option<Located<String>>,
     read_only: Option<Located<BooleanValue>>,
     pids_limit: Option<PidsLimit>,
@@ -405,6 +709,7 @@ impl Service {
             environment: None,
             environment_files: Vec::new(),
             labels: None,
+            annotations: None,
             extra_hosts: None,
             user: None,
             userns_mode: None,
@@ -412,6 +717,11 @@ impl Service {
             cap_add: None,
             cap_drop: None,
             devices: None,
+            dns: None,
+            dns_options: None,
+            dns_search: None,
+            expose: None,
+            security_options: None,
             working_dir: None,
             read_only: None,
             pids_limit: None,
@@ -505,6 +815,12 @@ impl Service {
         self.labels.as_ref()
     }
 
+    /// Returns service annotations with list and mapping forms kept distinct.
+    #[must_use]
+    pub const fn annotations(&self) -> Option<&Annotations> {
+        self.annotations.as_ref()
+    }
+
     /// Returns additional host mappings with short and long forms retained.
     #[must_use]
     pub const fn extra_hosts(&self) -> Option<&ExtraHosts> {
@@ -545,6 +861,36 @@ impl Service {
     #[must_use]
     pub const fn devices(&self) -> Option<&Devices> {
         self.devices.as_ref()
+    }
+
+    /// Returns raw service DNS servers with scalar and ordered-list forms retained.
+    #[must_use]
+    pub const fn dns(&self) -> Option<&Dns> {
+        self.dns.as_ref()
+    }
+
+    /// Returns the explicitly authored ordered DNS resolver-option sequence.
+    #[must_use]
+    pub const fn dns_options(&self) -> Option<&DnsOptions> {
+        self.dns_options.as_ref()
+    }
+
+    /// Returns raw DNS search domains with scalar and ordered-list forms retained.
+    #[must_use]
+    pub const fn dns_search(&self) -> Option<&DnsSearch> {
+        self.dns_search.as_ref()
+    }
+
+    /// Returns the explicitly authored ordered exposed-port sequence.
+    #[must_use]
+    pub const fn expose(&self) -> Option<&Expose> {
+        self.expose.as_ref()
+    }
+
+    /// Returns the explicitly authored ordered raw service security options.
+    #[must_use]
+    pub const fn security_options(&self) -> Option<&SecurityOptions> {
+        self.security_options.as_ref()
     }
 
     /// Returns the container working-directory override.
@@ -913,6 +1259,16 @@ fn unverified_healthcheck_diagnostic(span: SourceSpan) -> Diagnostic {
     .with_note("the dependency image may still define a health check; verify it at build or runtime")
 }
 
+fn annotation_diagnostic(
+    code: DiagnosticCode,
+    severity: Severity,
+    span: SourceSpan,
+    message: &'static str,
+    label: &'static str,
+) -> Diagnostic {
+    Diagnostic::new(code, severity, message).with_label(DiagnosticLabel::primary(span, label))
+}
+
 #[derive(Debug)]
 struct Parser {
     source_id: SourceId,
@@ -1060,13 +1416,9 @@ impl Parser {
             match service_field.name.value.as_str() {
                 "hostname" if !duplicate => service.hostname = self.parse_hostname(&service_field),
                 "container_name" if !duplicate => {
-                    service.container_name = self.parse_string(&service_field, "service container name");
+                    service.container_name = self.parse_string(&service_field, "container name");
                 }
-                "image" if !duplicate => {
-                    service.image = self
-                        .parse_string(&service_field, "service image")
-                        .map(|value| Located::new(ImageReference::parse(value.value), value.span));
-                }
+                "image" if !duplicate => service.image = self.parse_image(&service_field),
                 "entrypoint" if !duplicate => service.entrypoint = self.parse_entrypoint(&service_field),
                 "command" if !duplicate => service.command = self.parse_command(&service_field),
                 "init" if !duplicate => service.init = self.parse_boolean(&service_field, "service init"),
@@ -1075,6 +1427,7 @@ impl Parser {
                     service.environment_files = self.parse_environment_files(&service_field);
                 }
                 "labels" if !duplicate => service.labels = self.parse_labels(&service_field),
+                "annotations" if !duplicate => service.annotations = self.parse_annotations(&service_field),
                 "extra_hosts" if !duplicate => service.extra_hosts = self.parse_extra_hosts(&service_field),
                 "user" if !duplicate => {
                     service.user = self.parse_string(&service_field, "service user").map(UserSpec::parse);
@@ -1090,6 +1443,11 @@ impl Parser {
                 "cap_add" if !duplicate => service.cap_add = self.parse_cap_add(&service_field),
                 "cap_drop" if !duplicate => service.cap_drop = self.parse_cap_drop(&service_field),
                 "devices" if !duplicate => service.devices = self.parse_devices(&service_field),
+                "dns" if !duplicate => service.dns = self.parse_dns(&service_field),
+                "dns_opt" if !duplicate => service.dns_options = self.parse_dns_options(&service_field),
+                "dns_search" if !duplicate => service.dns_search = self.parse_dns_search(&service_field),
+                "expose" if !duplicate => service.expose = self.parse_expose(&service_field),
+                "security_opt" if !duplicate => service.security_options = self.parse_security_options(&service_field),
                 "working_dir" if !duplicate => {
                     service.working_dir = self.parse_string(&service_field, "service working directory");
                 }
@@ -1175,6 +1533,11 @@ impl Parser {
             );
         }
         Some(hostname)
+    }
+
+    fn parse_image(&mut self, field: &ParsedField) -> Option<Located<ImageReference>> {
+        self.parse_string(field, "service image")
+            .map(|value| Located::new(ImageReference::parse(value.value), value.span))
     }
 
     fn parse_cap_drop(&mut self, field: &ParsedField) -> Option<CapabilityDrop> {
@@ -1380,6 +1743,429 @@ impl Parser {
             scalar_string_from_source(&self.source, scalar),
             span_from_position(self.source_id, scalar.byte_range()),
         ))
+    }
+
+    fn parse_dns(&mut self, field: &ParsedField) -> Option<Dns> {
+        let value = field.value.as_ref()?;
+        if let Some(scalar) = value.as_scalar() {
+            if !matches!(
+                ScalarValue::from_scalar(scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.expected(
+                    DNS_EXPECTED_FORM,
+                    field,
+                    "dns must be a string scalar or a sequence of string scalars",
+                );
+                return None;
+            }
+            let span = span_from_position(self.source_id, scalar.byte_range());
+            return Some(Dns::new(
+                span,
+                DnsForm::Scalar(Located::new(scalar_string_from_source(&self.source, scalar), span)),
+            ));
+        }
+
+        let Some(sequence) = value.as_sequence() else {
+            self.expected(
+                DNS_EXPECTED_FORM,
+                field,
+                "dns must be a string scalar or a sequence of string scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    DNS_EXPECTED_STRING,
+                    &node,
+                    field.span,
+                    "dns entries must be string scalars",
+                );
+                continue;
+            };
+            if !matches!(
+                ScalarValue::from_scalar(&scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(
+                    DNS_EXPECTED_STRING,
+                    &YamlNode::Scalar(scalar),
+                    field.span,
+                    "dns entries must be string scalars",
+                );
+                continue;
+            }
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            items.push(Located::new(
+                scalar_string_from_source(&self.source, &scalar),
+                item_span,
+            ));
+        }
+        Some(Dns::new(span, DnsForm::List(items)))
+    }
+
+    fn parse_dns_options(&mut self, field: &ParsedField) -> Option<DnsOptions> {
+        let value = field.value.as_ref()?;
+        let Some(sequence) = value.as_sequence() else {
+            self.expected(
+                DNS_OPT_EXPECTED_SEQUENCE,
+                field,
+                "dns_opt must be a sequence of string scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        let mut seen = BTreeSet::new();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    DNS_OPT_EXPECTED_STRING,
+                    &node,
+                    field.span,
+                    "dns_opt entries must be string scalars",
+                );
+                continue;
+            };
+            if !matches!(
+                ScalarValue::from_scalar(&scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(
+                    DNS_OPT_EXPECTED_STRING,
+                    &YamlNode::Scalar(scalar),
+                    field.span,
+                    "dns_opt entries must be string scalars",
+                );
+                continue;
+            }
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            let option = scalar_string_from_source(&self.source, &scalar);
+            if !seen.insert(option.clone()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DNS_OPT_DUPLICATE_ITEM,
+                        Severity::Warning,
+                        "dns_opt entries must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(item_span, "duplicate DNS option retained")),
+                );
+            }
+            items.push(Located::new(option, item_span));
+        }
+        Some(DnsOptions::new(span, items))
+    }
+
+    fn parse_dns_search(&mut self, field: &ParsedField) -> Option<DnsSearch> {
+        let value = field.value.as_ref()?;
+        if let Some(scalar) = value.as_scalar() {
+            if !matches!(
+                ScalarValue::from_scalar(scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.expected(
+                    DNS_SEARCH_EXPECTED_FORM,
+                    field,
+                    "dns_search must be a string scalar or a sequence of string scalars",
+                );
+                return None;
+            }
+            let span = span_from_position(self.source_id, scalar.byte_range());
+            return Some(DnsSearch::new(
+                span,
+                DnsSearchForm::Scalar(Located::new(scalar_string_from_source(&self.source, scalar), span)),
+            ));
+        }
+
+        let Some(sequence) = value.as_sequence() else {
+            self.expected(
+                DNS_SEARCH_EXPECTED_FORM,
+                field,
+                "dns_search must be a string scalar or a sequence of string scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        let mut seen = BTreeSet::new();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    DNS_SEARCH_EXPECTED_STRING,
+                    &node,
+                    field.span,
+                    "dns_search entries must be string scalars",
+                );
+                continue;
+            };
+            if !matches!(
+                ScalarValue::from_scalar(&scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(
+                    DNS_SEARCH_EXPECTED_STRING,
+                    &YamlNode::Scalar(scalar),
+                    field.span,
+                    "dns_search entries must be string scalars",
+                );
+                continue;
+            }
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            let search = scalar_string_from_source(&self.source, &scalar);
+            if !seen.insert(search.clone()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DNS_SEARCH_DUPLICATE_ITEM,
+                        Severity::Warning,
+                        "dns_search schema entries are unique, but duplicate merge behavior is ambiguous",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        item_span,
+                        "duplicate DNS search domain retained",
+                    )),
+                );
+            }
+            items.push(Located::new(search, item_span));
+        }
+        Some(DnsSearch::new(span, DnsSearchForm::List(items)))
+    }
+
+    fn parse_expose(&mut self, field: &ParsedField) -> Option<Expose> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPOSE_EXPECTED_SEQUENCE,
+                field,
+                "expose must be a sequence of string or number scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        let mut seen = Vec::new();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    EXPOSE_EXPECTED_SCALAR,
+                    &node,
+                    field.span,
+                    "expose entries must be string or number scalars",
+                );
+                continue;
+            };
+            let scalar_kind = match ScalarValue::from_scalar(&scalar).scalar_type() {
+                ScalarType::Integer | ScalarType::Float => ExposeScalarKind::Number,
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => ExposeScalarKind::String,
+                ScalarType::Null | ScalarType::Boolean => {
+                    self.unsupported_sequence_item(
+                        EXPOSE_EXPECTED_SCALAR,
+                        &YamlNode::Scalar(scalar),
+                        field.span,
+                        "expose entries must be string or number scalars",
+                    );
+                    continue;
+                }
+            };
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            let raw = scalar_string_from_source(&self.source, &scalar);
+            if seen.contains(&(scalar_kind, raw.clone())) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        EXPOSE_DUPLICATE_ITEM,
+                        Severity::Warning,
+                        "expose entries must be unique by exact scalar identity",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        item_span,
+                        "duplicate exposed-port item retained",
+                    )),
+                );
+            } else {
+                seen.push((scalar_kind, raw.clone()));
+            }
+            let item = ExposeItem::parse(Located::new(raw, item_span), scalar_kind);
+            self.diagnose_expose_item(&item);
+            items.push(item);
+        }
+        Some(Expose::new(span, items))
+    }
+
+    fn diagnose_expose_item(&mut self, item: &ExposeItem) {
+        match item.kind() {
+            ExposeItemKind::Documented { .. } | ExposeItemKind::Expression => {}
+            ExposeItemKind::Sctp { .. } | ExposeItemKind::UnknownProtocol { .. } => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        EXPOSE_PROVIDER_DEPENDENT,
+                        Severity::Warning,
+                        "expose protocol is outside the documented portable `tcp` and `udp` set",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        item.span(),
+                        "provider-dependent exposed-port protocol retained",
+                    ))
+                    .with_note("ComposeLens does not normalize or reject the raw protocol spelling"),
+                );
+            }
+            ExposeItemKind::Malformed => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        EXPOSE_INVALID_ITEM,
+                        Severity::Error,
+                        "expose item must be a decimal port or range with an optional protocol",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        item.span(),
+                        "malformed exposed-port item retained",
+                    ))
+                    .with_note("use `PORT`, `START-END`, `PORT/tcp`, or `PORT/udp` for documented portable syntax"),
+                );
+            }
+        }
+    }
+
+    fn parse_security_options(&mut self, field: &ParsedField) -> Option<SecurityOptions> {
+        let value = field.value.as_ref()?;
+        let Some(sequence) = value.as_sequence() else {
+            self.expected(
+                SECURITY_OPT_EXPECTED_SEQUENCE,
+                field,
+                "security_opt must be a sequence of string scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        let mut candidates = SecurityOptionCandidateCounts::default();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    SECURITY_OPT_EXPECTED_STRING,
+                    &node,
+                    field.span,
+                    "security_opt entries must be string scalars",
+                );
+                continue;
+            };
+            if !matches!(
+                ScalarValue::from_scalar(&scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(
+                    SECURITY_OPT_EXPECTED_STRING,
+                    &YamlNode::Scalar(scalar),
+                    field.span,
+                    "security_opt entries must be string scalars",
+                );
+                continue;
+            }
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            let raw = scalar_string_from_source(&self.source, &scalar);
+            let item = SecurityOptionItem::parse(Located::new(raw, item_span));
+            self.diagnose_security_option_item(item.kind(), item_span, &mut candidates);
+            items.push(item);
+        }
+        Some(SecurityOptions::new(span, items))
+    }
+
+    fn diagnose_security_option_item(
+        &mut self,
+        kind: &SecurityOptionKind,
+        span: SourceSpan,
+        candidates: &mut SecurityOptionCandidateCounts,
+    ) {
+        let diagnostic = match kind {
+            SecurityOptionKind::AppArmor { .. } => {
+                candidates.apparmor += 1;
+                (candidates.apparmor > 1).then(|| {
+                    Diagnostic::new(
+                        SECURITY_OPT_APPARMOR_CONFLICT,
+                        Severity::Warning,
+                        "multiple AppArmor candidates are retained; a consumer must resolve the conflict explicitly",
+                    )
+                    .with_label(DiagnosticLabel::primary(span, "additional AppArmor candidate retained"))
+                })
+            }
+            SecurityOptionKind::AppArmorNearMiss => Some(
+                Diagnostic::new(
+                    SECURITY_OPT_APPARMOR_NEAR_MISS,
+                    Severity::Warning,
+                    "AppArmor candidates require exact lowercase `apparmor=<profile>` spelling without whitespace",
+                )
+                .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+            ),
+            SecurityOptionKind::Seccomp { .. } => {
+                candidates.seccomp += 1;
+                (candidates.seccomp > 1).then(|| {
+                    Diagnostic::new(
+                        SECURITY_OPT_SECCOMP_CONFLICT,
+                        Severity::Warning,
+                        "multiple seccomp candidates are retained; a consumer must resolve the conflict explicitly",
+                    )
+                    .with_label(DiagnosticLabel::primary(span, "additional seccomp candidate retained"))
+                })
+            }
+            SecurityOptionKind::SeccompNearMiss => Some(
+                Diagnostic::new(
+                    SECURITY_OPT_SECCOMP_NEAR_MISS,
+                    Severity::Warning,
+                    "seccomp candidates require exact lowercase `seccomp=<profile>` spelling without whitespace",
+                )
+                .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+            ),
+            SecurityOptionKind::NoNewPrivileges { .. } => {
+                candidates.no_new_privileges += 1;
+                (candidates.no_new_privileges > 1).then(|| {
+                    Diagnostic::new(
+                        SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
+                        Severity::Warning,
+                        "multiple no-new-privileges candidates are retained; a consumer must resolve the conflict explicitly",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "additional no-new-privileges candidate retained",
+                    ))
+                })
+            }
+            SecurityOptionKind::NoNewPrivilegesNearMiss => Some(
+                Diagnostic::new(
+                    SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS,
+                    Severity::Warning,
+                    "no-new-privileges candidates require exact lowercase `no-new-privileges:true` or `no-new-privileges:false` spelling without whitespace",
+                )
+                .with_label(DiagnosticLabel::primary(span, "raw near-miss security option retained")),
+            ),
+            SecurityOptionKind::Mask { .. }
+            | SecurityOptionKind::MaskNearMiss
+            | SecurityOptionKind::Unmask { .. }
+            | SecurityOptionKind::UnmaskNearMiss => security_path_option_diagnostic(kind, span),
+            SecurityOptionKind::SecurityLabelDisable { .. }
+            | SecurityOptionKind::SecurityLabelDisableNearMiss
+            | SecurityOptionKind::SecurityLabelFileType { .. }
+            | SecurityOptionKind::SecurityLabelFileTypeNearMiss
+            | SecurityOptionKind::SecurityLabelLevel { .. }
+            | SecurityOptionKind::SecurityLabelLevelNearMiss
+            | SecurityOptionKind::SecurityLabelNested { .. }
+            | SecurityOptionKind::SecurityLabelNestedNearMiss
+            | SecurityOptionKind::SecurityLabelType { .. }
+            | SecurityOptionKind::SecurityLabelTypeNearMiss => {
+                authored_security_label_diagnostic(kind, span, candidates)
+            }
+            SecurityOptionKind::Empty => Some(
+                Diagnostic::new(
+                    SECURITY_OPT_EMPTY_ITEM,
+                    Severity::Error,
+                    "security_opt entries must not be empty strings",
+                )
+                .with_label(DiagnosticLabel::primary(span, "empty security option retained")),
+            ),
+            SecurityOptionKind::Expression | SecurityOptionKind::Other => None,
+        };
+        if let Some(diagnostic) = diagnostic {
+            self.diagnostics.push(diagnostic);
+        }
     }
 
     fn parse_tmpfs(&mut self, field: &ParsedField) -> Option<Tmpfs> {
@@ -3228,6 +4014,123 @@ impl Parser {
                 None
             }
         }
+    }
+
+    fn parse_annotations(&mut self, field: &ParsedField) -> Option<Annotations> {
+        match field.value.as_ref() {
+            Some(YamlNode::Sequence(sequence)) => Some(self.parse_annotation_list(sequence, field.span)),
+            Some(YamlNode::Mapping(mapping)) => Some(self.parse_annotation_map(mapping)),
+            _ => {
+                self.expected(
+                    ANNOTATIONS_EXPECTED_FORM,
+                    field,
+                    "annotations must be a sequence or mapping",
+                );
+                None
+            }
+        }
+    }
+
+    fn parse_annotation_list(&mut self, sequence: &yaml_edit::Sequence, fallback: SourceSpan) -> Annotations {
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut values = Vec::new();
+        let mut seen = BTreeSet::new();
+        for node in sequence.values() {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(
+                    ANNOTATIONS_EXPECTED_STRING,
+                    &node,
+                    fallback,
+                    "annotation list entries must be string scalars",
+                );
+                continue;
+            };
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            let scalar_value = ScalarValue::from_scalar(&scalar);
+            let value = match scalar_value.scalar_type() {
+                ScalarType::Null => ComposeScalar::Null,
+                ScalarType::Boolean => ComposeScalar::Boolean(scalar_value.to_bool().unwrap_or(false)),
+                ScalarType::Integer | ScalarType::Float => {
+                    ComposeScalar::Number(scalar_string_from_source(&self.source, &scalar))
+                }
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                    ComposeScalar::String(scalar_string_from_source(&self.source, &scalar))
+                }
+            };
+            self.validate_annotation_list_scalar(&value, item_span, &mut seen);
+            values.push(Located::new(value, item_span));
+        }
+        Annotations::new(span, AnnotationsForm::List(values))
+    }
+
+    fn validate_annotation_list_scalar(
+        &mut self,
+        value: &ComposeScalar,
+        span: SourceSpan,
+        seen: &mut BTreeSet<String>,
+    ) {
+        let ComposeScalar::String(raw) = value else {
+            self.diagnostics.push(annotation_diagnostic(
+                ANNOTATIONS_EXPECTED_STRING,
+                Severity::Error,
+                span,
+                "annotation list entries must be string scalars",
+                "non-string annotation item retained",
+            ));
+            return;
+        };
+        let name = raw.split_once('=').map_or(raw.as_str(), |(name, _)| name);
+        if name.is_empty() {
+            self.diagnostics.push(annotation_diagnostic(
+                ANNOTATIONS_EMPTY_NAME,
+                Severity::Error,
+                span,
+                "service annotation name must not be empty",
+                "empty annotation name",
+            ));
+        } else if !seen.insert(name.to_owned()) {
+            self.diagnostics.push(annotation_diagnostic(
+                ANNOTATIONS_DUPLICATE_NAME,
+                Severity::Error,
+                span,
+                "service annotation names must be unique",
+                "duplicate annotation name",
+            ));
+        }
+        if !raw.contains('=') {
+            self.diagnostics.push(annotation_diagnostic(
+                ANNOTATIONS_KEY_ONLY,
+                Severity::Warning,
+                span,
+                "key-only service annotation has no explicit value",
+                "ambiguous key-only annotation",
+            ));
+        }
+    }
+
+    fn parse_annotation_map(&mut self, mapping: &Mapping) -> Annotations {
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut entries = Vec::new();
+        let mut seen = BTreeMap::new();
+        for entry in self.fields(mapping) {
+            let _duplicate = self.record_duplicate(&mut seen, &entry);
+            if entry.name.value.is_empty() {
+                self.diagnostics.push(annotation_diagnostic(
+                    ANNOTATIONS_EMPTY_NAME,
+                    Severity::Error,
+                    entry.name.span,
+                    "service annotation name must not be empty",
+                    "empty annotation name",
+                ));
+            }
+            if let Some(value) = self.parse_compose_scalar(
+                &entry,
+                "annotation mapping values must be scalar strings, numbers, booleans, or null",
+            ) {
+                entries.push(KeyValueEntry::new(entry.name, value, entry.span));
+            }
+        }
+        Annotations::new(span, AnnotationsForm::Map(entries))
     }
 
     fn field_is_null(field: &ParsedField) -> bool {

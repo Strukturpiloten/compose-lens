@@ -99,6 +99,17 @@ extensions, unknown fields, sensitivity, and target-keyed merge provenance. `Pro
 `ProjectLongDevice` expose item and nested provenance. `GeneratedDevice`/`GeneratedLongDevice` and
 `GeneratedService::set_devices` emit safe resolved quoted strings, retain order and duplicates,
 and parse-back validate without host-device, colon-triple, CDI, permissions, or runtime checks.
+Additive DNS types and getters cover `dns`, `dns_opt`, and `dns_search`, retaining
+authored form, ordering, duplicates, provenance, reset/override state, and sensitivity. Their
+generated APIs accept only resolved physical-line-safe values and parse back the emitted document.
+
+Additive `Expose` and `Annotations` types retain scalar or syntax identity and their documented
+field-specific merge evidence. Generated construction requires safe, unambiguous values.
+
+Additive `SecurityOptions` APIs preserve the raw ordered sequence and expose non-selecting lexical
+candidates for AppArmor, no-new-privileges, seccomp, SELinux labels, Mask, and Unmask. Near misses,
+duplicates, and conflicts stay observable; no profile, filesystem, provider, runtime, or
+cross-format policy is inferred.
 
 ## Changes before 1.0
 

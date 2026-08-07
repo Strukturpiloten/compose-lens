@@ -33,7 +33,7 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 | Surface | Project typed | Document typed only | Syntax-preserved only |
 | --- | ---: | ---: | ---: |
 | Top level | 6 | 0 | 3 |
-| Service | 28 | 3 | 62 |
+| Service | 34 | 3 | 56 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
@@ -55,9 +55,12 @@ project-typed.
 
 The effective project view currently exposes:
 
-`command`, `configs`, `container_name`, `depends_on`, `entrypoint`, `env_file`, `environment`, `extra_hosts`,
-`cap_add`, `cap_drop`, `devices`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `labels`, `networks`, `ports`, `profiles`, `read_only`,
-`pids_limit`, `pull_policy`, `restart`, `secrets`, `shm_size`, `stop_grace_period`, `stop_signal`, `sysctls`, `tmpfs`, `ulimits`, `user`, `userns_mode`, `volumes`, and `working_dir`.
+`annotations`, `command`, `configs`, `container_name`, `depends_on`, `entrypoint`, `env_file`,
+`environment`, `extra_hosts`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`,
+`expose`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `labels`, `networks`, `ports`,
+`profiles`, `read_only`, `pids_limit`, `pull_policy`, `restart`, `secrets`, `security_opt`,
+`shm_size`, `stop_grace_period`, `stop_signal`, `sysctls`, `tmpfs`, `ulimits`, `user`,
+`userns_mode`, `volumes`, and `working_dir`.
 
 ### Document-only service keys
 
@@ -76,17 +79,17 @@ Build and deploy field recognition is not a claim that every nested value is sem
 
 ### Syntax-preserved-only service keys
 
-The following 56 current service keys do not yet have a dedicated typed model:
+The following 50 current service keys do not yet have a dedicated typed model:
 
-`annotations`, `attach`, `blkio_config`, `cgroup`, `cgroup_parent`,
+`attach`, `blkio_config`, `cgroup`, `cgroup_parent`,
 `cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `cpu_rt_runtime`,
 `cpu_shares`, `cpus`, `cpuset`, `credential_spec`, `develop`, `device_cgroup_rules`,
-`dns`, `dns_opt`, `dns_search`, `domainname`, `expose`, `extends`,
+`domainname`, `extends`,
 `external_links`, `gpus`, `ipc`, `isolation`, `label_file`, `links`,
 `logging`, `mac_address`, `mem_limit`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
 `models`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `platform`,
 `post_start`, `pre_start`, `pre_stop`, `privileged`, `provider`, `pull_refresh_after`, `runtime`,
-`scale`, `security_opt`, `stdin_open`,
+`scale`, `stdin_open`,
 `storage_opt`, `tty`, `use_api_socket`,
 `uts`, and `volumes_from`.
 
@@ -161,7 +164,7 @@ hiding a nested semantic gap.
 ## Generated-document boundary
 
 Generated documents currently cover project `name`, services, networks, and volumes. Generated
-services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `env_file`, `environment`, `labels`, `user`,
+services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `env_file`, `environment`, `labels`, `annotations`, `user`,
 `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`,
 `stop_grace_period`, `extra_hosts`, `ports`,
 `volumes`, and `networks`.
@@ -210,7 +213,7 @@ parse-back tests are defined.
   effective-project, and generated boundaries while preserving mixed raw short/long forms,
   CDI/deferred/opaque evidence, duplicates, nested provenance, reset/override, and planned-only
   provider evidence without device, permissions, CDI, GPU, or runtime validation.
-- [ ] Type GPU reservations, `gpus`, `privileged`, `security_opt`, `credential_spec`, `storage_opt`,
+- [ ] Type GPU reservations, `gpus`, `privileged`, `credential_spec`, `storage_opt`,
   cgroup, IPC, PID, and UTS namespace choices.
 - [x] Type service-level `tmpfs` through authored, ordinary-append merge, effective-project, and
   generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,
@@ -224,9 +227,14 @@ parse-back tests are defined.
 
 - [x] Type and generate service `hostname` with conservative RFC-1123 validation, deferred and
   invalid authored states, complete merge provenance, and planned-only provider evidence.
-- [ ] Type DNS/search/options, domain name, exposed ports, MAC addresses, network modes,
+- [x] Type and generate service DNS settings with their documented merge rules and raw evidence.
+- [x] Type and generate exposed ports with scalar-kind-aware uniqueness.
+- [x] Preserve and generate raw service security options with non-selecting diagnostic candidates.
+- [ ] Type domain name, MAC addresses, network modes,
   external links, and links.
-- [ ] Type service annotations, `label_file`, logging, and remaining config/secret metadata fields.
+- [x] Type service annotations through authored mapping/list syntax, keyed effective merge,
+  provenance-preserving diagnostics, and safe generated mapping output.
+- [ ] Type `label_file`, logging, and remaining config/secret metadata fields.
 - [ ] Preserve provider/runtime-specific value spellings and attach compatibility evidence instead
   of enforcing one implementation's grammar globally.
 

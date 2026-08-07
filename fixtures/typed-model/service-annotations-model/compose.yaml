@@ -1,0 +1,32 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty-map:
+    annotations: {}
+  empty-list:
+    annotations: []
+  mapping:
+    annotations:
+      io.example.string: "${STRING_VALUE:-authored}"
+      io.example.number: 001
+      io.example.boolean: true
+      io.example.null: null
+      io.example.duplicate: first
+      io.example.duplicate: second
+      "": retained-empty-name
+  list:
+    annotations:
+      - "io.example.one=first"
+      - "io.example.equals=left=right"
+      - "io.example.key-only"
+      - "io.example.duplicate=first"
+      - "io.example.duplicate=second"
+      - "=empty-name"
+      - 7
+      - true
+      - null
+      - [nested]
+      - {name: nested}
+  wrong-form:
+    image: example.invalid/recovery:1
+    annotations: scalar

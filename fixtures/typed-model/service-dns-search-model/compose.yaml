@@ -1,0 +1,35 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  scalar:
+    dns_search: .
+  empty-list:
+    dns_search: []
+  exact-list:
+    dns_search:
+      - example.internal
+      - example.internal
+      - .
+      - "${DNS_SEARCH:-corp.internal}"
+  malformed-items:
+    image: example.invalid/recovery:1
+    dns_search:
+      - valid-before.internal
+      - true
+      - 53
+      - null
+      - { domain: invalid.internal }
+      - [nested.internal]
+      - valid-after.internal
+  null:
+    image: example.invalid/null:1
+    dns_search: null
+  boolean:
+    image: example.invalid/boolean:1
+    dns_search: false
+  number:
+    image: example.invalid/number:1
+    dns_search: 53
+  mapping:
+    image: example.invalid/mapping:1
+    dns_search: { domain: invalid.internal }

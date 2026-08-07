@@ -32,7 +32,8 @@ and [`podman-compose` 1.5.0](https://github.com/containers/podman-compose/blob/v
 
 All 48 previously collected combined and feature-specific provider observations are reviewed and
 retained. Six provider-config runs each for authored service `init`, service hostname, service
-`cap_add`, service `cap_drop`, service `devices`, the service
+`cap_add`, service `cap_drop`, service `devices`, service `dns`, service `dns_opt`, service
+`dns_search`, service `expose`, service `security_opt`, service annotations, the service
 stop-lifecycle probe, service pull policy, service PID limit, service shared-memory size, service memory limit,
 service-level `tmpfs`, service `sysctls`, and service `ulimits` are
 `planned` and make no support claim.
@@ -61,6 +62,12 @@ The service-ulimits probe asks only how provider config handles omission, explic
 integer/string single values, `-1`, and soft/hard ranges. It does not start a container, inspect or
 enforce host resource limits, infer a default, normalize a provider spelling, compare Podman
 behavior, or claim runtime or cross-format equivalence.
+The service-annotations probe covers omission, empty and populated mapping/list forms, duplicate
+names, and key-only ambiguity. The service-security-options probe covers representative exact,
+duplicate, conflicting, and near-miss AppArmor, no-new-privileges, seccomp, SELinux-label, Mask, and
+Unmask shapes. These are provider-config questions only; the probes do not validate profiles or
+paths, inspect host/runtime state, or claim cross-format equivalence.
+
 The shared-memory-size probe asks only how provider config handles omission, documented lowercase
 units, explicit bytes, leading-zero amounts, numeric and fractional scalars, bare strings, zero,
 uppercase units, and IEC spelling. It does not infer Podman's 64 MiB default, inspect runtime

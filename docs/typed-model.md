@@ -74,6 +74,24 @@ Compose-Go `extends` metadata disagree on whether `devices` is an ordinary appen
 ComposeLens does not inspect host devices, parse colon triples, validate permissions or CDI, infer
 GPU meaning, or claim runtime access.
 
+Service `dns` and `dns_search` retain optional scalar/list syntax, explicit empty lists,
+exact strings, duplicates, spans, provenance, and sensitivity. List merging appends while
+cross-form updates replace. `dns_opt` retains one ordered sequence with whole-sequence replacement.
+Resolver grammar and runtime meaning remain outside the model.
+
+Service `expose` retains ordered YAML string/number identity and classifies documented decimal
+port/range forms without integer conversion. Unsupported, deferred, and malformed values remain raw
+and source-addressable.
+
+Service `security_opt` retains an optional ordered raw sequence with append/reset/override
+provenance. Exact AppArmor, no-new-privileges, seccomp, SELinux-label, Mask, and Unmask shapes are
+independent diagnostic candidates; near misses and conflicts remain unselected. The model validates
+no profile, policy, path, filesystem, provider, runtime, or cross-format semantics.
+
+Service `annotations` retains mapping/list syntax, scalar evidence, raw list items, and keyed
+effective contributors. Mapping keys do not interpolate, and key-only list items remain explicit
+ambiguity rather than becoming empty label values.
+
 An explicit `container_name` is a source-aware scalar at both layers. The effective project view
 retains ordinary Compose scalar replacement provenance across files. The parser does not confuse
 the custom runtime name with the service key or infer one when the field is absent.
@@ -192,7 +210,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -213,6 +231,8 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 - service devices: an omitted or explicit ordered sequence of mixed raw short strings and long
   mappings with required `source`, optional raw `target`/`permissions`, exact duplicates, and
   retained CDI/deferred/opaque evidence;
+- service DNS servers: an omitted raw scalar or ordered list, including explicit empty lists and
+  exact duplicate strings;
 - environment: list or mapping, including `NAME`, `NAME=`, empty strings, and null values;
 - environment files: a scalar path, ordered path list, or ordered long entries with `path`,
   `required`, and `format` retained independently;

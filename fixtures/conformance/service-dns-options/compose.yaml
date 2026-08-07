@@ -1,0 +1,13 @@
+services:
+  omitted:
+    image: example.invalid/composelens/dns-options-omitted:1
+  empty:
+    dns_opt: []
+  ordered:
+    dns_opt:
+      - ndots:5
+      - timeout:2
+      - attempts:3
+      - rotate
+  duplicate:
+    dns_opt: [ndots:5, ndots:5]

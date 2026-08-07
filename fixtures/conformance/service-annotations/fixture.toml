@@ -1,0 +1,24 @@
+schema = 1
+id = "service-annotations"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, empty, mapping/list, scalar-kind, key-only, embedded-equals, and duplicate service annotations."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains, normalizes, or rejects each annotation form; planned rows make no runtime metadata, target propagation, or cross-format claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-annotations"]
+schema = 1
+reviewed = "2026-08-06"

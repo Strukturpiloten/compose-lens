@@ -1,0 +1,22 @@
+schema = 1
+id = "service-dns"
+suite = "conformance"
+description = "Isolates provider config handling of omitted, scalar, explicitly empty, ordered duplicate, hostname-like, IPv4-like, and IPv6-like raw service dns strings."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "The conformance runner clears inherited variables; the fixture contains no interpolation expressions or runtime operation."
+
+[expectations]
+summary = "The provider retains or specifically rejects each raw service dns form; planned rows make no resolver, network, rootless, runtime, or cross-provider support claim."
+
+[extensions.conformance]
+operation = "provider-config"
+features = ["service-dns"]

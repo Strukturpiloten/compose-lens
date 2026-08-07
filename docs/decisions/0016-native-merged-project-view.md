@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-02
-- Additive amendments: 2026-08-03, 2026-08-05, 2026-08-06
+- Additive amendments: 2026-08-03, 2026-08-05, 2026-08-06, 2026-08-07
 
 ## Context
 
@@ -64,6 +64,18 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
     `permissions` values plus extensions and unknown fields retain nested provenance. The existing
     target-keyed replacement rule remains observable alongside reset, override, duplicates, and
     interpolation sensitivity without device, permissions, CDI, GPU, or runtime validation.
+15. Effective `dns` and `dns_search` retain scalar/list form, append/replacement rules,
+    provenance, duplicates, sensitivity, reset, and override; `dns_opt` retains the same evidence
+    with whole-sequence replacement.
+16. Effective `expose` retains ordered YAML scalar identity and documented decimal classification
+    without inferring a protocol or runtime publication.
+17. Effective `annotations` retain mapping/list syntax and keyed contributors. Mapping keys do
+    not interpolate, and ambiguous key-only entries receive no invented value.
+18. Effective `security_opt` retains the raw appended sequence. Exact AppArmor,
+    no-new-privileges, seccomp, SELinux-label, Mask, and Unmask shapes are independent diagnostic
+    candidates; conflicts and near misses remain unselected.
+19. These views perform no resolver, profile, path, filesystem, provider, runtime, or cross-format
+    interpretation.
 
 The generic `MergedProject` remains public for advanced analysis, validation, rendering, and future
 native-boundary expansion. The new view is additive within the 0.1.x compatibility line.
