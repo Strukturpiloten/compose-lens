@@ -1082,6 +1082,9 @@ pub struct ProjectService {
     entrypoint: Option<ProjectValue<Entrypoint>>,
     command: Option<ProjectValue<Command>>,
     init: Option<ProjectValue<BooleanValue>>,
+    stdin_open: Option<ProjectValue<BooleanValue>>,
+    tty: Option<ProjectValue<BooleanValue>>,
+    privileged: Option<ProjectValue<BooleanValue>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
     environment_files: Option<ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>>,
     labels: Option<ProjectValue<ProjectLabels>>,
@@ -1133,6 +1136,9 @@ impl ProjectService {
             entrypoint: None,
             command: None,
             init: None,
+            stdin_open: None,
+            tty: None,
+            privileged: None,
             environment: None,
             environment_files: None,
             labels: None,
@@ -1220,6 +1226,24 @@ impl ProjectService {
     #[must_use]
     pub const fn init(&self) -> Option<&ProjectValue<BooleanValue>> {
         self.init.as_ref()
+    }
+
+    /// Returns whether Compose should keep standard input open for the effective service.
+    #[must_use]
+    pub const fn stdin_open(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.stdin_open.as_ref()
+    }
+
+    /// Returns whether Compose should allocate a terminal for the effective service.
+    #[must_use]
+    pub const fn tty(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.tty.as_ref()
+    }
+
+    /// Returns the effective privileged choice for the service.
+    #[must_use]
+    pub const fn privileged(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.privileged.as_ref()
     }
 
     /// Returns environment entries normalized by key with per-entry syntax retained.
@@ -1710,7 +1734,6 @@ impl<'a> Builder<'a> {
         let fields = self.mapping(value, "service definition must be a mapping")?;
         let mut service = ProjectService::from_entry(entry);
         let path = ["services".to_owned(), entry.key().to_owned()];
-
         for field in fields {
             match field.key() {
                 "hostname" => service.hostname = self.hostname(field.value()),
@@ -1728,10 +1751,13 @@ impl<'a> Builder<'a> {
                 }
                 "entrypoint" => service.entrypoint = self.entrypoint(field.value()),
                 "command" => service.command = self.command(field.value()),
-                "init" => {
-                    service.init = self
-                        .located_boolean(field.value(), "service init must be a boolean")
-                        .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                "init" => service.init = self.boolean(field.value(), "service init must be a boolean"),
+                "stdin_open" => {
+                    service.stdin_open = self.boolean(field.value(), "service stdin_open must be a boolean");
+                }
+                "tty" => service.tty = self.boolean(field.value(), "service tty must be a boolean"),
+                "privileged" => {
+                    service.privileged = self.boolean(field.value(), "service privileged must be a boolean");
                 }
                 "environment" => service.environment = self.environment(field.value()),
                 "env_file" => service.environment_files = self.environment_files(field.value(), &path),
@@ -1792,6 +1818,11 @@ impl<'a> Builder<'a> {
             .unmodeled_fields
             .extend(self.pending_unmodeled.drain(pending_start..));
         Some(service)
+    }
+
+    fn boolean(&mut self, field: &MergedValue, message: &'static str) -> Option<ProjectValue<BooleanValue>> {
+        self.located_boolean(field, message)
+            .map(|value| ProjectValue::new(value.into_value(), field))
     }
 
     fn hostname(&mut self, value: &MergedValue) -> Option<ProjectValue<Hostname>> {

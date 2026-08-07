@@ -686,6 +686,9 @@ pub struct Service {
     entrypoint: Option<Entrypoint>,
     command: Option<Command>,
     init: Option<Located<BooleanValue>>,
+    stdin_open: Option<Located<BooleanValue>>,
+    tty: Option<Located<BooleanValue>>,
+    privileged: Option<Located<BooleanValue>>,
     environment: Option<Environment>,
     environment_files: Vec<EnvironmentFile>,
     labels: Option<Labels>,
@@ -740,6 +743,9 @@ impl Service {
             entrypoint: None,
             command: None,
             init: None,
+            stdin_open: None,
+            tty: None,
+            privileged: None,
             environment: None,
             environment_files: Vec::new(),
             labels: None,
@@ -830,6 +836,24 @@ impl Service {
     #[must_use]
     pub const fn init(&self) -> Option<&Located<BooleanValue>> {
         self.init.as_ref()
+    }
+
+    /// Returns whether Compose should keep standard input open for the service.
+    #[must_use]
+    pub const fn stdin_open(&self) -> Option<&Located<BooleanValue>> {
+        self.stdin_open.as_ref()
+    }
+
+    /// Returns whether Compose should allocate a terminal for the service.
+    #[must_use]
+    pub const fn tty(&self) -> Option<&Located<BooleanValue>> {
+        self.tty.as_ref()
+    }
+
+    /// Returns whether Compose should run the service with its privileged choice.
+    #[must_use]
+    pub const fn privileged(&self) -> Option<&Located<BooleanValue>> {
+        self.privileged.as_ref()
     }
 
     /// Returns environment variables with list and mapping forms kept distinct.
@@ -1463,10 +1487,11 @@ impl Parser {
                 "entrypoint" if !duplicate => service.entrypoint = self.parse_entrypoint(&service_field),
                 "command" if !duplicate => service.command = self.parse_command(&service_field),
                 "init" if !duplicate => service.init = self.parse_boolean(&service_field, "service init"),
+                "stdin_open" if !duplicate => service.stdin_open = self.parse_boolean(&service_field, "stdin_open"),
+                "tty" if !duplicate => service.tty = self.parse_boolean(&service_field, "tty"),
+                "privileged" if !duplicate => service.privileged = self.parse_boolean(&service_field, "privileged"),
                 "environment" if !duplicate => service.environment = self.parse_environment(&service_field),
-                "env_file" if !duplicate => {
-                    service.environment_files = self.parse_environment_files(&service_field);
-                }
+                "env_file" if !duplicate => service.environment_files = self.parse_environment_files(&service_field),
                 "labels" if !duplicate => service.labels = self.parse_labels(&service_field),
                 "annotations" if !duplicate => service.annotations = self.parse_annotations(&service_field),
                 "extra_hosts" if !duplicate => service.extra_hosts = self.parse_extra_hosts(&service_field),
@@ -1509,9 +1534,7 @@ impl Parser {
                 "stop_grace_period" if !duplicate => {
                     service.stop_grace_period = self.parse_stop_grace_period(&service_field);
                 }
-                "ulimits" if !duplicate => {
-                    service.ulimits = self.parse_ulimits(&service_field);
-                }
+                "ulimits" if !duplicate => service.ulimits = self.parse_ulimits(&service_field),
                 "depends_on" if !duplicate => {
                     service.depends_on = self.parse_depends_on(&service_field);
                 }

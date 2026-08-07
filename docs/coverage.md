@@ -22,9 +22,9 @@ provenance.
 
 | Coverage | Service fields |
 | --- | --- |
-| Document model and project view | `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Document model and project view | `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `stdin_open`, `tty`, `privileged`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Document model only | `build`, `deploy` |
-| Preserved, not typed | 49 exact current service keys; see [Exact service gaps](roadmap.md#exact-service-gaps). |
+| Preserved, not typed | 45 exact current service keys; see [Exact service gaps](roadmap.md#exact-service-gaps). |
 
 The preserved row follows the current Docker documentation grouping. Provider-specific additions
 remain preserved even when they are not part of the compose-spec repository.
@@ -187,9 +187,10 @@ then validates its own bytes through the native parser.
 Entrypoint now has distinct source-aware document/project types and generated string, list, and
 explicitly empty forms. `null` continues to mean “use the image entrypoint,” while empty scalar or
 list forms explicitly clear it. Multi-file processing uses Compose's replacement rule and retains
-all contributing spans. Service `init` also crosses all three boundaries as an authored/project
-boolean that keeps omission distinct, retains deferred interpolation and complete replacement
-provenance, and generates only an explicitly selected boolean. No omission default is invented.
+all contributing spans. Service `init`, `stdin_open`, `tty`, and `privileged` also cross all three boundaries as
+independent authored/project booleans that keep omission distinct, retain deferred interpolation
+and complete replacement provenance, and generate only explicitly selected booleans. No omission
+default, terminal, security, or runtime policy is invented.
 Remaining resource limits are the next high-value promotion group.
 
 ## Promotion checklist

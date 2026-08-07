@@ -33,7 +33,7 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 | Surface | Project typed | Document typed only | Syntax-preserved only |
 | --- | ---: | ---: | ---: |
 | Top level | 6 | 0 | 3 |
-| Service | 35 | 3 | 55 |
+| Service | 46 | 2 | 45 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
@@ -57,9 +57,9 @@ The effective project view currently exposes:
 
 `annotations`, `command`, `configs`, `container_name`, `depends_on`, `entrypoint`, `env_file`,
 `environment`, `extra_hosts`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`,
-`expose`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `labels`, `networks`, `ports`,
+`expose`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `stdin_open`, `tty`, `privileged`, `labels`, `logging`, `networks`, `ports`,
 `profiles`, `read_only`, `pids_limit`, `pull_policy`, `restart`, `secrets`, `security_opt`,
-`shm_size`, `stop_grace_period`, `stop_signal`, `sysctls`, `tmpfs`, `ulimits`, `user`,
+`shm_size`, `mem_limit`, `stop_grace_period`, `stop_signal`, `sysctls`, `tmpfs`, `ulimits`, `user`,
 `userns_mode`, `volumes`, and `working_dir`.
 
 ### Document-only service keys
@@ -79,18 +79,18 @@ Build and deploy field recognition is not a claim that every nested value is sem
 
 ### Syntax-preserved-only service keys
 
-The following 49 current service keys do not yet have a dedicated typed model:
+The following 45 current service keys do not yet have a dedicated typed model:
 
 `attach`, `blkio_config`, `cgroup`, `cgroup_parent`,
 `cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `cpu_rt_runtime`,
 `cpu_shares`, `cpus`, `cpuset`, `credential_spec`, `develop`, `device_cgroup_rules`,
 `domainname`, `extends`,
 `external_links`, `gpus`, `ipc`, `isolation`, `label_file`, `links`,
-`mac_address`, `mem_limit`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
+`mac_address`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
 `models`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `platform`,
-`post_start`, `pre_start`, `pre_stop`, `privileged`, `provider`, `pull_refresh_after`, `runtime`,
-`scale`, `stdin_open`,
-`storage_opt`, `tty`, `use_api_socket`,
+`post_start`, `pre_start`, `pre_stop`, `provider`, `pull_refresh_after`, `runtime`,
+`scale`,
+`storage_opt`, `use_api_socket`,
 `uts`, and `volumes_from`.
 
 ## Nested resource gaps
@@ -164,7 +164,7 @@ hiding a nested semantic gap.
 ## Generated-document boundary
 
 Generated documents currently cover project `name`, services, networks, and volumes. Generated
-services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `env_file`, `environment`, `labels`, `annotations`, `logging`, `user`,
+services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `stdin_open`, `tty`, `privileged`, `env_file`, `environment`, `labels`, `annotations`, `logging`, `user`,
 `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`,
 `stop_grace_period`, `extra_hosts`, `ports`,
 `volumes`, and `networks`.
@@ -207,7 +207,12 @@ parse-back tests are defined.
 - [x] Type independent `stop_grace_period` and `stop_signal` fields through generated output.
 - [x] Type and generate raw-preserving `pull_policy` values while keeping schema-only `refresh`
   distinct and provider evidence planned.
-- [ ] Type `stdin_open` and `tty`.
+- [x] Type `stdin_open` as an independent source-aware/interpolation-preserving boolean and add
+  deterministic generated output.
+- [x] Type `tty` as an independent source-aware/interpolation-preserving boolean and add
+  deterministic generated output.
+- [x] Type `privileged` as an independent source-aware/interpolation-preserving boolean and add
+  deterministic generated output without inferring security or runtime behavior.
 - [ ] Type `pull_refresh_after`, `platform`, and `runtime` with deferred-value retention and
   provider-specific compatibility evidence.
 - [ ] Add generated construction only after each field's null/empty/short/long behavior is fixed.
@@ -236,7 +241,7 @@ parse-back tests are defined.
   effective-project, and generated boundaries while preserving mixed raw short/long forms,
   CDI/deferred/opaque evidence, duplicates, nested provenance, reset/override, and planned-only
   provider evidence without device, permissions, CDI, GPU, or runtime validation.
-- [ ] Type GPU reservations, `gpus`, `privileged`, `credential_spec`, `storage_opt`,
+- [ ] Type GPU reservations, `gpus`, `credential_spec`, `storage_opt`,
   cgroup, IPC, PID, and UTS namespace choices.
 - [x] Type service-level `tmpfs` through authored, ordinary-append merge, effective-project, and
   generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,

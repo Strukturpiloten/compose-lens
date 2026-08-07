@@ -77,6 +77,75 @@ fn exposes_authored_effective_and_generated_annotations_contracts() -> Result<()
 }
 
 #[test]
+fn exposes_stdin_open_tty_and_privileged_at_authored_effective_and_generated_boundaries()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    stdin_open: true\n    tty: false\n    privileged: true\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(707), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert_eq!(
+        parsed
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::stdin_open)
+            .map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    assert_eq!(
+        parsed
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::tty)
+            .map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        parsed
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::privileged)
+            .map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(708),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    assert_eq!(
+        build_project_view(merged.project().ok_or("merged project expected")?, None)
+            .view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::stdin_open)
+            .map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    assert_eq!(
+        build_project_view(merged.project().ok_or("merged project expected")?, None)
+            .view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::tty)
+            .map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        build_project_view(merged.project().ok_or("merged project expected")?, None)
+            .view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::privileged)
+            .map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Literal(true))
+    );
+
+    let mut service = GeneratedService::new("generated")?;
+    service.set_stdin_open(false)?;
+    service.set_tty(true)?;
+    service.set_privileged(false)?;
+    Ok(())
+}
+
+#[test]
 fn exposes_generated_volume_definition_driver_options_contracts() -> Result<(), Box<dyn std::error::Error>> {
     let mut volume = GeneratedVolumeDefinition::application("data")?;
     volume.set_driver(GeneratedString::plain("opaque-driver")?)?;

@@ -3249,3 +3249,117 @@ fn rejects_unsafe_or_malformed_generated_devices_without_validating_runtime_sema
     ])?;
     Ok(())
 }
+
+#[test]
+fn generates_literal_stdin_open_choices_and_rejects_replacement() -> Result<(), Box<dyn std::error::Error>> {
+    let mut opened = GeneratedService::new("opened")?;
+    opened.set_stdin_open(true)?;
+    assert_eq!(
+        opened.set_stdin_open(false),
+        Err(GenerationError::DuplicateField("stdin_open"))
+    );
+
+    let mut closed = GeneratedService::new("closed")?;
+    closed.set_stdin_open(false)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(opened)?;
+    builder.add_service(closed)?;
+    let generated = builder.build(SourceId::new(685))?;
+
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"opened\":\n",
+            "    stdin_open: true\n",
+            "  \"closed\":\n",
+            "    stdin_open: false\n",
+        )
+    );
+    for (name, expected) in [("opened", true), ("closed", false)] {
+        assert_eq!(
+            generated
+                .document()
+                .service(name)
+                .and_then(compose_lens::model::Service::stdin_open)
+                .map(compose_lens::model::Located::value),
+            Some(&BooleanValue::Literal(expected))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn generates_literal_tty_choices_and_rejects_replacement() -> Result<(), Box<dyn std::error::Error>> {
+    let mut allocated = GeneratedService::new("allocated")?;
+    allocated.set_tty(true)?;
+    assert_eq!(allocated.set_tty(false), Err(GenerationError::DuplicateField("tty")));
+
+    let mut disabled = GeneratedService::new("disabled")?;
+    disabled.set_tty(false)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(allocated)?;
+    builder.add_service(disabled)?;
+    let generated = builder.build(SourceId::new(690))?;
+
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"allocated\":\n",
+            "    tty: true\n",
+            "  \"disabled\":\n",
+            "    tty: false\n",
+        )
+    );
+    for (name, expected) in [("allocated", true), ("disabled", false)] {
+        assert_eq!(
+            generated
+                .document()
+                .service(name)
+                .and_then(compose_lens::model::Service::tty)
+                .map(compose_lens::model::Located::value),
+            Some(&BooleanValue::Literal(expected))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn generates_literal_privileged_choices_and_rejects_replacement() -> Result<(), Box<dyn std::error::Error>> {
+    let mut enabled = GeneratedService::new("enabled")?;
+    enabled.set_privileged(true)?;
+    assert_eq!(
+        enabled.set_privileged(false),
+        Err(GenerationError::DuplicateField("privileged"))
+    );
+
+    let mut disabled = GeneratedService::new("disabled")?;
+    disabled.set_privileged(false)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(enabled)?;
+    builder.add_service(disabled)?;
+    let generated = builder.build(SourceId::new(694))?;
+
+    assert_eq!(
+        generated.text(),
+        concat!(
+            "services:\n",
+            "  \"enabled\":\n",
+            "    privileged: true\n",
+            "  \"disabled\":\n",
+            "    privileged: false\n",
+        )
+    );
+    for (name, expected) in [("enabled", true), ("disabled", false)] {
+        assert_eq!(
+            generated
+                .document()
+                .service(name)
+                .and_then(compose_lens::model::Service::privileged)
+                .map(compose_lens::model::Located::value),
+            Some(&BooleanValue::Literal(expected))
+        );
+    }
+    Ok(())
+}

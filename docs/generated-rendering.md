@@ -21,7 +21,7 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - an optional explicit runtime `container_name` validated against Compose's portable grammar;
 - image references, including `name:tag@digest` spellings;
 - independent string/list entrypoints and exec/shell commands, including explicitly empty forms;
-- an explicit boolean init-process choice;
+- independent explicit boolean `init`, `stdin_open`, `tty`, and `privileged` choices;
 - ordered environment-file short and long declarations with optional `required` and `format: raw`;
 - ordered literal and host-resolved environment entries;
 - ordered service metadata labels with explicit, potentially empty string values;
@@ -169,6 +169,9 @@ provider or cross-format equivalence claim.
 `GeneratedService::set_init` accepts an explicit boolean and rejects a second assignment. The
 renderer emits an unquoted YAML boolean and parse-back validation must recover the same literal.
 Leaving the setter unused omits `init`; generation does not invent `false` for an omitted choice.
+The same set-once, omitted-versus-literal, deterministic parse-back boundary applies independently
+to `set_stdin_open`, `set_tty`, and `set_privileged`; no terminal, security, runtime, or
+cross-format policy is inferred.
 
 `GeneratedService::set_stop_signal` accepts any NUL-free `GeneratedString`, including named,
 numeric, and empty spellings, without inventing a signal grammar. The quoted empty spelling remains

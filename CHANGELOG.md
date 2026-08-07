@@ -10,6 +10,9 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ### Added
 
+- Native service `stdin_open`, `tty`, and `privileged` support across authored, effective-project,
+  generated, and public API boundaries without inferring terminal, security, runtime, or
+  cross-format behavior.
 - Loss-aware service `logging` with merged provenance and parse-back-validated generation.
 - Generated service-network attachments with optional raw IPv4 and IPv6 identities.
 - Top-level networks retain authored and merged IPAM; generated application-owned networks add

@@ -4971,3 +4971,96 @@ const DEVICE_MERGE_OVERRIDE: &str = concat!(
     "  overridden:\n",
     "    devices: !override [/dev/same, /dev/same, vendor.example/device=gpu]\n",
 );
+
+#[test]
+fn retains_merged_stdin_open_replacement_and_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(685);
+    let override_id = SourceId::new(686);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            "services:\n  app:\n    stdin_open: false\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            "services:\n  app:\n    stdin_open: true\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let stdin_open = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::stdin_open)
+        .ok_or("effective stdin_open expected")?;
+
+    assert_eq!(stdin_open.value(), &BooleanValue::Literal(true));
+    assert_eq!(stdin_open.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(stdin_open.provenance().sources(), &[base_id, override_id]);
+
+    Ok(())
+}
+
+#[test]
+fn retains_merged_tty_replacement_and_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(688);
+    let override_id = SourceId::new(689);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            "services:\n  app:\n    tty: false\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            "services:\n  app:\n    tty: true\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let tty = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::tty)
+        .ok_or("effective tty expected")?;
+
+    assert_eq!(tty.value(), &BooleanValue::Literal(true));
+    assert_eq!(tty.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(tty.provenance().sources(), &[base_id, override_id]);
+
+    Ok(())
+}
+
+#[test]
+fn retains_merged_privileged_replacement_and_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(692);
+    let override_id = SourceId::new(693);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            "services:\n  app:\n    privileged: false\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            "services:\n  app:\n    privileged: true\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let privileged = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::privileged)
+        .ok_or("effective privileged expected")?;
+
+    assert_eq!(privileged.value(), &BooleanValue::Literal(true));
+    assert_eq!(privileged.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(privileged.provenance().sources(), &[base_id, override_id]);
+
+    Ok(())
+}

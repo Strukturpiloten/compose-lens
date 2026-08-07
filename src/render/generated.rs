@@ -1782,6 +1782,9 @@ pub struct GeneratedService {
     entrypoint: Option<GeneratedEntrypoint>,
     command: Option<GeneratedCommand>,
     init: Option<bool>,
+    stdin_open: Option<bool>,
+    tty: Option<bool>,
+    privileged: Option<bool>,
     environment_files: Vec<GeneratedEnvironmentFile>,
     environment: Vec<GeneratedEnvironment>,
     labels: Vec<GeneratedLabel>,
@@ -1831,6 +1834,9 @@ impl GeneratedService {
             entrypoint: None,
             command: None,
             init: None,
+            stdin_open: None,
+            tty: None,
+            privileged: None,
             environment_files: Vec::new(),
             environment: Vec::new(),
             labels: Vec::new(),
@@ -1937,6 +1943,33 @@ impl GeneratedService {
     /// Returns [`GenerationError::DuplicateField`] when already configured.
     pub fn set_init(&mut self, init: bool) -> Result<(), GenerationError> {
         set_once(&mut self.init, init, "init")
+    }
+
+    /// Sets the Compose standard-input-open choice exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_stdin_open(&mut self, stdin_open: bool) -> Result<(), GenerationError> {
+        set_once(&mut self.stdin_open, stdin_open, "stdin_open")
+    }
+
+    /// Sets the Compose terminal-allocation choice exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_tty(&mut self, tty: bool) -> Result<(), GenerationError> {
+        set_once(&mut self.tty, tty, "tty")
+    }
+
+    /// Sets the Compose privileged choice exactly once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when already configured.
+    pub fn set_privileged(&mut self, privileged: bool) -> Result<(), GenerationError> {
+        set_once(&mut self.privileged, privileged, "privileged")
     }
 
     /// Adds one ordered environment-file declaration.
@@ -2899,6 +2932,18 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     if let Some(init) = service.init {
         write_field(output, 2, "init");
         output.push_str(if init { "true\n" } else { "false\n" });
+    }
+    if let Some(stdin_open) = service.stdin_open {
+        write_field(output, 2, "stdin_open");
+        output.push_str(if stdin_open { "true\n" } else { "false\n" });
+    }
+    if let Some(tty) = service.tty {
+        write_field(output, 2, "tty");
+        output.push_str(if tty { "true\n" } else { "false\n" });
+    }
+    if let Some(privileged) = service.privileged {
+        write_field(output, 2, "privileged");
+        output.push_str(if privileged { "true\n" } else { "false\n" });
     }
     render_environment_files(output, &service.environment_files);
     render_environment(output, &service.environment);

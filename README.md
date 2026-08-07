@@ -21,6 +21,12 @@ It is designed for tools that need more than strict deserialization: source-awar
   validation, deferred-expression retention, and no synthesized default.
 - Preserve, merge, inspect, and generate service-level restart policies without confusing them
   with dependency-update or deploy restart settings.
+- Preserve, merge, inspect, and generate service `stdin_open` choices without inferring terminal,
+  runtime, or cross-format behavior.
+- Preserve, merge, inspect, and generate service `tty` choices without inferring terminal,
+  runtime, or cross-format behavior.
+- Preserve, merge, inspect, and generate service `privileged` choices without inferring security,
+  runtime, or cross-format behavior.
 - Preserve, merge, inspect, and generate service image pull policies without inventing provider
   behavior or discarding schema-only refresh evidence.
 - Preserve, merge, inspect, and generate independent service stop signals and raw Compose stop
@@ -101,7 +107,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
-- [0.1.16 release notes](docs/releases/0.1.16.md) — logging and generated network and volume configuration
+- [0.1.16 release notes](docs/releases/0.1.16.md) — native service terminal/security choices, logging, and generated network and volume configuration
 - [0.1.15 release notes](docs/releases/0.1.15.md) — DNS, expose, annotations, and security options
 - [0.1.14 release notes](docs/releases/0.1.14.md)
 - [Release process](docs/releasing.md)

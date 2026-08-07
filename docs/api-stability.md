@@ -42,8 +42,9 @@ validation, or rendering.
 
 The additive generated-document path accepts only explicit Compose-owned values and performs no
 processing or I/O. Successful output is parse-back validated through the syntax and native model.
-Additive `init` getters retain omitted, literal, and deferred states at the authored-document and
-effective-project layers; the generated setter emits only an explicitly supplied boolean.
+Additive `init`, `stdin_open`, `tty`, and `privileged` getters retain omitted, literal, and deferred states at the
+authored-document and effective-project layers; their generated setters emit only explicitly
+supplied booleans.
 Additive lifecycle getters expose `stop_signal` independently from the lifecycle-specific
 `StopGracePeriod` state at both authored-document and effective-project layers. Generated setters
 retain caller spelling and sensitivity without applying target-runtime normalization.

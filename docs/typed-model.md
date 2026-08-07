@@ -47,6 +47,20 @@ interpolation remain distinct, omission remains omitted, and complete-value repl
 every contributing source. ComposeLens does not invent a default or select or inspect the
 platform-specific init binary.
 
+Service `stdin_open` is independently source-aware at both layers. Literal `true`/`false` and
+deferred interpolation remain distinct, omission remains omitted, and complete-value replacement
+retains every contributing source. ComposeLens does not infer a terminal, runtime, or cross-format
+policy from either boolean.
+
+Service `tty` has the same independent source-aware boundary. Literal `true`/`false` and deferred
+interpolation remain distinct, omission remains omitted, and complete-value replacement retains
+every contributing source. ComposeLens does not infer terminal, runtime, or cross-format policy.
+
+Service `privileged` is independently source-aware at both layers. Literal `true`/`false` and
+deferred interpolation remain distinct, omission remains omitted, and complete-value replacement
+retains every contributing source. ComposeLens does not infer security, runtime, or cross-format
+policy from this boolean.
+
 Execution identity and context are native at both document and merged-project layers. Effective
 `user`, `userns_mode`, `group_add`, `working_dir`, and `read_only` values retain raw spelling,
 field provenance, and, for supplementary groups, per-item provenance. No account, group, path, or
@@ -215,7 +229,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `stdin_open`, `tty`, `privileged`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -230,7 +244,7 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 
 - entrypoint and command: independent explicit null, scalar, or list values, including empty
   scalar and empty list;
-- init: a literal boolean or deferred interpolation expression;
+- init, stdin_open, tty, and privileged: independent literal booleans or deferred interpolation expressions;
 - capability additions and drops: independent omitted or explicit ordered string sequences with
   exact duplicates retained for diagnostics and case variants kept distinct;
 - service devices: an omitted or explicit ordered sequence of mixed raw short strings and long

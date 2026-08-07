@@ -134,7 +134,7 @@ services. A selection created from a different project returns the same stable m
 used by the other post-merge operations.
 
 The native view covers project name, services, service hostnames, explicit container names, images, entrypoints,
-commands, init-process choices, merged environment, service labels, extra host
+commands, init-process, standard-input-open, terminal-allocation, and privileged choices, merged environment, service labels, extra host
 mappings, service annotations, service logging configuration, ordered service capability additions and drops, ordered mixed service devices, raw service DNS servers, ordered service exposed ports, raw service security options, raw service PID limits, raw service shared-memory sizes, raw service memory limits, service-level temporary filesystems, service sysctls, ordered service ulimits, image pull policies, health checks, service dependencies, independent stop signals and stop grace periods,
 ports, volume mounts, service config and secret grants, service networks, profiles, and top-level
 network, volume, config, and secret definitions.

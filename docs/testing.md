@@ -35,7 +35,8 @@ reparent ports, volumes, or extensions into the environment mapping.
 Generated-rendering tests construct the runtime-migration subset through public Compose-owned
 types, compare exact deterministic bytes, and inspect the parse-back native model. They protect
 ordered duplicate-capable environment syntax, ordered environment-file short/long forms and
-options, explicit init true/false and omission, ordered unique service-label mappings, spec-shaped
+options, explicit `init`, `stdin_open`, `tty`, and `privileged` true/false choices and omission,
+ordered unique service-label mappings, spec-shaped
 ordered capability-add and capability-drop omission, explicit empty output, exact-case order,
 duplicate and multiline rejection, independent coexistence, parse-back fidelity, and sensitivity
 redaction,

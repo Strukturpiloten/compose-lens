@@ -6,16 +6,17 @@ use compose_lens::model::{
     ComposeScalar, ConfigGrant, ContainerPathKind, DEPENDENCY_HEALTHCHECK_UNVERIFIED, DEPENDENCY_INVALID_CONDITION,
     DEPENDENCY_MISSING_HEALTHCHECK, DEPENDENCY_MISSING_SERVICE, DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING,
     DEVICE_MISSING_SOURCE, DEVICES_EXPECTED_SEQUENCE, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING,
-    DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM, DNS_SEARCH_EXPECTED_STRING, DependencyCondition,
-    DeployFieldKind, Device, DnsForm, DnsSearchForm, ENVIRONMENT_FILE_EXPECTED_FORM, ENVIRONMENT_FILE_INVALID_FORMAT,
-    ENVIRONMENT_FILE_MISSING_PATH, EXPECTED_BOOLEAN, EXPECTED_FIELD_FORM, EXPECTED_MAPPING, EXPECTED_SCALAR,
-    EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Entrypoint, Environment, EnvironmentFile, EnvironmentFileFormatKind,
-    ExtraHostSeparator, ExtraHosts, GRANT_EXPECTED_FORM, GRANT_MISSING_SOURCE, HEALTHCHECK_INVALID_DURATION,
-    HEALTHCHECK_INVALID_RETRIES, HEALTHCHECK_INVALID_TEST, HealthcheckTestKind, HostAddressKind, HostnameKind,
-    IdentityComponent, LOGGING_DRIVER_EXPECTED_STRING, LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY,
-    LOGGING_OPTION_EXPECTED_SCALAR, LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue, Located, LoggingOptionValue,
-    MountType, PORT_EXPECTED_FORM, PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY,
-    RestartPolicyKind, STOP_GRACE_PERIOD_INVALID, SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM,
+    DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM, DNS_SEARCH_EXPECTED_STRING, DUPLICATE_FIELD,
+    DependencyCondition, DeployFieldKind, Device, DnsForm, DnsSearchForm, ENVIRONMENT_FILE_EXPECTED_FORM,
+    ENVIRONMENT_FILE_INVALID_FORMAT, ENVIRONMENT_FILE_MISSING_PATH, EXPECTED_BOOLEAN, EXPECTED_FIELD_FORM,
+    EXPECTED_MAPPING, EXPECTED_SCALAR, EXPECTED_SEQUENCE, EXTRA_HOST_INVALID_ENTRY, Entrypoint, Environment,
+    EnvironmentFile, EnvironmentFileFormatKind, ExtraHostSeparator, ExtraHosts, GRANT_EXPECTED_FORM,
+    GRANT_MISSING_SOURCE, HEALTHCHECK_INVALID_DURATION, HEALTHCHECK_INVALID_RETRIES, HEALTHCHECK_INVALID_TEST,
+    HealthcheckTestKind, HostAddressKind, HostnameKind, IdentityComponent, LOGGING_DRIVER_EXPECTED_STRING,
+    LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY, LOGGING_OPTION_EXPECTED_SCALAR,
+    LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue, Located, LoggingOptionValue, MountType, PORT_EXPECTED_FORM,
+    PORT_MISSING_TARGET, Port, RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY, RestartPolicyKind,
+    STOP_GRACE_PERIOD_INVALID, SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM,
     SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING, SecretGrant, SelinuxRelabel, ServiceNetworks, StopGracePeriod,
     SysctlsForm, ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UlimitValue,
     UserNamespaceModeKind, VOLUME_EXPECTED_FORM, VOLUME_EXTERNAL_DRIVER_CONFIGURATION,
@@ -2498,7 +2499,7 @@ fn reports_malformed_stop_lifecycle_values_without_dropping_invalid_scalars() ->
         parsed
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code() == compose_lens::model::DUPLICATE_FIELD)
+            .any(|diagnostic| diagnostic.code() == DUPLICATE_FIELD)
     );
     assert!(
         parsed
@@ -3678,5 +3679,180 @@ fn malformed_issue_derived_fields_return_partial_data() -> Result<(), Box<dyn st
     }
     assert!(matches!(app.extra_hosts(), Some(ExtraHosts::Short { entries, .. }) if entries.len() == 2));
     assert_eq!(app.ulimits().map(|limits| limits.entries().len()), Some(2));
+    Ok(())
+}
+
+#[test]
+fn retains_service_stdin_open_literals_expressions_and_duplicate_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(684),
+        concat!(
+            "services:\n",
+            "  literal-true:\n    stdin_open: true\n",
+            "  literal-false:\n    stdin_open: false\n",
+            "  deferred:\n    stdin_open: ${KEEP_STDIN:-true}\n",
+            "  invalid:\n    stdin_open: [true]\n",
+            "  duplicate:\n    stdin_open: true\n    stdin_open: false\n",
+        ),
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+
+    assert_eq!(
+        document
+            .service("literal-true")
+            .and_then(compose_lens::model::Service::stdin_open)
+            .map(Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    assert_eq!(
+        document
+            .service("literal-false")
+            .and_then(compose_lens::model::Service::stdin_open)
+            .map(Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        document
+            .service("deferred")
+            .and_then(compose_lens::model::Service::stdin_open)
+            .map(Located::value),
+        Some(&BooleanValue::Expression("${KEEP_STDIN:-true}".to_owned()))
+    );
+    assert!(
+        document
+            .service("invalid")
+            .and_then(compose_lens::model::Service::stdin_open)
+            .is_none()
+    );
+    assert_eq!(
+        document
+            .service("duplicate")
+            .and_then(compose_lens::model::Service::stdin_open)
+            .map(Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    for code in [EXPECTED_BOOLEAN, DUPLICATE_FIELD] {
+        assert!(parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    Ok(())
+}
+
+#[test]
+fn retains_service_tty_literals_expressions_and_duplicate_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(687),
+        concat!(
+            "services:\n",
+            "  literal-true:\n    tty: true\n",
+            "  literal-false:\n    tty: false\n",
+            "  deferred:\n    tty: ${KEEP_TTY:-true}\n",
+            "  invalid:\n    tty: [true]\n",
+            "  duplicate:\n    tty: true\n    tty: false\n",
+        ),
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+
+    assert_eq!(
+        document
+            .service("literal-true")
+            .and_then(compose_lens::model::Service::tty)
+            .map(Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    assert_eq!(
+        document
+            .service("literal-false")
+            .and_then(compose_lens::model::Service::tty)
+            .map(Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        document
+            .service("deferred")
+            .and_then(compose_lens::model::Service::tty)
+            .map(Located::value),
+        Some(&BooleanValue::Expression("${KEEP_TTY:-true}".to_owned()))
+    );
+    assert!(
+        document
+            .service("invalid")
+            .and_then(compose_lens::model::Service::tty)
+            .is_none()
+    );
+    assert_eq!(
+        document
+            .service("duplicate")
+            .and_then(compose_lens::model::Service::tty)
+            .map(Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    for code in [EXPECTED_BOOLEAN, DUPLICATE_FIELD] {
+        assert!(parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    Ok(())
+}
+
+#[test]
+fn retains_service_privileged_literals_expressions_spans_and_duplicate_recovery()
+-> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(691),
+        concat!(
+            "services:\n",
+            "  omitted: {}\n",
+            "  literal-true:\n    privileged: true\n",
+            "  literal-false:\n    privileged: false\n",
+            "  deferred:\n    privileged: ${KEEP_PRIVILEGED:-true}\n",
+            "  invalid:\n    privileged: [true]\n",
+            "  duplicate:\n    privileged: true\n    privileged: false\n",
+        ),
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+
+    assert!(
+        document
+            .service("omitted")
+            .and_then(compose_lens::model::Service::privileged)
+            .is_none()
+    );
+    let literal_true = document
+        .service("literal-true")
+        .and_then(compose_lens::model::Service::privileged)
+        .ok_or("literal privileged true expected")?;
+    assert_eq!(literal_true.value(), &BooleanValue::Literal(true));
+    assert!(!literal_true.span().is_empty());
+    assert_eq!(
+        document
+            .service("literal-false")
+            .and_then(compose_lens::model::Service::privileged)
+            .map(Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        document
+            .service("deferred")
+            .and_then(compose_lens::model::Service::privileged)
+            .map(Located::value),
+        Some(&BooleanValue::Expression("${KEEP_PRIVILEGED:-true}".to_owned()))
+    );
+    assert!(
+        document
+            .service("invalid")
+            .and_then(compose_lens::model::Service::privileged)
+            .is_none()
+    );
+    assert_eq!(
+        document
+            .service("duplicate")
+            .and_then(compose_lens::model::Service::privileged)
+            .map(Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    for code in [EXPECTED_BOOLEAN, DUPLICATE_FIELD] {
+        assert!(parsed.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
     Ok(())
 }
