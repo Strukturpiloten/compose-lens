@@ -10,6 +10,17 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ### Added
 
+- Effective Build-family support for `additional_contexts`, context, args, labels, Build-specific `extra_hosts`, raw caches and entitlements, Dockerfile/inline Dockerfile/target/network/platforms/no_cache/no_cache_filter/privileged/sbom/provenance/pull/`shm_size`/tags, service-equivalent `ulimits`, secrets, opaque `isolation`, and sensitive `build.ssh` forms.
+  Values retain provenance and recovery; SSH values redact by default, and no reference, path,
+  credential, socket, agent, mode, platform, privilege, or builder behavior is inferred.
+- Native authored/effective `deploy.endpoint_mode`, `deploy.mode`, and raw-preserving `deploy.replicas` support with
+  portability and scalar-category evidence; no count/default, scheduling, runtime, or conversion semantics are inferred.
+- Native authored/effective map/list `deploy.labels` support, distinct from service container labels, with provenance,
+  sensitivity, duplicate evidence, and no deployment/runtime or conversion semantics.
+- Native authored/effective deploy restart-policy members with raw spelling and provenance, distinct from service
+  restart behavior.
+- Native authored/effective deploy placement constraints, preferences, and max-replicas-per-node
+  scalar categories with merge provenance and recovery, without scheduling or runtime semantics.
 - Native service `stdin_open`, `tty`, and `privileged` support across authored, effective-project,
   generated, and public API boundaries without inferring terminal, security, runtime, or
   cross-format behavior.

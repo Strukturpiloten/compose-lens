@@ -33,7 +33,7 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 | Surface | Project typed | Document typed only | Syntax-preserved only |
 | --- | ---: | ---: | ---: |
 | Top level | 6 | 0 | 3 |
-| Service | 46 | 2 | 45 |
+| Service | 48 | 0 | 45 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
@@ -56,26 +56,38 @@ project-typed.
 The effective project view currently exposes:
 
 `annotations`, `command`, `configs`, `container_name`, `depends_on`, `entrypoint`, `env_file`,
-`environment`, `extra_hosts`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`,
+`environment`, `extra_hosts`, `build.additional_contexts`, `build.context`, `build.args`, `build.cache_from`, `build.cache_to`, `build.dockerfile`, `build.dockerfile_inline`, `build.entitlements`, `build.extra_hosts`, `build.target`, `build.network`, `build.isolation`, `build.platforms`, `build.no_cache`, `build.privileged`, `build.sbom`, `build.pull`, `build.shm_size`, `build.tags`, `build.labels`, `build.secrets`, `build.ssh`, `build.ulimits`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`,
 `expose`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `stdin_open`, `tty`, `privileged`, `labels`, `logging`, `networks`, `ports`,
 `profiles`, `read_only`, `pids_limit`, `pull_policy`, `restart`, `secrets`, `security_opt`,
 `shm_size`, `mem_limit`, `stop_grace_period`, `stop_signal`, `sysctls`, `tmpfs`, `ulimits`, `user`,
 `userns_mode`, `volumes`, and `working_dir`.
 
+`deploy.endpoint_mode`, `deploy.labels`, `deploy.mode`, `deploy.placement`, and `deploy.replicas` are also native in
+the effective project view: exact `vip`/`dnsrr` and `global`/`replicated` remain distinct from raw
+portability-diagnosed `Other` strings, replicas preserves its exact YAML number spelling or distinct
+string category, labels retain mapping scalar/null or ordered raw list forms separately from
+service container labels, and placement retains raw constraints, preferences, and maximum scalar
+categories with complete merge provenance. All other immediate deploy children remain nested
+unmodeled evidence.
+The prose `vip` default and schema lack of an effective default conflict, so no default,
+integer/positive/zero rule, mode coupling, container-label, platform, discovery, VIP, DNS, replica,
+scale, allocation, scheduling, placement, job, deployment, runtime, or conversion interpretation is
+applied.
+
 ### Document-only service keys
 
-These keys are source-aware in one document but are not yet effective-project values:
+All current service keys have an effective-project path. Remaining `deploy` children are retained
+as nested unmodeled evidence rather than native values: `resources`, `rollback_config`, and
+`update_config`.
 
-- `build` — all current immediate subkeys are recognized as field references:
-  `additional_contexts`, `args`, `cache_from`, `cache_to`, `context`, `dockerfile`,
-  `dockerfile_inline`, `entitlements`, `extra_hosts`, `isolation`, `labels`, `network`,
-  `no_cache`, `no_cache_filter`, `platforms`, `privileged`, `provenance`, `pull`, `sbom`,
-  `secrets`, `shm_size`, `ssh`, `tags`, `target`, and `ulimits`;
-- `deploy` — all current immediate subkeys are recognized as field references: `endpoint_mode`,
-  `labels`, `mode`, `placement`, `replicas`, `resources`, `restart_policy`, `rollback_config`, and
-  `update_config`.
-
-Build and deploy field recognition is not a claim that every nested value is semantically typed.
+The effective build view promotes raw list/scalar-map `additional_contexts`, scalar/long `context`, ordered raw `cache_from`/`cache_to`/`entitlements`, non-empty `dockerfile`, exact-string `dockerfile_inline`, Build-specific list/map `extra_hosts` with scalar or nested-list raw addresses, opaque `target`/`network`/`isolation`, ordered raw `platforms`/`tags`, map/list `args`/`labels`, boolean/string `no_cache`/`sbom`, boolean/expression `privileged`/`pull`, raw-preserving `shm_size`, service-equivalent ordered `ulimits`, short/long `secrets`, and sensitive list/scalar-map `ssh` with form, sensitivity, provenance, duplicates, empties, reset/override, and partial recovery.
+Cache descriptors and platforms remain raw, `no_cache` and `sbom` strings remain uncoerced, and `pull` remains unresolved: none receives reference, path, credential, default, or build-execution inference. `sbom` does not parse generators or expose generated data.
+`build.ssh` does not parse identifiers, paths, PEM, sockets, agents, mounts, or builder behavior; all grant values remain redacted by default. `build.entitlements` has no allowlist, privilege, BuildKit/platform, execution, or runtime claim; Docker Compose v2.27.0 is a badge with earlier/removal boundaries unknown. `build.dockerfile_inline` retains exact strings and conflict evidence with `dockerfile` but performs no Containerfile parsing, path/context access, secret scanning, build, Docker, BuildKit, or runtime inference; Docker Compose v2.17.0 is a badge with earlier/removal boundaries unknown. `build.shm_size` does not infer builder defaults, host state, allocation, or runtime behavior. Every other build subkey remains an unmodeled source reference.
+`build.privileged` retains literal booleans or deferred dollar expressions. Ordinary quoted
+non-expression strings remain diagnosed source evidence rather than coerced booleans. Docker
+Compose v2.15.0 is a badge with earlier/removal boundaries unknown; no privilege, platform,
+runtime, or build behavior is inferred.
+`build.provenance` retains only YAML boolean or opaque string form and no attestation parsing, generation, publication, validation, builder execution, or runtime claim; Docker Compose v2.39.0 is a badge with earlier/removal boundaries unknown.
 
 ### Syntax-preserved-only service keys
 
@@ -136,23 +148,25 @@ Service logging's `driver` and ordered scalar `options` are typed.
 - `pre_start[]` hooks: `command`, `environment`, `image`, `per_replica`, `privileged`, `user`,
   and `working_dir`.
 
-`build` and `deploy` currently recognize their immediate keys as source field references, not as
-semantic value types. Their complete closed-key boundary is therefore still open:
+`deploy.endpoint_mode`, `deploy.labels`, `deploy.mode`, `deploy.placement`, `deploy.replicas`,
+and `deploy.restart_policy` are the native deploy values; every other deploy child remains a
+source field reference rather than a semantic value type. Placement retains ordered raw
+constraints/preferences and YAML integer/string maximum categories with merge provenance, but no
+constraint grammar, node selection, count/default, scheduling, runtime, or conversion
+interpretation. Restart-policy members retain raw spelling and member provenance without
+service-restart fallback/default/precedence, simulation, runtime, or conversion interpretation.
+map/list `build.additional_contexts`, `build.context`, map/list `build.args`, `build.labels`, and Build-specific `build.extra_hosts`, ordered raw `build.cache_from`/`build.cache_to`/`build.entitlements`, non-empty `build.dockerfile`, exact-string `build.dockerfile_inline`, opaque
+`build.target`/`build.network`/`build.isolation`, ordered raw `build.platforms`/`build.tags`, boolean/string `build.no_cache`/`build.sbom`/`build.provenance`, scalar/list `build.no_cache_filter`, boolean/expression `build.privileged`/`build.pull`, raw-preserving `build.shm_size`, service-equivalent `build.ulimits`, and short/long `build.secrets`
+are the promoted build values; their complete closed-key boundary remains open:
 
-- `build`: `additional_contexts`, `args`, `cache_from`, `cache_to`, `context`, `dockerfile`,
-  `dockerfile_inline`, `entitlements`, `extra_hosts`, `isolation`, `labels`, `network`,
-  `no_cache`, `no_cache_filter`, `platforms`, `privileged`, `provenance`, `pull`, `sbom`,
-  `secrets`, `shm_size`, `ssh`, `tags`, `target`, and `ulimits`;
-- `deploy`: `endpoint_mode`, `labels`, `mode`, `placement`, `replicas`, `resources`,
-  `restart_policy`, `rollback_config`, and `update_config`;
-- `deploy.placement`: `constraints`, `max_replicas_per_node`, and `preferences[].spread`;
+- `build`: all current immediate subkeys are promoted;
+- `deploy`: `resources`, `rollback_config`, and `update_config`;
 - `deploy.resources.limits`: `cpus`, `memory`, and `pids`;
 - `deploy.resources.reservations`: `cpus`, `devices`, `generic_resources`, and `memory`;
 - `deploy.resources.reservations.devices[]`: `capabilities`, `count`, `device_ids`, `driver`,
   and `options`;
 - `deploy.resources.reservations.generic_resources[].discrete_resource_spec`: `kind` and
   `value`;
-- `deploy.restart_policy`: `condition`, `delay`, `max_attempts`, and `window`; and
 - both `deploy.rollback_config` and `deploy.update_config`: `delay`, `failure_action`,
   `max_failure_ratio`, `monitor`, `order`, and `parallelism`.
 
@@ -234,8 +248,17 @@ parse-back tests are defined.
 - [x] Promote `ulimits` through recursive mapping merge, the effective project view, and safe
   generated output while retaining ordered names, single/range form, nested provenance,
   sensitivity, empty/reset/override state, and planned-only provider evidence.
-- [ ] Promote `build` and `deploy` into the effective project view before deepening their semantic
-  types.
+- [x] Promote the Build value family—`additional_contexts`, context, args, labels, Build-specific `extra_hosts`, raw `cache_from`/`cache_to`/`entitlements`, Dockerfile/inline Dockerfile/target/network/isolation/platforms/no_cache/privileged/sbom/pull/shm_size/tags, `ulimits`, and short/long `build.secrets`—with source form, sensitivity, provenance, recovery, and retained conflict evidence; remaining siblings stay unmodeled.
+- [x] Promote `deploy.endpoint_mode`, map/list `deploy.labels`, `deploy.mode`, and raw-preserving `deploy.replicas`
+  into the effective project view with provenance and nested unmodeled siblings; no container-label, integer/default,
+  mode-coupling, scheduling, runtime, or conversion semantics are inferred before deepening further deploy types.
+- [x] Promote deploy-specific `restart_policy` members through authored and effective views with
+  raw condition/duration/attempt spelling, member provenance, and nested malformed/reset evidence;
+  no service-restart fallback/default/precedence, simulation, runtime, or conversion behavior is
+  inferred.
+- [x] Promote deploy `placement` constraints, preferences, and max-replicas-per-node scalar
+  categories through authored and effective views with nested provenance and recovery, without
+  scheduling, node-selection, default, runtime, or conversion semantics.
 - [ ] Type all CPU, memory, PID, OOM, and block-I/O keys without applying host defaults.
 - [x] Type service `devices` through authored, Compose-Go-compatible target merge,
   effective-project, and generated boundaries while preserving mixed raw short/long forms,

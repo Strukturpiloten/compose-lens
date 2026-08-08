@@ -4,25 +4,999 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::{EntrySyntax, MergeOperation, MergedScalarKind, merge_project};
 use compose_lens::model::{
-    BooleanValue, Command, ComposeScalar, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING, DNS_OPT_DUPLICATE_ITEM,
-    DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING, DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM,
-    DNS_SEARCH_EXPECTED_STRING, DependencyCondition, Entrypoint, EnvironmentFileFormatKind, HealthcheckDuration,
-    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, HostnameKind, IdentityComponent, Labels,
-    LimitValue, Port, RestartPolicyKind, SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel, ServiceNetworks, StopGracePeriod,
-    ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceModeKind,
-    VOLUME_EXTERNAL_DRIVER_CONFIGURATION, VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeMount,
+    BUILD_DOCKERFILE_INLINE_CONFLICT, BooleanValue, BuildNoCache, BuildSbom, Command, ComposeScalar,
+    DEPLOY_ENDPOINT_MODE_PORTABILITY, DEPLOY_MODE_PORTABILITY, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING,
+    DNS_OPT_DUPLICATE_ITEM, DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING, DNS_SEARCH_DUPLICATE_ITEM,
+    DNS_SEARCH_EXPECTED_FORM, DNS_SEARCH_EXPECTED_STRING, DependencyCondition, DeployEndpointMode, DeployMode,
+    DeployPlacementMaxReplicasPerNode, DeployReplicas, DeployRestartCondition, Entrypoint, EnvironmentFileFormatKind,
+    HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, HostnameKind,
+    IdentityComponent, Labels, LimitValue, Port, RestartPolicyKind, SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel,
+    ServiceNetworks, StopGracePeriod, ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER,
+    UserNamespaceModeKind, VOLUME_EXTERNAL_DRIVER_CONFIGURATION, VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
-    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, PROJECT_MISSING_FIELD, ProjectDependsOn, ProjectDevice, ProjectDns,
-    ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectLoggingOptionValue, ProjectService, ProjectSysctls,
-    ProjectTmpfs, ProjectUlimitValue, ProjectValue, ProjectView, build_project_view,
+    PROJECT_EXPECTED_FORM, PROJECT_INVALID_VALUE, PROJECT_MISSING_FIELD, ProjectBuild, ProjectBuildAdditionalContexts,
+    ProjectBuildArgs, ProjectBuildExtraHostAddresses, ProjectBuildExtraHosts, ProjectBuildLabels,
+    ProjectBuildNoCacheFilter, ProjectBuildSsh, ProjectDependsOn, ProjectDevice, ProjectDns, ProjectDnsSearch,
+    ProjectEnvironmentFile, ProjectFieldReference, ProjectGrant, ProjectLabelsForm, ProjectLoggingOptionValue,
+    ProjectService, ProjectSysctls, ProjectTmpfs, ProjectUlimitValue, ProjectValue, ProjectView, build_project_view,
 };
 use compose_lens::resolution::SELECTION_PROJECT_MISMATCH;
 use compose_lens::source::SourceId;
 
 const BASE: &str = include_str!("../fixtures/processing/typed-project-view/compose.yaml");
 const OVERRIDE: &str = include_str!("../fixtures/processing/typed-project-view/compose.override.yaml");
+
+#[test]
+fn retains_effective_deploy_endpoint_mode_merge_provenance_and_unmodeled_children()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(2502);
+    let override_id = SourceId::new(2503);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    deploy: {endpoint_mode: vip}\n",
+                "  reset:\n    deploy: {endpoint_mode: vip}\n",
+                "  overridden:\n    deploy: {endpoint_mode: vip}\n",
+                "  sensitive:\n    deploy: {endpoint_mode: \"${ENDPOINT_MODE}\"}\n",
+                "  provider:\n    deploy: {endpoint_mode: mesh}\n",
+                "  siblings:\n    deploy: {endpoint_mode: dnsrr, replicas: 2, resources: {limits: {cpus: \"0.5\"}}}\n",
+                "  malformed:\n    deploy: {endpoint_mode: true, replicas: 4}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    deploy: {endpoint_mode: dnsrr}\n",
+                "  reset:\n    deploy: {endpoint_mode: !reset null}\n",
+                "  overridden:\n    deploy: !override {endpoint_mode: dnsrr, replicas: 3}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("ENDPOINT_MODE", "vip");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+    let deploy = |name| {
+        view.service(name)
+            .and_then(ProjectService::deploy)
+            .ok_or("effective deploy expected")
+    };
+    let replaced = deploy("replaced")?
+        .value()
+        .endpoint_mode()
+        .ok_or("replaced endpoint mode expected")?;
+    assert!(matches!(replaced.value(), DeployEndpointMode::Dnsrr));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let reset = deploy("reset")?;
+    assert!(reset.value().endpoint_mode().is_none());
+    assert!(reset.value().unmodeled_fields().iter().any(|field| {
+        field.path() == ["services", "reset", "deploy", "endpoint_mode"]
+            && field.provenance().operation() == MergeOperation::Reset
+    }));
+    let overridden = deploy("overridden")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden.value().endpoint_mode().map(ProjectValue::value),
+        Some(DeployEndpointMode::Dnsrr)
+    ));
+    assert!(matches!(
+        overridden.value().replicas().map(ProjectValue::value),
+        Some(DeployReplicas::YamlNumber(value)) if value == "3"
+    ));
+    let sensitive = deploy("sensitive")?
+        .value()
+        .endpoint_mode()
+        .ok_or("sensitive endpoint mode expected")?;
+    assert!(matches!(sensitive.value(), DeployEndpointMode::Vip) && sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("vip"));
+    assert!(matches!(
+        deploy("provider")?.value().endpoint_mode().map(ProjectValue::value),
+        Some(DeployEndpointMode::Other(value)) if value == "mesh"
+    ));
+    let siblings = deploy("siblings")?.value();
+    assert!(matches!(
+        siblings.endpoint_mode().map(ProjectValue::value),
+        Some(DeployEndpointMode::Dnsrr)
+    ));
+    assert!(matches!(
+        siblings.replicas().map(ProjectValue::value),
+        Some(DeployReplicas::YamlNumber(value)) if value == "2"
+    ));
+    assert_eq!(siblings.unmodeled_fields().len(), 1);
+    let malformed = deploy("malformed")?.value();
+    assert!(malformed.endpoint_mode().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "malformed", "deploy", "endpoint_mode"] })
+    );
+    assert_deploy_endpoint_mode_diagnostics(&result);
+    Ok(())
+}
+
+fn assert_deploy_endpoint_mode_diagnostics(result: &compose_lens::project::ProjectViewResult) {
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == DEPLOY_ENDPOINT_MODE_PORTABILITY)
+    );
+}
+
+#[test]
+fn retains_effective_deploy_mode_merge_provenance_and_unmodeled_siblings() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(2602);
+    let override_id = SourceId::new(2603);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    deploy: {mode: global}\n",
+                "  reset:\n    deploy: {mode: global}\n",
+                "  overridden:\n    deploy: {mode: global}\n",
+                "  sensitive:\n    deploy: {mode: \"${DEPLOY_MODE}\"}\n",
+                "  global-replicas:\n    deploy: {mode: global, replicas: 2}\n    scale: 3\n",
+                "  omitted:\n    deploy: {replicas: 2}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    deploy: {mode: replicated}\n",
+                "  reset:\n    deploy: {mode: !reset null}\n",
+                "  overridden:\n    deploy: !override {mode: replicated, placement: {}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("DEPLOY_MODE", "global");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+    let deploy = |name| {
+        view.service(name)
+            .and_then(ProjectService::deploy)
+            .ok_or("effective deploy expected")
+    };
+    let replaced = deploy("replaced")?
+        .value()
+        .mode()
+        .ok_or("replaced deploy mode expected")?;
+    assert!(matches!(replaced.value(), DeployMode::Replicated));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let reset = deploy("reset")?;
+    assert!(reset.value().mode().is_none());
+    assert!(
+        reset
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "reset", "deploy", "mode"]
+                && field.provenance().operation() == MergeOperation::Reset)
+    );
+    let overridden = deploy("overridden")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden.value().mode().map(ProjectValue::value),
+        Some(DeployMode::Replicated)
+    ));
+    assert!(overridden.value().placement().is_some_and(|placement| {
+        placement.value().constraints().is_none()
+            && placement.value().preferences().is_none()
+            && placement.value().max_replicas_per_node().is_none()
+    }));
+    let sensitive = deploy("sensitive")?.value().mode().ok_or("sensitive mode expected")?;
+    assert!(matches!(sensitive.value(), DeployMode::Global) && sensitive.is_sensitive());
+    let global = deploy("global-replicas")?.value();
+    assert!(matches!(
+        global.mode().map(ProjectValue::value),
+        Some(DeployMode::Global)
+    ));
+    assert!(matches!(
+        global.replicas().map(ProjectValue::value),
+        Some(DeployReplicas::YamlNumber(value)) if value == "2"
+    ));
+    assert!(view.service("global-replicas").is_some_and(|service| {
+        service
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "global-replicas", "scale"])
+    }));
+    let omitted = deploy("omitted")?.value();
+    assert!(omitted.mode().is_none());
+    assert!(matches!(
+        omitted.replicas().map(ProjectValue::value),
+        Some(DeployReplicas::YamlNumber(value)) if value == "2"
+    ));
+    assert!(
+        !result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == DEPLOY_MODE_PORTABILITY)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_replicas_merge_provenance_and_scalar_category() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(2702);
+    let override_id = SourceId::new(2703);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n  replaced:\n    deploy: {replicas: 2}\n  reset:\n    deploy: {replicas: 2}\n",
+                "  overridden:\n    deploy: {replicas: 2}\n  sensitive:\n    deploy: {replicas: \"${REPLICAS}\"}\n",
+                "  global:\n    deploy: {mode: global, replicas: 2}\n    scale: 3\n",
+                "  mode-only:\n    deploy: {mode: global}\n  invalid:\n    deploy:\n      replicas: false\n      mode: global\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n  replaced:\n    deploy: {replicas: 3}\n  reset:\n    deploy: {replicas: !reset null}\n",
+                "  overridden:\n    deploy: !override {replicas: 4}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("REPLICAS", "private");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+    let deploy = |name| {
+        view.service(name)
+            .and_then(ProjectService::deploy)
+            .ok_or("effective deploy expected")
+    };
+    let replaced = deploy("replaced")?
+        .value()
+        .replicas()
+        .ok_or("replaced replicas expected")?;
+    assert!(matches!(replaced.value(), DeployReplicas::YamlNumber(value) if value == "3"));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let reset = deploy("reset")?.value();
+    assert!(reset.replicas().is_none());
+    assert!(
+        reset
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "reset", "deploy", "replicas"]
+                && field.provenance().operation() == MergeOperation::Reset)
+    );
+    let overridden = deploy("overridden")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(
+        matches!(overridden.value().replicas().map(ProjectValue::value), Some(DeployReplicas::YamlNumber(value)) if value == "4")
+    );
+    let sensitive = deploy("sensitive")?
+        .value()
+        .replicas()
+        .ok_or("sensitive replicas expected")?;
+    assert!(
+        matches!(sensitive.value(), DeployReplicas::String(value) if value == "private") && sensitive.is_sensitive()
+    );
+    assert!(!format!("{sensitive:?}").contains("private"));
+    let global = deploy("global")?.value();
+    assert!(
+        matches!(global.replicas().map(ProjectValue::value), Some(DeployReplicas::YamlNumber(value)) if value == "2")
+    );
+    assert!(view.service("global").is_some_and(|service| {
+        service
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "global", "scale"])
+    }));
+    assert!(deploy("mode-only")?.value().replicas().is_none());
+    let invalid = deploy("invalid")?.value();
+    assert!(invalid.replicas().is_none() && invalid.mode().is_some());
+    assert!(
+        invalid
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "invalid", "deploy", "replicas"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_labels_forms_merge_provenance_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(2802);
+    let override_id = SourceId::new(2803);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n  map:\n    deploy:\n      labels: {kept: base, replaced: base, number: 2, sensitive: \"${LABEL}\"}\n",
+                "  list:\n    deploy: {labels: [bare, pair=base, pair=base]}\n  reset:\n    deploy: {labels: {old: base}}\n",
+                "  overridden:\n    deploy: {labels: {old: base}}\n  malformed:\n    deploy:\n      labels:\n        kept: value\n        bad: {nested: value}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n  map:\n    deploy: {labels: {replaced: override}}\n  list:\n    deploy: {labels: [pair=override]}\n",
+                "  reset:\n    deploy: {labels: !reset {}}\n  overridden:\n    deploy: {labels: !override {only: override}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("LABEL", "private");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+    let labels = |name| {
+        view.service(name)
+            .and_then(ProjectService::deploy)
+            .and_then(|deploy| deploy.value().labels())
+            .ok_or("effective deploy labels expected")
+    };
+    let map = labels("map")?;
+    assert_eq!(map.value().form(), ProjectLabelsForm::Map);
+    let replaced = map.value().get("replaced").ok_or("replaced deploy label expected")?;
+    assert!(matches!(replaced.value().value(), ComposeScalar::String(value) if value == "override"));
+    assert_eq!(replaced.value().provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.value().provenance().sources(), &[base_id, override_id]);
+    assert!(
+        matches!(map.value().get("number").map(|entry| entry.value().value()), Some(ComposeScalar::Number(value)) if value == "2")
+    );
+    assert_eq!(map.provenance().operation(), MergeOperation::Merged);
+    assert!(
+        map.value()
+            .get("sensitive")
+            .is_some_and(|entry| entry.value().is_sensitive())
+    );
+    assert!(!format!("{map:?}").contains("private"));
+    let list = labels("list")?;
+    assert_eq!(list.value().form(), ProjectLabelsForm::List);
+    assert_eq!(list.value().entries().len(), 4);
+    assert_eq!(list.value().entries()[0].syntax(), EntrySyntax::ListKeyOnly);
+    assert_eq!(
+        list.value().entries()[1].value().value(),
+        &ComposeScalar::String("base".into())
+    );
+    assert_eq!(
+        list.value().entries()[2].value().value(),
+        &ComposeScalar::String("base".into())
+    );
+    assert_eq!(
+        list.value().entries()[3].value().value(),
+        &ComposeScalar::String("override".into())
+    );
+    let reset = labels("reset")?;
+    assert!(
+        reset.value().entries().is_empty()
+            && reset.value().form() == ProjectLabelsForm::Map
+            && reset.provenance().operation() == MergeOperation::Reset
+    );
+    let overridden = labels("overridden")?;
+    assert!(overridden.value().get("old").is_none());
+    assert!(
+        overridden.value().get("only").is_some() && overridden.provenance().operation() == MergeOperation::Override
+    );
+    let malformed = labels("malformed")?;
+    assert_eq!(malformed.value().entries().len(), 1);
+    assert!(
+        view.service("malformed")
+            .and_then(ProjectService::deploy)
+            .is_some_and(|deploy| deploy
+                .value()
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", "malformed", "deploy", "labels"]))
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_restart_policy_member_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base = SourceId::new(2902);
+    let override_id = SourceId::new(2903);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            "services:\n  app:\n    deploy:\n      restart_policy: {condition: any, delay: 1s, max_attempts: 003, window: 1m}\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override.yaml", "workspace"),
+            "services:\n  app:\n    deploy:\n      restart_policy: {condition: on-failure, max_attempts: !reset null}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let policy = result
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(ProjectService::deploy)
+        .and_then(|deploy| deploy.value().restart_policy())
+        .ok_or("effective restart policy")?;
+    assert!(matches!(
+        policy.value().condition().map(ProjectValue::value),
+        Some(DeployRestartCondition::OnFailure)
+    ));
+    assert_eq!(
+        policy.value().condition().map(|value| value.provenance().operation()),
+        Some(MergeOperation::Replaced)
+    );
+    assert_eq!(policy.value().delay().map(|value| value.value().raw()), Some("1s"));
+    assert!(policy.value().max_attempts().is_none());
+    assert!(policy.value().unmodeled_fields().iter().any(|field| field.path()
+        == ["services", "app", "deploy", "restart_policy", "max_attempts"]
+        && field.provenance().operation() == MergeOperation::Reset));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_restart_policy_reset_override_invalid_and_sensitive_boundaries()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base = SourceId::new(2906);
+    let override_id = SourceId::new(2907);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  reset:\n    deploy: {restart_policy: {condition: any, delay: 1s}}\n",
+                "  overridden:\n    deploy: {restart_policy: {condition: any, delay: 1s}}\n",
+                "  sensitive:\n    deploy: {restart_policy: {delay: \"${RESTART_DELAY}\"}}\n",
+                "  malformed:\n    deploy: {restart_policy: {condition: any, max_attempts: 1.5, delay: []}}\n",
+                "  retained:\n    deploy: {restart_policy: {x-map: {nested: value}, future: [value]}}\n",
+                "  independent:\n    restart: always\n    deploy: {restart_policy: {condition: none}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  reset:\n    deploy: {restart_policy: !reset {}}\n",
+                "  overridden:\n    deploy: {restart_policy: !override {condition: on-failure, max_attempts: 003}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("RESTART_DELAY", "private-delay");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+    let policy = |service| {
+        view.service(service)
+            .and_then(ProjectService::deploy)
+            .and_then(|deploy| deploy.value().restart_policy())
+            .ok_or("effective deploy restart policy expected")
+    };
+
+    let reset = policy("reset")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().condition().is_none() && reset.value().delay().is_none());
+
+    let overridden = policy("overridden")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden.value().condition().map(ProjectValue::value),
+        Some(DeployRestartCondition::OnFailure)
+    ));
+    assert!(matches!(
+        overridden.value().max_attempts().map(ProjectValue::value),
+        Some(compose_lens::model::DeployRestartMaxAttempts::YamlNumber(value)) if value == "003"
+    ));
+
+    let sensitive = policy("sensitive")?.value().delay().ok_or("sensitive delay expected")?;
+    assert!(sensitive.is_sensitive());
+    assert_eq!(sensitive.value().raw(), "private-delay");
+    assert!(!format!("{sensitive:?}").contains("private-delay"));
+
+    let malformed = policy("malformed")?.value();
+    assert!(malformed.max_attempts().is_none() && malformed.delay().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "malformed", "deploy", "restart_policy", "max_attempts"] })
+    );
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "malformed", "deploy", "restart_policy", "delay"] })
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+
+    let retained = policy("retained")?.value().unmodeled_fields();
+    assert!(retained.iter().any(|field| {
+        field.path() == ["services", "retained", "deploy", "restart_policy", "x-map"] && field.is_extension()
+    }));
+    assert!(retained.iter().any(|field| {
+        field.path() == ["services", "retained", "deploy", "restart_policy", "future"] && !field.is_extension()
+    }));
+
+    let independent = view.service("independent").ok_or("independent service expected")?;
+    assert!(matches!(
+        independent
+            .restart()
+            .map(ProjectValue::value)
+            .map(compose_lens::model::RestartPolicy::kind),
+        Some(RestartPolicyKind::Always)
+    ));
+    assert!(matches!(
+        policy("independent")?.value().condition().map(ProjectValue::value),
+        Some(DeployRestartCondition::None)
+    ));
+    Ok(())
+}
+
+fn deploy_placement_project_view() -> Result<compose_lens::project::ProjectViewResult, Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3002);
+    let override_id = SourceId::new(3003);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    deploy:\n      mode: global\n      placement:\n        constraints: [zone=east, \"\", zone=east]\n        preferences: [{spread: rack}, {}]\n        max_replicas_per_node: 003\n",
+                "  child-reset:\n    deploy: {placement: {constraints: [old], preferences: [{spread: old}], max_replicas_per_node: 2}}\n",
+                "  whole-reset:\n    deploy: {placement: {constraints: [old]}}\n",
+                "  whole-override:\n    deploy: {placement: {constraints: [old], max_replicas_per_node: 2}}\n",
+                "  sensitive:\n    deploy: {placement: {constraints: [\"${PLACEMENT_CONSTRAINT}\"], preferences: [{spread: \"${PLACEMENT_SPREAD}\"}], max_replicas_per_node: \"${PLACEMENT_MAX}\"}}\n",
+                "  malformed:\n    deploy: {placement: {constraints: [valid, 1.5, {bad: value}, later], preferences: [{spread: 1}, [], {future: retained}], max_replicas_per_node: 1.5, x-retained: {nested: value}}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    deploy: {placement: {constraints: [zone=west, zone=east], preferences: [{spread: zone}, {spread: zone}], max_replicas_per_node: 004}}\n",
+                "  child-reset:\n    deploy: {placement: {constraints: !reset [], preferences: !reset [], max_replicas_per_node: !reset null}}\n",
+                "  whole-reset:\n    deploy: {placement: !reset {}}\n",
+                "  whole-override:\n    deploy: {placement: !override {constraints: [only], max_replicas_per_node: \"three\"}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("PLACEMENT_CONSTRAINT", "private-constraint");
+    let _ = environment.insert_sensitive("PLACEMENT_SPREAD", "private-spread");
+    let _ = environment.insert_sensitive("PLACEMENT_MAX", "private-max");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    Ok(build_project_view(
+        merged.project().ok_or("merged project expected")?,
+        None,
+    ))
+}
+
+fn effective_deploy_placement<'view>(
+    view: &'view ProjectView,
+    service: &str,
+) -> Result<&'view ProjectValue<compose_lens::project::ProjectDeployPlacement>, Box<dyn std::error::Error>> {
+    view.service(service)
+        .and_then(ProjectService::deploy)
+        .and_then(|deploy| deploy.value().placement())
+        .ok_or_else(|| "effective deploy placement expected".into())
+}
+
+#[test]
+fn retains_effective_deploy_placement_append_and_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_placement_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let merged = effective_deploy_placement(view, "merged")?;
+
+    assert!(matches!(
+        view.service("merged")
+            .and_then(ProjectService::deploy)
+            .and_then(|deploy| deploy.value().mode())
+            .map(ProjectValue::value),
+        Some(DeployMode::Global)
+    ));
+    let constraints = merged.value().constraints().ok_or("merged constraints expected")?;
+    assert_eq!(constraints.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(
+        constraints.provenance().sources(),
+        &[SourceId::new(3002), SourceId::new(3003)],
+    );
+    assert_eq!(
+        constraints
+            .value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["zone=east", "", "zone=east", "zone=west", "zone=east"]
+    );
+    assert_eq!(
+        constraints.value()[0].provenance().operation(),
+        MergeOperation::Authored
+    );
+    assert_eq!(constraints.value()[4].provenance().operation(), MergeOperation::Added);
+    let preferences = merged.value().preferences().ok_or("merged preferences expected")?;
+    assert_eq!(preferences.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(preferences.value().len(), 4);
+    assert_eq!(
+        preferences.value()[0].provenance().operation(),
+        MergeOperation::Authored
+    );
+    assert_eq!(preferences.value()[3].provenance().operation(), MergeOperation::Added);
+    assert_eq!(
+        preferences.value()[2]
+            .value()
+            .spread()
+            .map(ProjectValue::value)
+            .map(String::as_str),
+        Some("zone")
+    );
+    let maximum = merged
+        .value()
+        .max_replicas_per_node()
+        .ok_or("merged maximum expected")?;
+    assert!(matches!(maximum.value(), DeployPlacementMaxReplicasPerNode::YamlInteger(value) if value == "004"));
+    assert_eq!(maximum.provenance().operation(), MergeOperation::Replaced);
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_placement_reset_and_override() -> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_placement_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let child_reset = effective_deploy_placement(view, "child-reset")?.value();
+    assert!(
+        matches!(child_reset.constraints(), Some(value) if value.value().is_empty() && value.provenance().operation() == MergeOperation::Reset)
+    );
+    assert!(
+        matches!(child_reset.preferences(), Some(value) if value.value().is_empty() && value.provenance().operation() == MergeOperation::Reset)
+    );
+    assert!(child_reset.max_replicas_per_node().is_none());
+    assert!(child_reset.unmodeled_fields().iter().any(|field| {
+        field.path()
+            == [
+                "services",
+                "child-reset",
+                "deploy",
+                "placement",
+                "max_replicas_per_node",
+            ]
+            && field.provenance().operation() == MergeOperation::Reset
+    }));
+
+    let whole_reset = effective_deploy_placement(view, "whole-reset")?;
+    assert_eq!(whole_reset.provenance().operation(), MergeOperation::Reset);
+    assert!(whole_reset.value().constraints().is_none() && whole_reset.value().preferences().is_none());
+    let whole_override = effective_deploy_placement(view, "whole-override")?;
+    assert_eq!(whole_override.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        whole_override.value().constraints().map(ProjectValue::value),
+        Some(values) if values.len() == 1 && values[0].value() == "only"
+    ));
+    assert!(matches!(
+        whole_override.value().max_replicas_per_node().map(ProjectValue::value),
+        Some(DeployPlacementMaxReplicasPerNode::String(value)) if value == "three"
+    ));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_placement_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_placement_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let sensitive = effective_deploy_placement(view, "sensitive")?.value();
+    let constraint = &sensitive.constraints().ok_or("sensitive constraints expected")?.value()[0];
+    let spread = sensitive.preferences().ok_or("sensitive preferences expected")?.value()[0]
+        .value()
+        .spread()
+        .ok_or("sensitive spread expected")?;
+    let maximum = sensitive.max_replicas_per_node().ok_or("sensitive maximum expected")?;
+    assert!(constraint.is_sensitive() && spread.is_sensitive() && maximum.is_sensitive());
+    for value in [format!("{constraint:?}"), format!("{spread:?}"), format!("{maximum:?}")] {
+        for secret in ["private-constraint", "private-spread", "private-max"] {
+            assert!(!value.contains(secret), "sensitive placement value leaked: {secret}");
+        }
+    }
+
+    let malformed = effective_deploy_placement(view, "malformed")?.value();
+    assert!(matches!(malformed.constraints().map(ProjectValue::value), Some(values)
+        if values.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>() == ["valid", "later"]));
+    assert!(malformed.max_replicas_per_node().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "malformed", "deploy", "placement", "constraints"] })
+    );
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "malformed", "deploy", "placement", "preferences"] })
+    );
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "malformed", "deploy", "placement", "max_replicas_per_node"] })
+    );
+    assert!(malformed.unmodeled_fields().iter().any(|field| {
+        field.path() == ["services", "malformed", "deploy", "placement", "x-retained"] && field.is_extension()
+    }));
+    let preferences = malformed.preferences().ok_or("partial preferences expected")?;
+    assert!(preferences.value()[0].value().unmodeled_fields().iter().any(|field| {
+        field.path()
+            == [
+                "services",
+                "malformed",
+                "deploy",
+                "placement",
+                "preferences",
+                "0",
+                "spread",
+            ]
+    }));
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_privileged_merge_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let a = SourceId::new(2402);
+    let b = SourceId::new(2403);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            a,
+            DocumentOrigin::new("a", "w"),
+            "services:\n  replaced:\n    build: {privileged: false}\n  reset:\n    build: {privileged: true}\n  override:\n    build: {privileged: false}\n  sensitive:\n    build: {privileged: \"${PRIV}\"}\n  sensitive-boolean:\n    init: \"${INIT}\"\n  invalid:\n    build: {context: kept, privileged: \"yes\"}\n",
+        ),
+        DocumentInput::new(
+            b,
+            DocumentOrigin::new("b", "w"),
+            "services:\n  replaced:\n    build: {privileged: true}\n  reset:\n    build: !reset {}\n  override:\n    build: !override {privileged: true}\n",
+        ),
+    ])?;
+    let mut env = MapEnvironment::new();
+    let _ = env.insert_sensitive("PRIV", "true");
+    let _ = env.insert_sensitive("INIT", "true");
+    let interpolation = loaded.interpolate(&env);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let view = result.view().ok_or("view")?;
+    let definition = |n| {
+        view.service(n)
+            .and_then(ProjectService::build)
+            .and_then(|b| match b.value() {
+                ProjectBuild::Definition(d) => Some(d),
+                _ => None,
+            })
+            .ok_or("def")
+    };
+    let replaced = definition("replaced")?.privileged().ok_or("replaced")?;
+    assert!(
+        matches!(replaced.value(), BooleanValue::Literal(true))
+            && replaced.provenance().operation() == MergeOperation::Replaced
+    );
+    assert!(definition("reset")?.privileged().is_none());
+    let override_build = view
+        .service("override")
+        .and_then(ProjectService::build)
+        .ok_or("override")?;
+    assert_eq!(override_build.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        definition("override")?.privileged().map(ProjectValue::value),
+        Some(BooleanValue::Literal(true))
+    ));
+    assert!(
+        definition("sensitive")?
+            .privileged()
+            .is_some_and(|value| value.is_sensitive() && value.value() == &BooleanValue::Literal(true))
+    );
+    assert!(matches!(
+        view.service("sensitive-boolean")
+            .and_then(ProjectService::init)
+            .map(ProjectValue::value),
+        Some(BooleanValue::Literal(true))
+    ));
+    assert!(
+        view.service("sensitive-boolean")
+            .and_then(ProjectService::init)
+            .is_some_and(ProjectValue::is_sensitive)
+    );
+    let invalid = definition("invalid")?;
+    assert!(
+        invalid.privileged().is_none()
+            && invalid.context().is_some()
+            && invalid
+                .unmodeled_fields()
+                .iter()
+                .any(|f| f.path() == ["services", "invalid", "privileged"])
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_no_cache_filter_merge_forms_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let a = SourceId::new(2302);
+    let b = SourceId::new(2303);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            a,
+            DocumentOrigin::new("a", "w"),
+            "services:\n  append:\n    build: {no_cache_filter: [one, one]}\n  mixed:\n    build: {no_cache_filter: [one]}\n  reset:\n    build: {no_cache_filter: [one]}\n  override:\n    build: {no_cache_filter: [one]}\n  sensitive:\n    build: {no_cache_filter: [\"${FILTER}\"]}\n  bad:\n    build: {context: kept, no_cache_filter: [one, false]}\n",
+        ),
+        DocumentInput::new(
+            b,
+            DocumentOrigin::new("b", "w"),
+            "services:\n  append:\n    build: {no_cache_filter: [two, one]}\n  mixed:\n    build: {no_cache_filter: scalar}\n  reset:\n    build: !reset {}\n  override:\n    build: !override {no_cache_filter: scalar}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("FILTER", "private");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let view = result.view().ok_or("view")?;
+    let definition = |n| {
+        view.service(n)
+            .and_then(ProjectService::build)
+            .and_then(|b| match b.value() {
+                ProjectBuild::Definition(d) => Some(d),
+                _ => None,
+            })
+            .ok_or("definition")
+    };
+    let append = definition("append")?.no_cache_filter().ok_or("append")?;
+    assert!(
+        matches!(append.value(),ProjectBuildNoCacheFilter::List(v) if v.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>()==["one","one","two","one"])
+    );
+    assert_eq!(append.provenance().operation(), MergeOperation::Appended);
+    assert!(
+        matches!(definition("mixed")?.no_cache_filter().map(ProjectValue::value),Some(ProjectBuildNoCacheFilter::Scalar(v))if v.value()=="scalar")
+    );
+    assert!(definition("reset")?.no_cache_filter().is_none());
+    let override_build = view
+        .service("override")
+        .and_then(ProjectService::build)
+        .ok_or("override")?;
+    assert_eq!(override_build.provenance().operation(), MergeOperation::Override);
+    let override_filter = definition("override")?.no_cache_filter().ok_or("override filter")?;
+    assert!(matches!(override_filter.value(), ProjectBuildNoCacheFilter::Scalar(value) if value.value() == "scalar"));
+    assert!(
+        definition("sensitive")?
+            .no_cache_filter()
+            .is_some_and(ProjectValue::is_sensitive)
+    );
+    let bad = definition("bad")?;
+    assert!(
+        bad.context().is_some()
+            && matches!(bad.no_cache_filter().map(ProjectValue::value),Some(ProjectBuildNoCacheFilter::List(v))if v.len()==1)
+    );
+    assert!(
+        bad.unmodeled_fields()
+            .iter()
+            .any(|f| f.path() == ["services", "bad", "no_cache_filter"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code() == compose_lens::model::BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM)
+            .count()
+            >= 2
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_provenance_merge_reset_override_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::BuildProvenance;
+    let base = SourceId::new(2203);
+    let over = SourceId::new(2204);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            "services:\n  replaced:\n    build: {provenance: true}\n  reset:\n    build: {provenance: false}\n  override:\n    build: {provenance: false}\n  sensitive:\n    build: {provenance: \"${MODE}\"}\n  invalid:\n    build: {context: retained, provenance: 1}\n",
+        ),
+        DocumentInput::new(
+            over,
+            DocumentOrigin::new("override.yaml", "workspace"),
+            "services:\n  replaced:\n    build: {provenance: \"mode=max\"}\n  reset:\n    build: !reset {}\n  override:\n    build: !override {provenance: true}\n",
+        ),
+    ])?;
+    let mut env = MapEnvironment::new();
+    let _ = env.insert_sensitive("MODE", "mode=min");
+    let interpolation = loaded.interpolate(&env);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged expected")?, None);
+    let view = result.view().ok_or("view expected")?;
+    let definition = |name| {
+        view.service(name)
+            .and_then(ProjectService::build)
+            .and_then(|b| match b.value() {
+                ProjectBuild::Definition(d) => Some(d),
+                _ => None,
+            })
+            .ok_or("definition expected")
+    };
+    let replaced = definition("replaced")?.provenance().ok_or("replaced expected")?;
+    assert!(matches!(replaced.value(), BuildProvenance::String(v) if v == "mode=max"));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base, over]);
+    assert!(definition("reset")?.provenance().is_none());
+    let override_build = view
+        .service("override")
+        .and_then(ProjectService::build)
+        .ok_or("override expected")?;
+    assert_eq!(override_build.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        definition("override")?.provenance().map(ProjectValue::value),
+        Some(BuildProvenance::Boolean(true))
+    ));
+    let sensitive = definition("sensitive")?.provenance().ok_or("sensitive expected")?;
+    assert!(sensitive.is_sensitive() && matches!(sensitive.value(), BuildProvenance::String(v) if v == "mode=min"));
+    let invalid = definition("invalid")?;
+    assert!(
+        invalid.provenance().is_none()
+            && invalid.context().is_some()
+            && invalid
+                .unmodeled_fields()
+                .iter()
+                .any(|f| f.path() == ["services", "invalid", "provenance"])
+    );
+    Ok(())
+}
 
 #[test]
 fn retains_merged_interpolated_and_reset_network_boolean_definitions() -> Result<(), Box<dyn std::error::Error>> {
@@ -98,6 +1072,224 @@ fn retains_merged_interpolated_and_reset_network_boolean_definitions() -> Result
     let reset = reset.definition().value();
     assert!(reset.internal().is_none() && reset.enable_ipv4().is_none() && reset.enable_ipv6().is_none());
     Ok(())
+}
+
+#[test]
+fn retains_effective_sensitive_build_ssh_forms_merge_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(998);
+    let override_id = SourceId::new(999);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  mapping:\n    build:\n      ssh:\n        default: \"${BASE_SSH}\"\n        retries: 2\n        enabled: true\n        empty: null\n",
+                "  list:\n    build:\n      ssh: [default, default]\n",
+                "  reset:\n    build:\n      ssh: [old]\n",
+                "  mixed:\n    build:\n      ssh: [old]\n",
+                "  malformed:\n    build:\n      ssh: [before, false, {bad: value}, later]\n",
+                "  wrong:\n    build:\n      ssh: default\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  mapping:\n    build:\n      ssh:\n        default: \"${NEXT_SSH}\"\n        added: next\n",
+                "  list:\n    build:\n      ssh: [\"id=deploy,src=${NEXT_SSH}\"]\n",
+                "  reset:\n    build:\n      ssh: !reset []\n",
+                "  mixed:\n    build:\n      ssh:\n        default: new\n",
+                "  malformed:\n    build:\n      ssh: [\"id=interpolated,src=${NEXT_SSH}\", []]\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("BASE_SSH", "private-base-ssh");
+    let _ = environment.insert("NEXT_SSH", "private-next-ssh");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    let mapping = build_definition(view, "mapping")?.ssh().ok_or("mapping ssh expected")?;
+    assert!(mapping.is_sensitive());
+    assert_eq!(mapping.provenance().operation(), MergeOperation::Merged);
+    let ProjectBuildSsh::Map(entries) = mapping.value() else {
+        return Err("mapping ssh form expected".into());
+    };
+    assert_eq!(
+        entries.iter().map(|entry| entry.name().value()).collect::<Vec<_>>(),
+        ["default", "retries", "enabled", "empty", "added"]
+    );
+    assert!(
+        entries
+            .iter()
+            .all(|entry| entry.name().is_sensitive() && entry.value().is_sensitive())
+    );
+    for rendered in [
+        format!("{mapping:?}"),
+        format!("{entries:?}"),
+        format!("{:?}", result.diagnostics()),
+    ] {
+        for secret in [
+            "default",
+            "private-base-ssh",
+            "private-next-ssh",
+            "id=deploy",
+            "id=interpolated",
+        ] {
+            assert!(!rendered.contains(secret), "sensitive effective value leaked: {secret}");
+        }
+    }
+
+    let list = build_definition(view, "list")?.ssh().ok_or("list ssh expected")?;
+    assert_eq!(list.provenance().operation(), MergeOperation::Appended);
+    assert!(matches!(list.value(), ProjectBuildSsh::List(items)
+        if items.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>()
+            == ["default", "default", "id=deploy,src=private-next-ssh"]
+            && items.iter().all(ProjectValue::is_sensitive)));
+    assert!(!format!("{list:?}").contains("private-next-ssh"));
+
+    let reset = build_definition(view, "reset")?.ssh().ok_or("reset ssh expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.value(), ProjectBuildSsh::List(items) if items.is_empty()));
+    let mixed = build_definition(view, "mixed")?.ssh().ok_or("mixed ssh expected")?;
+    assert!(matches!(mixed.value(), ProjectBuildSsh::Map(entries) if entries.len() == 1));
+
+    let malformed = build_definition(view, "malformed")?
+        .ssh()
+        .ok_or("malformed ssh expected")?;
+    assert!(matches!(malformed.value(), ProjectBuildSsh::List(items)
+        if items.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>()
+            == ["before", "later", "id=interpolated,src=private-next-ssh"]));
+    for service in ["malformed", "wrong"] {
+        assert!(
+            build_definition(view, service)?
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", service, "ssh"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_inline_dockerfiles_with_merge_provenance_and_conflicts() -> Result<(), Box<dyn std::error::Error>>
+{
+    let base_id = SourceId::new(2006);
+    let override_id = SourceId::new(2007);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  inline:\n    build:\n      dockerfile_inline: |-\n        FROM ${BASE_IMAGE}\n        RUN echo inline\n",
+                "  sensitive:\n    build: {dockerfile_inline: \"${BASE_IMAGE}\"}\n",
+                "  empty:\n    build: {dockerfile_inline: \"\"}\n",
+                "  replaced:\n    build: {dockerfile_inline: FROM base}\n",
+                "  reset:\n    build: {dockerfile_inline: FROM reset}\n",
+                "  overridden:\n    build: {dockerfile_inline: FROM old}\n",
+                "  malformed:\n    build: {context: retained, dockerfile_inline: false}\n",
+                "  conflicting:\n    build: {dockerfile: Dockerfile, dockerfile_inline: FROM scratch}\n",
+                "  cross-conflicting:\n    build: {dockerfile: Dockerfile}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build: {dockerfile_inline: \"${REPLACED_IMAGE}\"}\n",
+                "  reset:\n    build: !reset {}\n",
+                "  overridden:\n    build: !override {dockerfile_inline: FROM override}\n",
+                "  cross-conflicting:\n    build: {dockerfile_inline: FROM scratch}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("BASE_IMAGE", "private/base");
+    let _ = environment.insert_sensitive("REPLACED_IMAGE", "private/replaced");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    let inline = inline_dockerfile(view, "inline")?;
+    assert_eq!(inline.value(), "FROM ${BASE_IMAGE}\nRUN echo inline");
+    assert!(!inline.is_sensitive());
+    let sensitive = inline_dockerfile(view, "sensitive")?;
+    assert_eq!(sensitive.value(), "private/base");
+    assert!(sensitive.is_sensitive());
+    assert_eq!(
+        inline_dockerfile(view, "empty")?.value(),
+        "",
+        "explicit empty inline Dockerfile must remain distinct from omission"
+    );
+    let replaced = inline_dockerfile(view, "replaced")?;
+    assert_eq!(replaced.value(), "private/replaced");
+    assert!(replaced.is_sensitive());
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let reset = build_definition(view, "reset")?;
+    assert!(reset.dockerfile_inline().is_none());
+    let overridden_build = view
+        .service("overridden")
+        .and_then(ProjectService::build)
+        .ok_or("overridden build expected")?;
+    assert_eq!(overridden_build.provenance().operation(), MergeOperation::Override);
+    let ProjectBuild::Definition(overridden_definition) = overridden_build.value() else {
+        return Err("overridden build definition expected".into());
+    };
+    let overridden = overridden_definition
+        .dockerfile_inline()
+        .ok_or("overridden inline Dockerfile expected")?;
+    assert_eq!(overridden.value(), "FROM override");
+
+    let malformed = build_definition(view, "malformed")?;
+    assert!(malformed.context().is_some() && malformed.dockerfile_inline().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "dockerfile_inline"])
+    );
+    for service in ["conflicting", "cross-conflicting"] {
+        let definition = build_definition(view, service)?;
+        assert!(definition.dockerfile().is_some() && definition.dockerfile_inline().is_some());
+    }
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == BUILD_DOCKERFILE_INLINE_CONFLICT)
+            .count(),
+        2
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_INVALID_VALUE)
+    );
+    Ok(())
+}
+
+fn inline_dockerfile<'a>(
+    view: &'a ProjectView,
+    service: &str,
+) -> Result<&'a ProjectValue<String>, Box<dyn std::error::Error>> {
+    build_definition(view, service)?
+        .dockerfile_inline()
+        .ok_or_else(|| format!("{service} inline Dockerfile expected").into())
 }
 
 #[test]
@@ -5062,5 +6254,2352 @@ fn retains_merged_privileged_replacement_and_provenance() -> Result<(), Box<dyn 
     assert_eq!(privileged.provenance().operation(), MergeOperation::Replaced);
     assert_source_ids(privileged.provenance().sources(), &[base_id, override_id]);
 
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_context_forms_interpolation_provenance_and_unmodeled_siblings()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(694);
+    let override_id = SourceId::new(695);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  short:\n    build: \"${SHORT_CONTEXT}\"\n",
+                "  long:\n",
+                "    build:\n",
+                "      context: \"${LONG_CONTEXT}\"\n",
+                "      dockerfile: Dockerfile\n",
+                "  merged:\n",
+                "    build:\n",
+                "      context: ./base\n",
+                "      dockerfile: Basefile\n",
+                "      target: base-stage\n",
+                "  reset:\n    build: {context: ./reset}\n",
+                "  overridden:\n    build: {context: ./old}\n",
+                "  malformed:\n    build: {context: [], dockerfile: Basefile, target: base-stage}\n",
+                "  conflicting:\n    build: {dockerfile: Dockerfile, dockerfile_inline: FROM scratch}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    build: {context: \"${MERGED_CONTEXT}\", dockerfile: \"${MERGED_DOCKERFILE}\", target: \"${MERGED_TARGET}\"}\n",
+                "  reset:\n    build: !reset {}\n",
+                "  overridden:\n    build: !override {context: ./new, dockerfile: Dockerfile.release, target: \"\"}\n",
+                "  malformed:\n    build: {dockerfile: [], target: []}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("SHORT_CONTEXT", "private-short");
+    let _ = environment.insert_sensitive("LONG_CONTEXT", "private-long");
+    let _ = environment.insert_sensitive("MERGED_CONTEXT", "private-merged");
+    let _ = environment.insert_sensitive("MERGED_DOCKERFILE", "private-Dockerfile");
+    let _ = environment.insert_sensitive("MERGED_TARGET", "private-target");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    assert_effective_build_contexts(&result, base_id, override_id)
+}
+
+fn assert_effective_build_contexts(
+    result: &compose_lens::project::ProjectViewResult,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let view = result.view().ok_or("project view expected")?;
+
+    let short = view
+        .service("short")
+        .and_then(ProjectService::build)
+        .ok_or("short build expected")?;
+    let ProjectBuild::Context(context) = short.value() else {
+        return Err("short build context expected".into());
+    };
+    assert_eq!(context.value(), "private-short");
+    assert!(context.is_sensitive() && short.is_sensitive());
+    assert_eq!(short.provenance().operation(), MergeOperation::Authored);
+    assert_source_ids(short.provenance().sources(), &[base_id]);
+    assert!(!format!("{short:?}").contains("private-short"));
+
+    let long = view
+        .service("long")
+        .and_then(ProjectService::build)
+        .ok_or("long build expected")?;
+    assert!(long.is_sensitive());
+    let ProjectBuild::Definition(long) = long.value() else {
+        return Err("long build definition expected".into());
+    };
+    let long_context = long.context().ok_or("long build context expected")?;
+    assert_eq!(long_context.value(), "private-long");
+    assert!(long_context.is_sensitive());
+    assert_eq!(
+        long.dockerfile().map(ProjectValue::value).map(String::as_str),
+        Some("Dockerfile")
+    );
+    assert!(long.unmodeled_fields().is_empty());
+
+    let merged = view
+        .service("merged")
+        .and_then(ProjectService::build)
+        .ok_or("merged build expected")?;
+    assert!(merged.is_sensitive());
+    assert_eq!(merged.provenance().operation(), MergeOperation::Merged);
+    assert_source_ids(merged.provenance().sources(), &[base_id, override_id]);
+    let ProjectBuild::Definition(merged) = merged.value() else {
+        return Err("merged build definition expected".into());
+    };
+    let merged_context = merged.context().ok_or("merged context expected")?;
+    assert_eq!(merged_context.value(), "private-merged");
+    assert!(merged_context.is_sensitive());
+    assert_eq!(merged_context.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(merged_context.provenance().sources(), &[base_id, override_id]);
+    let merged_dockerfile = merged.dockerfile().ok_or("merged Dockerfile expected")?;
+    assert_eq!(merged_dockerfile.value(), "private-Dockerfile");
+    assert!(merged_dockerfile.is_sensitive());
+    assert_eq!(merged_dockerfile.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(merged_dockerfile.provenance().sources(), &[base_id, override_id]);
+    let merged_target = merged.target().ok_or("merged target expected")?;
+    assert_eq!(merged_target.value(), "private-target");
+    assert!(merged_target.is_sensitive());
+    assert_eq!(merged_target.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(merged_target.provenance().sources(), &[base_id, override_id]);
+
+    let reset = view
+        .service("reset")
+        .and_then(ProjectService::build)
+        .ok_or("reset build expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.value(), ProjectBuild::Definition(definition) if definition.context().is_none()));
+
+    let overridden = view
+        .service("overridden")
+        .and_then(ProjectService::build)
+        .ok_or("overridden build expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    let ProjectBuild::Definition(overridden) = overridden.value() else {
+        return Err("overridden build definition expected".into());
+    };
+    assert_eq!(
+        overridden.context().map(ProjectValue::value).map(String::as_str),
+        Some("./new")
+    );
+    assert_eq!(
+        overridden.dockerfile().map(ProjectValue::value).map(String::as_str),
+        Some("Dockerfile.release")
+    );
+    assert_eq!(
+        overridden.target().map(ProjectValue::value).map(String::as_str),
+        Some("")
+    );
+    assert!(overridden.unmodeled_fields().is_empty());
+
+    assert_malformed_and_conflicting_builds(view, result, base_id, override_id)
+}
+
+fn assert_malformed_and_conflicting_builds(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let malformed = view
+        .service("malformed")
+        .and_then(ProjectService::build)
+        .ok_or("partial malformed build expected")?;
+    assert!(matches!(malformed.value(), ProjectBuild::Definition(definition)
+        if definition.context().is_none() && definition.dockerfile().is_none() && definition.target().is_none() && definition.unmodeled_fields().len() == 3));
+    let ProjectBuild::Definition(malformed) = malformed.value() else {
+        return Err("malformed build definition expected".into());
+    };
+    let malformed_dockerfile = malformed
+        .unmodeled_fields()
+        .iter()
+        .find(|field| field.path() == ["services", "malformed", "dockerfile"])
+        .ok_or("malformed Dockerfile evidence expected")?;
+    assert_eq!(malformed_dockerfile.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(malformed_dockerfile.provenance().sources(), &[base_id, override_id]);
+    let malformed_target = malformed
+        .unmodeled_fields()
+        .iter()
+        .find(|field| field.path() == ["services", "malformed", "target"])
+        .ok_or("malformed target evidence expected")?;
+    assert_eq!(malformed_target.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(malformed_target.provenance().sources(), &[base_id, override_id]);
+    let conflicting = view
+        .service("conflicting")
+        .and_then(ProjectService::build)
+        .ok_or("conflicting build expected")?;
+    let ProjectBuild::Definition(conflicting) = conflicting.value() else {
+        return Err("conflicting build definition expected".into());
+    };
+    assert_eq!(
+        conflicting.dockerfile().map(ProjectValue::value).map(String::as_str),
+        Some("Dockerfile")
+    );
+    assert_eq!(
+        conflicting
+            .dockerfile_inline()
+            .map(ProjectValue::value)
+            .map(String::as_str),
+        Some("FROM scratch")
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == BUILD_DOCKERFILE_INLINE_CONFLICT && diagnostic.labels().len() == 2)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_tags_order_duplicates_and_partial_malformed_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(722);
+    let override_id = SourceId::new(723);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n      tags:\n        - \"example/app:${BASE_TAG}\"\n        - example/app:shared\n        - example/app:shared\n",
+                "  reset:\n    build:\n      tags:\n        - example/app:old\n",
+                "  overridden:\n    build:\n      tags:\n        - example/app:old\n",
+                "  malformed:\n    build:\n      tags:\n        - example/app:base\n        - {}\n",
+                "  nonsequence:\n    build:\n      tags: {}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n      tags:\n        - example/app:shared\n        - \"example/app:${NEXT_TAG}\"\n",
+                "  reset:\n    build:\n      tags: !reset []\n",
+                "  overridden:\n    build:\n      tags: !override [example/app:new, example/app:new]\n",
+                "  malformed:\n    build:\n      tags:\n        - \"example/app:${MALFORMED_TAG}\"\n        - []\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("BASE_TAG", "private-base");
+    let _ = environment.insert_sensitive("NEXT_TAG", "private-next");
+    let _ = environment.insert_sensitive("MALFORMED_TAG", "private-malformed");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    let appended = build_tags(view, "appended")?;
+    assert_appended_build_tags(appended, base_id, override_id);
+    let reset = build_tags(view, "reset")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().is_empty());
+    let overridden = build_tags(view, "overridden")?;
+    assert_overridden_build_tags(overridden);
+    let malformed = build_definition(view, "malformed")?;
+    assert_malformed_build_tags(malformed, base_id, override_id)?;
+    let nonsequence = build_definition(view, "nonsequence")?;
+    assert!(nonsequence.tags().is_none());
+    assert!(
+        nonsequence
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "nonsequence", "tags"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+fn assert_appended_build_tags(
+    tags: &ProjectValue<Vec<ProjectValue<String>>>,
+    base_id: SourceId,
+    override_id: SourceId,
+) {
+    assert_eq!(tags.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(tags.provenance().sources(), &[base_id, override_id]);
+    assert!(tags.is_sensitive());
+    assert_eq!(
+        tags.value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "example/app:private-base",
+            "example/app:shared",
+            "example/app:shared",
+            "example/app:shared",
+            "example/app:private-next",
+        ]
+    );
+    assert!(tags.value()[0].is_sensitive());
+    assert_eq!(tags.value()[3].provenance().operation(), MergeOperation::Added);
+    assert_source_ids(tags.value()[3].provenance().sources(), &[override_id]);
+    assert!(!format!("{tags:?}").contains("private-base"));
+}
+
+fn assert_overridden_build_tags(tags: &ProjectValue<Vec<ProjectValue<String>>>) {
+    assert_eq!(tags.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        tags.value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["example/app:new", "example/app:new"]
+    );
+}
+
+fn assert_malformed_build_tags(
+    definition: &compose_lens::project::ProjectBuildDefinition,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let tags = definition.tags().ok_or("partial malformed build tags expected")?;
+    assert_eq!(tags.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(
+        tags.value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["example/app:base", "example/app:private-malformed"]
+    );
+    assert!(tags.value()[1].is_sensitive());
+    let evidence = definition
+        .unmodeled_fields()
+        .iter()
+        .find(|field| field.path() == ["services", "malformed", "tags"])
+        .ok_or("malformed build tags evidence expected")?;
+    assert_eq!(evidence.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(evidence.provenance().sources(), &[base_id, override_id]);
+    assert!(evidence.is_sensitive());
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_platforms_order_duplicates_and_partial_malformed_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(7230);
+    let override_id = SourceId::new(7231);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n      platforms:\n        - \"${BASE_PLATFORM}\"\n        - linux/amd64\n        - linux/amd64\n",
+                "  empty:\n    build:\n      platforms: []\n",
+                "  omitted:\n    build: {context: .}\n",
+                "  reset:\n    build:\n      platforms: [linux/amd64]\n",
+                "  overridden:\n    build:\n      platforms: [linux/amd64]\n",
+                "  malformed:\n    build:\n      platforms: [linux/arm64, {}]\n",
+                "  nonsequence:\n    build:\n      platforms: {}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n      platforms: [linux/amd64, \"${NEXT_PLATFORM}\"]\n",
+                "  reset:\n    build:\n      platforms: !reset []\n",
+                "  overridden:\n    build:\n      platforms: !override [linux/arm64, linux/arm64]\n",
+                "  malformed:\n    build:\n      platforms: [\"${MALFORMED_PLATFORM}\", []]\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("BASE_PLATFORM", "private-base");
+    let _ = environment.insert_sensitive("NEXT_PLATFORM", "private-next");
+    let _ = environment.insert_sensitive("MALFORMED_PLATFORM", "private-malformed");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_appended_build_platforms(build_platforms(view, "appended")?, base_id, override_id);
+
+    let empty = build_platforms(view, "empty")?;
+    assert!(empty.value().is_empty());
+    assert_eq!(empty.provenance().operation(), MergeOperation::Authored);
+    assert!(build_definition(view, "omitted")?.platforms().is_none());
+    let reset = build_platforms(view, "reset")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().is_empty());
+    let overridden = build_platforms(view, "overridden")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        overridden
+            .value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["linux/arm64", "linux/arm64"]
+    );
+    let malformed = build_definition(view, "malformed")?;
+    let recovered = malformed.platforms().ok_or("recovered build platforms expected")?;
+    assert_eq!(recovered.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(
+        recovered
+            .value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["linux/arm64", "private-malformed"]
+    );
+    assert!(recovered.value()[1].is_sensitive());
+    let evidence = malformed
+        .unmodeled_fields()
+        .iter()
+        .find(|field| field.path() == ["services", "malformed", "platforms"])
+        .ok_or("malformed build platforms evidence expected")?;
+    assert_eq!(evidence.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(evidence.provenance().sources(), &[base_id, override_id]);
+    assert!(evidence.is_sensitive());
+    let nonsequence = build_definition(view, "nonsequence")?;
+    assert!(nonsequence.platforms().is_none());
+    assert!(
+        nonsequence
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "nonsequence", "platforms"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+fn assert_appended_build_platforms(
+    platforms: &ProjectValue<Vec<ProjectValue<String>>>,
+    base_id: SourceId,
+    override_id: SourceId,
+) {
+    assert_eq!(platforms.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(platforms.provenance().sources(), &[base_id, override_id]);
+    assert!(platforms.is_sensitive());
+    assert_eq!(
+        platforms
+            .value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "private-base",
+            "linux/amd64",
+            "linux/amd64",
+            "linux/amd64",
+            "private-next"
+        ]
+    );
+    assert!(platforms.value()[0].is_sensitive());
+    assert_eq!(platforms.value()[0].provenance().operation(), MergeOperation::Authored);
+    assert_eq!(
+        platforms.value()[0]
+            .effective_source()
+            .map(compose_lens::source::SourceSpan::source_id),
+        Some(base_id)
+    );
+    assert_eq!(platforms.value()[3].provenance().operation(), MergeOperation::Added);
+    assert_eq!(
+        platforms.value()[3]
+            .effective_source()
+            .map(compose_lens::source::SourceSpan::source_id),
+        Some(override_id)
+    );
+    assert!(platforms.value()[4].is_sensitive());
+    assert!(!format!("{platforms:?}").contains("private-base"));
+}
+
+#[test]
+fn retains_effective_build_secrets_with_grant_provenance_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(7240);
+    let override_id = SourceId::new(7241);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "secrets:\n  short-secret: {}\n  long-secret: {}\n  override-secret: {}\n",
+                "services:\n",
+                "  appended:\n    build:\n      secrets:\n",
+                "        - \"${BUILD_SECRET}\"\n",
+                "        - source: long-secret\n          target: /run/secrets/build\n          uid: \"01000\"\n          gid: 1001\n          mode: \"0440\"\n",
+                "        - short-secret\n",
+                "  reset:\n    build: {secrets: [short-secret]}\n",
+                "  overridden:\n    build: {secrets: [short-secret]}\n",
+                "  malformed:\n    build:\n      secrets:\n        - source: []\n          target: /run/secrets/bad\n        - short-secret\n        - []\n",
+                "  nonsequence:\n    build: {secrets: {source: short-secret}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n      secrets:\n",
+                "        - short-secret\n",
+                "        - source: override-secret\n          target: /run/secrets/override\n          uid: \"2000\"\n          gid: \"2001\"\n          mode: 0400\n",
+                "  reset:\n    build: {secrets: !reset []}\n",
+                "  overridden:\n    build: {secrets: !override [override-secret, override-secret]}\n",
+                "  malformed:\n    build:\n      secrets:\n        - source: \"${BUILD_LONG_SECRET}\"\n          target: /run/secrets/later\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("BUILD_SECRET", "private-short-secret");
+    let _ = environment.insert_sensitive("BUILD_LONG_SECRET", "private-long-secret");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    assert_effective_build_secrets(&result, base_id, override_id)
+}
+
+fn assert_effective_build_secrets(
+    result: &compose_lens::project::ProjectViewResult,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let view = result.view().ok_or("project view expected")?;
+
+    assert!(
+        view.secrets()
+            .iter()
+            .any(|secret| secret.name().value() == "long-secret")
+    );
+    let appended = build_definition(view, "appended")?
+        .secrets()
+        .ok_or("appended build secrets expected")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(appended.provenance().sources(), &[base_id, override_id]);
+    assert!(appended.is_sensitive());
+    assert_eq!(appended.value().len(), 5);
+    assert!(matches!(appended.value()[0].value(), ProjectGrant::Short(value) if value == "private-short-secret"));
+    assert!(appended.value()[0].is_sensitive());
+    let ProjectGrant::Long(long) = appended.value()[1].value() else {
+        return Err("long build secret expected".into());
+    };
+    assert_eq!(
+        long.source().map(ProjectValue::value).map(String::as_str),
+        Some("long-secret")
+    );
+    assert_eq!(
+        long.target().map(ProjectValue::value).map(String::as_str),
+        Some("/run/secrets/build")
+    );
+    assert_eq!(long.uid().map(ProjectValue::value).map(String::as_str), Some("01000"));
+    assert_eq!(long.gid().map(ProjectValue::value).map(String::as_str), Some("1001"));
+    assert_eq!(long.mode().map(ProjectValue::value).map(String::as_str), Some("0440"));
+    assert_eq!(appended.value()[3].provenance().operation(), MergeOperation::Added);
+    assert!(!format!("{appended:?}").contains("private-short-secret"));
+
+    let reset = build_definition(view, "reset")?
+        .secrets()
+        .ok_or("reset build secrets expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().is_empty());
+    let overridden = build_definition(view, "overridden")?
+        .secrets()
+        .ok_or("overridden build secrets expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(overridden.value().as_slice(), [first, second]
+        if matches!(first.value(), ProjectGrant::Short(value) if value == "override-secret")
+            && matches!(second.value(), ProjectGrant::Short(value) if value == "override-secret")));
+
+    let malformed = build_definition(view, "malformed")?;
+    let malformed_secrets = malformed.secrets().ok_or("partial malformed build secrets expected")?;
+    assert_eq!(malformed_secrets.value().len(), 3);
+    assert!(malformed_secrets.is_sensitive());
+    assert!(matches!(malformed_secrets.value()[0].value(), ProjectGrant::Long(long) if long.source().is_none()));
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "secrets"])
+    );
+    let nonsequence = build_definition(view, "nonsequence")?;
+    assert!(nonsequence.secrets().is_none());
+    assert!(
+        nonsequence
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "nonsequence", "secrets"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_MISSING_FIELD)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_label_mapping_replacement_and_malformed_evidence() -> Result<(), Box<dyn std::error::Error>>
+{
+    let base_id = SourceId::new(726);
+    let override_id = SourceId::new(727);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n  app:\n    build:\n      labels:\n",
+                "        public: old\n        private: \"${PRIVATE_BASE}\"\n        malformed: []\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            "services:\n  app:\n    build:\n      labels:\n        public: new\n        private: \"${PRIVATE_OVERRIDE}\"\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("PRIVATE_BASE", "private-base");
+    let _ = environment.insert_sensitive("PRIVATE_OVERRIDE", "private-override");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let definition = build_definition(result.view().ok_or("project view expected")?, "app")?;
+    let labels = definition.labels().ok_or("build labels expected")?;
+    let Some(entries) = labels.value().as_map() else {
+        return Err("mapping build labels expected".into());
+    };
+    assert_eq!(labels.provenance().operation(), MergeOperation::Merged);
+    assert!(labels.is_sensitive());
+    assert_eq!(entries.len(), 2);
+    let public = entries
+        .iter()
+        .find(|entry| entry.name().value() == "public")
+        .ok_or("public label expected")?;
+    assert_eq!(public.value().value(), &ComposeScalar::String("new".to_owned()));
+    assert_eq!(public.value().provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(public.value().provenance().sources(), &[base_id, override_id]);
+    let private = entries
+        .iter()
+        .find(|entry| entry.name().value() == "private")
+        .ok_or("private label expected")?;
+    assert!(private.value().is_sensitive());
+    assert_eq!(
+        private.value().value(),
+        &ComposeScalar::String("private-override".to_owned())
+    );
+    assert!(
+        definition
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "app", "labels"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    assert!(!format!("{labels:?}").contains("private-override"));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_label_list_append_reset_override_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(728);
+    let override_id = SourceId::new(729);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n      labels: [base=one, bare, base=one]\n",
+                "  reset:\n    build:\n      labels: [old]\n",
+                "  overridden:\n    build:\n      labels: [old]\n",
+                "  malformed:\n    build:\n      labels:\n        - base\n        - {}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n      labels: [\"next=${NEXT}\", bare]\n",
+                "  reset:\n    build:\n      labels: !reset []\n",
+                "  overridden:\n    build:\n      labels: !override [new, new]\n",
+                "  malformed:\n    build:\n      labels:\n        - \"later=${LATER}\"\n        - []\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("NEXT", "private-next");
+    let _ = environment.insert_sensitive("LATER", "private-later");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+    assert_build_label_list(
+        build_definition(view, "appended")?
+            .labels()
+            .ok_or("appended labels expected")?,
+        MergeOperation::Appended,
+        ["base=one", "bare", "base=one", "next=private-next", "bare"],
+    )?;
+    assert_build_label_list(
+        build_definition(view, "reset")?
+            .labels()
+            .ok_or("reset labels expected")?,
+        MergeOperation::Reset,
+        [],
+    )?;
+    assert_build_label_list(
+        build_definition(view, "overridden")?
+            .labels()
+            .ok_or("overridden labels expected")?,
+        MergeOperation::Override,
+        ["new", "new"],
+    )?;
+    let malformed = build_definition(view, "malformed")?;
+    let labels = malformed.labels().ok_or("partial malformed labels expected")?;
+    assert_build_label_list(labels, MergeOperation::Appended, ["base", "later=private-later"])?;
+    assert!(labels.is_sensitive() && labels.value().as_list().is_some_and(|values| values[1].is_sensitive()));
+    assert_source_ids(labels.provenance().sources(), &[base_id, override_id]);
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "labels"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+fn assert_build_label_list<const N: usize>(
+    labels: &ProjectValue<ProjectBuildLabels>,
+    operation: MergeOperation,
+    expected: [&str; N],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let values = labels.value().as_list().ok_or("list build labels expected")?;
+    assert_eq!(labels.provenance().operation(), operation);
+    assert_eq!(
+        values
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        expected
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_network_interpolation_and_merge_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(724);
+    let override_id = SourceId::new(725);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build:\n      network: base-network\n",
+                "  reset:\n    build:\n      network: old-network\n",
+                "  overridden:\n    build:\n      network: old-network\n",
+                "  malformed:\n    build:\n      network: []\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build:\n      network: \"${BUILD_NETWORK}\"\n",
+                "  reset:\n    build:\n      network: !reset null\n",
+                "  overridden:\n    build:\n      network: !override \"\"\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("BUILD_NETWORK", "private-network");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    let replaced = build_definition(view, "replaced")?
+        .network()
+        .ok_or("replaced build network expected")?;
+    assert_eq!(replaced.value(), "private-network");
+    assert!(replaced.is_sensitive());
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    assert!(!format!("{replaced:?}").contains("private-network"));
+
+    let reset = build_definition(view, "reset")?;
+    assert!(reset.network().is_none());
+    let reset_evidence = reset
+        .unmodeled_fields()
+        .iter()
+        .find(|field| field.path() == ["services", "reset", "network"])
+        .ok_or("reset build network evidence expected")?;
+    assert_eq!(reset_evidence.provenance().operation(), MergeOperation::Reset);
+
+    let overridden = build_definition(view, "overridden")?
+        .network()
+        .ok_or("overridden build network expected")?;
+    assert_eq!(overridden.value(), "");
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_source_ids(overridden.provenance().sources(), &[base_id, override_id, override_id]);
+
+    let malformed = build_definition(view, "malformed")?;
+    assert!(malformed.network().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "network"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_pull_replacement_reset_override_and_malformed_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(832);
+    let override_id = SourceId::new(833);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build: {pull: true}\n",
+                "  reset:\n    build: {pull: true}\n",
+                "  overridden:\n    build: {pull: false}\n",
+                "  expression:\n    build: {pull: \"${BUILD_PULL}\"}\n",
+                "  malformed:\n    build: {pull: nope}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build: {pull: false}\n",
+                "  reset:\n    build: {pull: !reset null}\n",
+                "  overridden:\n    build: {pull: !override true}\n",
+            ),
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    let replaced = build_definition(view, "replaced")?
+        .pull()
+        .ok_or("replaced build pull expected")?;
+    assert_eq!(replaced.value(), &BooleanValue::Literal(false));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+
+    let reset = build_definition(view, "reset")?;
+    assert!(reset.pull().is_none());
+    let reset_evidence = reset
+        .unmodeled_fields()
+        .iter()
+        .find(|field| field.path() == ["services", "reset", "pull"])
+        .ok_or("reset build pull evidence expected")?;
+    assert_eq!(reset_evidence.provenance().operation(), MergeOperation::Reset);
+
+    let overridden = build_definition(view, "overridden")?
+        .pull()
+        .ok_or("overridden build pull expected")?;
+    assert_eq!(overridden.value(), &BooleanValue::Literal(true));
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_source_ids(overridden.provenance().sources(), &[base_id, override_id, override_id]);
+
+    let expression = build_definition(view, "expression")?
+        .pull()
+        .ok_or("deferred build pull expected")?;
+    assert_eq!(
+        expression.value(),
+        &BooleanValue::Expression("${BUILD_PULL}".to_owned())
+    );
+
+    let malformed = build_definition(view, "malformed")?;
+    assert!(malformed.pull().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "pull"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_INVALID_VALUE)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_no_cache_type_interpolation_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(843);
+    let override_id = SourceId::new(844);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  boolean:\n    build: {no_cache: true}\n",
+                "  string:\n    build: {no_cache: \"false\"}\n",
+                "  expression:\n    build: {no_cache: \"${NO_CACHE}\"}\n",
+                "  empty:\n    build: {no_cache: \"\"}\n",
+                "  replaced:\n    build: {no_cache: true}\n",
+                "  reset:\n    build: {no_cache: true}\n",
+                "  overridden:\n    build: {no_cache: false}\n",
+                "  invalid-null:\n    build: {context: retained, no_cache: null}\n",
+                "  invalid-number:\n    build: {context: retained, no_cache: 1}\n",
+                "  invalid-mapping:\n    build: {context: retained, no_cache: {invalid: value}}\n",
+                "  invalid-sequence:\n    build: {context: retained, no_cache: [true]}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build: {no_cache: \"true\"}\n",
+                "  reset:\n    build: {no_cache: !reset null}\n",
+                "  overridden:\n    build: {no_cache: !override \"${SECRET}\"}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("NO_CACHE", "false");
+    let _ = environment.insert_sensitive("SECRET", "private-cache-choice");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert!(matches!(
+        build_definition(view, "boolean")?.no_cache().map(ProjectValue::value),
+        Some(BuildNoCache::Boolean(true))
+    ));
+    assert!(
+        matches!(build_definition(view, "string")?.no_cache().map(ProjectValue::value), Some(BuildNoCache::String(value)) if value == "false")
+    );
+    assert!(
+        matches!(build_definition(view, "expression")?.no_cache().map(ProjectValue::value), Some(BuildNoCache::String(value)) if value == "false")
+    );
+    assert!(
+        matches!(build_definition(view, "empty")?.no_cache().map(ProjectValue::value), Some(BuildNoCache::String(value)) if value.is_empty())
+    );
+
+    let replaced = build_definition(view, "replaced")?
+        .no_cache()
+        .ok_or("replaced no_cache expected")?;
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    assert!(matches!(replaced.value(), BuildNoCache::String(value) if value == "true"));
+
+    let reset = build_definition(view, "reset")?;
+    assert!(reset.no_cache().is_none());
+    let reset_evidence = reset
+        .unmodeled_fields()
+        .iter()
+        .find(|field| field.path() == ["services", "reset", "no_cache"])
+        .ok_or("reset no_cache evidence expected")?;
+    assert_eq!(reset_evidence.provenance().operation(), MergeOperation::Reset);
+
+    let overridden = build_definition(view, "overridden")?
+        .no_cache()
+        .ok_or("overridden no_cache expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_source_ids(overridden.provenance().sources(), &[base_id, override_id, override_id]);
+    assert!(matches!(overridden.value(), BuildNoCache::String(value) if value == "private-cache-choice"));
+    assert!(overridden.is_sensitive());
+    assert!(!format!("{overridden:?}").contains("private-cache-choice"));
+
+    assert_invalid_build_no_cache_recovery(view)?;
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_INVALID_VALUE)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_sbom_type_interpolation_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(8422);
+    let override_id = SourceId::new(8423);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  boolean:\n    build: {sbom: true}\n",
+                "  generator:\n    build: {sbom: \"generator=base\"}\n",
+                "  expression:\n    build: {sbom: \"${SBOM_GENERATOR}\"}\n",
+                "  empty:\n    build: {sbom: \"\"}\n",
+                "  replaced:\n    build: {sbom: false}\n",
+                "  reset:\n    build: {sbom: true}\n",
+                "  overridden:\n    build: {sbom: false}\n",
+                "  invalid-null:\n    build: {context: retained, sbom: null}\n",
+                "  invalid-number:\n    build: {context: retained, sbom: 1}\n",
+                "  invalid-mapping:\n    build: {context: retained, sbom: {invalid: value}}\n",
+                "  invalid-sequence:\n    build: {context: retained, sbom: [true]}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build: {sbom: \"generator=override\"}\n",
+                "  reset:\n    build: {sbom: !reset null}\n",
+                "  overridden:\n    build: {sbom: !override \"${SBOM_SECRET}\"}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("SBOM_GENERATOR", "generator=interpolated");
+    let _ = environment.insert_sensitive("SBOM_SECRET", "generator=private");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert!(matches!(
+        build_definition(view, "boolean")?.sbom().map(ProjectValue::value),
+        Some(BuildSbom::Boolean(true))
+    ));
+    assert!(
+        matches!(build_definition(view, "generator")?.sbom().map(ProjectValue::value), Some(BuildSbom::String(value)) if value == "generator=base")
+    );
+    assert!(
+        matches!(build_definition(view, "expression")?.sbom().map(ProjectValue::value), Some(BuildSbom::String(value)) if value == "generator=interpolated")
+    );
+    assert!(
+        matches!(build_definition(view, "empty")?.sbom().map(ProjectValue::value), Some(BuildSbom::String(value)) if value.is_empty())
+    );
+
+    let replaced = build_definition(view, "replaced")?
+        .sbom()
+        .ok_or("replaced sbom expected")?;
+    assert!(matches!(replaced.value(), BuildSbom::String(value) if value == "generator=override"));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+
+    let reset = build_definition(view, "reset")?;
+    assert!(reset.sbom().is_none());
+    assert!(
+        reset
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "reset", "sbom"]
+                && field.provenance().operation() == MergeOperation::Reset)
+    );
+
+    let overridden = build_definition(view, "overridden")?
+        .sbom()
+        .ok_or("overridden sbom expected")?;
+    assert!(matches!(overridden.value(), BuildSbom::String(value) if value == "generator=private"));
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(overridden.is_sensitive());
+    assert!(!format!("{overridden:?}").contains("generator=private"));
+
+    assert_invalid_build_sbom_recovery(view, &result)?;
+    Ok(())
+}
+
+fn assert_invalid_build_sbom_recovery(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for service in ["invalid-null", "invalid-number", "invalid-mapping", "invalid-sequence"] {
+        let definition = build_definition(view, service)?;
+        assert!(definition.sbom().is_none());
+        assert_eq!(
+            definition.context().map(ProjectValue::value).map(String::as_str),
+            Some("retained")
+        );
+        assert!(
+            definition
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", service, "sbom"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_INVALID_VALUE)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_shm_size_classification_merge_provenance_and_recovery()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit};
+
+    let base_id = SourceId::new(8461);
+    let override_id = SourceId::new(8462);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  documented:\n    build: {shm_size: \"64mb\"}\n",
+                "  number:\n    build: {shm_size: 64}\n",
+                "  zero:\n    build: {shm_size: \"000m\"}\n",
+                "  replaced:\n    build: {shm_size: 64m}\n",
+                "  reset:\n    build: {shm_size: 64m}\n",
+                "  overridden:\n    build: {shm_size: 64m}\n",
+                "  invalid-null:\n    build:\n      context: retained\n      shm_size: null\n      x-retained: true\n",
+                "  invalid-mapping:\n    build:\n      context: retained\n      shm_size:\n        value: 64mb\n      x-retained: true\n",
+                "  invalid-sequence:\n    build:\n      context: retained\n      shm_size:\n        - 64mb\n      x-retained: true\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build: {shm_size: \"${BUILD_SHM_SIZE}\"}\n",
+                "  reset:\n    build: {shm_size: !reset null}\n",
+                "  overridden:\n    build: {shm_size: !override \"${OVERRIDE_SHM_SIZE}\"}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("BUILD_SHM_SIZE", "128mb");
+    let _ = environment.insert_sensitive("OVERRIDE_SHM_SIZE", "256mb");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    let documented = build_definition(view, "documented")?
+        .shm_size()
+        .ok_or("documented build shm_size expected")?;
+    assert_eq!(documented.value().raw().value(), "64mb");
+    assert_eq!(documented.value().scalar_kind(), ShmSizeScalarKind::String);
+    assert!(matches!(
+        documented.value().kind(),
+        ShmSizeKind::Documented { amount_raw, unit: ShmSizeUnit::Mb } if amount_raw == "64"
+    ));
+    assert!(matches!(
+        build_definition(view, "number")?
+            .shm_size()
+            .map(ProjectValue::value)
+            .map(compose_lens::model::ShmSize::kind),
+        Some(ShmSizeKind::ProviderDependentNumber)
+    ));
+    assert!(matches!(
+        build_definition(view, "zero")?.shm_size().map(ProjectValue::value).map(compose_lens::model::ShmSize::kind),
+        Some(ShmSizeKind::Zero { amount_raw, unit: Some(ShmSizeUnit::M) }) if amount_raw == "000"
+    ));
+
+    let replaced = build_definition(view, "replaced")?
+        .shm_size()
+        .ok_or("replaced build shm_size expected")?;
+    assert_eq!(replaced.value().raw().value(), "128mb");
+    assert!(replaced.is_sensitive());
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    assert!(!format!("{replaced:?}").contains("128mb"));
+
+    let reset = build_definition(view, "reset")?;
+    assert!(reset.shm_size().is_none());
+    let reset_evidence = reset
+        .unmodeled_fields()
+        .iter()
+        .find(|field| field.path() == ["services", "reset", "shm_size"])
+        .ok_or("reset build shm_size evidence expected")?;
+    assert_eq!(reset_evidence.provenance().operation(), MergeOperation::Reset);
+
+    let overridden = build_definition(view, "overridden")?
+        .shm_size()
+        .ok_or("overridden build shm_size expected")?;
+    assert_eq!(overridden.value().raw().value(), "256mb");
+    assert!(overridden.is_sensitive());
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_source_ids(overridden.provenance().sources(), &[base_id, override_id, override_id]);
+
+    assert_invalid_build_shm_size_recovery(view, &result)?;
+    Ok(())
+}
+
+fn assert_invalid_build_shm_size_recovery(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for service in ["invalid-null", "invalid-mapping", "invalid-sequence"] {
+        let definition = build_definition(view, service)?;
+        assert!(definition.shm_size().is_none());
+        assert_eq!(
+            definition.context().map(ProjectValue::value).map(String::as_str),
+            Some("retained")
+        );
+        assert_eq!(definition.unmodeled_fields().len(), 2);
+        assert!(
+            definition
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", service, "shm_size"])
+        );
+        assert!(
+            definition
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", service, "x-retained"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == compose_lens::model::SHM_SIZE_EXPECTED_VALUE)
+    );
+    Ok(())
+}
+
+fn assert_invalid_build_no_cache_recovery(view: &ProjectView) -> Result<(), Box<dyn std::error::Error>> {
+    for service in ["invalid-null", "invalid-number", "invalid-mapping", "invalid-sequence"] {
+        let definition = build_definition(view, service)?;
+        assert!(definition.no_cache().is_none());
+        assert_eq!(
+            definition.context().map(ProjectValue::value).map(String::as_str),
+            Some("retained")
+        );
+        assert!(
+            definition
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", service, "no_cache"])
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_isolation_interpolation_provenance_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(847);
+    let override_id = SourceId::new(848);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  interpolated:\n    build: {isolation: \"${ISOLATION}\"}\n",
+                "  replaced:\n    build: {isolation: process}\n",
+                "  reset:\n    build: {isolation: process}\n",
+                "  overridden:\n    build: {isolation: process}\n",
+                "  invalid-boolean:\n    build: {context: retained, isolation: true}\n",
+                "  invalid-number:\n    build: {context: retained, isolation: 1}\n",
+                "  invalid-null:\n    build: {context: retained, isolation: null}\n",
+                "  invalid-sequence:\n    build: {context: retained, isolation: [process]}\n",
+                "  invalid-mapping:\n    build: {context: retained, isolation: {mode: process}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    build: {isolation: hyperv}\n",
+                "  reset:\n    build: {isolation: !reset null}\n",
+                "  overridden:\n    build: {isolation: !override \"${SECRET}\"}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("ISOLATION", "process");
+    let _ = environment.insert_sensitive("SECRET", "private-isolation");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_eq!(
+        build_definition(view, "interpolated")?
+            .isolation()
+            .map(ProjectValue::value)
+            .map(String::as_str),
+        Some("process")
+    );
+    let replaced = build_definition(view, "replaced")?
+        .isolation()
+        .ok_or("replaced isolation expected")?;
+    assert_eq!(replaced.value(), "hyperv");
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+
+    let reset = build_definition(view, "reset")?;
+    assert!(reset.isolation().is_none());
+    assert!(reset.unmodeled_fields().iter().any(|field| {
+        field.path() == ["services", "reset", "isolation"] && field.provenance().operation() == MergeOperation::Reset
+    }));
+
+    let overridden = build_definition(view, "overridden")?
+        .isolation()
+        .ok_or("overridden isolation expected")?;
+    assert_eq!(overridden.value(), "private-isolation");
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_source_ids(overridden.provenance().sources(), &[base_id, override_id, override_id]);
+    assert!(overridden.is_sensitive());
+    assert!(!format!("{overridden:?}").contains("private-isolation"));
+
+    for service in [
+        "invalid-boolean",
+        "invalid-number",
+        "invalid-null",
+        "invalid-sequence",
+        "invalid-mapping",
+    ] {
+        let definition = build_definition(view, service)?;
+        assert!(definition.isolation().is_none());
+        assert_eq!(
+            definition.context().map(ProjectValue::value).map(String::as_str),
+            Some("retained")
+        );
+        assert!(
+            definition
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", service, "isolation"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_INVALID_VALUE)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+fn build_definition<'view>(
+    view: &'view ProjectView,
+    service: &str,
+) -> Result<&'view compose_lens::project::ProjectBuildDefinition, Box<dyn std::error::Error>> {
+    let build = view
+        .service(service)
+        .and_then(ProjectService::build)
+        .ok_or("build definition expected")?;
+    let ProjectBuild::Definition(definition) = build.value() else {
+        return Err("long build definition expected".into());
+    };
+    Ok(definition)
+}
+
+fn build_tags<'view>(
+    view: &'view ProjectView,
+    service: &str,
+) -> Result<&'view ProjectValue<Vec<ProjectValue<String>>>, Box<dyn std::error::Error>> {
+    build_definition(view, service)?
+        .tags()
+        .ok_or_else(|| "build tags expected".into())
+}
+
+fn build_platforms<'view>(
+    view: &'view ProjectView,
+    service: &str,
+) -> Result<&'view ProjectValue<Vec<ProjectValue<String>>>, Box<dyn std::error::Error>> {
+    build_definition(view, service)?
+        .platforms()
+        .ok_or_else(|| "build platforms expected".into())
+}
+
+fn build_cache_from<'view>(
+    view: &'view ProjectView,
+    service: &str,
+) -> Result<&'view ProjectValue<Vec<ProjectValue<String>>>, Box<dyn std::error::Error>> {
+    build_definition(view, service)?
+        .cache_from()
+        .ok_or_else(|| "build cache_from expected".into())
+}
+
+fn build_cache_to<'view>(
+    view: &'view ProjectView,
+    service: &str,
+) -> Result<&'view ProjectValue<Vec<ProjectValue<String>>>, Box<dyn std::error::Error>> {
+    build_definition(view, service)?
+        .cache_to()
+        .ok_or_else(|| "build cache_to expected".into())
+}
+
+#[test]
+fn retains_effective_raw_build_cache_locations_and_malformed_evidence() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(911);
+    let override_id = SourceId::new(912);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n",
+                "      cache_from: [\"type=registry,ref=${BASE_CACHE}\", \"type=local,src=.cache\", \"type=local,src=.cache\"]\n",
+                "      cache_to: [\"type=local,dest=.cache\", \"type=local,dest=.cache\"]\n",
+                "  empty:\n    build: {cache_from: [], cache_to: []}\n",
+                "  reset:\n    build: {cache_from: [\"type=local,src=old\"], cache_to: [\"type=local,dest=old\"]}\n",
+                "  overridden:\n    build: {cache_from: [\"type=local,src=old\"], cache_to: [\"type=local,dest=old\"]}\n",
+                "  malformed:\n    build:\n",
+                "      cache_from: [\"type=local,src=base\", false, {}, \"type=gha\"]\n",
+                "      cache_to: [\"type=local,dest=base\", 7, [], \"type=gha\"]\n",
+                "  wrong-outer:\n    build: {cache_from: {type: local}, cache_to: \"type=local,dest=.cache\"}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build:\n",
+                "      cache_from: [\"type=local,src=.cache\", \"type=registry,ref=${NEXT_CACHE}\"]\n",
+                "      cache_to: [\"type=local,dest=.cache\", \"type=registry,ref=${NEXT_CACHE}\"]\n",
+                "  reset:\n    build: {cache_from: !reset [], cache_to: !reset []}\n",
+                "  overridden:\n    build: {cache_from: !override [\"type=gha\", \"type=gha\"], cache_to: !override [\"type=gha\", \"type=gha\"]}\n",
+                "  malformed:\n    build:\n",
+                "      cache_from: [\"type=registry,ref=${MALFORMED_CACHE}\", []]\n",
+                "      cache_to: [\"type=registry,ref=${MALFORMED_CACHE}\", null]\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("BASE_CACHE", "private-base");
+    let _ = environment.insert_sensitive("NEXT_CACHE", "private-next");
+    let _ = environment.insert_sensitive("MALFORMED_CACHE", "private-malformed");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_appended_build_cache_locations(view, base_id, override_id)?;
+    assert_reset_and_overridden_build_cache_locations(view)?;
+    assert_malformed_build_cache_locations(view)?;
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+fn assert_appended_build_cache_locations(
+    view: &ProjectView,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let cache_from = build_cache_from(view, "appended")?;
+    assert_eq!(cache_from.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(cache_from.provenance().sources(), &[base_id, override_id]);
+    assert!(cache_from.is_sensitive());
+    assert_eq!(
+        cache_values(cache_from),
+        [
+            "type=registry,ref=private-base",
+            "type=local,src=.cache",
+            "type=local,src=.cache",
+            "type=local,src=.cache",
+            "type=registry,ref=private-next"
+        ]
+    );
+    assert!(cache_from.value()[0].is_sensitive());
+    assert_eq!(cache_from.value()[3].provenance().operation(), MergeOperation::Added);
+    assert_source_ids(cache_from.value()[3].provenance().sources(), &[override_id]);
+    assert!(!format!("{cache_from:?}").contains("private-base"));
+
+    let cache_to = build_cache_to(view, "appended")?;
+    assert_eq!(cache_to.provenance().operation(), MergeOperation::Appended);
+    assert!(cache_to.is_sensitive());
+    assert_eq!(
+        cache_values(cache_to),
+        [
+            "type=local,dest=.cache",
+            "type=local,dest=.cache",
+            "type=local,dest=.cache",
+            "type=registry,ref=private-next"
+        ]
+    );
+    assert_eq!(cache_to.value()[2].provenance().operation(), MergeOperation::Added);
+    assert_source_ids(cache_to.value()[2].provenance().sources(), &[override_id]);
+    assert!(cache_to.value()[3].is_sensitive());
+    Ok(())
+}
+
+fn assert_reset_and_overridden_build_cache_locations(view: &ProjectView) -> Result<(), Box<dyn std::error::Error>> {
+    let empty = build_definition(view, "empty")?;
+    for locations in [empty.cache_from(), empty.cache_to()] {
+        let locations = locations.ok_or("empty build cache locations expected")?;
+        assert!(locations.value().is_empty());
+        assert_eq!(locations.provenance().operation(), MergeOperation::Authored);
+    }
+    let reset = build_definition(view, "reset")?;
+    for locations in [reset.cache_from(), reset.cache_to()] {
+        let locations = locations.ok_or("reset build cache locations expected")?;
+        assert!(locations.value().is_empty());
+        assert_eq!(locations.provenance().operation(), MergeOperation::Reset);
+    }
+    let overridden = build_definition(view, "overridden")?;
+    for locations in [overridden.cache_from(), overridden.cache_to()] {
+        let locations = locations.ok_or("overridden build cache locations expected")?;
+        assert_eq!(cache_values(locations), ["type=gha", "type=gha"]);
+        assert_eq!(locations.provenance().operation(), MergeOperation::Override);
+    }
+    Ok(())
+}
+
+fn assert_malformed_build_cache_locations(view: &ProjectView) -> Result<(), Box<dyn std::error::Error>> {
+    let malformed = build_definition(view, "malformed")?;
+    assert_eq!(
+        cache_values(build_cache_from(view, "malformed")?),
+        ["type=local,src=base", "type=gha", "type=registry,ref=private-malformed"]
+    );
+    assert_eq!(
+        cache_values(build_cache_to(view, "malformed")?),
+        [
+            "type=local,dest=base",
+            "type=gha",
+            "type=registry,ref=private-malformed"
+        ]
+    );
+    for name in ["cache_from", "cache_to"] {
+        assert!(
+            malformed
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", "malformed", name])
+        );
+    }
+    let wrong_outer = build_definition(view, "wrong-outer")?;
+    assert!(wrong_outer.cache_from().is_none() && wrong_outer.cache_to().is_none());
+    for name in ["cache_from", "cache_to"] {
+        assert!(
+            wrong_outer
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", "wrong-outer", name])
+        );
+    }
+    Ok(())
+}
+
+fn cache_values(locations: &ProjectValue<Vec<ProjectValue<String>>>) -> Vec<&str> {
+    locations
+        .value()
+        .iter()
+        .map(ProjectValue::value)
+        .map(String::as_str)
+        .collect()
+}
+
+#[test]
+fn retains_effective_build_args_forms_merge_provenance_and_partial_recovery() -> Result<(), Box<dyn std::error::Error>>
+{
+    let base_id = SourceId::new(730);
+    let override_id = SourceId::new(731);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  mapping:\n    build:\n      args: {retained: base, replaced: old, count: 1, enabled: true, empty: null}\n",
+                "  list:\n    build:\n      args: [base=value, BARE, base=value]\n",
+                "  reset:\n    build:\n      args: {old: value}\n",
+                "  empty-list:\n    build:\n      args: []\n",
+                "  overridden:\n    build:\n      args: [old]\n",
+                "  malformed:\n    build:\n      args: [before, false, {nested: value}]\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  mapping:\n    build:\n      args: {replaced: \"${REPLACED}\", added: after}\n",
+                "  list:\n    build:\n      args: [\"next=${NEXT}\", BARE]\n",
+                "  reset:\n    build:\n      args: !reset {}\n",
+                "  overridden:\n    build:\n      args: !override [new, new]\n",
+                "  malformed:\n    build:\n      args: [later, []]\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("REPLACED", "private-value");
+    let _ = environment.insert_sensitive("NEXT", "private-next");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_effective_mapping_build_args(view, base_id, override_id)?;
+    assert_effective_list_build_args(view, &result)?;
+    Ok(())
+}
+
+fn assert_effective_mapping_build_args(
+    view: &ProjectView,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mapping = build_definition(view, "mapping")?
+        .args()
+        .ok_or("mapping args expected")?;
+    assert_eq!(mapping.provenance().operation(), MergeOperation::Merged);
+    assert_source_ids(mapping.provenance().sources(), &[base_id, override_id]);
+    let ProjectBuildArgs::Map(entries) = mapping.value() else {
+        return Err("mapping build args expected".into());
+    };
+    assert_eq!(entries.len(), 6);
+    let replaced = entries
+        .iter()
+        .find(|entry| entry.name().value() == "replaced")
+        .ok_or("replaced arg expected")?;
+    assert_eq!(
+        replaced.value().value(),
+        &ComposeScalar::String("private-value".to_owned())
+    );
+    assert!(replaced.value().is_sensitive());
+    assert_eq!(replaced.value().provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.value().provenance().sources(), &[base_id, override_id]);
+    assert!(
+        matches!(entries.iter().find(|entry| entry.name().value() == "count").map(|entry| entry.value().value()), Some(ComposeScalar::Number(value)) if value == "1")
+    );
+    assert!(matches!(
+        entries
+            .iter()
+            .find(|entry| entry.name().value() == "enabled")
+            .map(|entry| entry.value().value()),
+        Some(ComposeScalar::Boolean(true))
+    ));
+    assert!(matches!(
+        entries
+            .iter()
+            .find(|entry| entry.name().value() == "empty")
+            .map(|entry| entry.value().value()),
+        Some(ComposeScalar::Null)
+    ));
+    Ok(())
+}
+
+fn assert_effective_list_build_args(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let list = build_definition(view, "list")?.args().ok_or("list args expected")?;
+    let ProjectBuildArgs::List(items) = list.value() else {
+        return Err("list build args expected".into());
+    };
+    assert_eq!(
+        items
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["base=value", "BARE", "base=value", "next=private-next", "BARE"]
+    );
+    assert_eq!(items[3].provenance().operation(), MergeOperation::Added);
+    assert!(items[3].is_sensitive());
+    assert_eq!(
+        build_definition(view, "reset")?
+            .args()
+            .ok_or("reset args expected")?
+            .provenance()
+            .operation(),
+        MergeOperation::Reset
+    );
+    assert!(
+        matches!(build_definition(view, "reset")?.args().map(ProjectValue::value), Some(ProjectBuildArgs::Map(entries)) if entries.is_empty())
+    );
+    assert!(
+        matches!(build_definition(view, "empty-list")?.args().map(ProjectValue::value), Some(ProjectBuildArgs::List(items)) if items.is_empty())
+    );
+    let overridden = build_definition(view, "overridden")?
+        .args()
+        .ok_or("overridden args expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(overridden.value(), ProjectBuildArgs::List(items)
+        if items.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>() == ["new", "new"]));
+    let malformed = build_definition(view, "malformed")?;
+    assert!(
+        matches!(malformed.args().map(ProjectValue::value), Some(ProjectBuildArgs::List(items))
+        if items.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>() == ["before", "later"])
+    );
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "args"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_additional_context_forms_generic_merges_and_partial_recovery()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(901);
+    let override_id = SourceId::new(902);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  mapping:\n    build:\n      additional_contexts: {retained: ./base, replaced: ./old, value: \"${VALUE}\"}\n",
+                "  list:\n    build:\n      additional_contexts: [assets=./assets, duplicate=./one]\n",
+                "  mixed:\n    build:\n      additional_contexts: {old: ./old}\n",
+                "  reset:\n    build:\n      additional_contexts: {old: ./old}\n",
+                "  overridden:\n    build:\n      additional_contexts: [old=./old]\n",
+                "  malformed:\n    build:\n      additional_contexts: {retained: ./retained, invalid: [nested], later: null}\n",
+                "  duplicate:\n    build:\n      additional_contexts: {retained: ./retained, duplicate: first, duplicate: second, later: ./later}\n",
+                "  wrong-outer:\n    build:\n      additional_contexts: ./not-a-collection\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  mapping:\n    build:\n      additional_contexts: {replaced: \"${REPLACED}\", \"${KEY}\": \"${ADDED}\"}\n",
+                "  list:\n    build:\n      additional_contexts: [duplicate=./one, \"next=${NEXT}\"]\n",
+                "  mixed:\n    build:\n      additional_contexts: [replacement=./new]\n",
+                "  reset:\n    build:\n      additional_contexts: !reset {}\n",
+                "  overridden:\n    build:\n      additional_contexts: !override [new=./new, new=./new]\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("VALUE", "private-value");
+    let _ = environment.insert_sensitive("REPLACED", "private-replaced");
+    let _ = environment.insert_sensitive("ADDED", "private-added");
+    let _ = environment.insert_sensitive("KEY", "must-not-interpolate");
+    let _ = environment.insert_sensitive("NEXT", "private-next");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_effective_build_additional_context_merges(view, base_id, override_id)?;
+    assert_effective_build_additional_context_recovery(view, &result)
+}
+
+fn assert_effective_build_additional_context_merges(
+    view: &ProjectView,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mapping = build_definition(view, "mapping")?
+        .additional_contexts()
+        .ok_or("mapping additional contexts expected")?;
+    assert_eq!(mapping.provenance().operation(), MergeOperation::Merged);
+    assert_source_ids(mapping.provenance().sources(), &[base_id, override_id]);
+    assert!(mapping.is_sensitive());
+    let ProjectBuildAdditionalContexts::Map(entries) = mapping.value() else {
+        return Err("mapping additional contexts expected".into());
+    };
+    assert_eq!(entries.len(), 4);
+    let replaced = entries
+        .iter()
+        .find(|entry| entry.name().value() == "replaced")
+        .ok_or("replaced context expected")?;
+    assert_eq!(
+        replaced.value().value(),
+        &ComposeScalar::String("private-replaced".to_owned())
+    );
+    assert!(replaced.value().is_sensitive());
+    assert_eq!(replaced.value().provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.value().provenance().sources(), &[base_id, override_id]);
+    let unexpanded_key = entries
+        .iter()
+        .find(|entry| entry.name().value() == "${KEY}")
+        .ok_or("uninterpolated context key expected")?;
+    assert!(!unexpanded_key.name().is_sensitive());
+    assert_eq!(
+        unexpanded_key.value().value(),
+        &ComposeScalar::String("private-added".to_owned())
+    );
+    assert!(unexpanded_key.value().is_sensitive());
+
+    let list = build_definition(view, "list")?
+        .additional_contexts()
+        .ok_or("list additional contexts expected")?;
+    let ProjectBuildAdditionalContexts::List(items) = list.value() else {
+        return Err("list additional contexts expected".into());
+    };
+    assert_eq!(
+        items
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "assets=./assets",
+            "duplicate=./one",
+            "duplicate=./one",
+            "next=private-next"
+        ]
+    );
+    assert_eq!(items[3].provenance().operation(), MergeOperation::Added);
+    assert!(items[3].is_sensitive());
+    Ok(())
+}
+
+fn assert_effective_build_additional_context_recovery(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mixed = build_definition(view, "mixed")?
+        .additional_contexts()
+        .ok_or("mixed additional contexts expected")?;
+    assert_eq!(mixed.provenance().operation(), MergeOperation::Replaced);
+    assert!(matches!(mixed.value(), ProjectBuildAdditionalContexts::List(items)
+        if items.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>() == ["replacement=./new"]));
+    let reset = build_definition(view, "reset")?
+        .additional_contexts()
+        .ok_or("reset additional contexts expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.value(), ProjectBuildAdditionalContexts::Map(entries) if entries.is_empty()));
+    let overridden = build_definition(view, "overridden")?
+        .additional_contexts()
+        .ok_or("overridden additional contexts expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(overridden.value(), ProjectBuildAdditionalContexts::List(items)
+        if items.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>() == ["new=./new", "new=./new"]));
+
+    let malformed = build_definition(view, "malformed")?;
+    assert!(matches!(malformed.additional_contexts().map(ProjectValue::value),
+        Some(ProjectBuildAdditionalContexts::Map(entries))
+            if entries.iter().map(|entry| entry.name().value()).collect::<Vec<_>>() == ["retained", "later"]));
+    let duplicate = build_definition(view, "duplicate")?
+        .additional_contexts()
+        .ok_or("duplicate additional contexts expected")?;
+    assert!(matches!(duplicate.value(), ProjectBuildAdditionalContexts::Map(entries)
+        if entries.iter().map(|entry| entry.name().value()).collect::<Vec<_>>() == ["retained", "duplicate", "later"]));
+    for service in ["malformed", "duplicate", "wrong-outer"] {
+        assert!(
+            build_definition(view, service)?
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", service, "additional_contexts"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_INVALID_VALUE)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_ulimits_merge_provenance_and_malformed_evidence() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(1818);
+    let override_id = SourceId::new(1819);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    build:\n      ulimits:\n        nofile: \"001024\"\n        nproc: {soft: \"${SOFT_LIMIT}\", hard: 4096}\n",
+                "  empty:\n    build: {ulimits: {}}\n",
+                "  reset:\n    build: {ulimits: {nofile: 1}}\n",
+                "  overridden:\n    build: {ulimits: {nofile: 1}}\n",
+                "  malformed:\n    build:\n      ulimits:\n        retained: 1\n        Bad: 2\n        broken: []\n        range: {soft: true, hard: 4, future: retained}\n",
+                "  wrong-outer:\n    build: {ulimits: []}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    build:\n      ulimits:\n        nofile: \"${NOFILE}\"\n        nproc: {hard: \"8192\"}\n",
+                "  reset:\n    build: {ulimits: !reset {}}\n",
+                "  overridden:\n    build: {ulimits: !override {core: -1}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("SOFT_LIMIT", "1024");
+    let _ = environment.insert_sensitive("NOFILE", "2048");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_merged_build_ulimits(view, base_id, override_id)?;
+    assert_empty_and_overridden_build_ulimits(view)?;
+    assert_malformed_build_ulimit_evidence(view, &result)?;
+    Ok(())
+}
+
+fn assert_merged_build_ulimits(
+    view: &ProjectView,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let limits = build_definition(view, "merged")?
+        .ulimits()
+        .ok_or("merged build ulimits expected")?;
+    assert_eq!(limits.provenance().operation(), MergeOperation::Merged);
+    let nofile = limits
+        .value()
+        .entries()
+        .iter()
+        .find(|entry| entry.value().name().value() == "nofile")
+        .ok_or("effective nofile expected")?;
+    let ProjectUlimitValue::Single(nofile) = nofile.value().value() else {
+        return Err("effective nofile must remain scalar syntax".into());
+    };
+    assert_eq!(nofile.value().authored(), "\"${NOFILE}\"");
+    assert_eq!(nofile.value().value().raw(), "2048");
+    assert!(nofile.is_sensitive());
+    assert_eq!(nofile.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(nofile.provenance().sources(), &[base_id, override_id]);
+
+    let nproc = limits
+        .value()
+        .entries()
+        .iter()
+        .find(|entry| entry.value().name().value() == "nproc")
+        .ok_or("effective nproc expected")?;
+    let ProjectUlimitValue::Range(nproc) = nproc.value().value() else {
+        return Err("effective nproc must remain range syntax".into());
+    };
+    let soft = nproc.soft().ok_or("effective soft limit expected")?;
+    let hard = nproc.hard().ok_or("effective hard limit expected")?;
+    assert_eq!(soft.value().value().raw(), "1024");
+    assert!(soft.is_sensitive());
+    assert_eq!(hard.value().authored(), "\"8192\"");
+    assert_eq!(hard.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(hard.provenance().sources(), &[base_id, override_id]);
+    Ok(())
+}
+
+fn assert_empty_and_overridden_build_ulimits(view: &ProjectView) -> Result<(), Box<dyn std::error::Error>> {
+    let empty = build_definition(view, "empty")?
+        .ulimits()
+        .ok_or("empty build ulimits expected")?;
+    assert!(empty.value().is_empty());
+    assert_eq!(empty.provenance().operation(), MergeOperation::Authored);
+    let reset = build_definition(view, "reset")?
+        .ulimits()
+        .ok_or("reset build ulimits expected")?;
+    assert!(reset.value().is_empty());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = build_definition(view, "overridden")?
+        .ulimits()
+        .ok_or("overridden build ulimits expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(overridden.value().entries(), [entry]
+        if entry.value().name().value() == "core"
+            && matches!(entry.value().value(), ProjectUlimitValue::Single(value) if value.value().value().raw() == "-1")));
+    Ok(())
+}
+
+fn assert_malformed_build_ulimit_evidence(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let malformed = build_definition(view, "malformed")?;
+    let malformed_limits = malformed.ulimits().ok_or("partial malformed build ulimits expected")?;
+    assert_eq!(
+        malformed_limits
+            .value()
+            .entries()
+            .iter()
+            .map(|entry| entry.value().name().value())
+            .collect::<Vec<_>>(),
+        ["retained", "range"]
+    );
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "ulimits", "Bad"])
+    );
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "ulimits", "broken"])
+    );
+    let ProjectUlimitValue::Range(range) = malformed_limits.value().entries()[1].value().value() else {
+        return Err("partially malformed range expected".into());
+    };
+    assert!(range.soft().is_none());
+    for path in [
+        ["services", "malformed", "ulimits", "range", "soft"],
+        ["services", "malformed", "ulimits", "range", "future"],
+    ] {
+        assert!(range.unmodeled_fields().iter().any(|field| field.path() == path));
+    }
+    let wrong_outer = build_definition(view, "wrong-outer")?;
+    assert!(wrong_outer.ulimits().is_none());
+    assert!(
+        wrong_outer
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "wrong-outer", "ulimits"])
+    );
+    for code in [
+        PROJECT_EXPECTED_FORM,
+        ULIMIT_INVALID_NAME,
+        ULIMIT_INVALID_VALUE,
+        ULIMIT_MISSING_RANGE_MEMBER,
+    ] {
+        assert!(result.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_entitlements_merge_provenance_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(2002);
+    let override_id = SourceId::new(2003);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build: {entitlements: [network.host, security.insecure, network.host]}\n",
+                "  empty:\n    build: {entitlements: []}\n",
+                "  reset:\n    build: {entitlements: [network.host]}\n",
+                "  overridden:\n    build: {entitlements: [network.host]}\n",
+                "  malformed:\n    build: {entitlements: [network.host, false, {}, \"\"]}\n",
+                "  outer:\n    build: {entitlements: network.host}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  appended:\n    build: {entitlements: [network.host, \"${NEXT}\"]}\n",
+                "  reset:\n    build: {entitlements: !reset []}\n",
+                "  overridden:\n    build: {entitlements: !override [security.insecure, security.insecure]}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("NEXT", "private.entitlement");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_appended_build_entitlements(view, base_id, override_id)?;
+    assert_build_entitlement_recovery(view, &result)
+}
+
+fn assert_appended_build_entitlements(
+    view: &ProjectView,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let entitlements = build_definition(view, "appended")?
+        .entitlements()
+        .ok_or("appended build entitlements expected")?;
+    assert_eq!(entitlements.provenance().operation(), MergeOperation::Appended);
+    assert_source_ids(entitlements.provenance().sources(), &[base_id, override_id]);
+    assert!(entitlements.is_sensitive());
+    assert_eq!(
+        entitlements
+            .value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "network.host",
+            "security.insecure",
+            "network.host",
+            "network.host",
+            "private.entitlement"
+        ]
+    );
+    assert_eq!(entitlements.value()[3].provenance().operation(), MergeOperation::Added);
+    assert!(entitlements.value()[4].is_sensitive());
+    Ok(())
+}
+
+fn assert_build_entitlement_recovery(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    assert!(
+        matches!(build_definition(view, "empty")?.entitlements().map(ProjectValue::value), Some(values) if values.is_empty())
+    );
+    let reset = build_definition(view, "reset")?
+        .entitlements()
+        .ok_or("reset build entitlements expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.value().is_empty());
+    let overridden = build_definition(view, "overridden")?
+        .entitlements()
+        .ok_or("overridden build entitlements expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        overridden
+            .value()
+            .iter()
+            .map(ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["security.insecure", "security.insecure"]
+    );
+    let malformed = build_definition(view, "malformed")?;
+    assert!(matches!(malformed.entitlements().map(ProjectValue::value), Some(values)
+        if values.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>() == ["network.host", ""]));
+    for service in ["malformed", "outer"] {
+        assert!(
+            build_definition(view, service)?
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", service, "entitlements"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_build_extra_hosts_forms_generic_merge_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(1931);
+    let override_id = SourceId::new(1932);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  map:\n    build:\n      extra_hosts: {retained: 10.0.0.1, replaced: \"${OLD}\", list: [\"[::1]\"]}\n",
+                "  list:\n    build:\n      extra_hosts: [\"db:127.0.0.1\", \"gateway=host-gateway\"]\n",
+                "  mixed:\n    build: {extra_hosts: {old: 127.0.0.1}}\n",
+                "  reset:\n    build: {extra_hosts: {old: 127.0.0.1}}\n",
+                "  overridden:\n    build: {extra_hosts: [old:127.0.0.1]}\n",
+                "  malformed:\n    build: {extra_hosts: {retained: 127.0.0.1, bad: [ok, 7], wrong: {nested: no}}}\n",
+                "  outer:\n    build: {extra_hosts: 127.0.0.1}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  map:\n    build:\n      extra_hosts: {replaced: \"${NEW}\", list: [host-gateway], \"${KEY}\": \"${ADDED}\"}\n",
+                "  list:\n    build:\n      extra_hosts: [\"db:127.0.0.1\", \"v6=[::1]\"]\n",
+                "  mixed:\n    build: {extra_hosts: [replacement=host-gateway]}\n",
+                "  reset:\n    build: {extra_hosts: !reset {}}\n",
+                "  overridden:\n    build: {extra_hosts: !override {new: [\"[fd00::1]\"]}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("OLD", "private-old");
+    let _ = environment.insert_sensitive("NEW", "private-new");
+    let _ = environment.insert_sensitive("ADDED", "private-added");
+    let _ = environment.insert_sensitive("KEY", "must-not-interpolate");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+
+    assert_effective_build_extra_hosts_mapping(view, base_id, override_id)?;
+    assert_effective_build_extra_hosts_collections_and_recovery(view, &result)
+}
+
+fn assert_effective_build_extra_hosts_mapping(
+    view: &ProjectView,
+    base_id: SourceId,
+    override_id: SourceId,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let map = build_definition(view, "map")?
+        .extra_hosts()
+        .ok_or("map extra_hosts expected")?;
+    assert_eq!(map.provenance().operation(), MergeOperation::Merged);
+    assert_source_ids(map.provenance().sources(), &[base_id, override_id]);
+    assert!(map.is_sensitive());
+    let ProjectBuildExtraHosts::Map(hosts) = map.value() else {
+        return Err("mapping extra_hosts expected".into());
+    };
+    let replaced = hosts
+        .iter()
+        .find(|entry| entry.hostname().value() == "replaced")
+        .ok_or("replaced host expected")?;
+    assert!(
+        matches!(replaced.addresses(), ProjectBuildExtraHostAddresses::Scalar(value)
+        if value.value() == "private-new" && value.is_sensitive() && value.provenance().operation() == MergeOperation::Replaced)
+    );
+    let list = hosts
+        .iter()
+        .find(|entry| entry.hostname().value() == "list")
+        .ok_or("address list expected")?;
+    assert!(matches!(list.addresses(), ProjectBuildExtraHostAddresses::List(values)
+        if values.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>() == ["[::1]", "host-gateway"]
+            && values[1].provenance().operation() == MergeOperation::Added));
+    let unexpanded = hosts
+        .iter()
+        .find(|entry| entry.hostname().value() == "${KEY}")
+        .ok_or("raw key expected")?;
+    assert!(!unexpanded.hostname().is_sensitive());
+    assert!(
+        matches!(unexpanded.addresses(), ProjectBuildExtraHostAddresses::Scalar(value) if value.value() == "private-added")
+    );
+    Ok(())
+}
+
+fn assert_effective_build_extra_hosts_collections_and_recovery(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let list = build_definition(view, "list")?
+        .extra_hosts()
+        .ok_or("list extra_hosts expected")?;
+    assert!(matches!(list.value(), ProjectBuildExtraHosts::List(values)
+        if values.iter().map(ProjectValue::value).map(String::as_str).collect::<Vec<_>>()
+            == ["db:127.0.0.1", "gateway=host-gateway", "db:127.0.0.1", "v6=[::1]"]));
+    assert_eq!(list.provenance().operation(), MergeOperation::Appended);
+    assert!(
+        matches!(build_definition(view, "mixed")?.extra_hosts().map(ProjectValue::value),
+        Some(ProjectBuildExtraHosts::List(values)) if values[0].value() == "replacement=host-gateway")
+    );
+    let reset = build_definition(view, "reset")?
+        .extra_hosts()
+        .ok_or("reset extra_hosts expected")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.value(), ProjectBuildExtraHosts::Map(entries) if entries.is_empty()));
+    let overridden = build_definition(view, "overridden")?
+        .extra_hosts()
+        .ok_or("override extra_hosts expected")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(overridden.value(), ProjectBuildExtraHosts::Map(entries)
+        if matches!(entries[0].addresses(), ProjectBuildExtraHostAddresses::List(values) if values[0].value() == "[fd00::1]")));
+    let malformed = build_definition(view, "malformed")?;
+    assert!(
+        matches!(malformed.extra_hosts().map(ProjectValue::value), Some(ProjectBuildExtraHosts::Map(entries))
+        if entries.iter().map(|entry| entry.hostname().value()).collect::<Vec<_>>() == ["retained", "bad"])
+    );
+    for path in [
+        vec!["services", "malformed", "extra_hosts"],
+        vec!["services", "malformed", "extra_hosts", "bad", "1"],
+        vec!["services", "malformed", "extra_hosts", "wrong"],
+    ] {
+        assert!(
+            malformed.unmodeled_fields().iter().any(|field| field.path() == path),
+            "missing {path:?}; got {:?}",
+            malformed
+                .unmodeled_fields()
+                .iter()
+                .map(ProjectFieldReference::path)
+                .collect::<Vec<_>>()
+        );
+    }
+    assert!(
+        build_definition(view, "outer")?
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "outer", "extra_hosts"])
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
     Ok(())
 }

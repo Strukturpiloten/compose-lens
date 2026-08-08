@@ -45,6 +45,49 @@ processing or I/O. Successful output is parse-back validated through the syntax 
 Additive `init`, `stdin_open`, `tty`, and `privileged` getters retain omitted, literal, and deferred states at the
 authored-document and effective-project layers; their generated setters emit only explicitly
 supplied booleans.
+Additive `BuildDefinition::{additional_contexts,context,args,cache_from,cache_to,dockerfile,dockerfile_inline,entitlements,extra_hosts,target,network,isolation,platforms,no_cache,privileged,sbom,pull,shm_size,tags,labels,secrets,ssh,ulimits}` and `ProjectBuild` retain form, scalar spelling, sensitivity, provenance, explicit empties, duplicates, reset/override, and partial recovery. `additional_contexts` retains raw ordered list spelling or scalar mapping entries without parsing names, paths, URLs, images, `service:` schemes, or builder behavior. Build-specific `extra_hosts` remains distinct from service `ExtraHosts`, retaining raw string list entries and mapping hostname keys with scalar or nested-list string addresses. `entitlements` retains opaque ordered strings without an allowlist, privilege, BuildKit/platform, execution, or runtime claim; Docker Compose v2.27.0 is an implementation badge only, with earlier and removal boundaries unknown. `dockerfile_inline` retains exact empty or multiline string content, interpolation sensitivity, scalar merge provenance, and conflicts without Containerfile parsing, path/context access, secret scanning, build execution, or Docker/BuildKit/runtime claims; Docker Compose v2.17.0 is an implementation badge only, with earlier and removal boundaries unknown.
+`cache_from`, `cache_to`, and `platforms` are ordered raw strings; `no_cache` and `sbom` retain YAML boolean/string distinction without string coercion. ComposeLens neither parses cache descriptor/reference/path/credential or OCI grammar nor validates availability, service platform, defaults, build execution, or SBOM generators/data.
+`build.privileged` retains literal booleans or deferred dollar expressions in `BooleanValue` at both
+authored and effective layers. Ordinary quoted non-expression strings are rejected rather than
+coerced and remain source-addressable unmodeled evidence with diagnostics. Docker Compose v2.15.0
+is an implementation badge only, with earlier and removal boundaries unknown; privilege,
+platform, runtime, and build behavior remain outside this API contract.
+`isolation` accepts only opaque YAML string scalars and remains independent from service `isolation`; it does not validate modes, platforms, privileges, defaults, or `BUILDAH_ISOLATION` behavior.
+`build.shm_size` exposes the existing `ShmSize` model at authored and effective layers, preserving YAML number/string spelling and the documented lowercase-unit, lexical-zero, deferred-expression, and provider-dependent classifications. It infers no builder default, host setting, allocation, or runtime behavior.
+`build.ulimits` exposes the existing `Ulimits` and `ProjectUlimits` models with ordered keys, single/range form, retained scalar spelling, independent soft/hard provenance, and malformed evidence. It applies neither defaults nor `-1`/name normalization and validates no host, builder, or runtime behavior.
+`BuildSsh` and `ProjectBuildSsh` retain list-string or mapping string/number/boolean/null forms. SSH values and mapping entries are always sensitive, redact from `Debug`, and expose raw data only through explicit accessors; no grant identifier, path, PEM, socket, agent, mount, or build behavior is parsed or accessed.
+`BuildProvenance` is distinct from `BuildSbom` and retains only YAML boolean or opaque string form, source span, sensitivity, scalar merge provenance, and malformed evidence; it makes no attestation or builder/runtime claim. Docker Compose v2.39.0 is an implementation badge only, with earlier and removal boundaries unknown.
+Other build fields remain source-addressable unmodeled evidence, and generated build output is outside this boundary.
+Additive `DeployDefinition::{endpoint_mode,mode,replicas}`, `ProjectService::deploy`, and `ProjectDeploy` expose
+effective deploy endpoint mode/mode/replicas values and nested unmodeled deploy children. `DeployEndpointMode`
+retains `vip`, `dnsrr`, or raw `Other(String)` values; other strings receive a portability
+diagnostic without rejection, while non-string forms remain source-addressable evidence. The prose
+`vip` default and schema lack of an effective default are intentionally unresolved, so this API
+injects no default and claims no platform, discovery, VIP, DNS, replica, deployment, runtime, or
+conversion behavior.
+`DeployMode` likewise retains `global`, `replicated`, or raw `Other(String)` values; empty,
+deferred, and provider-specific strings diagnose portability without coercion, and omission does
+not become `replicated`. No replica, scale, placement, job, deployment, runtime, or conversion
+behavior is within this API contract.
+`DeployReplicas` retains raw YAML number spelling or a distinct YAML string form, including empty
+and deferred strings. It validates no integer grammar and applies no positive/zero/default rule,
+mode coupling, scale, allocation, scheduling, runtime, or conversion behavior; no version boundary
+is claimed.
+`DeployDefinition::labels` and `ProjectDeploy::labels` expose deployment labels separately from
+service container labels. They retain mapping scalar/null categories or ordered raw list spelling;
+`ProjectLabelsForm` preserves an explicit empty map/list distinction, mapping keys merge while
+lists append duplicate fallible-input evidence. No container, service, runtime, platform,
+deployment, or conversion behavior or version boundary is claimed.
+`DeployDefinition::restart_policy` and `ProjectDeploy::restart_policy` are deploy-specific. They
+retain member-level provenance and malformed evidence without service-restart fallback, defaults,
+precedence, attempt simulation, runtime, or conversion claims.
+`DeployDefinition::placement` and `ProjectDeploy::placement` expose ordered YAML-string
+constraints, preference mappings with optional string `spread`, and max-replicas-per-node as a
+YAML-integer or YAML-string category. The effective values preserve collection, item, and nested
+member provenance across append, replacement, reset, and override; extensions, unknown members,
+and malformed values remain source-addressable evidence. The API supplies no constraint/spread
+grammar, node-selection, count/range/default, mode coupling, scheduling, runtime, or conversion
+interpretation.
 Additive lifecycle getters expose `stop_signal` independently from the lifecycle-specific
 `StopGracePeriod` state at both authored-document and effective-project layers. Generated setters
 retain caller spelling and sensitivity without applying target-runtime normalization.
