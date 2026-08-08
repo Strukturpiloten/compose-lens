@@ -81,7 +81,7 @@ The component crates remain unpublished until their release contract is finalize
 
 Status: in progress. Each repository owns its native types; BoxFerry owns mappings.
 
-- ComposeLens (completed): services, images, commands, environment, service labels, service annotations, hostnames, extra hosts, DNS servers, exposed ports, service security options, capability additions and drops, service devices,
+- ComposeLens (completed): services, images, commands, environment, service labels, service annotations, service logging, hostnames, extra hosts, DNS servers, exposed ports, service security options, capability additions and drops, service devices,
   service PID limits, shared-memory sizes, service-level temporary filesystems, service sysctls, service ulimits, image pull policies, independent stop signals and stop grace periods, ports, volumes, networks,
   profiles, configs, and secrets.
 - QuadletLens (completed): `.container`, `.pod`, `.volume`, `.network`, required generic systemd
@@ -237,6 +237,11 @@ effective-project, and safe generated boundaries. Their field-specific merge beh
 evidence, sensitivity, reset/override state, and diagnostic ambiguity remain visible. Provider
 rows are still planned evidence; no resolver, profile, path, filesystem, runtime, or cross-format
 behavior is inferred.
+
+Service `logging` now covers authored, effective-project, and generated boundaries. Drivers remain
+uninterpreted strings; ordered options retain exact string/number/null kind, value-only
+interpolation, recursive merge and replacement provenance, sensitivity, reset/override state,
+extensions, unknowns, and malformed recovery. Generation adds no defaults or provider semantics.
 
 ## T8: First N-to-N runtime and definition milestone
 

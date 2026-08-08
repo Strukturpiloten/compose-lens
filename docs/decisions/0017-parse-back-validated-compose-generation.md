@@ -59,6 +59,30 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
     profile, SELinux, path, filesystem, provider, runtime, or cross-format normalization.
 17. Every successful generated document is quoted where required and parsed back through the
     native model.
+18. Generated service `logging` requires an explicit uninterpreted string driver and ordered
+    unique non-empty option keys. Options select string, validated YAML number, or null kind;
+    empty maps remain explicit, sensitivity propagates, and no defaults or provider semantics are
+    inferred.
+19. Generated top-level network driver configuration uses a distinct API rather than extending the
+    shared basic `GeneratedResource`. The driver-configured API is application-owned; external
+    networks stay on `GeneratedResource::external` because Compose permits only `name` alongside
+    `external`. Optional opaque `driver` and ordered unique `driver_opts` retain explicit string
+    or validated-number scalar identity, empty-map state, and sensitivity; plugin availability and
+    provider-specific option semantics remain unvalidated.
+20. Generated top-level volume driver configuration uses distinct volume-specific option types
+    rather than network option types or the shared basic/external `GeneratedResource`. The
+    driver-configured API is application-owned; external volumes remain
+    `GeneratedResource::external`. Optional opaque `driver` and ordered unique `driver_opts`
+    retain explicit string or validated-number scalar identity, empty-map state, sensitivity, and
+    parse-back fidelity; plugin, provider, runtime, default, and image semantics remain
+    unvalidated.
+21. Generated application-owned volume definitions accept ordered unique `GeneratedLabel` mappings
+    exactly once, including an explicit empty map. Labels use explicit quoted string values,
+    preserve sensitivity, and parse back through the existing volume label model. The shared
+    `GeneratedResource::external` API remains the sole generated external-volume path. At authored
+    and project-view boundaries, literal `external: true` plus any volume `labels` attribute emits
+    a distinct diagnostic while retaining labels; a simultaneous driver configuration continues to
+    emit its existing independent diagnostic.
 
 ## Consequences
 

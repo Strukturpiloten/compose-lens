@@ -1,0 +1,21 @@
+schema = 1
+id = "invalid-network-label-forms"
+suite = "typed-model"
+description = "Protects recoverable diagnostics for invalid top-level network label forms and duplicate keys while retaining valid scalar-map evidence."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation, provider, or runtime is used."
+
+[expectations]
+summary = "Malformed network-label forms remain source-addressable and do not prevent other network definitions from being typed."
+
+[extensions.typed-model]
+expected_diagnostics = ["compose.model.duplicate-field", "compose.model.expected-field-form", "compose.model.expected-scalar"]

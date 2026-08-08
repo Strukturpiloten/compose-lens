@@ -1,0 +1,10 @@
+networks:
+  mapping:
+    labels:
+      com.example.empty: ""
+      com.example.equals: "left=right"
+  sequence:
+    labels:
+      - "com.example.value=sequence"
+      - "com.example.empty"
+      - "com.example.equals=left=right"

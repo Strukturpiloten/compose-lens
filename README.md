@@ -21,6 +21,12 @@ It is designed for tools that need more than strict deserialization: source-awar
   validation, deferred-expression retention, and no synthesized default.
 - Preserve, merge, inspect, and generate service-level restart policies without confusing them
   with dependency-update or deploy restart settings.
+- Preserve, merge, inspect, and generate service `stdin_open` choices without inferring terminal,
+  runtime, or cross-format behavior.
+- Preserve, merge, inspect, and generate service `tty` choices without inferring terminal,
+  runtime, or cross-format behavior.
+- Preserve, merge, inspect, and generate service `privileged` choices without inferring security,
+  runtime, or cross-format behavior.
 - Preserve, merge, inspect, and generate service image pull policies without inventing provider
   behavior or discarding schema-only refresh evidence.
 - Preserve, merge, inspect, and generate independent service stop signals and raw Compose stop
@@ -47,6 +53,43 @@ It is designed for tools that need more than strict deserialization: source-awar
   resolver, network, or runtime access.
 - Preserve and safely generate keyed service annotations without losing mapping/list syntax or
   ambiguous key-only entries.
+- Preserve, recursively merge, inspect, and safely generate service logging drivers and ordered
+  string/number/null options without interpreting provider semantics.
+- Preserve Build `no_cache` YAML boolean/string distinctions, interpolation provenance, and
+  recovery without inferring defaults, builder behavior, or cache behavior.
+- Preserve Build `sbom` YAML boolean/string distinctions, interpolation provenance, and recovery
+  without parsing generators, exposing generated SBOM data, or inferring builder behavior.
+- Preserve Build `privileged` literal booleans and deferred expressions through authored and
+  effective views without inferring privilege, platform, runtime, or build behavior.
+- Preserve sensitive BuildKit `build.ssh` mapping/list forms, complete provenance, and redacted
+  inspection without parsing grants or accessing sockets, agents, files, or a builder.
+- Preserve opaque Build `isolation` YAML strings with interpolation, provenance, and recovery
+  without validating modes, platforms, privileges, or builder behavior.
+- Preserve raw ordered Build `cache_from` and `cache_to` descriptors with source spans,
+  interpolation provenance, and generic sequence merge behavior without interpreting cache types
+  or locations.
+- Preserve opaque ordered Build `entitlements` strings with interpolation, provenance, and
+  recovery without inferring allowlists, privilege state, BuildKit/platform support, execution,
+  or runtime effect.
+- Preserve exact Build `dockerfile_inline` string scalars with source spans, interpolation,
+  provenance, recovery, and conflict diagnostics without parsing Containerfiles or building.
+- Preserve Build `shm_size` through authored and effective views with the same raw scalar,
+  lowercase-unit, zero, deferred-expression, and provider-dependent states as service
+  `shm_size`, without default, host, allocation, or builder inference.
+- Preserve Build `ulimits` through authored and effective views with the same ordered single and
+  soft/hard forms, scalar spelling, recursive merge, and source evidence as service `ulimits`,
+  without defaults, normalization, host-limit validation, or builder/runtime inference.
+- Preserve Build-specific `extra_hosts` list/map forms, raw host/address spelling, nested address
+  lists, interpolation provenance, and generic merge evidence without conflating service hosts or
+  performing address validation, DNS/host access, build generation, or conversion.
+- Preserve Deploy `endpoint_mode`, `mode`, raw `replicas` scalars, and distinct map/list deployment labels through
+  authored and effective views while retaining all other deploy children as evidence and inferring no count, container,
+  platform, discovery, or runtime behavior.
+- Preserve deploy restart-policy members with raw condition, duration, and attempt spellings without service-restart
+  defaults, precedence, simulation, or runtime interpretation.
+- Preserve deploy placement constraints, preferences, and max-replicas-per-node spelling through
+  authored and effective views with append/reset/override provenance, malformed recovery, and no
+  scheduling, node-selection, default, runtime, or conversion interpretation.
 - Preserve raw service security options and expose conflict-aware lexical candidates without
   selecting policy, inspecting the host, or claiming runtime behavior.
 - Preserve, inspect, and generate ordered service `env_file` short/long syntax and options; retain
@@ -99,6 +142,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
+- [0.1.16 release notes](docs/releases/0.1.16.md) — Build-family project values, native service terminal/security choices, logging, and generated network and volume configuration
 - [0.1.15 release notes](docs/releases/0.1.15.md) — DNS, expose, annotations, and security options
 - [0.1.14 release notes](docs/releases/0.1.14.md)
 - [Release process](docs/releasing.md)

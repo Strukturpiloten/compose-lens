@@ -1,6 +1,7 @@
 //! Source-aware native Compose document types.
 
 mod annotation;
+mod build_extra_host;
 mod capability;
 mod command;
 mod dependency;
@@ -16,6 +17,7 @@ mod hostname;
 mod identity;
 mod image;
 mod lifecycle;
+mod logging;
 mod memory;
 mod network;
 mod pids;
@@ -33,6 +35,7 @@ mod value;
 mod volume;
 
 pub use annotation::{Annotations, AnnotationsForm};
+pub use build_extra_host::{BuildExtraHostAddresses, BuildExtraHostEntry, BuildExtraHosts};
 pub use capability::{CapabilityAdd, CapabilityAddItem, CapabilityDrop, CapabilityDropItem};
 pub use command::Command;
 pub use dependency::{
@@ -57,6 +60,7 @@ pub use hostname::{Hostname, HostnameKind};
 pub use identity::{IdentityComponent, UserNamespaceMode, UserNamespaceModeKind, UserSpec};
 pub use image::{ImageDigest, ImageReference};
 pub use lifecycle::StopGracePeriod;
+pub use logging::{Logging, LoggingOption, LoggingOptionValue, LoggingOptions};
 pub(crate) use memory::valid_generated_mem_amount;
 pub use memory::{MemLimit, MemLimitKind, MemLimitScalarKind, MemLimitUnit};
 pub use network::{Ipam, IpamConfig, NetworkDefinition, ServiceNetwork, ServiceNetworks};
@@ -68,7 +72,10 @@ pub use pull::{PullPolicy, PullPolicyKind};
 pub use resource::{ConfigDefinition, ConfigGrant, LongGrant, SecretDefinition, SecretGrant, VolumeDefinition};
 pub use restart::{RestartPolicy, RestartPolicyKind};
 pub use sections::{
-    Build, BuildDefinition, BuildField, BuildFieldKind, DeployDefinition, DeployField, DeployFieldKind,
+    Build, BuildAdditionalContexts, BuildArgs, BuildDefinition, BuildField, BuildFieldKind, BuildNoCacheFilter,
+    BuildSsh, BuildSshForm, DeployDefinition, DeployEndpointMode, DeployField, DeployFieldKind, DeployMode,
+    DeployPlacement, DeployPlacementMaxReplicasPerNode, DeployPlacementPreference, DeployReplicas,
+    DeployRestartCondition, DeployRestartDuration, DeployRestartMaxAttempts, DeployRestartPolicy,
 };
 pub(crate) use security_option::{SecurityOptionCandidateCounts, classify_security_option};
 pub use security_option::{SecurityOptionItem, SecurityOptionKind, SecurityOptions};
@@ -79,7 +86,7 @@ pub(crate) use tmpfs::valid_generated_tmpfs_item;
 pub use tmpfs::{Tmpfs, TmpfsForm, TmpfsItem, TmpfsItemKind};
 pub(crate) use ulimit::valid_ulimit_name;
 pub use ulimit::{LimitValue, Ulimit, UlimitRange, UlimitValue, Ulimits};
-pub use value::{BooleanValue, ComposeScalar, KeyValueEntry, Labels};
+pub use value::{BooleanValue, BuildNoCache, BuildProvenance, BuildSbom, ComposeScalar, KeyValueEntry, Labels};
 pub use volume::{
     BindOptions, ContainerPath, ContainerPathKind, LongVolumeMount, MountType, SelinuxRelabel, ShortVolumeMount,
     VolumeMount, VolumeSyntax,
@@ -99,6 +106,14 @@ pub const MULTIPLE_DOCUMENTS: DiagnosticCode = DiagnosticCode::new("compose.docu
 
 /// A mapping contains a duplicate field.
 pub const DUPLICATE_FIELD: DiagnosticCode = DiagnosticCode::new("compose.model.duplicate-field");
+/// A deploy endpoint mode is retained but is outside Compose's documented portable values.
+pub const DEPLOY_ENDPOINT_MODE_PORTABILITY: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.endpoint-mode.portability");
+/// A deploy mode is retained but is outside Compose's documented portable values.
+pub const DEPLOY_MODE_PORTABILITY: DiagnosticCode = DiagnosticCode::new("compose.deploy.mode.portability");
+/// A Build no-cache filter list repeats an exact stage name.
+pub const BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM: DiagnosticCode =
+    DiagnosticCode::new("compose.build.no-cache-filter.duplicate-item");
 
 /// A Compose value has to be a mapping at this location.
 pub const EXPECTED_MAPPING: DiagnosticCode = DiagnosticCode::new("compose.model.expected-mapping");
@@ -115,6 +130,38 @@ pub const EXPECTED_BOOLEAN: DiagnosticCode = DiagnosticCode::new("compose.model.
 /// A field supports multiple Compose syntax forms, but the authored form is invalid here.
 pub const EXPECTED_FIELD_FORM: DiagnosticCode = DiagnosticCode::new("compose.model.expected-field-form");
 
+/// A build `dockerfile` must be a non-empty scalar.
+pub const BUILD_DOCKERFILE_EXPECTED_NON_EMPTY: DiagnosticCode =
+    DiagnosticCode::new("compose.build.dockerfile.expected-non-empty-scalar");
+
+/// A build definition declares both `dockerfile` and `dockerfile_inline`.
+pub const BUILD_DOCKERFILE_INLINE_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.build.dockerfile-inline-conflict");
+
+/// A build `no_cache` value is neither a YAML boolean nor a YAML string scalar.
+pub const BUILD_NO_CACHE_EXPECTED_BOOLEAN_OR_STRING: DiagnosticCode =
+    DiagnosticCode::new("compose.build.no-cache.expected-boolean-or-string");
+
+/// A build `sbom` value is neither a YAML boolean nor a YAML string scalar.
+pub const BUILD_SBOM_EXPECTED_BOOLEAN_OR_STRING: DiagnosticCode =
+    DiagnosticCode::new("compose.build.sbom.expected-boolean-or-string");
+
+/// A build `isolation` value is not a YAML string scalar.
+pub const BUILD_ISOLATION_EXPECTED_STRING: DiagnosticCode =
+    DiagnosticCode::new("compose.build.isolation.expected-string");
+
+/// Build `extra_hosts` has neither list nor mapping syntax.
+pub const BUILD_EXTRA_HOSTS_EXPECTED_FORM: DiagnosticCode =
+    DiagnosticCode::new("compose.build.extra-hosts.expected-form");
+
+/// A build `extra_hosts` list item or address is not a YAML string scalar.
+pub const BUILD_EXTRA_HOSTS_EXPECTED_STRING: DiagnosticCode =
+    DiagnosticCode::new("compose.build.extra-hosts.expected-string");
+
+/// A build `extra_hosts` list repeats a schema-unique raw entry.
+pub const BUILD_EXTRA_HOSTS_DUPLICATE_ITEM: DiagnosticCode =
+    DiagnosticCode::new("compose.build.extra-hosts.duplicate-item");
+
 /// A service port is neither scalar short syntax nor mapping long syntax.
 pub const PORT_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.port.expected-short-or-long");
 
@@ -129,6 +176,19 @@ pub const GRANT_MISSING_SOURCE: DiagnosticCode = DiagnosticCode::new("compose.gr
 
 /// A top-level resource definition must be a mapping or an explicit null.
 pub const RESOURCE_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.resource.expected-mapping-or-null");
+
+/// An external volume also configures a local driver or driver options.
+///
+/// Both authored values remain available for diagnosis; `ComposeLens` does not silently select one.
+pub const VOLUME_EXTERNAL_DRIVER_CONFIGURATION: DiagnosticCode =
+    DiagnosticCode::new("compose.volume.external-driver-configuration");
+
+/// An external volume also configures labels.
+///
+/// The authored labels remain available for diagnosis; `ComposeLens` does not silently discard
+/// them or repurpose the driver-configuration diagnostic.
+pub const VOLUME_EXTERNAL_LABELS_CONFIGURATION: DiagnosticCode =
+    DiagnosticCode::new("compose.volume.external-labels-configuration");
 
 /// A service-volume item is neither short nor long syntax.
 pub const VOLUME_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.volume.expected-short-or-long");
@@ -554,6 +614,24 @@ pub const SYSCTLS_EXPECTED_STRING: DiagnosticCode = DiagnosticCode::new("compose
 /// A service `sysctls` list contains an exact duplicate string.
 pub const SYSCTLS_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.sysctls.duplicate-item");
 
+/// A service `logging` value is not a mapping.
+pub const LOGGING_EXPECTED_MAPPING: DiagnosticCode = DiagnosticCode::new("compose.logging.expected-mapping");
+
+/// A service logging driver is not a YAML string scalar.
+pub const LOGGING_DRIVER_EXPECTED_STRING: DiagnosticCode =
+    DiagnosticCode::new("compose.logging.driver.expected-string");
+
+/// A service logging options value is not a mapping.
+pub const LOGGING_OPTIONS_EXPECTED_MAPPING: DiagnosticCode =
+    DiagnosticCode::new("compose.logging.options.expected-mapping");
+
+/// A service logging option has an empty key.
+pub const LOGGING_OPTION_EMPTY_KEY: DiagnosticCode = DiagnosticCode::new("compose.logging.option.empty-key");
+
+/// A service logging option is not a YAML string, number, or null scalar.
+pub const LOGGING_OPTION_EXPECTED_SCALAR: DiagnosticCode =
+    DiagnosticCode::new("compose.logging.option.expected-scalar");
+
 /// A service environment-file item is neither scalar short syntax nor mapping long syntax.
 pub const ENVIRONMENT_FILE_EXPECTED_FORM: DiagnosticCode =
     DiagnosticCode::new("compose.environment-file.expected-short-or-long");
@@ -579,6 +657,12 @@ pub const DEPENDENCY_MISSING_HEALTHCHECK: DiagnosticCode =
 /// A `service_healthy` dependency may rely on health metadata from its image.
 pub const DEPENDENCY_HEALTHCHECK_UNVERIFIED: DiagnosticCode =
     DiagnosticCode::new("compose.dependencies.healthcheck-unverified");
+
+/// A `BuildKit` SSH declaration has an unsupported outer or item form.
+pub const BUILD_SSH_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.build.ssh-expected-form");
+
+/// A `BuildKit` SSH list repeats an item despite the schema uniqueness rule.
+pub const BUILD_SSH_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.build.ssh-duplicate-item");
 
 /// A typed value and the exact source span from which it was read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -653,6 +737,9 @@ pub struct Service {
     entrypoint: Option<Entrypoint>,
     command: Option<Command>,
     init: Option<Located<BooleanValue>>,
+    stdin_open: Option<Located<BooleanValue>>,
+    tty: Option<Located<BooleanValue>>,
+    privileged: Option<Located<BooleanValue>>,
     environment: Option<Environment>,
     environment_files: Vec<EnvironmentFile>,
     labels: Option<Labels>,
@@ -676,6 +763,7 @@ pub struct Service {
     mem_limit: Option<MemLimit>,
     tmpfs: Option<Tmpfs>,
     sysctls: Option<Sysctls>,
+    logging: Option<Logging>,
     pull_policy: Option<PullPolicy>,
     restart: Option<RestartPolicy>,
     stop_signal: Option<Located<String>>,
@@ -706,6 +794,9 @@ impl Service {
             entrypoint: None,
             command: None,
             init: None,
+            stdin_open: None,
+            tty: None,
+            privileged: None,
             environment: None,
             environment_files: Vec::new(),
             labels: None,
@@ -729,6 +820,7 @@ impl Service {
             mem_limit: None,
             tmpfs: None,
             sysctls: None,
+            logging: None,
             pull_policy: None,
             restart: None,
             stop_signal: None,
@@ -795,6 +887,24 @@ impl Service {
     #[must_use]
     pub const fn init(&self) -> Option<&Located<BooleanValue>> {
         self.init.as_ref()
+    }
+
+    /// Returns whether Compose should keep standard input open for the service.
+    #[must_use]
+    pub const fn stdin_open(&self) -> Option<&Located<BooleanValue>> {
+        self.stdin_open.as_ref()
+    }
+
+    /// Returns whether Compose should allocate a terminal for the service.
+    #[must_use]
+    pub const fn tty(&self) -> Option<&Located<BooleanValue>> {
+        self.tty.as_ref()
+    }
+
+    /// Returns whether Compose should run the service with its privileged choice.
+    #[must_use]
+    pub const fn privileged(&self) -> Option<&Located<BooleanValue>> {
+        self.privileged.as_ref()
     }
 
     /// Returns environment variables with list and mapping forms kept distinct.
@@ -933,6 +1043,12 @@ impl Service {
     #[must_use]
     pub const fn sysctls(&self) -> Option<&Sysctls> {
         self.sysctls.as_ref()
+    }
+
+    /// Returns service logging configuration with an uninterpreted driver and ordered options.
+    #[must_use]
+    pub const fn logging(&self) -> Option<&Logging> {
+        self.logging.as_ref()
     }
 
     /// Returns the raw-preserving service image pull policy.
@@ -1422,10 +1538,11 @@ impl Parser {
                 "entrypoint" if !duplicate => service.entrypoint = self.parse_entrypoint(&service_field),
                 "command" if !duplicate => service.command = self.parse_command(&service_field),
                 "init" if !duplicate => service.init = self.parse_boolean(&service_field, "service init"),
+                "stdin_open" if !duplicate => service.stdin_open = self.parse_boolean(&service_field, "stdin_open"),
+                "tty" if !duplicate => service.tty = self.parse_boolean(&service_field, "tty"),
+                "privileged" if !duplicate => service.privileged = self.parse_boolean(&service_field, "privileged"),
                 "environment" if !duplicate => service.environment = self.parse_environment(&service_field),
-                "env_file" if !duplicate => {
-                    service.environment_files = self.parse_environment_files(&service_field);
-                }
+                "env_file" if !duplicate => service.environment_files = self.parse_environment_files(&service_field),
                 "labels" if !duplicate => service.labels = self.parse_labels(&service_field),
                 "annotations" if !duplicate => service.annotations = self.parse_annotations(&service_field),
                 "extra_hosts" if !duplicate => service.extra_hosts = self.parse_extra_hosts(&service_field),
@@ -1459,6 +1576,7 @@ impl Parser {
                 "mem_limit" if !duplicate => service.mem_limit = self.parse_mem_limit(&service_field),
                 "tmpfs" if !duplicate => service.tmpfs = self.parse_tmpfs(&service_field),
                 "sysctls" if !duplicate => service.sysctls = self.parse_sysctls(&service_field),
+                "logging" if !duplicate => service.logging = self.parse_logging(&service_field),
                 "pull_policy" if !duplicate => service.pull_policy = self.parse_pull_policy(&service_field),
                 "restart" if !duplicate => service.restart = self.parse_restart_policy(&service_field),
                 "stop_signal" if !duplicate => {
@@ -1467,9 +1585,7 @@ impl Parser {
                 "stop_grace_period" if !duplicate => {
                     service.stop_grace_period = self.parse_stop_grace_period(&service_field);
                 }
-                "ulimits" if !duplicate => {
-                    service.ulimits = self.parse_ulimits(&service_field);
-                }
+                "ulimits" if !duplicate => service.ulimits = self.parse_ulimits(&service_field),
                 "depends_on" if !duplicate => {
                     service.depends_on = self.parse_depends_on(&service_field);
                 }
@@ -1498,7 +1614,7 @@ impl Parser {
                     service.configs = self.parse_config_grants(&service_field);
                 }
                 "secrets" if !duplicate => {
-                    service.secrets = self.parse_secret_grants(&service_field);
+                    service.secrets = self.parse_secret_grants(&service_field).unwrap_or_default();
                 }
                 name if name.starts_with("x-") => {
                     service.extension_fields.push(service_field.reference());
@@ -2346,6 +2462,141 @@ impl Parser {
         }
     }
 
+    fn parse_logging(&mut self, field: &ParsedField) -> Option<Logging> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                LOGGING_EXPECTED_MAPPING,
+                field,
+                "logging must be a mapping with optional driver and options fields",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut logging = Logging::new(span);
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &member);
+            match member.name.value.as_str() {
+                "driver" if !duplicate => {
+                    if let Some(driver) = self.parse_logging_driver(&member) {
+                        logging.set_driver(driver);
+                    }
+                }
+                "options" if !duplicate => {
+                    if let Some(options) = self.parse_logging_options(&member) {
+                        logging.set_options(options);
+                    }
+                }
+                name if name.starts_with("x-") => logging.push_extension(member.reference()),
+                _ if duplicate => {}
+                _ => logging.push_unknown(member.reference()),
+            }
+        }
+        Some(logging)
+    }
+
+    fn parse_logging_driver(&mut self, field: &ParsedField) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                LOGGING_DRIVER_EXPECTED_STRING,
+                field,
+                "logging driver must be a YAML string scalar",
+            );
+            return None;
+        };
+        if !matches!(
+            ScalarValue::from_scalar(scalar).scalar_type(),
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+        ) {
+            self.expected(
+                LOGGING_DRIVER_EXPECTED_STRING,
+                field,
+                "logging driver must be a YAML string scalar",
+            );
+            return None;
+        }
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        Some(Located::new(scalar_string_from_source(&self.source, scalar), span))
+    }
+
+    fn parse_logging_options(&mut self, field: &ParsedField) -> Option<LoggingOptions> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                LOGGING_OPTIONS_EXPECTED_MAPPING,
+                field,
+                "logging options must be a mapping",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut entries = Vec::new();
+        let mut unmodeled_entries = Vec::new();
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            if option.name.value.is_empty() {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        LOGGING_OPTION_EMPTY_KEY,
+                        Severity::Error,
+                        "logging option keys must not be empty",
+                    )
+                    .with_label(DiagnosticLabel::primary(option.name.span, "empty logging option key")),
+                );
+                unmodeled_entries.push(option.reference());
+                continue;
+            }
+            let Some(value) = self.parse_logging_option_scalar(&option) else {
+                unmodeled_entries.push(option.reference());
+                continue;
+            };
+            entries.push(LoggingOption::new(option.name, value, option.span));
+        }
+        Some(LoggingOptions::new(span, entries, unmodeled_entries))
+    }
+
+    fn parse_logging_option_scalar(&mut self, field: &ParsedField) -> Option<Located<LoggingOptionValue>> {
+        let Some(node) = field.value.as_ref() else {
+            return Some(Located::new(LoggingOptionValue::Null, field.name.span));
+        };
+        let Some(scalar) = node.as_scalar() else {
+            self.expected(
+                LOGGING_OPTION_EXPECTED_SCALAR,
+                field,
+                "logging option values must be YAML string, number, or null scalars",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let value = match scalar_value.scalar_type() {
+            ScalarType::Null => LoggingOptionValue::Null,
+            ScalarType::Integer | ScalarType::Float => {
+                LoggingOptionValue::Number(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                LoggingOptionValue::String(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::Boolean => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        LOGGING_OPTION_EXPECTED_SCALAR,
+                        Severity::Error,
+                        "logging option values must be YAML string, number, or null scalars",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "boolean logging option retained as malformed",
+                    )),
+                );
+                return None;
+            }
+        };
+        Some(Located::new(value, span))
+    }
+
     fn parse_restart_policy(&mut self, field: &ParsedField) -> Option<RestartPolicy> {
         let value = self.parse_string(field, "service restart policy")?;
         let policy = RestartPolicy::parse(value);
@@ -3100,28 +3351,487 @@ impl Parser {
         match field.value.as_ref() {
             Some(YamlNode::Scalar(_)) => self.parse_string(field, "build context").map(Build::Context),
             Some(YamlNode::Mapping(mapping)) => {
-                let span = span_from_position(self.source_id, mapping.byte_range());
-                let mut definition = BuildDefinition::new(span);
+                let mut definition = BuildDefinition::new(span_from_position(self.source_id, mapping.byte_range()));
                 let mut seen = BTreeMap::new();
+                let (mut dockerfile, mut dockerfile_inline) = (None, None);
                 for option in self.fields(mapping) {
-                    let duplicate = self.record_duplicate(&mut seen, &option);
-                    if duplicate {
+                    if self.record_duplicate(&mut seen, &option) {
                         continue;
                     }
                     if let Some(kind) = BuildFieldKind::from_name(option.name.value()) {
                         definition.push_field(BuildField::new(kind, option.reference()));
+                        match kind {
+                            BuildFieldKind::AdditionalContexts => {
+                                definition.set_additional_contexts(self.parse_build_additional_contexts(&option));
+                            }
+                            BuildFieldKind::Args => {
+                                if let Some(args) = self.parse_build_args(&option) {
+                                    definition.set_args(args);
+                                }
+                            }
+                            BuildFieldKind::CacheFrom | BuildFieldKind::CacheTo => {
+                                self.set_build_cache_locations(&mut definition, &option, kind);
+                            }
+                            BuildFieldKind::Entitlements => {
+                                if let Some(entitlements) = self.parse_build_entitlements(&option) {
+                                    definition.set_entitlements(entitlements);
+                                }
+                            }
+                            BuildFieldKind::ExtraHosts => {
+                                if let Some(extra_hosts) = self.parse_build_extra_hosts(&option) {
+                                    definition.set_extra_hosts(extra_hosts);
+                                }
+                            }
+                            BuildFieldKind::Context => {
+                                if let Some(context) = self.parse_string(&option, "build context") {
+                                    definition.set_context(context);
+                                }
+                            }
+                            BuildFieldKind::Dockerfile => {
+                                dockerfile = Some(self.parse_build_dockerfile(&mut definition, &option));
+                            }
+                            BuildFieldKind::DockerfileInline => {
+                                self.set_build_dockerfile_inline(&mut definition, &option, &mut dockerfile_inline);
+                            }
+                            BuildFieldKind::Target => {
+                                if let Some(target) = self.parse_string(&option, "build target") {
+                                    definition.set_target(target);
+                                }
+                            }
+                            BuildFieldKind::Network => {
+                                if let Some(network) = self.parse_string(&option, "build network") {
+                                    definition.set_network(network);
+                                }
+                            }
+                            BuildFieldKind::Isolation => self.set_build_isolation(&mut definition, &option),
+                            BuildFieldKind::Platforms => {
+                                if let Some(platforms) = self.parse_build_platforms(&option) {
+                                    definition.set_platforms(platforms);
+                                }
+                            }
+                            BuildFieldKind::NoCache => self.set_build_no_cache(&mut definition, &option),
+                            BuildFieldKind::NoCacheFilter => self.set_build_no_cache_filter(&mut definition, &option),
+                            BuildFieldKind::Privileged => self.set_build_privileged(&mut definition, &option),
+                            BuildFieldKind::Sbom => self.set_build_sbom(&mut definition, &option),
+                            BuildFieldKind::Provenance => self.set_build_provenance(&mut definition, &option),
+                            BuildFieldKind::Pull => {
+                                if let Some(pull) = self.parse_boolean(&option, "build pull") {
+                                    definition.set_pull(pull);
+                                }
+                            }
+                            BuildFieldKind::ShmSize => self.set_build_shm_size(&mut definition, &option),
+                            BuildFieldKind::Tags => {
+                                if let Some(tags) = self.parse_build_tags(&option) {
+                                    definition.set_tags(tags);
+                                }
+                            }
+                            BuildFieldKind::Labels => {
+                                if let Some(labels) = self.parse_labels(&option) {
+                                    definition.set_labels(labels);
+                                }
+                            }
+                            BuildFieldKind::Secrets => self
+                                .parse_secret_grants(&option)
+                                .into_iter()
+                                .for_each(|secrets| definition.set_secrets(secrets)),
+                            BuildFieldKind::Ssh => self.set_build_ssh(&mut definition, &option),
+                            BuildFieldKind::Ulimits => self.set_build_ulimits(&mut definition, &option),
+                        }
                     } else if option.name.value().starts_with("x-") {
                         definition.push_extension(option.reference());
                     } else {
                         definition.push_unknown(option.reference());
                     }
                 }
+                self.report_build_dockerfile_conflict(dockerfile, dockerfile_inline);
                 Some(Build::Definition(definition))
             }
+            _ => self.invalid_build_form(field),
+        }
+    }
+
+    fn invalid_build_form(&mut self, field: &ParsedField) -> Option<Build> {
+        self.expected(EXPECTED_FIELD_FORM, field, "build must be a scalar context or mapping");
+        None
+    }
+
+    fn report_build_dockerfile_conflict(
+        &mut self,
+        dockerfile: Option<FieldReference>,
+        dockerfile_inline: Option<FieldReference>,
+    ) {
+        let (Some(dockerfile), Some(dockerfile_inline)) = (dockerfile, dockerfile_inline) else {
+            return;
+        };
+        self.diagnostics.push(
+            Diagnostic::new(
+                BUILD_DOCKERFILE_INLINE_CONFLICT,
+                Severity::Error,
+                "build `dockerfile` and `dockerfile_inline` are mutually exclusive",
+            )
+            .with_label(DiagnosticLabel::primary(dockerfile.span(), "dockerfile retained"))
+            .with_label(DiagnosticLabel::secondary(
+                dockerfile_inline.span(),
+                "dockerfile_inline retained",
+            )),
+        );
+    }
+
+    fn set_build_shm_size(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(shm_size) = self.parse_shm_size(field) {
+            definition.set_shm_size(shm_size);
+        }
+    }
+
+    fn set_build_ulimits(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(ulimits) = self.parse_ulimits(field) {
+            definition.set_ulimits(ulimits);
+        }
+    }
+
+    fn parse_build_tags(&mut self, field: &ParsedField) -> Option<Vec<Located<String>>> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(EXPECTED_SEQUENCE, field, "build tags must be a sequence of scalars");
+            return None;
+        };
+        Some(self.parse_scalar_nodes(
+            sequence.values(),
+            field.span,
+            "build tag entries must be non-null scalars",
+        ))
+    }
+
+    fn parse_build_entitlements(&mut self, field: &ParsedField) -> Option<Vec<Located<String>>> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "build entitlements must be a sequence of string scalars",
+            );
+            return None;
+        };
+        Some(self.parse_string_scalar_nodes(
+            sequence.values(),
+            field.span,
+            "build entitlement entries must be string scalars",
+        ))
+    }
+
+    fn parse_build_cache_locations(&mut self, field: &ParsedField, name: &str) -> Option<Vec<Located<String>>> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                format!("build {name} must be a sequence of string scalars"),
+            );
+            return None;
+        };
+        Some(self.parse_string_scalar_nodes(
+            sequence.values(),
+            field.span,
+            format!("build {name} entries must be string scalars"),
+        ))
+    }
+
+    fn set_build_cache_locations(
+        &mut self,
+        definition: &mut BuildDefinition,
+        field: &ParsedField,
+        kind: BuildFieldKind,
+    ) {
+        let name = if kind == BuildFieldKind::CacheFrom {
+            "cache_from"
+        } else {
+            "cache_to"
+        };
+        if let Some(locations) = self.parse_build_cache_locations(field, name) {
+            if kind == BuildFieldKind::CacheFrom {
+                definition.set_cache_from(locations);
+            } else {
+                definition.set_cache_to(locations);
+            }
+        }
+    }
+
+    fn parse_build_extra_hosts(&mut self, field: &ParsedField) -> Option<BuildExtraHosts> {
+        match field.value.as_ref() {
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let mut values = Vec::new();
+                let mut seen = BTreeSet::new();
+                for node in sequence.values() {
+                    let YamlNode::Scalar(scalar) = node else {
+                        self.unsupported_sequence_item(
+                            BUILD_EXTRA_HOSTS_EXPECTED_STRING,
+                            &node,
+                            field.span,
+                            "build extra_hosts list entries must be string scalars",
+                        );
+                        continue;
+                    };
+                    if !matches!(
+                        ScalarValue::from_scalar(&scalar).scalar_type(),
+                        ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+                    ) {
+                        self.unsupported_sequence_item(
+                            BUILD_EXTRA_HOSTS_EXPECTED_STRING,
+                            &YamlNode::Scalar(scalar),
+                            field.span,
+                            "build extra_hosts list entries must be string scalars",
+                        );
+                        continue;
+                    }
+                    let raw = scalar_string_from_source(&self.source, &scalar);
+                    let item_span = span_from_position(self.source_id, scalar.byte_range());
+                    if !seen.insert(raw.clone()) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                BUILD_EXTRA_HOSTS_DUPLICATE_ITEM,
+                                Severity::Error,
+                                "build extra_hosts list entries must be unique raw strings",
+                            )
+                            .with_label(DiagnosticLabel::primary(item_span, "duplicate entry retained")),
+                        );
+                    }
+                    values.push(Located::new(raw, item_span));
+                }
+                Some(BuildExtraHosts::List { span, values })
+            }
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let mut entries = Vec::new();
+                let mut seen = BTreeMap::new();
+                for entry in self.fields(mapping) {
+                    if self.record_duplicate(&mut seen, &entry) {
+                        continue;
+                    }
+                    let Some(addresses) = self.parse_build_extra_host_addresses(&entry) else {
+                        continue;
+                    };
+                    entries.push(BuildExtraHostEntry::new(entry.name, addresses, entry.span));
+                }
+                Some(BuildExtraHosts::Map { span, entries })
+            }
             _ => {
-                self.expected(EXPECTED_FIELD_FORM, field, "build must be a scalar context or mapping");
+                self.expected(
+                    BUILD_EXTRA_HOSTS_EXPECTED_FORM,
+                    field,
+                    "build extra_hosts must be a sequence or mapping",
+                );
                 None
             }
+        }
+    }
+
+    fn parse_build_extra_host_addresses(&mut self, field: &ParsedField) -> Option<BuildExtraHostAddresses> {
+        match field.value.as_ref() {
+            Some(YamlNode::Scalar(scalar)) => {
+                if !matches!(
+                    ScalarValue::from_scalar(scalar).scalar_type(),
+                    ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+                ) {
+                    self.expected(
+                        BUILD_EXTRA_HOSTS_EXPECTED_STRING,
+                        field,
+                        "build extra_hosts mapping addresses must be string scalars or sequences of string scalars",
+                    );
+                    return None;
+                }
+                let span = span_from_position(self.source_id, scalar.byte_range());
+                Some(BuildExtraHostAddresses::Scalar(Located::new(
+                    scalar_string_from_source(&self.source, scalar),
+                    span,
+                )))
+            }
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let values = self.parse_string_scalar_nodes(
+                    sequence.values(),
+                    field.span,
+                    "build extra_hosts mapping address lists must contain string scalars",
+                );
+                Some(BuildExtraHostAddresses::List { span, values })
+            }
+            _ => {
+                self.expected(
+                    BUILD_EXTRA_HOSTS_EXPECTED_STRING,
+                    field,
+                    "build extra_hosts mapping addresses must be string scalars or sequences of string scalars",
+                );
+                None
+            }
+        }
+    }
+
+    fn parse_build_additional_contexts(&mut self, field: &ParsedField) -> Option<BuildAdditionalContexts> {
+        match field.value.as_ref() {
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let values = self.parse_string_scalar_nodes(
+                    sequence.values(),
+                    field.span,
+                    "build additional context list entries must be string scalars",
+                );
+                Some(BuildAdditionalContexts::List { span, values })
+            }
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let entries = self.parse_scalar_mapping(field, "build additional contexts");
+                Some(BuildAdditionalContexts::Map { span, entries })
+            }
+            _ => {
+                self.expected(
+                    EXPECTED_FIELD_FORM,
+                    field,
+                    "build additional_contexts must be a sequence or mapping",
+                );
+                None
+            }
+        }
+    }
+
+    fn parse_build_platforms(&mut self, field: &ParsedField) -> Option<Vec<Located<String>>> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "build platforms must be a sequence of scalars",
+            );
+            return None;
+        };
+        Some(self.parse_scalar_nodes(
+            sequence.values(),
+            field.span,
+            "build platform entries must be non-null scalars",
+        ))
+    }
+
+    fn parse_build_args(&mut self, field: &ParsedField) -> Option<BuildArgs> {
+        match field.value.as_ref() {
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let values = self.parse_string_scalar_nodes(
+                    sequence.values(),
+                    field.span,
+                    "build argument list entries must be string scalars",
+                );
+                Some(BuildArgs::List { span, values })
+            }
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let entries = self.parse_scalar_mapping(field, "build arguments");
+                Some(BuildArgs::Map { span, entries })
+            }
+            _ => {
+                self.expected(EXPECTED_FIELD_FORM, field, "build args must be a sequence or mapping");
+                None
+            }
+        }
+    }
+
+    fn parse_build_ssh(&mut self, field: &ParsedField) -> Option<BuildSsh> {
+        match field.value.as_ref() {
+            Some(YamlNode::Sequence(sequence)) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let mut values = Vec::new();
+                let mut seen = BTreeSet::new();
+                for node in sequence.values() {
+                    let YamlNode::Scalar(scalar) = node else {
+                        self.unsupported_sequence_item(
+                            BUILD_SSH_EXPECTED_FORM,
+                            &node,
+                            field.span,
+                            "build ssh list entries must be string scalars",
+                        );
+                        continue;
+                    };
+                    if !matches!(
+                        ScalarValue::from_scalar(&scalar).scalar_type(),
+                        ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+                    ) {
+                        self.unsupported_sequence_item(
+                            BUILD_SSH_EXPECTED_FORM,
+                            &YamlNode::Scalar(scalar),
+                            field.span,
+                            "build ssh list entries must be string scalars",
+                        );
+                        continue;
+                    }
+                    let value = scalar_string_from_source(&self.source, &scalar);
+                    let span = span_from_position(self.source_id, scalar.byte_range());
+                    if !seen.insert(value.clone()) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                BUILD_SSH_DUPLICATE_ITEM,
+                                Severity::Error,
+                                "build ssh list entries must be unique",
+                            )
+                            .with_label(DiagnosticLabel::primary(span, "duplicate SSH entry retained")),
+                        );
+                    }
+                    values.push(Located::new(value, span));
+                }
+                Some(BuildSsh::list(span, values))
+            }
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let mut entries = Vec::new();
+                let mut seen = BTreeMap::new();
+                for entry in self.fields(mapping) {
+                    if self.record_duplicate(&mut seen, &entry) {
+                        continue;
+                    }
+                    let key_span = entry.name.span;
+                    let Some(value) = entry.value.as_ref() else {
+                        entries.push(KeyValueEntry::new(
+                            entry.name,
+                            Located::new(ComposeScalar::Null, key_span),
+                            entry.span,
+                        ));
+                        continue;
+                    };
+                    let Some(scalar) = value.as_scalar() else {
+                        self.expected(
+                            BUILD_SSH_EXPECTED_FORM,
+                            &entry,
+                            "build ssh mapping values must be scalars or null",
+                        );
+                        continue;
+                    };
+                    let scalar_span = span_from_position(self.source_id, scalar.byte_range());
+                    let scalar_value = ScalarValue::from_scalar(scalar);
+                    let value = match scalar_value.scalar_type() {
+                        ScalarType::Null => ComposeScalar::Null,
+                        ScalarType::Boolean => ComposeScalar::Boolean(scalar_value.to_bool().unwrap_or(false)),
+                        ScalarType::Integer | ScalarType::Float => {
+                            ComposeScalar::Number(scalar_string_from_source(&self.source, scalar))
+                        }
+                        ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                            ComposeScalar::String(scalar_string_from_source(&self.source, scalar))
+                        }
+                    };
+                    entries.push(KeyValueEntry::new(
+                        entry.name,
+                        Located::new(value, scalar_span),
+                        entry.span,
+                    ));
+                }
+                Some(BuildSsh::map(span, entries))
+            }
+            _ => {
+                self.expected(
+                    BUILD_SSH_EXPECTED_FORM,
+                    field,
+                    "build ssh must be a sequence or mapping",
+                );
+                None
+            }
+        }
+    }
+
+    fn set_build_ssh(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(ssh) = self.parse_build_ssh(field) {
+            definition.set_ssh(ssh);
         }
     }
 
@@ -3140,6 +3850,24 @@ impl Parser {
             }
             if let Some(kind) = DeployFieldKind::from_name(option.name.value()) {
                 definition.push_field(DeployField::new(kind, option.reference()));
+                match kind {
+                    DeployFieldKind::EndpointMode => self.set_deploy_endpoint_mode(&mut definition, &option),
+                    DeployFieldKind::Labels => self
+                        .parse_labels(&option)
+                        .into_iter()
+                        .for_each(|labels| definition.set_labels(labels)),
+                    DeployFieldKind::Mode => self.set_deploy_mode(&mut definition, &option),
+                    DeployFieldKind::Placement => self
+                        .parse_deploy_placement(&option)
+                        .into_iter()
+                        .for_each(|value| definition.set_placement(value)),
+                    DeployFieldKind::Replicas => self.set_deploy_replicas(&mut definition, &option),
+                    DeployFieldKind::RestartPolicy => self
+                        .parse_deploy_restart_policy(&option)
+                        .into_iter()
+                        .for_each(|value| definition.set_restart_policy(value)),
+                    _ => {}
+                }
             } else if option.name.value().starts_with("x-") {
                 definition.push_extension(option.reference());
             } else {
@@ -3147,6 +3875,337 @@ impl Parser {
             }
         }
         Some(definition)
+    }
+
+    fn set_deploy_endpoint_mode(&mut self, definition: &mut DeployDefinition, field: &ParsedField) {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy endpoint_mode must be a YAML string scalar",
+            );
+            return;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy endpoint_mode must be a YAML string scalar",
+            );
+            return;
+        }
+        let endpoint_mode = Located::new(
+            DeployEndpointMode::parse(scalar_string_from_source(&self.source, scalar)),
+            span_from_position(self.source_id, scalar.byte_range()),
+        );
+        if !endpoint_mode.value().is_documented() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEPLOY_ENDPOINT_MODE_PORTABILITY,
+                    Severity::Warning,
+                    "deploy endpoint_mode is outside Compose's documented portable values",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    endpoint_mode.span(),
+                    "retained provider-specific endpoint mode",
+                )),
+            );
+        }
+        definition.set_endpoint_mode(endpoint_mode);
+    }
+
+    fn set_deploy_mode(&mut self, definition: &mut DeployDefinition, field: &ParsedField) {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_SCALAR, field, "deploy mode must be a YAML string scalar");
+            return;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(EXPECTED_SCALAR, field, "deploy mode must be a YAML string scalar");
+            return;
+        }
+        let mode = Located::new(
+            DeployMode::parse(scalar_string_from_source(&self.source, scalar)),
+            span_from_position(self.source_id, scalar.byte_range()),
+        );
+        if !mode.value().is_documented() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEPLOY_MODE_PORTABILITY,
+                    Severity::Warning,
+                    "deploy mode is outside Compose's documented portable values",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    mode.span(),
+                    "retained provider-specific deploy mode",
+                )),
+            );
+        }
+        definition.set_mode(mode);
+    }
+
+    fn set_deploy_replicas(&mut self, definition: &mut DeployDefinition, field: &ParsedField) {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy replicas must be a YAML number or string scalar",
+            );
+            return;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer | ScalarType::Float => {
+                DeployReplicas::YamlNumber(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String => DeployReplicas::String(scalar_string_from_source(&self.source, scalar)),
+            ScalarType::Boolean | ScalarType::Null | ScalarType::Timestamp | ScalarType::Regex => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "deploy replicas must be a YAML number or string scalar",
+                );
+                return;
+            }
+        };
+        definition.set_replicas(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ));
+    }
+
+    fn parse_deploy_restart_policy(&mut self, field: &ParsedField) -> Option<DeployRestartPolicy> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "deploy restart_policy must be a mapping");
+            return None;
+        };
+        let mut policy = DeployRestartPolicy::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            match option.name.value().as_str() {
+                name if name.starts_with("x-") => {
+                    policy.push_extension(option.reference());
+                    continue;
+                }
+                "condition" | "delay" | "max_attempts" | "window" => {}
+                _ => {
+                    policy.push_unknown(option.reference());
+                    continue;
+                }
+            }
+            let Some(scalar) = option.value.as_ref().and_then(YamlNode::as_scalar) else {
+                self.expected(EXPECTED_SCALAR, &option, "deploy restart-policy members must be scalar");
+                continue;
+            };
+            let span = span_from_position(self.source_id, scalar.byte_range());
+            match option.name.value().as_str() {
+                "condition" if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String => policy
+                    .set_condition(Located::new(
+                        DeployRestartCondition::parse(scalar_string_from_source(&self.source, scalar)),
+                        span,
+                    )),
+                "delay" | "window" if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String => {
+                    let value = Located::new(
+                        DeployRestartDuration::new(scalar_string_from_source(&self.source, scalar)),
+                        span,
+                    );
+                    if option.name.value() == "delay" {
+                        policy.set_delay(value);
+                    } else {
+                        policy.set_window(value);
+                    }
+                }
+                "max_attempts" => match ScalarValue::from_scalar(scalar).scalar_type() {
+                    ScalarType::Integer => policy.set_max_attempts(Located::new(
+                        DeployRestartMaxAttempts::YamlNumber(scalar_string_from_source(&self.source, scalar)),
+                        span,
+                    )),
+                    ScalarType::String => policy.set_max_attempts(Located::new(
+                        DeployRestartMaxAttempts::String(scalar_string_from_source(&self.source, scalar)),
+                        span,
+                    )),
+                    _ => self.expected(
+                        EXPECTED_SCALAR,
+                        &option,
+                        "deploy restart-policy max_attempts must be a YAML integer or string scalar",
+                    ),
+                },
+                "condition" | "delay" | "window" => self.expected(
+                    EXPECTED_SCALAR,
+                    &option,
+                    "deploy restart-policy condition, delay, and window must be YAML string scalars",
+                ),
+                _ => unreachable!("recognized deploy restart-policy field already matched"),
+            }
+        }
+        Some(policy)
+    }
+
+    fn parse_deploy_placement(&mut self, field: &ParsedField) -> Option<DeployPlacement> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "deploy placement must be a mapping");
+            return None;
+        };
+        let mut placement = DeployPlacement::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            match option.name.value().as_str() {
+                name if name.starts_with("x-") => placement.push_extension(option.reference()),
+                "constraints" => self
+                    .parse_deploy_placement_constraints(&option)
+                    .into_iter()
+                    .for_each(|value| placement.set_constraints(value)),
+                "preferences" => self
+                    .parse_deploy_placement_preferences(&option)
+                    .into_iter()
+                    .for_each(|value| placement.set_preferences(value)),
+                "max_replicas_per_node" => self
+                    .parse_deploy_placement_max_replicas_per_node(&option)
+                    .into_iter()
+                    .for_each(|value| placement.set_max_replicas_per_node(value)),
+                _ => placement.push_unknown(option.reference()),
+            }
+        }
+        Some(placement)
+    }
+
+    fn parse_deploy_placement_constraints(&mut self, field: &ParsedField) -> Option<Vec<Located<String>>> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "deploy placement constraints must be a sequence",
+            );
+            return None;
+        };
+        let mut constraints = Vec::new();
+        for value in sequence.values() {
+            let YamlNode::Scalar(scalar) = value else {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &value,
+                    field.span,
+                    "deploy placement constraints must contain YAML string scalars",
+                );
+                continue;
+            };
+            if ScalarValue::from_scalar(&scalar).scalar_type() != ScalarType::String {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &YamlNode::Scalar(scalar),
+                    field.span,
+                    "deploy placement constraints must contain YAML string scalars",
+                );
+                continue;
+            }
+            constraints.push(Located::new(
+                scalar_string_from_source(&self.source, &scalar),
+                span_from_position(self.source_id, scalar.byte_range()),
+            ));
+        }
+        Some(constraints)
+    }
+
+    fn parse_deploy_placement_preferences(&mut self, field: &ParsedField) -> Option<Vec<DeployPlacementPreference>> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "deploy placement preferences must be a sequence",
+            );
+            return None;
+        };
+        let mut preferences = Vec::new();
+        for value in sequence.values() {
+            let YamlNode::Mapping(mapping) = value else {
+                self.unsupported_sequence_item(
+                    EXPECTED_MAPPING,
+                    &value,
+                    field.span,
+                    "deploy placement preferences must contain mappings",
+                );
+                continue;
+            };
+            let mut preference =
+                DeployPlacementPreference::new(span_from_position(self.source_id, mapping.byte_range()));
+            let mut seen = BTreeMap::new();
+            for member in self.fields(&mapping) {
+                if self.record_duplicate(&mut seen, &member) {
+                    continue;
+                }
+                match member.name.value().as_str() {
+                    name if name.starts_with("x-") => preference.push_extension(member.reference()),
+                    "spread" => self
+                        .parse_deploy_placement_string(&member, "deploy placement preference spread")
+                        .into_iter()
+                        .for_each(|value| preference.set_spread(value)),
+                    _ => preference.push_unknown(member.reference()),
+                }
+            }
+            preferences.push(preference);
+        }
+        Some(preferences)
+    }
+
+    fn parse_deploy_placement_max_replicas_per_node(
+        &mut self,
+        field: &ParsedField,
+    ) -> Option<Located<DeployPlacementMaxReplicasPerNode>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy placement max_replicas_per_node must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer => {
+                DeployPlacementMaxReplicasPerNode::YamlInteger(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String => {
+                DeployPlacementMaxReplicasPerNode::String(scalar_string_from_source(&self.source, scalar))
+            }
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "deploy placement max_replicas_per_node must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_placement_string(&mut self, field: &ParsedField, description: &str) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                format!("{description} must be a YAML string scalar"),
+            );
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                format!("{description} must be a YAML string scalar"),
+            );
+            return None;
+        }
+        Some(Located::new(
+            scalar_string_from_source(&self.source, scalar),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
     }
 
     fn source_column(&self, offset: usize) -> usize {
@@ -3326,6 +4385,7 @@ impl Parser {
 
     fn parse_config_grants(&mut self, field: &ParsedField) -> Vec<ConfigGrant> {
         self.parse_grants(field)
+            .unwrap_or_default()
             .into_iter()
             .map(|grant| match grant {
                 ParsedGrant::Short(value) => ConfigGrant::Short(value),
@@ -3334,20 +4394,22 @@ impl Parser {
             .collect()
     }
 
-    fn parse_secret_grants(&mut self, field: &ParsedField) -> Vec<SecretGrant> {
-        self.parse_grants(field)
-            .into_iter()
-            .map(|grant| match grant {
-                ParsedGrant::Short(value) => SecretGrant::Short(value),
-                ParsedGrant::Long(value) => SecretGrant::Long(value),
-            })
-            .collect()
+    fn parse_secret_grants(&mut self, field: &ParsedField) -> Option<Vec<SecretGrant>> {
+        Some(
+            self.parse_grants(field)?
+                .into_iter()
+                .map(|grant| match grant {
+                    ParsedGrant::Short(value) => SecretGrant::Short(value),
+                    ParsedGrant::Long(value) => SecretGrant::Long(value),
+                })
+                .collect(),
+        )
     }
 
-    fn parse_grants(&mut self, field: &ParsedField) -> Vec<ParsedGrant> {
+    fn parse_grants(&mut self, field: &ParsedField) -> Option<Vec<ParsedGrant>> {
         let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
             self.expected(EXPECTED_SEQUENCE, field, "service grants must be a sequence");
-            return Vec::new();
+            return None;
         };
         let mut grants = Vec::new();
         for value in sequence.values() {
@@ -3370,7 +4432,7 @@ impl Parser {
                 ),
             }
         }
-        grants
+        Some(grants)
     }
 
     fn parse_long_grant(&mut self, mapping: &Mapping) -> LongGrant {
@@ -3748,9 +4810,52 @@ impl Parser {
                     _ => volume.push_unknown(option.reference()),
                 }
             }
+            self.validate_external_volume_driver_configuration(&volume);
+            self.validate_external_volume_labels_configuration(&volume);
             definitions.push(volume);
         }
         definitions
+    }
+
+    fn validate_external_volume_driver_configuration(&mut self, volume: &VolumeDefinition) {
+        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
+            || (volume.driver().is_none() && volume.driver_opts().is_empty())
+        {
+            return;
+        }
+        let span = volume
+            .driver()
+            .map(Located::span)
+            .or_else(|| volume.driver_opts().first().map(KeyValueEntry::span))
+            .unwrap_or_else(|| volume.span());
+        self.diagnostics.push(
+            Diagnostic::new(
+                VOLUME_EXTERNAL_DRIVER_CONFIGURATION,
+                Severity::Error,
+                "external volume cannot also configure `driver` or `driver_opts`",
+            )
+            .with_label(DiagnosticLabel::primary(
+                span,
+                "driver configuration remains retained for review",
+            )),
+        );
+    }
+
+    fn validate_external_volume_labels_configuration(&mut self, volume: &VolumeDefinition) {
+        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
+            || volume.labels().is_none()
+        {
+            return;
+        }
+        let span = volume.labels().map_or_else(|| volume.span(), Labels::span);
+        self.diagnostics.push(
+            Diagnostic::new(
+                VOLUME_EXTERNAL_LABELS_CONFIGURATION,
+                Severity::Error,
+                "external volume cannot also configure `labels`",
+            )
+            .with_label(DiagnosticLabel::primary(span, "labels remain retained for review")),
+        );
     }
 
     fn parse_config_definitions(&mut self, field: &ParsedField) -> Vec<ConfigDefinition> {
@@ -3890,6 +4995,111 @@ impl Parser {
         ))
     }
 
+    fn parse_non_empty_string(&mut self, field: &ParsedField, description: &str) -> Option<Located<String>> {
+        let value = self.parse_string(field, description)?;
+        if value.value().is_empty() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    BUILD_DOCKERFILE_EXPECTED_NON_EMPTY,
+                    Severity::Error,
+                    format!("{description} must be a non-empty scalar"),
+                )
+                .with_label(DiagnosticLabel::primary(value.span(), "empty scalar retained")),
+            );
+            return None;
+        }
+        Some(value)
+    }
+
+    fn parse_build_dockerfile(&mut self, definition: &mut BuildDefinition, field: &ParsedField) -> FieldReference {
+        if let Some(dockerfile) = self.parse_non_empty_string(field, "build dockerfile") {
+            definition.set_dockerfile(dockerfile);
+        }
+        field.reference()
+    }
+
+    fn set_build_dockerfile_inline(
+        &mut self,
+        definition: &mut BuildDefinition,
+        field: &ParsedField,
+        dockerfile_inline: &mut Option<FieldReference>,
+    ) {
+        *dockerfile_inline = Some(field.reference());
+        if let Some(value) = self.parse_build_dockerfile_inline(field) {
+            definition.set_dockerfile_inline(value);
+        }
+    }
+
+    fn parse_build_dockerfile_inline(&mut self, field: &ParsedField) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "build dockerfile_inline must be a YAML string scalar",
+            );
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "build dockerfile_inline must be a YAML string scalar",
+            );
+            return None;
+        }
+        Some(Located::new(
+            scalar_string_from_source(&self.source, scalar),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn set_build_no_cache(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(no_cache) = self.parse_build_no_cache(field) {
+            definition.set_no_cache(no_cache);
+        }
+    }
+
+    fn set_build_sbom(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(sbom) = self.parse_build_sbom(field) {
+            definition.set_sbom(sbom);
+        }
+    }
+
+    fn set_build_provenance(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(value) = self.parse_build_provenance(field) {
+            definition.set_provenance(value);
+        }
+    }
+
+    fn set_build_isolation(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(isolation) = self.parse_build_isolation(field) {
+            definition.set_isolation(isolation);
+        }
+    }
+
+    fn parse_build_isolation(&mut self, field: &ParsedField) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                BUILD_ISOLATION_EXPECTED_STRING,
+                field,
+                "build isolation must be a YAML string scalar",
+            );
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(
+                BUILD_ISOLATION_EXPECTED_STRING,
+                field,
+                "build isolation must be a YAML string scalar",
+            );
+            return None;
+        }
+        Some(Located::new(
+            scalar_string_from_source(&self.source, scalar),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
     fn parse_boolean(&mut self, field: &ParsedField, description: &str) -> Option<Located<BooleanValue>> {
         let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
             self.expected(EXPECTED_BOOLEAN, field, format!("{description} must be a boolean"));
@@ -3913,6 +5123,133 @@ impl Parser {
             .with_label(DiagnosticLabel::primary(span, "not a boolean expression")),
         );
         None
+    }
+
+    fn parse_build_no_cache(&mut self, field: &ParsedField) -> Option<Located<BuildNoCache>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                BUILD_NO_CACHE_EXPECTED_BOOLEAN_OR_STRING,
+                field,
+                "build no_cache must be a YAML boolean or string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let value = match scalar_value.scalar_type() {
+            ScalarType::Boolean => BuildNoCache::Boolean(scalar_value.to_bool().unwrap_or(false)),
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                BuildNoCache::String(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::Null | ScalarType::Integer | ScalarType::Float => {
+                self.expected(
+                    BUILD_NO_CACHE_EXPECTED_BOOLEAN_OR_STRING,
+                    field,
+                    "build no_cache must be a YAML boolean or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(value, span))
+    }
+    fn parse_build_no_cache_filter(&mut self, field: &ParsedField) -> Option<BuildNoCacheFilter> {
+        match field.value.as_ref() {
+            Some(YamlNode::Scalar(s)) if ScalarValue::from_scalar(s).scalar_type() == ScalarType::String => {
+                Some(BuildNoCacheFilter::Scalar(Located::new(
+                    scalar_string_from_source(&self.source, s),
+                    span_from_position(self.source_id, s.byte_range()),
+                )))
+            }
+            Some(YamlNode::Sequence(seq)) => {
+                let values = self.parse_string_scalar_nodes(
+                    seq.values(),
+                    field.span,
+                    "build no_cache_filter entries must be string scalars",
+                );
+                let mut seen = BTreeSet::new();
+                for value in &values {
+                    if !seen.insert(value.value().clone()) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM,
+                                Severity::Warning,
+                                "build no_cache_filter retains duplicate stage",
+                            )
+                            .with_label(DiagnosticLabel::primary(value.span(), "duplicate retained")),
+                        );
+                    }
+                }
+                Some(BuildNoCacheFilter::List(values))
+            }
+            _ => {
+                self.expected(
+                    EXPECTED_FIELD_FORM,
+                    field,
+                    "build no_cache_filter must be a string scalar or sequence",
+                );
+                None
+            }
+        }
+    }
+    fn set_build_no_cache_filter(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(value) = self.parse_build_no_cache_filter(field) {
+            definition.set_no_cache_filter(value);
+        }
+    }
+    fn set_build_privileged(&mut self, definition: &mut BuildDefinition, field: &ParsedField) {
+        if let Some(value) = self.parse_boolean(field, "build privileged") {
+            definition.set_privileged(value);
+        }
+    }
+
+    fn parse_build_sbom(&mut self, field: &ParsedField) -> Option<Located<BuildSbom>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                BUILD_SBOM_EXPECTED_BOOLEAN_OR_STRING,
+                field,
+                "build sbom must be a YAML boolean or string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let value = match scalar_value.scalar_type() {
+            ScalarType::Boolean => BuildSbom::Boolean(scalar_value.to_bool().unwrap_or(false)),
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                BuildSbom::String(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::Null | ScalarType::Integer | ScalarType::Float => {
+                self.expected(
+                    BUILD_SBOM_EXPECTED_BOOLEAN_OR_STRING,
+                    field,
+                    "build sbom must be a YAML boolean or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(value, span))
+    }
+
+    fn parse_build_provenance(&mut self, field: &ParsedField) -> Option<Located<BuildProvenance>> {
+        let scalar = field.value.as_ref().and_then(YamlNode::as_scalar)?;
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Boolean => {
+                BuildProvenance::Boolean(ScalarValue::from_scalar(scalar).to_bool().unwrap_or(false))
+            }
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                BuildProvenance::String(scalar_string_from_source(&self.source, scalar))
+            }
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "build provenance must be a YAML boolean or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(value, span))
     }
 
     fn parse_string_sequence(&mut self, field: &ParsedField, description: &str) -> Vec<Located<String>> {
@@ -4000,8 +5337,11 @@ impl Parser {
         match field.value.as_ref() {
             Some(YamlNode::Sequence(sequence)) => {
                 let span = span_from_position(self.source_id, sequence.byte_range());
-                let values =
-                    self.parse_scalar_nodes(sequence.values(), field.span, "label list entries must be scalars");
+                let values = self.parse_string_scalar_nodes(
+                    sequence.values(),
+                    field.span,
+                    "label list entries must be string scalars",
+                );
                 Some(Labels::List { span, values })
             }
             Some(YamlNode::Mapping(mapping)) => {
@@ -4014,6 +5354,32 @@ impl Parser {
                 None
             }
         }
+    }
+
+    fn parse_string_scalar_nodes(
+        &mut self,
+        nodes: impl Iterator<Item = YamlNode>,
+        fallback_span: SourceSpan,
+        message: impl Into<String>,
+    ) -> Vec<Located<String>> {
+        let message = message.into();
+        let mut values = Vec::new();
+        for node in nodes {
+            let YamlNode::Scalar(scalar) = node else {
+                self.unsupported_sequence_item(EXPECTED_SCALAR, &node, fallback_span, &message);
+                continue;
+            };
+            if !matches!(
+                ScalarValue::from_scalar(&scalar).scalar_type(),
+                ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
+            ) {
+                self.unsupported_sequence_item(EXPECTED_SCALAR, &YamlNode::Scalar(scalar), fallback_span, &message);
+                continue;
+            }
+            let span = span_from_position(self.source_id, scalar.byte_range());
+            values.push(Located::new(scalar_string_from_source(&self.source, &scalar), span));
+        }
+        values
     }
 
     fn parse_annotations(&mut self, field: &ParsedField) -> Option<Annotations> {

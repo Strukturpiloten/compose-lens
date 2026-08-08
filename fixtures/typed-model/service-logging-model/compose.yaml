@@ -1,0 +1,42 @@
+services:
+  omitted:
+    image: example.invalid/omitted:1
+  empty:
+    logging: {}
+  configured:
+    logging:
+      driver: "vendor-driver:${DRIVER_SUFFIX}"
+      options:
+        string-option: "01"
+        number-option: 0001
+        null-option: null
+        expression-option: "${LOGGING_SECRET}"
+      x-provider-note: retained
+      provider-unknown: {nested: evidence}
+  empty-options:
+    logging:
+      driver: local
+      options: {}
+  malformed-driver:
+    image: example.invalid/driver-recovery:1
+    logging:
+      driver: 7
+      options:
+        retained: value
+  malformed-options:
+    image: example.invalid/options-recovery:1
+    logging:
+      driver: retained-driver
+      options:
+        "": empty-key
+        valid-before: before
+        boolean-invalid: true
+        nested-invalid: {value: rejected}
+        valid-after: null
+  malformed-options-field:
+    logging:
+      driver: retained-driver
+      options: [invalid]
+  malformed-logging:
+    image: example.invalid/logging-recovery:1
+    logging: local

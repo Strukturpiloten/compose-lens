@@ -47,6 +47,20 @@ interpolation remain distinct, omission remains omitted, and complete-value repl
 every contributing source. ComposeLens does not invent a default or select or inspect the
 platform-specific init binary.
 
+Service `stdin_open` is independently source-aware at both layers. Literal `true`/`false` and
+deferred interpolation remain distinct, omission remains omitted, and complete-value replacement
+retains every contributing source. ComposeLens does not infer a terminal, runtime, or cross-format
+policy from either boolean.
+
+Service `tty` has the same independent source-aware boundary. Literal `true`/`false` and deferred
+interpolation remain distinct, omission remains omitted, and complete-value replacement retains
+every contributing source. ComposeLens does not infer terminal, runtime, or cross-format policy.
+
+Service `privileged` is independently source-aware at both layers. Literal `true`/`false` and
+deferred interpolation remain distinct, omission remains omitted, and complete-value replacement
+retains every contributing source. ComposeLens does not infer security, runtime, or cross-format
+policy from this boolean.
+
 Execution identity and context are native at both document and merged-project layers. Effective
 `user`, `userns_mode`, `group_add`, `working_dir`, and `read_only` values retain raw spelling,
 field provenance, and, for supplementary groups, per-item provenance. No account, group, path, or
@@ -92,6 +106,11 @@ Service `annotations` retains mapping/list syntax, scalar evidence, raw list ite
 effective contributors. Mapping keys do not interpolate, and key-only list items remain explicit
 ambiguity rather than becoming empty label values.
 
+Service `logging` retains an optional uninterpreted YAML string `driver`, an ordered `options`
+mapping including explicit empty state, and exact string/number/null option kinds. Option keys are
+non-empty and never interpolate; extensions, unknown fields, malformed entries, and valid siblings
+remain source-addressable.
+
 An explicit `container_name` is a source-aware scalar at both layers. The effective project view
 retains ordinary Compose scalar replacement provenance across files. The parser does not confuse
 the custom runtime name with the service key or infer one when the field is absent.
@@ -115,8 +134,8 @@ deferred. Fractions, signs other than the exact `-1`, exponents, and arbitrary s
 without deleting their service. ComposeLens injects no default and performs no runtime or cgroup
 inspection.
 
-Service `shm_size` is raw-preserving at both layers and remains separate from `build.shm_size`,
-IPC and pod grouping, CPU or memory limits, and runtime `/dev/shm` inspection. YAML number and
+Service and Build `shm_size` are raw-preserving at both layers and remain separate from IPC and
+pod grouping, CPU or memory limits, and runtime `/dev/shm` inspection. YAML number and
 string scalars are accepted and retain their exact value, span, and scalar category. Dollar-bearing
 strings are deferred. Strings ending in the documented lowercase `b`, `k`, `kb`, `m`, `mb`, `g`,
 or `gb` family expose that unit and retain the complete `amount_raw` without imposing an integer,
@@ -210,7 +229,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `stdin_open`, `tty`, `privileged`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -225,7 +244,7 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 
 - entrypoint and command: independent explicit null, scalar, or list values, including empty
   scalar and empty list;
-- init: a literal boolean or deferred interpolation expression;
+- init, stdin_open, tty, and privileged: independent literal booleans or deferred interpolation expressions;
 - capability additions and drops: independent omitted or explicit ordered string sequences with
   exact duplicates retained for diagnostics and case variants kept distinct;
 - service devices: an omitted or explicit ordered sequence of mixed raw short strings and long
@@ -253,6 +272,9 @@ Field-specific variants retain forms whose behavior or meaning can differ:
   exact duplicates, colon-delimited documented assignments, and retained raw target options;
 - service sysctls: omitted, ordered mapping or ordered list form with explicit empty collections,
   exact scalar kind/spelling, uninterpolated map keys, and retained duplicate list evidence;
+- service logging: omitted or mapping form, optional uninterpreted string driver, ordered
+  string/number/null options including explicit empty state, extensions, unknowns, and malformed
+  sibling recovery;
 - restart policy: a known literal, optional raw-preserving `on-failure` retry count, deferred
   expression, or retained invalid/provider-specific scalar;
 - pull policy: documented literals, a retained alias, exact custom interval spelling, deferred
@@ -261,7 +283,9 @@ Field-specific variants retain forms whose behavior or meaning can differ:
   duration value/expression/other state;
 - ulimits: an ordered lowercase-name mapping with one number/string scalar or required separate
   soft/hard values, including an explicit empty mapping;
-- build: scalar context or a mapping of independently identified specification fields;
+- build: raw list/scalar-map `additional_contexts`, short scalar or long mapping context, raw ordered `cache_from`/`cache_to`, non-empty `dockerfile`, opaque `target`/`network`/`isolation`, raw ordered `platforms`/`tags`, map/list `args`/`labels`, boolean/string `no_cache` and `sbom`, scalar boolean/expression `pull`, raw-preserving `shm_size`, short/long `secrets`, and sensitive list/scalar-map `ssh` retain source evidence and recovery.
+  Cache descriptors receive no type, reference, source, destination, path, image, credential, or builder interpretation. Platforms receive no OCI parsing; string `no_cache` and `sbom` values retain type and spelling without boolean coercion, while `pull` receives no interpolation, default, or execution inference. `sbom` does not parse generators, expose generated SBOM data, or trigger builds.
+  No build resolves top-level secrets, materializes contents, parses SSH grants/paths/sockets/agents, or generates builds;
 - service and resource labels: list or mapping. Service-label list entries retain the complete
   scalar so values containing additional `=` characters are not truncated.
 
@@ -290,9 +314,48 @@ warning because the image may contain health metadata. An explicitly disabled he
 error for a required `service_healthy` edge. `required: false` downgrades unavailable dependency
 diagnostics to warnings without hiding the reference.
 
-Build and deploy definitions expose every current top-level subfield as its own stable kind and
-source reference. This is intentionally field-level evaluation, not a claim that every nested
-value is already semantically typed or supported by every converter.
+Build and deploy definitions expose every current top-level subfield as its own stable kind and source reference; the project view promotes map/list `build.additional_contexts`, `build.context`, map/list `build.args`/`build.labels`, Build-specific list/map `build.extra_hosts` with scalar or nested-list raw string addresses, raw ordered `build.cache_from`/`build.cache_to`/`build.entitlements`, `dockerfile`, exact-string `dockerfile_inline`, `target`, `network`, opaque string `isolation`, raw ordered `platforms`/`tags`, boolean/string `no_cache`/`sbom`, boolean/expression `privileged`/`pull`, raw-preserving `shm_size`, service-equivalent ordered `build.ulimits`, and short/long `build.secrets`.
+Platforms retain per-item source, sensitivity, append/reset/override provenance, duplicates, explicit empties, and malformed evidence without OCI or runtime inference.
+`dockerfile_inline` retains exact empty or multiline string content, source spans, interpolation sensitivity, scalar merge provenance, and mutual-exclusion evidence with `dockerfile`; it does not parse Containerfiles, access paths or contexts, scan secrets, build, or infer Docker, BuildKit, or runtime behavior. Docker Compose v2.17.0 is an implementation badge only, with earlier and removal boundaries unknown. Other fields remain source-addressable, and no build is resolved, materialized, or generated.
+`build.provenance` has a distinct boolean-or-opaque-string model with spans, interpolation sensitivity, scalar merge provenance, and malformed evidence; it performs no attestation parsing, generation, publication, validation, builder execution, or runtime inference. Docker Compose v2.39.0 is an implementation badge only, with earlier and removal boundaries unknown.
+`build.privileged` accepts YAML literal booleans or deferred dollar expressions. Ordinary quoted
+non-expression strings are invalid schema ambiguity rather than coerced booleans; they retain
+source-addressable unmodeled evidence with diagnostics. Docker Compose v2.15.0 is an
+implementation badge only, with earlier and removal boundaries unknown. No privilege, platform,
+runtime, or build behavior is inferred.
+
+`deploy.endpoint_mode` is independently typed as `vip`, `dnsrr`, or a raw retained `Other` value.
+The latter remains a portability diagnostic rather than a rejected value; non-string forms retain
+their source reference with diagnostics. The prose's `vip` default and the schema's lack of an
+effective default are recorded as an evidence conflict, so ComposeLens injects no default. It does
+not infer platform, service discovery, VIP, DNS, replica, deployment, runtime, or conversion behavior.
+
+`deploy.mode` likewise retains `global`, `replicated`, or raw `Other` strings. Empty, deferred,
+and provider-specific strings are portability diagnostics rather than coerced defaults; omission
+remains absent rather than becoming `replicated`. No replica, scale, placement, job, deployment,
+runtime, or conversion behavior is inferred.
+
+`deploy.replicas` retains only its exact YAML number spelling or distinct YAML string spelling in
+`DeployReplicas`; strings include empty and deferred values. It applies no integer grammar,
+positive/zero/default rule, mode coupling, scale, allocation, scheduling, runtime, or conversion
+interpretation, and has no version-boundary badge.
+
+`deploy.labels` is distinct from service container labels. It retains mapping scalar categories and
+nulls or ordered list bare/`KEY=VALUE` spellings. Mapping keys merge and replace by key; lists
+append with duplicate evidence retained despite schema `uniqueItems`. No container-label, service,
+runtime, platform, deployment, or conversion behavior is claimed, and there is no version boundary.
+
+`deploy.restart_policy` is distinct from service `restart`. Its condition retains `none`,
+`on-failure`, `any`, deferred, and unknown values; delay/window and max-attempts retain raw
+spellings and YAML integer/string category. No fallback, default, precedence, attempt simulation,
+runtime, or conversion behavior is inferred.
+
+`deploy.placement` retains ordered YAML-string `constraints`, preference mappings with an optional
+YAML-string `spread`, and `max_replicas_per_node` as a YAML-integer or YAML-string scalar category.
+Extensions, unknown members, and malformed siblings remain source-aware evidence. Its effective
+view keeps collection, item, and nested-member provenance across generic append, replacement,
+reset, and override behavior. ComposeLens applies no constraint/spread grammar, node selection,
+count/range/default, mode coupling, scheduling, runtime, or conversion interpretation.
 
 Podman `keep-id`, `auto`, and `nomap` user-namespace values and the `host-gateway` token have native
 classifications. Their compatibility findings cite official implementation documentation and do

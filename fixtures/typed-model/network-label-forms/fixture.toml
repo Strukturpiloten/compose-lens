@@ -1,0 +1,21 @@
+schema = 1
+id = "network-label-forms"
+suite = "typed-model"
+description = "Protects top-level network label map/list syntax, explicit empty values, key-only list entries, and embedded equals signs."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation, provider, or runtime is used."
+
+[expectations]
+summary = "Network labels retain their authored collection form and complete list scalar spelling."
+
+[extensions.typed-model]
+expected_diagnostics = []

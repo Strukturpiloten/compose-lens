@@ -14,8 +14,10 @@ Cover every field in the documented [typed boundary](typed-model.md), all suppor
 unknown fields, extensions, image references, ports, volumes, host/container path separation,
 environment values, environment-file short/long forms and options, service-label forms,
 entrypoints, commands,
-extra hosts, service hostnames, service annotations, ordered service capability additions and drops, ordered mixed service devices, raw service DNS scalar/list forms, raw service security options, raw identities, service-level PID limits, service shared-memory sizes, service memory limits, service-level temporary filesystems, service sysctls, restart and image pull policies, independent stop signals and raw
-lifecycle grace periods, ulimits, health checks, dependency conditions, field-level build/deploy identities, networks,
+extra hosts, service hostnames, service annotations, service logging drivers and options, ordered service capability additions and drops, ordered mixed service devices, raw service DNS scalar/list forms, raw service security options, raw identities, service-level PID limits, service and Build shared-memory sizes, service memory limits, service-level temporary filesystems, service sysctls, restart and image pull policies, independent stop signals and raw
+lifecycle grace periods, ulimits, health checks, dependency conditions, short/long build contexts,
+non-empty Dockerfile, map/list build arguments, opaque target/network scalars, ordered raw platforms/tags, and
+map/list-preserving build labels with retained conflict evidence and unmodeled build/deploy identities, networks,
 profiles, configs, secrets, top-level resources, and discriminated unions.
 
 ### Processing tests
@@ -35,12 +37,14 @@ reparent ports, volumes, or extensions into the environment mapping.
 Generated-rendering tests construct the runtime-migration subset through public Compose-owned
 types, compare exact deterministic bytes, and inspect the parse-back native model. They protect
 ordered duplicate-capable environment syntax, ordered environment-file short/long forms and
-options, explicit init true/false and omission, ordered unique service-label mappings, spec-shaped
+options, explicit `init`, `stdin_open`, `tty`, and `privileged` true/false choices and omission,
+ordered unique service-label mappings, spec-shaped
 ordered capability-add and capability-drop omission, explicit empty output, exact-case order,
 duplicate and multiline rejection, independent coexistence, parse-back fidelity, and sensitivity
 redaction,
 long TCP/UDP ports, short SCTP ports,
-ordinary mounts, deliberate short `SELinux` bind syntax, network aliases,
+ordinary mounts, deliberate short `SELinux` bind syntax, network aliases and raw per-attachment
+IPv4/IPv6 address omission, ordering, duplicate-set rejection, sensitivity, and parse-back,
 all service-level restart-policy forms and optional maximum retries,
 all documented pull-policy forms, alias, integer `w`/`d`/`h`/`m`/`s` interval components,
 schema-valid zero, and fractional or subsecond interval rejection,
@@ -62,6 +66,9 @@ ordered exact-unique list strings, unsafe/deferred rejection, sensitivity, and t
 service `ulimits` omission/empty/single/range forms, ordered unique lowercase names, quoted
 non-negative decimal or `-1` values, missing-member and unsafe-value rejection, sensitivity, and
 typed parse-back,
+service `logging` omission/empty/configured/malformed authored forms, recursive option merge,
+replacement/reset/override provenance, interpolation sensitivity, generated scalar kinds,
+duplicate/unsafe rejection, deterministic bytes, and typed parse-back,
 service `devices` omission/explicit-empty/mixed short/long forms, exact duplicates, order, CDI-like
 and opaque raw strings, required long source, optional raw target/permissions, unsafe/deferred
 rejection, sensitivity, deterministic bytes, and exact typed parse-back,
@@ -74,6 +81,11 @@ service annotation syntax, keyed merge, ambiguity diagnostics, generation, and t
 application/external resource lifecycle, duplicate
 rejection, label duplicate rejection, empty and embedded-equals label values, ambiguous short-form
 failures, and sensitive debug redaction.
+
+Top-level volume-label regressions cover authored mapping/list fidelity, literal external-label
+diagnostics including explicit empty collections, simultaneous external driver and label findings,
+interpolation, generic map/list merge behavior, reset/override provenance, deterministic generated
+maps, duplicate rejection, and parse-back sensitivity redaction.
 
 Preservation-editing tests compare exact authored and expected files after changing typed scalar
 spans. They prove that comments, whitespace, ordering, unknown fields, extensions, flow syntax, and
@@ -126,6 +138,34 @@ The initial syntax corpus exercises comments, anchors, aliases, duplicate keys, 
 
 DNS regressions protect authored forms, merge/reset behavior, provenance, generation safety, and
 typed parse-back.
+
+Build regressions protect short/long context, non-empty Dockerfile, opaque target/network, raw ordered `cache_from`/`cache_to`/platforms/tags, boolean/string `no_cache`/`sbom`, boolean/expression `privileged`, raw-preserving `shm_size`, map/list args/labels, short/long secrets, and sensitive map/list `ssh`.
+They cover empties, duplicates, per-file interpolation sensitivity, source/provenance, append/replacement/reset/override, partial malformed recovery, and `dockerfile`/`dockerfile_inline` conflict evidence.
+All remaining build siblings stay source-addressable unmodeled evidence.
+
+Deploy endpoint-mode regressions protect authored documented/provider-specific/interpolated values,
+duplicates, malformed recovery, scalar merge/reset/override provenance, sensitivity, and nested
+unmodeled evidence for the remaining immediate deploy children.
+Deploy-mode regressions additionally protect global/replicated/raw/empty/deferred values, omission,
+and global coexistence with replicas and service scale without scheduling diagnostics. Deploy-replica
+regressions protect raw YAML number spelling, distinct string/empty/deferred values, malformed
+recovery, duplicate retention, merge/reset/override provenance, sensitivity, and the absence of
+integer, default, mode-coupling, allocation, scheduling, runtime, or conversion inference.
+Deploy-label regressions protect mapping/list forms, scalar/null and bare/`KEY=VALUE` evidence,
+keyed merge/list append, duplicate retention, reset/override provenance, sensitivity, and malformed
+recovery without container, service, runtime, platform, deployment, or conversion inference.
+Deploy restart-policy regressions protect all members, condition spelling, raw duration and
+attempt scalar categories, partial nested merge and replacement provenance, reset/malformed nested
+evidence, and separation from service `restart` without defaults, precedence, simulation, runtime,
+or conversion inference.
+Deploy placement regressions protect YAML-string constraints and optional preference spreads,
+empty and duplicate items, YAML integer/string maximum categories, nested extensions/unknowns,
+partial malformed recovery, append/replacement/reset/override provenance, and sensitive
+interpolation redaction without constraint grammar, node-selection, default, scheduling, runtime,
+or conversion inference.
+
+Logging regressions protect empty mappings, scalar-kind fidelity, malformed sibling recovery,
+recursive merge provenance, value-only interpolation, generation safety, and typed parse-back.
 
 The built-in compatibility rules are unit/integration evidence, not a substitute for the runtime
 conformance tier. Phase 5 expands the exact Docker Compose, `podman-compose`, Docker Engine, and

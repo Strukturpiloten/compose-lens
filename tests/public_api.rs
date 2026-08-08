@@ -4,22 +4,30 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
-    BooleanValue, ComposeDocument, DependencyCondition, Entrypoint, EnvironmentFileFormatKind, HealthcheckDuration,
-    HostAddressKind, HostnameKind, IdentityComponent, MemLimitKind, MemLimitScalarKind, MemLimitUnit, PidsLimitKind,
-    PullPolicyKind, RestartPolicyKind, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit, StopGracePeriod,
-    UserNamespaceModeKind,
+    BooleanValue, Build, BuildAdditionalContexts, BuildArgs, BuildExtraHostAddresses, BuildExtraHosts, BuildNoCache,
+    BuildSbom, BuildSshForm, ComposeDocument, DependencyCondition, DeployEndpointMode, DeployMode,
+    DeployPlacementMaxReplicasPerNode, DeployReplicas, DeployRestartCondition, Entrypoint, EnvironmentFileFormatKind,
+    HealthcheckDuration, HostAddressKind, HostnameKind, IdentityComponent, MemLimitKind, MemLimitScalarKind,
+    MemLimitUnit, PidsLimitKind, PullPolicyKind, RestartPolicyKind, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit,
+    StopGracePeriod, UserNamespaceModeKind,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
-    ProjectDevice, ProjectDns, ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectSysctls, ProjectTmpfs,
-    ProjectUlimit, ProjectUlimitRange, ProjectUlimitScalar, ProjectUlimitValue, ProjectUlimits, build_project_view,
+    ProjectBuild, ProjectBuildAdditionalContexts, ProjectBuildArgs, ProjectBuildDefinition,
+    ProjectBuildExtraHostAddresses, ProjectBuildExtraHosts, ProjectBuildLabels, ProjectBuildSsh, ProjectDevice,
+    ProjectDns, ProjectDnsSearch, ProjectEnvironmentFile, ProjectGrant, ProjectLogging, ProjectLoggingOption,
+    ProjectLoggingOptionValue, ProjectLoggingOptions, ProjectSysctls, ProjectTmpfs, ProjectUlimit, ProjectUlimitRange,
+    ProjectUlimitScalar, ProjectUlimitValue, ProjectUlimits, build_project_view,
 };
 use compose_lens::render::{
     ComposeDocumentBuilder, GeneratedAnnotation, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
-    GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel, GeneratedLongDevice,
-    GeneratedMemLimit, GeneratedPidsLimit, GeneratedPullPolicy, GeneratedRestartPolicy, GeneratedService,
-    GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit,
-    GeneratedUlimitValue, GeneratedUlimits, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
+    GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel, GeneratedLogging,
+    GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit,
+    GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
+    GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPullPolicy, GeneratedRestartPolicy,
+    GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs,
+    GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption,
+    GeneratedVolumeDriverOptionValue, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
 
 #[test]
@@ -69,6 +77,1205 @@ fn exposes_authored_effective_and_generated_annotations_contracts() -> Result<()
         GeneratedString::plain("platform")?,
     )?])?;
     assert_eq!(service.annotations().map(<[GeneratedAnnotation]>::len), Some(1));
+    Ok(())
+}
+
+#[test]
+fn exposes_sensitive_build_ssh_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source =
+        "services:\n  app:\n    build:\n      ssh:\n        default: /private/agent.sock\n        retries: 2\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(997), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|build| match build {
+            Build::Definition(definition) => definition.ssh(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored build ssh expected")?;
+    assert_eq!(authored.form(), BuildSshForm::Map);
+    assert_eq!(
+        authored.as_map().map(<[compose_lens::model::KeyValueEntry]>::len),
+        Some(2)
+    );
+    assert!(!format!("{authored:?}").contains("/private/agent.sock"));
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(998),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project_view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let ssh = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => definition.ssh(),
+            _ => None,
+        })
+        .ok_or("effective build ssh expected")?;
+    assert!(ssh.is_sensitive());
+    assert!(matches!(ssh.value(), ProjectBuildSsh::Map(entries) if entries.len() == 2));
+    assert!(!format!("{ssh:?}").contains("/private/agent.sock"));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_context_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "secrets:\n  build-secret: {}\n",
+        "services:\n",
+        "  short:\n    build: ./short\n",
+        "  long:\n    build:\n      context: ./long\n      dockerfile_inline: \"FROM scratch\\nRUN echo public\"\n      target: \"\"\n      cache_from: [\"type=local,src=.cache\", \"type=local,src=.cache\"]\n      cache_to: [\"type=local,dest=.cache\", \"type=local,dest=.cache\"]\n      platforms: [linux/amd64, linux/amd64]\n      tags: [example/app:one, example/app:one]\n      secrets: [build-secret, {source: build-secret, target: /run/secrets/build, uid: \"1000\", gid: \"1001\", mode: \"0440\"}]\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(705), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert!(matches!(
+        parsed
+            .document()
+            .and_then(|document| document.service("short"))
+            .and_then(compose_lens::model::Service::build),
+        Some(Build::Context(context)) if context.value() == "./short"
+    ));
+    assert!(matches!(
+        parsed
+            .document()
+            .and_then(|document| document.service("long"))
+            .and_then(compose_lens::model::Service::build),
+        Some(Build::Definition(definition)) if definition.context().is_some() && definition.dockerfile_inline().is_some() && definition.target().is_some() && definition.cache_from().is_some() && definition.cache_to().is_some() && definition.platforms().is_some() && definition.tags().is_some() && definition.secrets().is_some()
+    ));
+    let Some(Build::Definition(authored_long)) = parsed
+        .document()
+        .and_then(|document| document.service("long"))
+        .and_then(compose_lens::model::Service::build)
+    else {
+        return Err("authored long build definition expected".into());
+    };
+    assert_eq!(
+        authored_long
+            .target()
+            .map(compose_lens::model::Located::value)
+            .map(String::as_str),
+        Some("")
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(706),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    assert!(matches!(
+        view.view()
+            .and_then(|view| view.service("short"))
+            .and_then(compose_lens::project::ProjectService::build)
+            .map(compose_lens::project::ProjectValue::value),
+        Some(ProjectBuild::Context(context)) if context.value() == "./short"
+    ));
+    let long = view
+        .view()
+        .and_then(|view| view.service("long"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .ok_or("long build expected")?;
+    let ProjectBuild::Definition(definition) = long.value() else {
+        return Err("long build definition expected".into());
+    };
+    let _: &ProjectBuildDefinition = definition;
+    assert_eq!(
+        definition
+            .context()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("./long")
+    );
+    assert_eq!(
+        definition
+            .dockerfile_inline()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("FROM scratch\nRUN echo public")
+    );
+    assert_eq!(
+        definition
+            .target()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("")
+    );
+    assert_public_build_sequences(authored_long, definition)?;
+    assert_public_build_secrets(definition)?;
+    assert!(definition.unmodeled_fields().is_empty());
+    Ok(())
+}
+
+#[test]
+fn exposes_distinct_build_provenance_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build: {provenance: \"${MODE}\"}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2201), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|d| d.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|b| match b {
+            Build::Definition(d) => d.provenance(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored provenance expected")?;
+    assert!(matches!(authored.value(), compose_lens::model::BuildProvenance::String(value) if value == "${MODE}"));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2201),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("MODE", "mode=max");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let view = build_project_view(merged.project().ok_or("merged expected")?, None);
+    let effective = view
+        .view()
+        .and_then(|v| v.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|b| match b.value() {
+            ProjectBuild::Definition(d) => d.provenance(),
+            _ => None,
+        })
+        .ok_or("effective provenance expected")?;
+    assert!(matches!(effective.value(), compose_lens::model::BuildProvenance::String(value) if value == "mode=max"));
+    assert!(effective.is_sensitive());
+    Ok(())
+}
+
+#[test]
+fn exposes_build_no_cache_filter_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build: {no_cache_filter: [one, two]}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2304), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|d| d.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|b| match b {
+            Build::Definition(d) => d.no_cache_filter(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored")?;
+    assert!(matches!(authored,compose_lens::model::BuildNoCacheFilter::List(v)if v.len()==2));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2304),
+        DocumentOrigin::new("a", "w"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged")?, None);
+    let effective = view
+        .view()
+        .and_then(|v| v.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|b| match b.value() {
+            ProjectBuild::Definition(d) => d.no_cache_filter(),
+            _ => None,
+        })
+        .ok_or("effective")?;
+    assert!(matches!(effective.value(),compose_lens::project::ProjectBuildNoCacheFilter::List(v)if v.len()==2));
+    Ok(())
+}
+
+#[test]
+fn exposes_deploy_endpoint_mode_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    deploy: {endpoint_mode: dnsrr, replicas: 2}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2504), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::deploy)
+        .and_then(|deploy| deploy.endpoint_mode())
+        .ok_or("authored endpoint mode")?;
+    assert!(matches!(authored.value(), DeployEndpointMode::Dnsrr));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2504),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let deploy = view
+        .view()
+        .and_then(|project| project.service("app"))
+        .and_then(compose_lens::project::ProjectService::deploy)
+        .ok_or("effective deploy")?;
+    assert!(matches!(
+        deploy
+            .value()
+            .endpoint_mode()
+            .map(compose_lens::project::ProjectValue::value),
+        Some(DeployEndpointMode::Dnsrr)
+    ));
+    assert!(matches!(
+        deploy
+            .value()
+            .replicas()
+            .map(compose_lens::project::ProjectValue::value),
+        Some(DeployReplicas::YamlNumber(value)) if value == "2"
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_deploy_mode_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    deploy: {mode: global, replicas: 2}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2604), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert!(matches!(
+        parsed
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::deploy)
+            .and_then(|deploy| deploy.mode())
+            .map(compose_lens::model::Located::value),
+        Some(DeployMode::Global)
+    ));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2604),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let deploy = view
+        .view()
+        .and_then(|project| project.service("app"))
+        .and_then(compose_lens::project::ProjectService::deploy)
+        .ok_or("effective deploy")?;
+    assert!(matches!(
+        deploy.value().mode().map(compose_lens::project::ProjectValue::value),
+        Some(DeployMode::Global)
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_deploy_replicas_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    deploy: {replicas: 1.50}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2704), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert!(matches!(
+        parsed.document().and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::deploy)
+            .and_then(|deploy| deploy.replicas())
+            .map(compose_lens::model::Located::value),
+        Some(DeployReplicas::YamlNumber(value)) if value == "1.50"
+    ));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2704),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let deploy = view
+        .view()
+        .and_then(|project| project.service("app"))
+        .and_then(compose_lens::project::ProjectService::deploy)
+        .ok_or("effective deploy")?;
+    assert!(matches!(
+        deploy.value().replicas().map(compose_lens::project::ProjectValue::value),
+        Some(DeployReplicas::YamlNumber(value)) if value == "1.50"
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_deploy_labels_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  map:\n    deploy: {labels: {owner: platform}}\n  list:\n    deploy: {labels: [bare, owner=platform]}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2804), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert!(matches!(
+        parsed.document().and_then(|document| document.service("map"))
+            .and_then(compose_lens::model::Service::deploy).and_then(|deploy| deploy.labels()),
+        Some(compose_lens::model::Labels::Map { entries, .. }) if entries.len() == 1
+    ));
+    assert!(matches!(
+        parsed.document().and_then(|document| document.service("list"))
+            .and_then(compose_lens::model::Service::deploy).and_then(|deploy| deploy.labels()),
+        Some(compose_lens::model::Labels::List { values, .. }) if values.len() == 2
+    ));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2804),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let map = view
+        .view()
+        .and_then(|project| project.service("map"))
+        .and_then(compose_lens::project::ProjectService::deploy)
+        .and_then(|deploy| deploy.value().labels())
+        .ok_or("effective mapping labels")?;
+    assert!(map.value().get("owner").is_some());
+    assert!(matches!(
+        map.value().form(),
+        compose_lens::project::ProjectLabelsForm::Map
+    ));
+    let list = view
+        .view()
+        .and_then(|project| project.service("list"))
+        .and_then(compose_lens::project::ProjectService::deploy)
+        .and_then(|deploy| deploy.value().labels())
+        .ok_or("effective list labels")?;
+    assert_eq!(list.value().entries().len(), 2);
+    assert!(matches!(
+        list.value().form(),
+        compose_lens::project::ProjectLabelsForm::List
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_deploy_restart_policy_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    deploy: {restart_policy: {condition: on-failure, max_attempts: 3}}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2904), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert!(matches!(
+        parsed
+            .document()
+            .and_then(|doc| doc.service("app"))
+            .and_then(compose_lens::model::Service::deploy)
+            .and_then(|deploy| deploy.restart_policy())
+            .and_then(|policy| policy.condition())
+            .map(compose_lens::model::Located::value),
+        Some(DeployRestartCondition::OnFailure)
+    ));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2904),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged")?, None);
+    assert!(
+        view.view()
+            .and_then(|project| project.service("app"))
+            .and_then(compose_lens::project::ProjectService::deploy)
+            .and_then(|deploy| deploy.value().restart_policy())
+            .is_some()
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_deploy_placement_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    deploy:\n",
+        "      placement:\n",
+        "        constraints: [node.labels.zone == east]\n",
+        "        preferences: [{spread: node.labels.rack}]\n",
+        "        max_replicas_per_node: 003\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(3004), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert!(matches!(
+        parsed
+            .document()
+            .and_then(|doc| doc.service("app"))
+            .and_then(compose_lens::model::Service::deploy)
+            .and_then(|deploy| deploy.placement())
+            .and_then(|placement| placement.max_replicas_per_node())
+            .map(compose_lens::model::Located::value),
+        Some(DeployPlacementMaxReplicasPerNode::YamlInteger(value)) if value == "003"
+    ));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(3004),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    assert!(
+        view.view()
+            .and_then(|project| project.service("app"))
+            .and_then(compose_lens::project::ProjectService::deploy)
+            .and_then(|deploy| deploy.value().placement())
+            .is_some()
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_build_privileged_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build: {privileged: true}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2404), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|d| d.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|b| match b {
+            Build::Definition(d) => d.privileged(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored")?;
+    assert_eq!(authored.value(), &BooleanValue::Literal(true));
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2404),
+        DocumentOrigin::new("a", "w"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged")?, None);
+    let effective = view
+        .view()
+        .and_then(|v| v.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|b| match b.value() {
+            ProjectBuild::Definition(d) => d.privileged(),
+            _ => None,
+        })
+        .ok_or("effective")?;
+    assert_eq!(effective.value(), &BooleanValue::Literal(true));
+    Ok(())
+}
+
+fn assert_public_build_secrets(definition: &ProjectBuildDefinition) -> Result<(), Box<dyn std::error::Error>> {
+    let secrets = definition.secrets().ok_or("effective build secrets expected")?;
+    assert!(matches!(secrets.value().as_slice(), [short, long]
+        if matches!(short.value(), ProjectGrant::Short(value) if value == "build-secret")
+            && matches!(long.value(), ProjectGrant::Long(long) if long.source().is_some()
+                && long.target().is_some() && long.uid().is_some() && long.gid().is_some() && long.mode().is_some())));
+    Ok(())
+}
+
+fn assert_public_build_sequences(
+    authored: &compose_lens::model::BuildDefinition,
+    definition: &ProjectBuildDefinition,
+) -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(
+        authored.tags().map(|tags| tags
+            .iter()
+            .map(compose_lens::model::Located::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>()),
+        Some(vec!["example/app:one", "example/app:one"])
+    );
+    assert_eq!(
+        authored.platforms().map(|platforms| platforms
+            .iter()
+            .map(compose_lens::model::Located::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>()),
+        Some(vec!["linux/amd64", "linux/amd64"])
+    );
+    assert_eq!(
+        authored.cache_from().map(|locations| locations
+            .iter()
+            .map(compose_lens::model::Located::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>()),
+        Some(vec!["type=local,src=.cache", "type=local,src=.cache"])
+    );
+    assert_eq!(
+        authored.cache_to().map(|locations| locations
+            .iter()
+            .map(compose_lens::model::Located::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>()),
+        Some(vec!["type=local,dest=.cache", "type=local,dest=.cache"])
+    );
+    assert_eq!(
+        definition
+            .tags()
+            .ok_or("effective build tags expected")?
+            .value()
+            .iter()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["example/app:one", "example/app:one"]
+    );
+    assert_eq!(
+        definition
+            .platforms()
+            .ok_or("effective build platforms expected")?
+            .value()
+            .iter()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["linux/amd64", "linux/amd64"]
+    );
+    assert_eq!(
+        definition
+            .cache_from()
+            .ok_or("effective build cache_from expected")?
+            .value()
+            .iter()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["type=local,src=.cache", "type=local,src=.cache"]
+    );
+    assert_eq!(
+        definition
+            .cache_to()
+            .ok_or("effective build cache_to expected")?
+            .value()
+            .iter()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["type=local,dest=.cache", "type=local,dest=.cache"]
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_network_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build:\n      network: \"\"\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(708), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .ok_or("authored build expected")?;
+    let Build::Definition(authored) = authored else {
+        return Err("authored build definition expected".into());
+    };
+    assert_eq!(
+        authored
+            .network()
+            .map(compose_lens::model::Located::value)
+            .map(String::as_str),
+        Some("")
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(709),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let definition = view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => Some(definition),
+            _ => None,
+        })
+        .ok_or("effective build definition expected")?;
+    assert_eq!(
+        definition
+            .network()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("")
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_isolation_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build:\n      isolation: \"${BUILD_ISOLATION}\"\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(849), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let Build::Definition(authored) = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .ok_or("authored build expected")?
+    else {
+        return Err("authored build definition expected".into());
+    };
+    assert_eq!(
+        authored
+            .isolation()
+            .map(compose_lens::model::Located::value)
+            .map(String::as_str),
+        Some("${BUILD_ISOLATION}")
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(850),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert("BUILD_ISOLATION", "process");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let definition = view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => Some(definition),
+            _ => None,
+        })
+        .ok_or("effective build definition expected")?;
+    let _: &ProjectBuildDefinition = definition;
+    assert_eq!(
+        definition
+            .isolation()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str),
+        Some("process")
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_pull_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build:\n      pull: \"${BUILD_PULL:-false}\"\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(834), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .ok_or("authored build expected")?;
+    let Build::Definition(authored) = authored else {
+        return Err("authored build definition expected".into());
+    };
+    assert_eq!(
+        authored.pull().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Expression("${BUILD_PULL:-false}".to_owned()))
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(835),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let definition = view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => Some(definition),
+            _ => None,
+        })
+        .ok_or("effective build definition expected")?;
+    assert_eq!(
+        definition.pull().map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Expression("${BUILD_PULL:-false}".to_owned()))
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_no_cache_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build:\n      no_cache: \"${BUILD_NO_CACHE:-false}\"\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(845), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .ok_or("authored build expected")?;
+    let Build::Definition(authored) = authored else {
+        return Err("authored build definition expected".into());
+    };
+    assert!(matches!(
+        authored.no_cache().map(compose_lens::model::Located::value),
+        Some(BuildNoCache::String(value)) if value == "${BUILD_NO_CACHE:-false}"
+    ));
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(846),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let definition = view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => Some(definition),
+            _ => None,
+        })
+        .ok_or("effective build definition expected")?;
+    assert!(matches!(
+        definition.no_cache().map(compose_lens::project::ProjectValue::value),
+        Some(BuildNoCache::String(value)) if value == "${BUILD_NO_CACHE:-false}"
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_sbom_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build:\n      sbom: \"${SBOM_GENERATOR:-generator=default}\"\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(8451), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|build| match build {
+            Build::Definition(definition) => definition.sbom(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored build sbom expected")?;
+    assert!(matches!(authored.value(), BuildSbom::String(value) if value == "${SBOM_GENERATOR:-generator=default}"));
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(8452),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let sbom = view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => definition.sbom(),
+            _ => None,
+        })
+        .ok_or("effective build sbom expected")?;
+    assert!(matches!(sbom.value(), BuildSbom::String(value) if value == "${SBOM_GENERATOR:-generator=default}"));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_shm_size_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build:\n      shm_size: \"64mb\"\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(8463), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|build| match build {
+            Build::Definition(definition) => definition.shm_size(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored build shm_size expected")?;
+    assert_eq!(authored.raw().value(), "64mb");
+    assert_eq!(authored.scalar_kind(), ShmSizeScalarKind::String);
+    assert!(matches!(
+        authored.kind(),
+        ShmSizeKind::Documented { amount_raw, unit: ShmSizeUnit::Mb } if amount_raw == "64"
+    ));
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(8464),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let effective = view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => definition.shm_size(),
+            _ => None,
+        })
+        .ok_or("effective build shm_size expected")?;
+    assert_eq!(effective.value().raw().value(), "64mb");
+    assert_eq!(effective.value().scalar_kind(), ShmSizeScalarKind::String);
+    assert!(matches!(
+        effective.value().kind(),
+        ShmSizeKind::Documented { amount_raw, unit: ShmSizeUnit::Mb } if amount_raw == "64"
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_labels_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source =
+        "services:\n  app:\n    build:\n      labels: [io.example.value=one, io.example.bare, io.example.value=one]\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(710), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .ok_or("authored build expected")?;
+    let Build::Definition(authored) = authored else {
+        return Err("authored build definition expected".into());
+    };
+    assert!(
+        matches!(authored.labels(), Some(compose_lens::model::Labels::List { values, .. })
+        if values.iter().map(compose_lens::model::Located::value).map(String::as_str).collect::<Vec<_>>()
+            == ["io.example.value=one", "io.example.bare", "io.example.value=one"])
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(711),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project_view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let definition = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => Some(definition),
+            _ => None,
+        })
+        .ok_or("effective build definition expected")?;
+    let labels = definition.labels().ok_or("effective build labels expected")?;
+    let _: &ProjectBuildLabels = labels.value();
+    assert_eq!(
+        labels
+            .value()
+            .as_list()
+            .ok_or("list build labels expected")?
+            .iter()
+            .map(compose_lens::project::ProjectValue::value)
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["io.example.value=one", "io.example.bare", "io.example.value=one"]
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_args_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n  app:\n    build:\n      args:\n",
+        "        string: value\n        number: 1\n        boolean: true\n        empty: null\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(713), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|build| match build {
+            Build::Definition(definition) => definition.args(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored build args expected")?;
+    let _: &BuildArgs = authored;
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(714),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project_view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let definition = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => Some(definition),
+            _ => None,
+        })
+        .ok_or("effective build definition expected")?;
+    let args = definition.args().ok_or("effective build args expected")?;
+    let _: &ProjectBuildArgs = args.value();
+    assert!(matches!(args.value(), ProjectBuildArgs::Map(entries)
+        if entries.len() == 4 && entries.iter().any(|entry| entry.name().value() == "empty")));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_additional_contexts_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n  app:\n    build:\n      additional_contexts:\n",
+        "        assets: ./assets\n        image: example/context:latest\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(915), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|build| match build {
+            Build::Definition(definition) => definition.additional_contexts(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored additional contexts expected")?;
+    let _: &BuildAdditionalContexts = authored;
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(916),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project_view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let definition = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => Some(definition),
+            _ => None,
+        })
+        .ok_or("effective build definition expected")?;
+    let contexts = definition
+        .additional_contexts()
+        .ok_or("effective additional contexts expected")?;
+    let _: &ProjectBuildAdditionalContexts = contexts.value();
+    assert!(matches!(contexts.value(), ProjectBuildAdditionalContexts::Map(entries)
+        if entries.len() == 2 && entries.iter().any(|entry| entry.name().value() == "assets")));
+    Ok(())
+}
+
+#[test]
+fn exposes_stdin_open_tty_and_privileged_at_authored_effective_and_generated_boundaries()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    stdin_open: true\n    tty: false\n    privileged: true\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(707), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert_eq!(
+        parsed
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::stdin_open)
+            .map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    assert_eq!(
+        parsed
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::tty)
+            .map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        parsed
+            .document()
+            .and_then(|document| document.service("app"))
+            .and_then(compose_lens::model::Service::privileged)
+            .map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(708),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    assert_eq!(
+        build_project_view(merged.project().ok_or("merged project expected")?, None)
+            .view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::stdin_open)
+            .map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Literal(true))
+    );
+    assert_eq!(
+        build_project_view(merged.project().ok_or("merged project expected")?, None)
+            .view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::tty)
+            .map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        build_project_view(merged.project().ok_or("merged project expected")?, None)
+            .view()
+            .and_then(|view| view.service("app"))
+            .and_then(compose_lens::project::ProjectService::privileged)
+            .map(compose_lens::project::ProjectValue::value),
+        Some(&BooleanValue::Literal(true))
+    );
+
+    let mut service = GeneratedService::new("generated")?;
+    service.set_stdin_open(false)?;
+    service.set_tty(true)?;
+    service.set_privileged(false)?;
+    Ok(())
+}
+
+#[test]
+fn exposes_generated_volume_definition_driver_options_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let mut volume = GeneratedVolumeDefinition::application("data")?;
+    volume.set_driver(GeneratedString::plain("opaque-driver")?)?;
+    volume.set_driver_opts(vec![
+        GeneratedVolumeDriverOption::new(
+            "quoted",
+            GeneratedVolumeDriverOptionValue::String(GeneratedString::plain("2")?),
+        )?,
+        GeneratedVolumeDriverOption::new(
+            "number",
+            GeneratedVolumeDriverOptionValue::Number(GeneratedString::plain("2")?),
+        )?,
+    ])?;
+    volume.set_labels(vec![GeneratedLabel::new(
+        "com.example.owner",
+        GeneratedString::plain("strukturpiloten")?,
+    )?])?;
+    assert_eq!(volume.driver().map(GeneratedString::expose), Some("opaque-driver"));
+    assert_eq!(volume.driver_opts().map(<[GeneratedVolumeDriverOption]>::len), Some(2));
+    assert_eq!(volume.labels().map(<[GeneratedLabel]>::len), Some(1));
+
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(GeneratedString::plain("example/app")?)?;
+    builder.add_service(service)?;
+    builder.add_volume_definition(volume)?;
+    let generated = builder.build(SourceId::new(820))?;
+    let volume = generated
+        .document()
+        .volumes()
+        .first()
+        .ok_or("generated volume expected")?;
+    assert!(matches!(
+        volume.driver_opts()[0].value().value(),
+        compose_lens::model::ComposeScalar::String(value) if value == "2"
+    ));
+    assert!(matches!(
+        volume.driver_opts()[1].value().value(),
+        compose_lens::model::ComposeScalar::Number(value) if value == "2"
+    ));
+    assert!(matches!(
+        volume.labels(),
+        Some(compose_lens::model::Labels::Map { entries, .. })
+            if entries[0].key().value() == "com.example.owner"
+                && matches!(entries[0].value().value(), compose_lens::model::ComposeScalar::String(value) if value == "strukturpiloten")
+    ));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_effective_and_generated_logging_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    logging:\n",
+        "      driver: custom\n",
+        "      options:\n",
+        "        text: \"01\"\n",
+        "        count: 2\n",
+        "        empty: null\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(816), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored: &compose_lens::model::Logging = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::logging)
+        .ok_or("authored logging expected")?;
+    let authored_options: &compose_lens::model::LoggingOptions =
+        authored.options().ok_or("authored options expected")?;
+    let _: &compose_lens::model::LoggingOption = &authored_options.entries()[0];
+    assert!(
+        matches!(authored_options.entries()[0].value().value(), compose_lens::model::LoggingOptionValue::String(value) if value == "01")
+    );
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(817),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let logging: &ProjectLogging = project
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::logging)
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective logging expected")?;
+    let options: &ProjectLoggingOptions = logging
+        .options()
+        .map(compose_lens::project::ProjectValue::value)
+        .ok_or("effective options expected")?;
+    let option: &ProjectLoggingOption = options.entries()[0].value();
+    assert!(matches!(option.value().value(), ProjectLoggingOptionValue::String { value, .. } if value == "01"));
+
+    let generated_option = GeneratedLoggingOption::new("empty", GeneratedLoggingOptionValue::Null)?;
+    let generated = GeneratedLogging::new(GeneratedString::plain("custom")?, vec![generated_option])?;
+    let mut service = GeneratedService::new("app")?;
+    service.set_logging(generated)?;
+    assert_eq!(
+        service.logging().map(GeneratedLogging::options).map(<[_]>::len),
+        Some(1)
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_generated_network_definition_driver_options_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let mut network = GeneratedNetworkDefinition::application("frontend")?;
+    network.set_driver(GeneratedString::plain("opaque-driver")?)?;
+    network.set_driver_opts(vec![
+        GeneratedNetworkDriverOption::new(
+            "quoted",
+            GeneratedNetworkDriverOptionValue::String(GeneratedString::plain("2")?),
+        )?,
+        GeneratedNetworkDriverOption::new(
+            "number",
+            GeneratedNetworkDriverOptionValue::Number(GeneratedString::plain("2")?),
+        )?,
+    ])?;
+    network.set_enable_ipv6(false)?;
+    network.set_internal(true)?;
+    network.set_labels(vec![GeneratedLabel::new(
+        "com.example.owner",
+        GeneratedString::plain("strukturpiloten")?,
+    )?])?;
+    assert_eq!(network.driver().map(GeneratedString::expose), Some("opaque-driver"));
+    assert_eq!(
+        network.driver_opts().map(<[GeneratedNetworkDriverOption]>::len),
+        Some(2)
+    );
+    assert_eq!(network.enable_ipv6(), Some(false));
+    assert_eq!(network.internal(), Some(true));
+    assert_eq!(network.labels().map(<[GeneratedLabel]>::len), Some(1));
+
+    let mut service = GeneratedService::new("app")?;
+    service.add_network(GeneratedNetworkAttachment::new("frontend")?)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    builder.add_network_definition(network)?;
+    let generated = builder.build(SourceId::new(819))?;
+    let network = generated
+        .document()
+        .networks()
+        .first()
+        .ok_or("generated network expected")?;
+    assert!(matches!(
+        network.driver_opts()[0].value().value(),
+        compose_lens::model::ComposeScalar::String(value) if value == "2"
+    ));
+    assert!(matches!(
+        network.driver_opts()[1].value().value(),
+        compose_lens::model::ComposeScalar::Number(value) if value == "2"
+    ));
+    assert!(matches!(
+        network.labels(),
+        Some(compose_lens::model::Labels::Map { entries, .. })
+            if entries[0].key().value() == "com.example.owner"
+                && matches!(entries[0].value().value(), compose_lens::model::ComposeScalar::String(value) if value == "strukturpiloten")
+    ));
+    assert_eq!(
+        network.enable_ipv6().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(false))
+    );
+    assert_eq!(
+        network.internal().map(compose_lens::model::Located::value),
+        Some(&BooleanValue::Literal(true))
+    );
     Ok(())
 }
 
@@ -826,6 +2033,37 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
     Ok(())
 }
 
+#[test]
+fn generated_network_attachment_addresses_are_additive_public_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let mut attachment = GeneratedNetworkAttachment::new("frontend")?;
+    attachment.add_alias("app")?;
+    attachment.set_ipv4_address(GeneratedString::plain("192.0.2.40")?)?;
+    attachment.set_ipv6_address(GeneratedString::plain("2001:db8::40")?)?;
+    assert_eq!(
+        attachment.ipv4_address().map(GeneratedString::expose),
+        Some("192.0.2.40")
+    );
+    assert_eq!(
+        attachment.ipv6_address().map(GeneratedString::expose),
+        Some("2001:db8::40")
+    );
+
+    let mut service = GeneratedService::new("app")?;
+    service.add_network(attachment)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(818))?;
+    assert!(matches!(
+        generated.document().service("app").and_then(compose_lens::model::Service::networks),
+        Some(compose_lens::model::ServiceNetworks::Long { networks, .. })
+            if networks.first().is_some_and(|network| {
+                network.ipv4_address().is_some_and(|value| value.value() == "192.0.2.40")
+                    && network.ipv6_address().is_some_and(|value| value.value() == "2001:db8::40")
+            })
+    ));
+    Ok(())
+}
+
 fn assert_generated_kernel_controls(
     generated: &compose_lens::render::GeneratedComposeDocument,
 ) -> Result<(), &'static str> {
@@ -1407,5 +2645,148 @@ fn assert_dependency(project_view: &compose_lens::project::ProjectViewResult) ->
             .map(compose_lens::project::ProjectValue::value),
         Some(DependencyCondition::ServiceHealthy)
     ));
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_ulimits_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    build:\n",
+        "      ulimits:\n",
+        "        nofile: \"001024\"\n",
+        "        nproc: {soft: \"1024\", hard: -1}\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(1820), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|build| match build {
+            Build::Definition(definition) => definition.ulimits(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored build ulimits expected")?;
+    assert_eq!(authored.entries().len(), 2);
+    assert_eq!(authored.entries()[0].name().value(), "nofile");
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(1821),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project_view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let effective = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => definition.ulimits(),
+            _ => None,
+        })
+        .ok_or("effective build ulimits expected")?;
+    let _: &ProjectUlimits = effective.value();
+    let entry: &ProjectUlimit = effective.value().entries()[1].value();
+    let ProjectUlimitValue::Range(range) = entry.value() else {
+        return Err("public build ulimit range expected".into());
+    };
+    let _: &ProjectUlimitRange = range;
+    let hard: &ProjectUlimitScalar = range.hard().ok_or("public hard build ulimit expected")?.value();
+    assert_eq!(hard.authored(), "-1");
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_entitlements_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  app:\n    build: {entitlements: [network.host, security.insecure]}\n";
+    let syntax = SyntaxDocument::parse(SourceId::new(2004), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|build| match build {
+            Build::Definition(definition) => definition.entitlements(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored build entitlements expected")?;
+    assert_eq!(authored.len(), 2);
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2005),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project_view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let effective = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => definition.entitlements(),
+            _ => None,
+        })
+        .ok_or("effective build entitlements expected")?;
+    let _: &Vec<compose_lens::project::ProjectValue<String>> = effective.value();
+    assert_eq!(effective.value()[1].value(), "security.insecure");
+    Ok(())
+}
+
+#[test]
+fn exposes_authored_and_effective_build_extra_hosts_contract() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n    build:\n      extra_hosts:\n        gateway: host-gateway\n        v6: [\"[::1]\", \"${SECOND}\"]\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(1933), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let authored = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::build)
+        .and_then(|build| match build {
+            Build::Definition(definition) => definition.extra_hosts(),
+            Build::Context(_) => None,
+        })
+        .ok_or("authored build extra_hosts expected")?;
+    let BuildExtraHosts::Map { entries, .. } = authored else {
+        return Err("public authored mapping expected".into());
+    };
+    let _: &BuildExtraHostAddresses = entries[1].addresses();
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(1934),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("SECOND", "host-gateway");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let project_view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let effective = project_view
+        .view()
+        .and_then(|view| view.service("app"))
+        .and_then(compose_lens::project::ProjectService::build)
+        .and_then(|build| match build.value() {
+            ProjectBuild::Definition(definition) => definition.extra_hosts(),
+            _ => None,
+        })
+        .ok_or("effective build extra_hosts expected")?;
+    let _: &ProjectBuildExtraHosts = effective.value();
+    let ProjectBuildExtraHosts::Map(entries) = effective.value() else {
+        return Err("public effective mapping expected".into());
+    };
+    let _: &ProjectBuildExtraHostAddresses = entries[1].addresses();
+    assert!(
+        entries[1]
+            .addresses()
+            .as_list()
+            .is_some_and(|values| values[1].is_sensitive())
+    );
     Ok(())
 }
