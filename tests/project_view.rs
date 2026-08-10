@@ -8,11 +8,13 @@ use compose_lens::model::{
     DEPLOY_ENDPOINT_MODE_PORTABILITY, DEPLOY_MODE_PORTABILITY, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING,
     DNS_OPT_DUPLICATE_ITEM, DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING, DNS_SEARCH_DUPLICATE_ITEM,
     DNS_SEARCH_EXPECTED_FORM, DNS_SEARCH_EXPECTED_STRING, DependencyCondition, DeployEndpointMode, DeployMode,
-    DeployPlacementMaxReplicasPerNode, DeployReplicas, DeployRestartCondition, Entrypoint, EnvironmentFileFormatKind,
-    HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddressKind, HostnameKind,
-    IdentityComponent, Labels, LimitValue, Port, RestartPolicyKind, SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel,
-    ServiceNetworks, StopGracePeriod, ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER,
-    UserNamespaceModeKind, VOLUME_EXTERNAL_DRIVER_CONFIGURATION, VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeMount,
+    DeployPlacementMaxReplicasPerNode, DeployReplicas, DeployReservationDeviceCount, DeployResourceCpus,
+    DeployResourceMemoryKind, DeployResourceMemoryUnit, DeployResourcePids, DeployRestartCondition, Entrypoint,
+    EnvironmentFileFormatKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
+    HostAddressKind, HostnameKind, IdentityComponent, Labels, LimitValue, PidsLimitKind, Port, RestartPolicyKind,
+    SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel, ServiceNetworks, StopGracePeriod, ULIMIT_INVALID_NAME,
+    ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceModeKind, VOLUME_EXTERNAL_DRIVER_CONFIGURATION,
+    VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeMount,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
@@ -112,7 +114,8 @@ fn retains_effective_deploy_endpoint_mode_merge_provenance_and_unmodeled_childre
         siblings.replicas().map(ProjectValue::value),
         Some(DeployReplicas::YamlNumber(value)) if value == "2"
     ));
-    assert_eq!(siblings.unmodeled_fields().len(), 1);
+    assert!(siblings.resources().is_some());
+    assert!(siblings.unmodeled_fields().is_empty());
     let malformed = deploy("malformed")?.value();
     assert!(malformed.endpoint_mode().is_none());
     assert!(
@@ -426,6 +429,1221 @@ fn retains_effective_deploy_labels_forms_merge_provenance_and_recovery() -> Resu
             .diagnostics()
             .iter()
             .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_update_config_merge_reset_override_and_sensitivity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3151),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  merged:\n    deploy: {update_config: {parallelism: 1, delay: \"${DELAY}\", failure_action: pause}}\n  reset:\n    deploy: {update_config: {parallelism: 1}}\n  override:\n    deploy: {update_config: {parallelism: 1, delay: old}}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3152),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  merged:\n    deploy: {update_config: {monitor: new, order: vendor}}\n  reset:\n    deploy: {update_config: !reset {}}\n  override:\n    deploy: {update_config: !override {order: start-first}}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("DELAY", "private-delay");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let update = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::deploy)
+            .and_then(|deploy| deploy.value().update_config())
+            .ok_or("update config")
+    };
+    let value = update("merged")?;
+    assert!(
+        matches!(value.value().parallelism().map(ProjectValue::value), Some(compose_lens::model::DeployUpdateParallelism::YamlInteger(raw)) if raw == "1")
+    );
+    assert_eq!(
+        value.value().monitor().map(ProjectValue::value).map(String::as_str),
+        Some("new")
+    );
+    assert!(value.value().delay().is_some_and(ProjectValue::is_sensitive));
+    assert!(!format!("{value:?}").contains("private-delay"));
+    assert!(
+        matches!(value.value().order().map(ProjectValue::value), Some(compose_lens::model::DeployUpdateOrder::Other(raw)) if raw == "vendor")
+    );
+    let reset = update("reset")?;
+    assert!(reset.value().parallelism().is_none());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = update("override")?;
+    assert!(overridden.value().delay().is_none());
+    assert!(matches!(
+        overridden.value().order().map(ProjectValue::value),
+        Some(compose_lens::model::DeployUpdateOrder::StartFirst)
+    ));
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_rollback_config_merge_reset_override_and_sensitivity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3155),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  merged:\n    deploy:\n      rollback_config:\n        parallelism: 1\n        delay: \"${DELAY}\"\n        failure_action: pause\n      update_config:\n        order: start-first\n  reset:\n    deploy:\n      rollback_config:\n        parallelism: 1\n  override:\n    deploy:\n      rollback_config:\n        parallelism: 1\n        delay: old\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3156),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  merged:\n    deploy:\n      rollback_config:\n        monitor: new\n        order: vendor\n  reset:\n    deploy:\n      rollback_config: !reset {}\n  override:\n    deploy:\n      rollback_config: !override\n        order: stop-first\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("DELAY", "private-delay");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let rollback = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::deploy)
+            .and_then(|deploy| deploy.value().rollback_config())
+            .ok_or("rollback config")
+    };
+    let value = rollback("merged")?;
+    assert!(matches!(
+        value.value().parallelism().map(ProjectValue::value),
+        Some(compose_lens::model::DeployRollbackParallelism::YamlInteger(raw)) if raw == "1"
+    ));
+    assert_eq!(
+        value.value().monitor().map(ProjectValue::value).map(String::as_str),
+        Some("new")
+    );
+    assert!(value.value().delay().is_some_and(ProjectValue::is_sensitive));
+    assert!(!format!("{value:?}").contains("private-delay"));
+    assert!(matches!(
+        value.value().order().map(ProjectValue::value),
+        Some(compose_lens::model::DeployRollbackOrder::Other(raw)) if raw == "vendor"
+    ));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("merged"))
+            .and_then(ProjectService::deploy)
+            .and_then(|deploy| deploy.value().update_config())
+            .is_some()
+    );
+    let reset = rollback("reset")?;
+    assert!(reset.value().parallelism().is_none());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = rollback("override")?;
+    assert!(overridden.value().delay().is_none());
+    assert!(matches!(
+        overridden.value().order().map(ProjectValue::value),
+        Some(compose_lens::model::DeployRollbackOrder::StopFirst)
+    ));
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| { diagnostic.code() == compose_lens::model::DEPLOY_ROLLBACK_CONFIG_ORDER_PORTABILITY })
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_credential_spec_merge_reset_override_and_sensitivity() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3159),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  merged:\n    credential_spec:\n      config: old\n      file: \"${SECRET_FILE}\"\n  reset:\n    credential_spec: {config: old}\n  override:\n    credential_spec: {config: old, file: old-file}\n  null:\n    credential_spec: {config: old}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3160),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  merged:\n    credential_spec:\n      config: new\n      registry: registry://account\n  reset:\n    credential_spec: !reset {}\n  override:\n    credential_spec: !override {registry: registry://override}\n  null:\n    credential_spec: !reset null\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("SECRET_FILE", "private-file");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let credential_spec = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::credential_spec)
+            .ok_or("credential spec")
+    };
+    let value = credential_spec("merged")?;
+    assert_eq!(
+        value.value().config().map(ProjectValue::value).map(String::as_str),
+        Some("new")
+    );
+    assert_eq!(
+        value.value().registry().map(ProjectValue::value).map(String::as_str),
+        Some("registry://account")
+    );
+    assert!(value.value().file().is_some_and(ProjectValue::is_sensitive));
+    assert!(!format!("{value:?}").contains("private-file"));
+    let reset = credential_spec("reset")?;
+    assert!(reset.value().config().is_none());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = credential_spec("override")?;
+    assert!(overridden.value().config().is_none());
+    assert_eq!(
+        overridden
+            .value()
+            .registry()
+            .map(ProjectValue::value)
+            .map(String::as_str),
+        Some("registry://override")
+    );
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    let reset_null = credential_spec("null")?;
+    assert!(reset_null.value().config().is_none());
+    assert_eq!(reset_null.provenance().operation(), MergeOperation::Reset);
+    Ok(())
+}
+
+#[test]
+fn retains_effective_extends_without_expansion_or_file_lookup() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3163),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  merged:\n    extends:\n      service: \"${PARENT}\"\n      file: base.yml\n  reset:\n    extends: {service: old}\n  override:\n    extends: {service: old, file: old.yml}\n  null:\n    extends: {service: old}\n  shape:\n    extends: short-parent\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3164),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  merged:\n    extends:\n      file: override.yml\n  reset:\n    extends: !reset {}\n  override:\n    extends: !override {service: override-parent}\n  null:\n    extends: !reset null\n  shape:\n    extends: {service: map-parent}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("PARENT", "private-parent");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let extends = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::extends)
+            .ok_or("extends")
+    };
+    let merged = extends("merged")?;
+    let compose_lens::project::ProjectExtends::Long(reference) = merged.value() else {
+        return Err("merged long form expected".into());
+    };
+    assert!(reference.service().is_some_and(ProjectValue::is_sensitive));
+    assert_eq!(
+        reference.file().map(ProjectValue::value).map(String::as_str),
+        Some("override.yml")
+    );
+    assert!(!format!("{merged:?}").contains("private-parent"));
+    let reset = extends("reset")?;
+    assert!(matches!(reset.value(), compose_lens::project::ProjectExtends::Long(value) if value.service().is_none()));
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = extends("override")?;
+    assert!(matches!(
+        overridden.value(),
+        compose_lens::project::ProjectExtends::Long(value)
+            if value.service().map(ProjectValue::value).map(String::as_str) == Some("override-parent")
+    ));
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    let reset_null = extends("null")?;
+    assert!(
+        matches!(reset_null.value(), compose_lens::project::ProjectExtends::Long(value) if value.service().is_none())
+    );
+    assert_eq!(reset_null.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(
+        extends("shape")?.value(),
+        compose_lens::project::ProjectExtends::Long(_)
+    ));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_provider_merge_reset_override_and_sensitivity() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3169),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  merged:\n    provider:\n      type: \"${TYPE}\"\n      options:\n        secret: \"${TOKEN}\"\n        replaced: first\n        values: [one, true]\n  reset:\n    provider:\n      type: old\n      options: {old: value}\n  override:\n    provider:\n      type: old\n      options: {old: value}\n  missing:\n    provider: {options: {kept: value}}\n  shape:\n    provider:\n      type: example\n      options: {value: scalar}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3170),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  merged:\n    provider:\n      options:\n        replaced: second\n        values: [2, false]\n        added: true\n  reset:\n    provider:\n      options: !reset {}\n  override:\n    provider: !override {type: override, options: {only: true}}\n  shape:\n    provider:\n      options: {value: [one]}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("TYPE", "private-provider");
+    let _ = environment.insert_sensitive("TOKEN", "private-option");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let provider = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::provider)
+            .ok_or("provider")
+    };
+    let merged = provider("merged")?;
+    assert!(merged.value().type_().is_some_and(ProjectValue::is_sensitive));
+    assert!(!format!("{merged:?}").contains("private-provider"));
+    let options = merged.value().options().ok_or("merged options")?.value();
+    let option = |name| {
+        options
+            .entries()
+            .iter()
+            .find(|entry| entry.value().name().value() == name)
+            .ok_or("option")
+    };
+    assert!(option("secret")?.is_sensitive());
+    assert!(!format!("{:?}", option("secret")?).contains("private-option"));
+    assert!(
+        matches!(option("replaced")?.value().value().value(), compose_lens::project::ProjectProviderOptionValue::Scalar(ComposeScalar::String(value)) if value == "second")
+    );
+    assert!(matches!(
+        option("added")?.value().value().value(),
+        compose_lens::project::ProjectProviderOptionValue::Scalar(ComposeScalar::Boolean(true))
+    ));
+    assert!(
+        matches!(option("values")?.value().value().value(), compose_lens::project::ProjectProviderOptionValue::Sequence(items)
+            if matches!(items.as_slice(), [first, second, third, fourth]
+                if matches!(first.value(), compose_lens::project::ProjectProviderOptionItem::Scalar(ComposeScalar::String(value)) if value == "one")
+                    && matches!(second.value(), compose_lens::project::ProjectProviderOptionItem::Scalar(ComposeScalar::Boolean(true)))
+                    && matches!(third.value(), compose_lens::project::ProjectProviderOptionItem::Scalar(ComposeScalar::Number(value)) if value == "2")
+                    && matches!(fourth.value(), compose_lens::project::ProjectProviderOptionItem::Scalar(ComposeScalar::Boolean(false)))
+            )
+        )
+    );
+    let reset = provider("reset")?;
+    assert!(
+        reset
+            .value()
+            .options()
+            .is_some_and(|options| options.value().is_empty())
+    );
+    let overridden = provider("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden.value().type_().map(ProjectValue::value).map(String::as_str),
+        Some("override")
+    ));
+    assert!(matches!(
+        provider("shape")?
+            .value()
+            .options()
+            .map(ProjectValue::value)
+            .and_then(|options| options.entries().first())
+            .map(|option| option.value().value().value()),
+        Some(compose_lens::project::ProjectProviderOptionValue::Sequence(_))
+    ));
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == compose_lens::model::PROVIDER_MISSING_TYPE)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_post_start_append_reset_override_and_sensitivity() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3174);
+    let override_id = SourceId::new(3175);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  merged:\n    post_start:\n      - command: \"${HOOK}\"\n        environment: {ONE: base}\n      - command: [echo, base]\n  reset:\n    post_start: [{command: old}]\n  override:\n    post_start: [{command: old}]\n  malformed:\n    post_start: [{command: old}]\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  merged:\n    post_start:\n      - command: later\n        environment: [TWO=two]\n        privileged: true\n        user: hook-user\n        working_dir: /hook\n  reset:\n    post_start: !reset []\n  override:\n    post_start: !override [{command: override}]\n  malformed:\n    post_start: [{environment: [ONE=one]}, invalid]\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("HOOK", "private-hook");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let hooks = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::post_start)
+            .ok_or("post-start hooks")
+    };
+    let merged = hooks("merged")?;
+    assert_eq!(merged.value().len(), 3);
+    let compose_lens::project::ProjectPostStartHook::Hook(first) = merged.value()[0].value() else {
+        return Err("first hook expected".into());
+    };
+    assert!(first.command().is_some_and(ProjectValue::is_sensitive));
+    assert!(!format!("{:?}", merged.value()[0]).contains("private-hook"));
+    assert!(matches!(
+        merged.value()[1].value(),
+        compose_lens::project::ProjectPostStartHook::Hook(hook)
+            if matches!(hook.command().map(ProjectValue::value), Some(Command::List { values, .. }) if values.len() == 2)
+    ));
+    let compose_lens::project::ProjectPostStartHook::Hook(last) = merged.value()[2].value() else {
+        return Err("last hook expected".into());
+    };
+    assert!(last.environment().is_some());
+    assert!(matches!(
+        last.privileged().map(ProjectValue::value),
+        Some(BooleanValue::Literal(true))
+    ));
+    assert_eq!(
+        last.user().map(ProjectValue::value).map(String::as_str),
+        Some("hook-user")
+    );
+    assert_eq!(
+        last.working_dir().map(ProjectValue::value).map(String::as_str),
+        Some("/hook")
+    );
+    assert_source_ids(merged.provenance().sources(), &[base_id, override_id]);
+    let reset = hooks("reset")?;
+    assert!(reset.value().is_empty());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = hooks("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(overridden.value().len(), 1);
+    assert!(matches!(
+        overridden.value()[0].value(),
+        compose_lens::project::ProjectPostStartHook::Hook(hook)
+            if matches!(hook.command().map(ProjectValue::value), Some(Command::String(value)) if value.value() == "override")
+    ));
+    let malformed = hooks("malformed")?;
+    assert_eq!(malformed.value().len(), 3);
+    assert!(matches!(
+        malformed.value()[1].value(),
+        compose_lens::project::ProjectPostStartHook::Hook(hook) if hook.command().is_none()
+    ));
+    assert!(matches!(
+        malformed.value()[2].value(),
+        compose_lens::project::ProjectPostStartHook::Unmodeled
+    ));
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == compose_lens::model::POST_START_MISSING_COMMAND)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_pre_stop_append_reset_override_and_null_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3181);
+    let override_id = SourceId::new(3182);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  merged:\n    pre_stop: [{command: \"${HOOK}\", environment: {LOCAL: base}}]\n  reset:\n    pre_stop: [{command: old}]\n  override:\n    pre_stop: [{command: old}]\n  null:\n    pre_stop: [{command: old}]\n  missing:\n    pre_stop: [{environment: [LOCAL=base]}]\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  merged:\n    pre_stop: [{command: later, privileged: true, user: hook-user, working_dir: /hook}]\n  reset:\n    pre_stop: !reset []\n  override:\n    pre_stop: !override [{command: replacement}]\n  null:\n    pre_stop: !reset null\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("HOOK", "private-hook");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let hooks = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::pre_stop)
+            .ok_or("pre-stop hooks")
+    };
+    let merged = hooks("merged")?;
+    assert_eq!(merged.value().len(), 2);
+    let compose_lens::project::ProjectPreStopHook::Hook(first) = merged.value()[0].value() else {
+        return Err("first pre-stop hook expected".into());
+    };
+    assert!(first.command().is_some_and(ProjectValue::is_sensitive));
+    assert!(!format!("{:?}", merged.value()[0]).contains("private-hook"));
+    let compose_lens::project::ProjectPreStopHook::Hook(last) = merged.value()[1].value() else {
+        return Err("last pre-stop hook expected".into());
+    };
+    assert!(matches!(
+        last.privileged().map(ProjectValue::value),
+        Some(BooleanValue::Literal(true))
+    ));
+    assert_eq!(
+        last.user().map(ProjectValue::value).map(String::as_str),
+        Some("hook-user")
+    );
+    assert_source_ids(merged.provenance().sources(), &[base_id, override_id]);
+    let reset = hooks("reset")?;
+    assert!(reset.value().is_empty());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = hooks("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden.value()[0].value(),
+        compose_lens::project::ProjectPreStopHook::Hook(hook)
+            if matches!(hook.command().map(ProjectValue::value), Some(Command::String(value)) if value.value() == "replacement")
+    ));
+    let reset_null = hooks("null")?;
+    assert!(reset_null.value().is_empty());
+    assert_eq!(reset_null.provenance().operation(), MergeOperation::Reset);
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == compose_lens::model::PRE_STOP_MISSING_COMMAND)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_pre_start_optional_members_and_merge_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3192);
+    let override_id = SourceId::new(3193);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  merged:\n    pre_start: [{}, {command: \"${COMMAND}\", image: \"${IMAGE}\", environment: {LOCAL: base}}]\n  reset:\n    pre_start: [{command: old}]\n  override:\n    pre_start: [{command: old}]\n  null:\n    pre_start: [{command: old}]\n  malformed:\n    pre_start: [{command: old}]\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  merged:\n    pre_start: [{command: later, privileged: true, per_replica: true, user: hook-user, working_dir: /hook}]\n  reset:\n    pre_start: !reset []\n  override:\n    pre_start: !override [{image: replacement}]\n  null:\n    pre_start: !reset null\n  malformed:\n    pre_start: [invalid, {privileged: sometimes, per_replica: maybe, image: 1, user: 1000, working_dir: false}]\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("COMMAND", "private-command");
+    let _ = environment.insert_sensitive("IMAGE", "private image @ all");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let hooks = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::pre_start)
+            .ok_or("pre-start hooks")
+    };
+    let merged = hooks("merged")?;
+    assert_eq!(merged.value().len(), 3);
+    assert!(
+        matches!(merged.value()[0].value(), compose_lens::project::ProjectPreStartHook::Hook(hook) if hook.command().is_none())
+    );
+    let compose_lens::project::ProjectPreStartHook::Hook(second) = merged.value()[1].value() else {
+        return Err("second pre-start hook expected".into());
+    };
+    assert!(second.command().is_some_and(ProjectValue::is_sensitive));
+    assert!(second.image().is_some_and(ProjectValue::is_sensitive));
+    assert!(!format!("{:?}", merged.value()[1]).contains("private image @ all"));
+    let compose_lens::project::ProjectPreStartHook::Hook(last) = merged.value()[2].value() else {
+        return Err("last pre-start hook expected".into());
+    };
+    assert!(matches!(
+        last.privileged().map(ProjectValue::value),
+        Some(BooleanValue::Literal(true))
+    ));
+    assert!(matches!(
+        last.per_replica().map(ProjectValue::value),
+        Some(BooleanValue::Literal(true))
+    ));
+    assert_eq!(
+        last.user().map(ProjectValue::value).map(String::as_str),
+        Some("hook-user")
+    );
+    assert_source_ids(merged.provenance().sources(), &[base_id, override_id]);
+    let reset = hooks("reset")?;
+    assert!(reset.value().is_empty());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = hooks("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden.value()[0].value(),
+        compose_lens::project::ProjectPreStartHook::Hook(hook)
+            if hook.command().is_none()
+                && hook.image().map(ProjectValue::value).map(String::as_str) == Some("replacement")
+    ));
+    let reset_null = hooks("null")?;
+    assert!(reset_null.value().is_empty());
+    assert_eq!(reset_null.provenance().operation(), MergeOperation::Reset);
+    let malformed = hooks("malformed")?;
+    assert_eq!(malformed.value().len(), 3);
+    assert!(matches!(
+        malformed.value()[1].value(),
+        compose_lens::project::ProjectPreStartHook::Unmodeled
+    ));
+    assert!(matches!(
+        malformed.value()[2].value(),
+        compose_lens::project::ProjectPreStartHook::Hook(hook)
+            if hook.privileged().is_none()
+                && hook.per_replica().is_none()
+                && hook.image().is_none()
+                && hook.unmodeled_fields().len() == 5
+    ));
+    assert!(!result.diagnostics().iter().any(|diagnostic| {
+        matches!(
+            diagnostic.code(),
+            compose_lens::model::POST_START_MISSING_COMMAND | compose_lens::model::PRE_STOP_MISSING_COMMAND
+        )
+    }));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_service_runtime_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3199);
+    let override_id = SourceId::new(3200);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced:\n    runtime: first\n  sensitive:\n    runtime: \"${RUNTIME}\"\n  reset:\n    runtime: first\n  override:\n    runtime: first\n  malformed:\n    runtime: first\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced:\n    runtime: second\n  reset:\n    runtime: !reset null\n  override:\n    runtime: !override replacement\n  malformed:\n    runtime: 1\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("RUNTIME", "private-runtime");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let runtime = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::runtime)
+            .ok_or("runtime")
+    };
+    let replaced = runtime("replaced")?;
+    assert_eq!(replaced.value(), "second");
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let sensitive = runtime("sensitive")?;
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("private-runtime"));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.runtime().is_none())
+    );
+    let overridden = runtime("override")?;
+    assert_eq!(overridden.value(), "replacement");
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("malformed"))
+            .is_some_and(|service| service.runtime().is_none())
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_cgroup_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3234);
+    let override_id = SourceId::new(3235);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cgroup: host}\n  sensitive: {cgroup: \"${CGROUP}\"}\n  reset: {cgroup: host}\n  override: {cgroup: host}\n  invalid: {cgroup: none}\n  malformed: {cgroup: host}\n  omitted: {image: example/app}\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cgroup: private}\n  reset: {cgroup: !reset null}\n  override: {cgroup: !override private}\n  malformed: {cgroup: [private]}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("CGROUP", "host");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let cgroup = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::cgroup)
+            .ok_or("effective cgroup")
+    };
+    let replaced = cgroup("replaced")?;
+    assert!(matches!(
+        replaced.value().kind(),
+        compose_lens::model::CgroupNamespaceKind::Private
+    ));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let sensitive = cgroup("sensitive")?;
+    assert!(sensitive.is_sensitive());
+    assert!(matches!(
+        sensitive.value().kind(),
+        compose_lens::model::CgroupNamespaceKind::Host
+    ));
+    assert!(!format!("{sensitive:?}").contains("host"));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.cgroup().is_none())
+    );
+    assert_eq!(cgroup("override")?.provenance().operation(), MergeOperation::Override);
+    let invalid = cgroup("invalid")?;
+    assert!(!invalid.value().is_valid());
+    assert!(matches!(
+        invalid.value().kind(),
+        compose_lens::model::CgroupNamespaceKind::Other(value) if value == "none"
+    ));
+    let malformed = result
+        .view()
+        .and_then(|view| view.service("malformed"))
+        .ok_or("malformed service")?;
+    assert!(malformed.cgroup().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "cgroup"])
+    );
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("omitted"))
+            .is_some_and(|service| service.cgroup().is_none())
+    );
+    for code in [PROJECT_EXPECTED_FORM, compose_lens::model::CGROUP_NAMESPACE_INVALID] {
+        assert!(result.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    Ok(())
+}
+
+#[test]
+fn retains_effective_cgroup_parent_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3244);
+    let override_id = SourceId::new(3245);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cgroup_parent: base}\n  sensitive: {cgroup_parent: \"${PARENT}\"}\n  reset: {cgroup_parent: base}\n  override: {cgroup_parent: base}\n  malformed: {cgroup_parent: base}\n  omitted: {image: example/app}\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cgroup_parent: replacement}\n  reset: {cgroup_parent: !reset null}\n  override: {cgroup_parent: !override explicit}\n  malformed: {cgroup_parent: [parent]}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("PARENT", "sensitive-parent");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let parent = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::cgroup_parent)
+            .ok_or("effective cgroup parent")
+    };
+    let replaced = parent("replaced")?;
+    assert_eq!(replaced.value(), "replacement");
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let sensitive = parent("sensitive")?;
+    assert_eq!(sensitive.value(), "sensitive-parent");
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("sensitive-parent"));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.cgroup_parent().is_none())
+    );
+    assert_eq!(parent("override")?.provenance().operation(), MergeOperation::Override);
+    let malformed = result
+        .view()
+        .and_then(|view| view.service("malformed"))
+        .ok_or("malformed service")?;
+    assert!(malformed.cgroup_parent().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "cgroup_parent"])
+    );
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("omitted"))
+            .is_some_and(|service| service.cgroup_parent().is_none())
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_cpu_count_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3254);
+    let override_id = SourceId::new(3255);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_count: 1}\n  reset: {cpu_count: 1}\n  override: {cpu_count: 1}\n  sensitive: {cpu_count: \"${CPU_COUNT}\"}\n  block:\n    cpu_count: |-\n      007\n  negative: {cpu_count: -1}\n  malformed: {cpu_count: 1}\n  timestamp: {cpu_count: !!timestamp 2024-01-01}\n  regex: {cpu_count: !!regex '007'}\n  omitted: {image: example/app}\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_count: 0xCA_FE}\n  reset: {cpu_count: !reset null}\n  override: {cpu_count: !override \"custom\"}\n  malformed: {cpu_count: [1]}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("CPU_COUNT", "private-cpu-count");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let count = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::cpu_count)
+            .ok_or("effective cpu count")
+    };
+    let replaced = count("replaced")?;
+    assert!(matches!(replaced.value(), compose_lens::model::CpuCount::YamlInteger(value) if value == "0xCA_FE"));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    assert!(count("sensitive")?.is_sensitive());
+    assert!(
+        matches!(count("sensitive")?.value(), compose_lens::model::CpuCount::String(value) if value == "private-cpu-count")
+    );
+    assert!(!format!("{:?}", count("sensitive")?).contains("private-cpu-count"));
+    assert!(matches!(count("block")?.value(), compose_lens::model::CpuCount::String(value) if value == "007"));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.cpu_count().is_none())
+    );
+    assert!(matches!(count("override")?.value(), compose_lens::model::CpuCount::String(value) if value == "custom"));
+    assert!(
+        matches!(count("negative")?.value(), compose_lens::model::CpuCount::NegativeYamlInteger(value) if value == "-1")
+    );
+    let malformed = result
+        .view()
+        .and_then(|view| view.service("malformed"))
+        .ok_or("malformed service")?;
+    assert!(malformed.cpu_count().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "cpu_count"])
+    );
+    for name in ["timestamp", "regex"] {
+        let service = result
+            .view()
+            .and_then(|view| view.service(name))
+            .ok_or("tagged service")?;
+        assert!(service.cpu_count().is_none());
+        assert!(
+            service
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", name, "cpu_count"])
+        );
+    }
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("omitted"))
+            .is_some_and(|service| service.cpu_count().is_none())
+    );
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+            .count(),
+        4
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == compose_lens::model::CPU_COUNT_NEGATIVE)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_cpu_percent_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3267);
+    let override_id = SourceId::new(3268);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_percent: 1}\n  reset: {cpu_percent: 1}\n  override: {cpu_percent: 1}\n  sensitive: {cpu_percent: \"${CPU_PERCENT}\"}\n  block:\n    cpu_percent: |-\n      101\n  over: {cpu_percent: 0x65}\n  malformed: {cpu_percent: 1}\n  timestamp: {cpu_percent: !!timestamp 2024-01-01}\n  regex: {cpu_percent: !!regex '101'}\n  tagged: {cpu_percent: !opaque 101}\n  omitted: {image: example/app}\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_percent: 0x64}\n  reset: {cpu_percent: !reset null}\n  override: {cpu_percent: !override \"101\"}\n  malformed: {cpu_percent: [1]}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("CPU_PERCENT", "private-cpu-percent");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let percent = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::cpu_percent)
+            .ok_or("effective cpu percent")
+    };
+    let replaced = percent("replaced")?;
+    assert!(matches!(
+        replaced.value(),
+        compose_lens::model::CpuPercent::YamlInteger(value) if value == "0x64"
+    ));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    assert!(percent("sensitive")?.is_sensitive());
+    assert!(matches!(
+        percent("sensitive")?.value(),
+        compose_lens::model::CpuPercent::String(value) if value == "private-cpu-percent"
+    ));
+    assert!(!format!("{:?}", percent("sensitive")?).contains("private-cpu-percent"));
+    assert!(matches!(
+        percent("block")?.value(),
+        compose_lens::model::CpuPercent::String(value) if value == "101"
+    ));
+    assert!(matches!(
+        percent("over")?.value(),
+        compose_lens::model::CpuPercent::OutOfRangeYamlInteger(value) if value == "0x65"
+    ));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.cpu_percent().is_none())
+    );
+    assert!(matches!(
+        percent("override")?.value(),
+        compose_lens::model::CpuPercent::String(value) if value == "101"
+    ));
+    for name in ["malformed", "timestamp", "regex", "tagged"] {
+        let service = result
+            .view()
+            .and_then(|view| view.service(name))
+            .ok_or("malformed service")?;
+        assert!(service.cpu_percent().is_none());
+        assert!(
+            service
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", name, "cpu_percent"])
+        );
+    }
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("omitted"))
+            .is_some_and(|service| service.cpu_percent().is_none())
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == compose_lens::model::CPU_PERCENT_OUT_OF_RANGE)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_cpu_period_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3275);
+    let override_id = SourceId::new(3276);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_period: 1}\n  reset: {cpu_period: 1}\n  override: {cpu_period: 1}\n  sensitive: {cpu_period: \"${CPU_PERIOD}\"}\n  literal:\n    cpu_period: |-\n      1e6\n  folded:\n    cpu_period: >-\n      1e6\n  malformed: {cpu_period: 1}\n  tagged: {cpu_period: !opaque 1}\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_period: 1e+6}\n  reset: {cpu_period: !reset null}\n  override: {cpu_period: !override \"opaque\"}\n  malformed: {cpu_period: [1]}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("CPU_PERIOD", "private-cpu-period");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let period = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::cpu_period)
+            .ok_or("effective cpu period")
+    };
+    let replaced = period("replaced")?;
+    assert!(matches!(
+        replaced.value(),
+        compose_lens::model::CpuPeriod::YamlNumber(value) if value == "1e+6"
+    ));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    assert!(period("sensitive")?.is_sensitive());
+    assert!(matches!(
+        period("sensitive")?.value(),
+        compose_lens::model::CpuPeriod::String(value) if value == "private-cpu-period"
+    ));
+    assert!(!format!("{:?}", period("sensitive")?).contains("private-cpu-period"));
+    for name in ["literal", "folded"] {
+        assert!(matches!(
+            period(name)?.value(),
+            compose_lens::model::CpuPeriod::String(value) if value == "1e6"
+        ));
+    }
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.cpu_period().is_none())
+    );
+    assert!(matches!(
+        period("override")?.value(),
+        compose_lens::model::CpuPeriod::String(value) if value == "opaque"
+    ));
+    for name in ["malformed", "tagged"] {
+        let service = result
+            .view()
+            .and_then(|view| view.service(name))
+            .ok_or("malformed service")?;
+        assert!(service.cpu_period().is_none());
+        assert!(
+            service
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", name, "cpu_period"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_cpu_quota_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3281);
+    let override_id = SourceId::new(3282);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_quota: 1}\n  reset: {cpu_quota: 1}\n  override: {cpu_quota: 1}\n  sensitive: {cpu_quota: \"${CPU_QUOTA}\"}\n  literal:\n    cpu_quota: |-\n      1e6\n  folded:\n    cpu_quota: >-\n      1e6\n  malformed: {cpu_quota: 1}\n  tagged: {cpu_quota: !opaque 1}\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_quota: 1e+6}\n  reset: {cpu_quota: !reset null}\n  override: {cpu_quota: !override \"opaque\"}\n  malformed: {cpu_quota: [1]}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("CPU_QUOTA", "private-cpu-quota");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let quota = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::cpu_quota)
+            .ok_or("effective cpu quota")
+    };
+    let replaced = quota("replaced")?;
+    assert!(matches!(
+        replaced.value(),
+        compose_lens::model::CpuQuota::YamlNumber(value) if value == "1e+6"
+    ));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    assert!(quota("sensitive")?.is_sensitive());
+    assert!(matches!(
+        quota("sensitive")?.value(),
+        compose_lens::model::CpuQuota::String(value) if value == "private-cpu-quota"
+    ));
+    assert!(!format!("{:?}", quota("sensitive")?).contains("private-cpu-quota"));
+    for name in ["literal", "folded"] {
+        assert!(matches!(
+            quota(name)?.value(),
+            compose_lens::model::CpuQuota::String(value) if value == "1e6"
+        ));
+    }
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.cpu_quota().is_none())
+    );
+    assert!(matches!(
+        quota("override")?.value(),
+        compose_lens::model::CpuQuota::String(value) if value == "opaque"
+    ));
+    for name in ["malformed", "tagged"] {
+        let service = result
+            .view()
+            .and_then(|view| view.service(name))
+            .ok_or("malformed service")?;
+        assert!(service.cpu_quota().is_none());
+        assert!(
+            service
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", name, "cpu_quota"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_cpu_rt_period_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3289);
+    let override_id = SourceId::new(3290);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_rt_period: 1s}\n  reset: {cpu_rt_period: 1s}\n  override: {cpu_rt_period: 1s}\n  sensitive: {cpu_rt_period: \"${CPU_RT_PERIOD}\"}\n  literal:\n    cpu_rt_period: |-\n      1m30s\n  other: {cpu_rt_period: 1ns}\n  malformed: {cpu_rt_period: 1s}\n  tagged: {cpu_rt_period: !opaque 1s}\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_rt_period: 1.5s}\n  reset: {cpu_rt_period: !reset null}\n  override: {cpu_rt_period: !override \"opaque\"}\n  malformed: {cpu_rt_period: [1]}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("CPU_RT_PERIOD", "1m30s");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let period = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::cpu_rt_period)
+            .ok_or("effective cpu rt period")
+    };
+    let replaced = period("replaced")?;
+    assert!(matches!(
+        replaced.value(),
+        compose_lens::model::CpuRtPeriod::Duration(value) if value == "1.5s"
+    ));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    assert!(period("sensitive")?.is_sensitive());
+    assert!(matches!(
+        period("sensitive")?.value(),
+        compose_lens::model::CpuRtPeriod::Duration(value) if value == "1m30s"
+    ));
+    assert!(!format!("{:?}", period("sensitive")?).contains("1m30s"));
+    assert!(matches!(
+        period("literal")?.value(),
+        compose_lens::model::CpuRtPeriod::Duration(value) if value == "1m30s"
+    ));
+    assert!(matches!(
+        period("other")?.value(),
+        compose_lens::model::CpuRtPeriod::Other(value) if value == "1ns"
+    ));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.cpu_rt_period().is_none())
+    );
+    assert!(matches!(
+        period("override")?.value(),
+        compose_lens::model::CpuRtPeriod::Other(value) if value == "opaque"
+    ));
+    for name in ["malformed", "tagged"] {
+        let service = result
+            .view()
+            .and_then(|view| view.service(name))
+            .ok_or("malformed service")?;
+        assert!(service.cpu_rt_period().is_none());
+        assert!(
+            service
+                .unmodeled_fields()
+                .iter()
+                .any(|field| field.path() == ["services", name, "cpu_rt_period"])
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_INVALID_VALUE)
     );
     Ok(())
 }
@@ -786,6 +2004,1304 @@ fn retains_effective_deploy_placement_sensitivity_and_recovery() -> Result<(), B
             .diagnostics()
             .iter()
             .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+fn deploy_resource_pids_project_view() -> Result<compose_lens::project::ProjectViewResult, Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3102),
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    deploy:\n      resources:\n        limits:\n          pids: 003\n          x-limit: kept\n          future-limit: kept\n        x-resources: kept\n        future-resources: kept\n",
+                "  leaf-reset:\n    deploy: {resources: {limits: {pids: 2}}}\n",
+                "  limits-reset:\n    deploy: {resources: {limits: {pids: 2}}}\n",
+                "  resources-reset:\n    deploy: {resources: {limits: {pids: 2}}}\n",
+                "  resources-override:\n    deploy: {resources: {limits: {pids: 2}}}\n",
+                "  sensitive:\n    pids_limit: -1\n    deploy: {resources: {limits: {pids: \"${DEPLOY_PIDS}\"}}}\n",
+                "  malformed:\n    deploy: {resources: {limits: {pids: 1.5, x-limit: kept}, x-resources: kept}}\n",
+                "  cpu-merged:\n    mem_limit: 512m\n    deploy:\n      resources:\n        limits:\n          cpus: 0.50\n          x-limit: kept\n          future-limit: kept\n        x-resources: kept\n        future-resources: kept\n",
+                "  cpu-leaf-reset:\n    deploy: {resources: {limits: {cpus: 2}}}\n",
+                "  cpu-limits-reset:\n    deploy: {resources: {limits: {cpus: 2}}}\n",
+                "  cpu-resources-reset:\n    deploy: {resources: {limits: {cpus: 2}}}\n",
+                "  cpu-resources-override:\n    deploy: {resources: {limits: {cpus: 2}}}\n",
+                "  cpu-sensitive:\n    deploy: {resources: {limits: {cpus: \"${DEPLOY_CPUS}\"}}}\n",
+                "  cpu-malformed:\n    deploy: {resources: {limits: {cpus: true}}}\n",
+                "  cpu-malformed-map:\n    deploy: {resources: {limits: {cpus: {bad: value}}}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(3103),
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    deploy: {resources: {limits: {pids: 004}}}\n",
+                "  leaf-reset:\n    deploy: {resources: {limits: {pids: !reset null}}}\n",
+                "  limits-reset:\n    deploy: {resources: {limits: !reset {}}}\n",
+                "  resources-reset:\n    deploy: {resources: !reset {}}\n",
+                "  resources-override:\n    deploy: {resources: !override {limits: {pids: \"six\"}}}\n",
+                "  cpu-merged:\n    deploy: {resources: {limits: {cpus: 1e-3}}}\n",
+                "  cpu-leaf-reset:\n    deploy: {resources: {limits: {cpus: !reset null}}}\n",
+                "  cpu-limits-reset:\n    deploy: {resources: {limits: !reset {}}}\n",
+                "  cpu-resources-reset:\n    deploy: {resources: !reset {}}\n",
+                "  cpu-resources-override:\n    deploy: {resources: !override {limits: {cpus: \"one\"}}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("DEPLOY_PIDS", "private-deploy-pids");
+    let _ = environment.insert_sensitive("DEPLOY_CPUS", "private-deploy-cpus");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    Ok(build_project_view(
+        merged.project().ok_or("merged project expected")?,
+        None,
+    ))
+}
+
+fn effective_deploy_resources<'view>(
+    view: &'view ProjectView,
+    service: &str,
+) -> Result<&'view ProjectValue<compose_lens::project::ProjectDeployResources>, Box<dyn std::error::Error>> {
+    view.service(service)
+        .and_then(ProjectService::deploy)
+        .and_then(|deploy| deploy.value().resources())
+        .ok_or_else(|| "effective deploy resources expected".into())
+}
+
+fn deploy_resource_memory_project_view() -> Result<compose_lens::project::ProjectViewResult, Box<dyn std::error::Error>>
+{
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3106),
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    mem_limit: \"512m\"\n    deploy:\n      resources:\n        limits:\n          memory: \"50m\"\n          x-limit: kept\n          future-limit: kept\n        reservations: {memory: \"1g\"}\n        x-resources: kept\n        future-resources: kept\n",
+                "  zero:\n    deploy: {resources: {limits: {memory: \"000mb\"}}}\n",
+                "  leaf-reset:\n    deploy: {resources: {limits: {memory: \"2m\"}}}\n",
+                "  limits-reset:\n    deploy: {resources: {limits: {memory: \"2m\"}}}\n",
+                "  resources-reset:\n    deploy: {resources: {limits: {memory: \"2m\"}}}\n",
+                "  resources-override:\n    deploy: {resources: {limits: {memory: \"2m\"}}}\n",
+                "  sensitive:\n    deploy: {resources: {limits: {memory: \"${DEPLOY_MEMORY}\"}}}\n",
+                "  malformed-number:\n    deploy: {resources: {limits: {memory: 64}}}\n",
+                "  malformed-map:\n    deploy: {resources: {limits: {memory: {bad: value}}}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(3107),
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    deploy: {resources: {limits: {memory: \"001kb\"}}}\n",
+                "  leaf-reset:\n    deploy: {resources: {limits: {memory: !reset null}}}\n",
+                "  limits-reset:\n    deploy: {resources: {limits: !reset {}}}\n",
+                "  resources-reset:\n    deploy: {resources: !reset {}}\n",
+                "  resources-override:\n    deploy: {resources: !override {limits: {memory: \"64\"}}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("DEPLOY_MEMORY", "private-deploy-memory");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    Ok(build_project_view(
+        merged.project().ok_or("merged project expected")?,
+        None,
+    ))
+}
+
+fn deploy_resource_reservation_project_view()
+-> Result<compose_lens::project::ProjectViewResult, Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3110),
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    cpus: 3\n    mem_limit: \"100m\"\n    deploy:\n      resources:\n        limits: {cpus: 9, memory: \"99m\"}\n        reservations:\n          cpus: 0.50\n          memory: \"50m\"\n          x-reservation: kept\n          future: kept\n        x-resources: kept\n        later: kept\n",
+                "  leaf-reset:\n    deploy: {resources: {reservations: {cpus: 2, memory: \"2m\"}}}\n",
+                "  reservations-reset:\n    deploy: {resources: {reservations: {cpus: 2, memory: \"2m\"}}}\n",
+                "  resources-reset:\n    deploy: {resources: {reservations: {cpus: 2, memory: \"2m\"}}}\n",
+                "  override:\n    deploy: {resources: {reservations: {cpus: 2, memory: \"2m\"}}}\n",
+                "  sensitive:\n    deploy: {resources: {reservations: {cpus: \"${RESERVED_CPUS}\", memory: \"${RESERVED_MEMORY}\"}}}\n",
+                "  malformed-bool:\n    deploy: {resources: {reservations: {cpus: true}}}\n",
+                "  malformed-map:\n    deploy: {resources: {reservations: {cpus: {bad: value}}}}\n",
+                "  memory-malformed-number:\n    deploy: {resources: {reservations: {memory: 64}}}\n",
+                "  memory-malformed-map:\n    deploy: {resources: {reservations: {memory: {bad: value}}}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(3111),
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  merged:\n    deploy: {resources: {reservations: {cpus: 1e-3, memory: \"001kb\"}}}\n",
+                "  leaf-reset:\n    deploy: {resources: {reservations: {cpus: !reset null, memory: !reset null}}}\n",
+                "  reservations-reset:\n    deploy: {resources: {reservations: !reset {}}}\n",
+                "  resources-reset:\n    deploy: {resources: !reset {}}\n",
+                "  override:\n    deploy: {resources: !override {reservations: {cpus: \"one\", memory: \"64\"}}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("RESERVED_CPUS", "private-reserved-cpus");
+    let _ = environment.insert_sensitive("RESERVED_MEMORY", "private-reserved-memory");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    Ok(build_project_view(
+        merged.project().ok_or("merged project expected")?,
+        None,
+    ))
+}
+
+#[test]
+fn retains_effective_deploy_resource_pids_nested_merge_and_service_independence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_pids_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let resources = effective_deploy_resources(view, "merged")?;
+    assert_eq!(resources.provenance().operation(), MergeOperation::Merged);
+    assert_source_ids(
+        resources.provenance().sources(),
+        &[SourceId::new(3102), SourceId::new(3103)],
+    );
+    let limits = resources.value().limits().ok_or("limits expected")?;
+    assert_eq!(limits.provenance().operation(), MergeOperation::Merged);
+    let pids = limits.value().pids().ok_or("pids expected")?;
+    assert!(matches!(pids.value(), DeployResourcePids::YamlInteger(value) if value == "004"));
+    assert_eq!(pids.provenance().operation(), MergeOperation::Replaced);
+    assert!(
+        resources
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(
+        resources
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "merged", "deploy", "resources", "future-resources"] })
+    );
+    assert!(
+        limits
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(
+        limits
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "merged", "deploy", "resources", "limits", "future-limit"] })
+    );
+    let service_pids = view
+        .service("sensitive")
+        .and_then(ProjectService::pids_limit)
+        .ok_or("service pids_limit expected")?;
+    assert!(matches!(service_pids.value().kind(), PidsLimitKind::Unlimited));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_pids_reset_and_override_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_pids_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let leaf_limits = effective_deploy_resources(view, "leaf-reset")?
+        .value()
+        .limits()
+        .ok_or("leaf limits expected")?;
+    assert!(leaf_limits.value().pids().is_none());
+    assert!(leaf_limits.value().unmodeled_fields().iter().any(|field| {
+        field.path() == ["services", "leaf-reset", "deploy", "resources", "limits", "pids"]
+            && field.provenance().operation() == MergeOperation::Reset
+    }));
+    let limits_reset = effective_deploy_resources(view, "limits-reset")?
+        .value()
+        .limits()
+        .ok_or("reset limits expected")?;
+    assert!(limits_reset.value().pids().is_none());
+    assert_eq!(limits_reset.provenance().operation(), MergeOperation::Reset);
+    let resources_reset = effective_deploy_resources(view, "resources-reset")?;
+    assert!(resources_reset.value().limits().is_none());
+    assert_eq!(resources_reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = effective_deploy_resources(view, "resources-override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    let pids = overridden
+        .value()
+        .limits()
+        .and_then(|limits| limits.value().pids())
+        .ok_or("overridden pids expected")?;
+    assert!(matches!(pids.value(), DeployResourcePids::String(value) if value == "six"));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_pids_sensitivity_and_malformed_evidence() -> Result<(), Box<dyn std::error::Error>>
+{
+    let result = deploy_resource_pids_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let sensitive = effective_deploy_resources(view, "sensitive")?
+        .value()
+        .limits()
+        .and_then(|limits| limits.value().pids())
+        .ok_or("sensitive deploy pids expected")?;
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("private-deploy-pids"));
+    let malformed = effective_deploy_resources(view, "malformed")?
+        .value()
+        .limits()
+        .ok_or("malformed limits expected")?;
+    assert!(malformed.value().pids().is_none());
+    assert!(
+        malformed
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "malformed", "deploy", "resources", "limits", "pids"] })
+    );
+    assert!(
+        malformed
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_cpus_nested_merge_and_independence() -> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_pids_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let resources = effective_deploy_resources(view, "cpu-merged")?;
+    assert_eq!(resources.provenance().operation(), MergeOperation::Merged);
+    let limits = resources.value().limits().ok_or("limits expected")?;
+    assert_eq!(limits.provenance().operation(), MergeOperation::Merged);
+    let cpus = limits.value().cpus().ok_or("cpus expected")?;
+    assert!(matches!(cpus.value(), DeployResourceCpus::YamlNumber(value) if value == "1e-3"));
+    assert_eq!(cpus.provenance().operation(), MergeOperation::Replaced);
+    assert!(
+        resources
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(
+        resources
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "cpu-merged", "deploy", "resources", "future-resources"] })
+    );
+    assert!(
+        limits
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(limits.value().unmodeled_fields().iter().any(|field| {
+        field.path()
+            == [
+                "services",
+                "cpu-merged",
+                "deploy",
+                "resources",
+                "limits",
+                "future-limit",
+            ]
+    }));
+    assert!(view.service("cpu-merged").and_then(ProjectService::mem_limit).is_some());
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_cpus_reset_and_override_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_pids_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let leaf_limits = effective_deploy_resources(view, "cpu-leaf-reset")?
+        .value()
+        .limits()
+        .ok_or("leaf limits expected")?;
+    assert!(leaf_limits.value().cpus().is_none());
+    assert!(leaf_limits.value().unmodeled_fields().iter().any(|field| {
+        field.path() == ["services", "cpu-leaf-reset", "deploy", "resources", "limits", "cpus"]
+            && field.provenance().operation() == MergeOperation::Reset
+    }));
+    let limits_reset = effective_deploy_resources(view, "cpu-limits-reset")?
+        .value()
+        .limits()
+        .ok_or("reset limits expected")?;
+    assert!(limits_reset.value().cpus().is_none());
+    assert_eq!(limits_reset.provenance().operation(), MergeOperation::Reset);
+    let resources_reset = effective_deploy_resources(view, "cpu-resources-reset")?;
+    assert!(resources_reset.value().limits().is_none());
+    assert_eq!(resources_reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = effective_deploy_resources(view, "cpu-resources-override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    let cpus = overridden
+        .value()
+        .limits()
+        .and_then(|limits| limits.value().cpus())
+        .ok_or("overridden cpus expected")?;
+    assert!(matches!(cpus.value(), DeployResourceCpus::String(value) if value == "one"));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_cpus_sensitivity_and_malformed_evidence() -> Result<(), Box<dyn std::error::Error>>
+{
+    let result = deploy_resource_pids_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let sensitive = effective_deploy_resources(view, "cpu-sensitive")?
+        .value()
+        .limits()
+        .and_then(|limits| limits.value().cpus())
+        .ok_or("sensitive deploy cpus expected")?;
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("private-deploy-cpus"));
+    for service in ["cpu-malformed", "cpu-malformed-map"] {
+        let limits = effective_deploy_resources(view, service)?
+            .value()
+            .limits()
+            .ok_or("malformed limits expected")?;
+        assert!(limits.value().cpus().is_none());
+        assert!(
+            limits
+                .value()
+                .unmodeled_fields()
+                .iter()
+                .any(|field| { field.path() == ["services", service, "deploy", "resources", "limits", "cpus"] })
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_memory_merge_and_independence() -> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_memory_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let resources = effective_deploy_resources(view, "merged")?;
+    assert_eq!(resources.provenance().operation(), MergeOperation::Merged);
+    let limits = resources.value().limits().ok_or("limits expected")?;
+    assert_eq!(limits.provenance().operation(), MergeOperation::Merged);
+    let memory = limits.value().memory().ok_or("memory expected")?;
+    assert_eq!(memory.value().raw(), "001kb");
+    assert!(matches!(
+        memory.value().kind(),
+        DeployResourceMemoryKind::Documented { amount_raw, unit: DeployResourceMemoryUnit::Kb } if amount_raw == "001"
+    ));
+    assert_eq!(memory.provenance().operation(), MergeOperation::Replaced);
+    assert!(
+        resources
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(matches!(
+        resources
+            .value()
+            .reservations()
+            .and_then(|reservations| reservations.value().memory())
+            .map(ProjectValue::value)
+            .map(compose_lens::model::DeployResourceMemory::kind),
+        Some(DeployResourceMemoryKind::Documented { amount_raw, unit: DeployResourceMemoryUnit::G }) if amount_raw == "1"
+    ));
+    assert!(
+        limits
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(view.service("merged").and_then(ProjectService::mem_limit).is_some());
+    let zero = effective_deploy_resources(view, "zero")?
+        .value()
+        .limits()
+        .and_then(|limits| limits.value().memory());
+    assert!(matches!(
+        zero.map(ProjectValue::value).map(compose_lens::model::DeployResourceMemory::kind),
+        Some(DeployResourceMemoryKind::Zero { amount_raw, unit: Some(DeployResourceMemoryUnit::Mb) }) if amount_raw == "000"
+    ));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_memory_reset_and_override_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_memory_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let leaf_limits = effective_deploy_resources(view, "leaf-reset")?
+        .value()
+        .limits()
+        .ok_or("leaf limits expected")?;
+    assert!(leaf_limits.value().memory().is_none());
+    assert!(leaf_limits.value().unmodeled_fields().iter().any(|field| {
+        field.path() == ["services", "leaf-reset", "deploy", "resources", "limits", "memory"]
+            && field.provenance().operation() == MergeOperation::Reset
+    }));
+    let limits_reset = effective_deploy_resources(view, "limits-reset")?
+        .value()
+        .limits()
+        .ok_or("limits reset")?;
+    assert!(limits_reset.value().memory().is_none());
+    assert_eq!(limits_reset.provenance().operation(), MergeOperation::Reset);
+    let resources_reset = effective_deploy_resources(view, "resources-reset")?;
+    assert!(resources_reset.value().limits().is_none());
+    assert_eq!(resources_reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = effective_deploy_resources(view, "resources-override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden
+            .value()
+            .limits()
+            .and_then(|limits| limits.value().memory())
+            .map(ProjectValue::value)
+            .map(compose_lens::model::DeployResourceMemory::kind),
+        Some(DeployResourceMemoryKind::ProviderDependentString)
+    ));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_memory_sensitivity_and_malformed_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_memory_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let sensitive = effective_deploy_resources(view, "sensitive")?
+        .value()
+        .limits()
+        .and_then(|limits| limits.value().memory())
+        .ok_or("sensitive memory expected")?;
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("private-deploy-memory"));
+    for service in ["malformed-number", "malformed-map"] {
+        let limits = effective_deploy_resources(view, service)?
+            .value()
+            .limits()
+            .ok_or("malformed limits expected")?;
+        assert!(limits.value().memory().is_none());
+        assert!(
+            limits
+                .value()
+                .unmodeled_fields()
+                .iter()
+                .any(|field| { field.path() == ["services", service, "deploy", "resources", "limits", "memory"] })
+        );
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_reservation_cpu_merge_and_independence() -> Result<(), Box<dyn std::error::Error>>
+{
+    let result = deploy_resource_reservation_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let resources = effective_deploy_resources(view, "merged")?;
+    assert_eq!(resources.provenance().operation(), MergeOperation::Merged);
+    let reservations = resources.value().reservations().ok_or("reservations expected")?;
+    assert_eq!(reservations.provenance().operation(), MergeOperation::Merged);
+    let cpus = reservations.value().cpus().ok_or("reservation CPUs expected")?;
+    assert!(matches!(cpus.value(), DeployResourceCpus::YamlNumber(value) if value == "1e-3"));
+    assert_eq!(cpus.provenance().operation(), MergeOperation::Replaced);
+    assert!(
+        resources
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(
+        resources
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "merged", "deploy", "resources", "later"] })
+    );
+    assert!(
+        reservations
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(
+        reservations
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "merged", "deploy", "resources", "reservations", "future"] })
+    );
+    let limits = resources
+        .value()
+        .limits()
+        .and_then(|limits| limits.value().cpus())
+        .ok_or("limit CPUs expected")?;
+    assert!(matches!(limits.value(), DeployResourceCpus::YamlNumber(value) if value == "9"));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_reservation_cpu_reset_and_override_provenance()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_reservation_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let leaf = effective_deploy_resources(view, "leaf-reset")?
+        .value()
+        .reservations()
+        .ok_or("leaf reservations")?;
+    assert!(leaf.value().cpus().is_none());
+    assert!(leaf.value().unmodeled_fields().iter().any(|field| {
+        field.path() == ["services", "leaf-reset", "deploy", "resources", "reservations", "cpus"]
+            && field.provenance().operation() == MergeOperation::Reset
+    }));
+    let reset = effective_deploy_resources(view, "reservations-reset")?
+        .value()
+        .reservations()
+        .ok_or("reset reservations")?;
+    assert!(reset.value().cpus().is_none());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let resources_reset = effective_deploy_resources(view, "resources-reset")?;
+    assert!(resources_reset.value().reservations().is_none());
+    assert_eq!(resources_reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = effective_deploy_resources(view, "override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden.value().reservations().and_then(|value| value.value().cpus()).map(ProjectValue::value),
+        Some(DeployResourceCpus::String(value)) if value == "one"
+    ));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_reservation_cpu_sensitivity_and_malformed_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_reservation_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let sensitive = effective_deploy_resources(view, "sensitive")?
+        .value()
+        .reservations()
+        .and_then(|reservations| reservations.value().cpus())
+        .ok_or("sensitive reservation CPUs expected")?;
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("private-reserved-cpus"));
+    for service in ["malformed-bool", "malformed-map"] {
+        let reservations = effective_deploy_resources(view, service)?
+            .value()
+            .reservations()
+            .ok_or("malformed reservations")?;
+        assert!(reservations.value().cpus().is_none());
+        assert!(
+            reservations
+                .value()
+                .unmodeled_fields()
+                .iter()
+                .any(|field| { field.path() == ["services", service, "deploy", "resources", "reservations", "cpus"] })
+        );
+    }
+    assert!(result.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == PROJECT_EXPECTED_FORM
+            && diagnostic.message() == "deploy resource reservations cpus must be a YAML number or string scalar"
+    }));
+    assert!(!result.diagnostics().iter().any(|diagnostic| {
+        diagnostic.message() == "deploy resource limits cpus must be a YAML number or string scalar"
+    }));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_reservation_memory_merge_and_independence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_reservation_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let resources = effective_deploy_resources(view, "merged")?;
+    assert_eq!(resources.provenance().operation(), MergeOperation::Merged);
+    let reservations = resources.value().reservations().ok_or("reservations expected")?;
+    assert_eq!(reservations.provenance().operation(), MergeOperation::Merged);
+    let memory = reservations.value().memory().ok_or("reservation memory expected")?;
+    assert_eq!(memory.value().raw(), "001kb");
+    assert!(matches!(
+        memory.value().kind(),
+        DeployResourceMemoryKind::Documented { amount_raw, unit: DeployResourceMemoryUnit::Kb } if amount_raw == "001"
+    ));
+    assert_eq!(memory.provenance().operation(), MergeOperation::Replaced);
+    assert!(matches!(
+        resources
+            .value()
+            .limits()
+            .and_then(|limits| limits.value().memory())
+            .map(ProjectValue::value)
+            .map(compose_lens::model::DeployResourceMemory::raw),
+        Some("99m")
+    ));
+    assert!(matches!(
+        view.service("merged")
+            .and_then(ProjectService::mem_limit)
+            .map(ProjectValue::value)
+            .map(|memory| memory.raw().value().as_str()),
+        Some("100m")
+    ));
+    assert!(
+        reservations
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(ProjectFieldReference::is_extension)
+    );
+    assert!(
+        reservations
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| { field.path() == ["services", "merged", "deploy", "resources", "reservations", "future"] })
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_reservation_memory_reset_and_override_provenance()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_reservation_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let leaf = effective_deploy_resources(view, "leaf-reset")?
+        .value()
+        .reservations()
+        .ok_or("leaf reservations")?;
+    assert!(leaf.value().memory().is_none());
+    assert!(leaf.value().unmodeled_fields().iter().any(|field| {
+        field.path()
+            == [
+                "services",
+                "leaf-reset",
+                "deploy",
+                "resources",
+                "reservations",
+                "memory",
+            ]
+            && field.provenance().operation() == MergeOperation::Reset
+    }));
+    let reset = effective_deploy_resources(view, "reservations-reset")?
+        .value()
+        .reservations()
+        .ok_or("reset reservations")?;
+    assert!(reset.value().memory().is_none());
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    let resources_reset = effective_deploy_resources(view, "resources-reset")?;
+    assert!(resources_reset.value().reservations().is_none());
+    assert_eq!(resources_reset.provenance().operation(), MergeOperation::Reset);
+    let overridden = effective_deploy_resources(view, "override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(matches!(
+        overridden
+            .value()
+            .reservations()
+            .and_then(|reservations| reservations.value().memory())
+            .map(ProjectValue::value)
+            .map(compose_lens::model::DeployResourceMemory::kind),
+        Some(DeployResourceMemoryKind::ProviderDependentString)
+    ));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_deploy_resource_reservation_memory_sensitivity_and_malformed_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let result = deploy_resource_reservation_project_view()?;
+    let view = result.view().ok_or("project view expected")?;
+    let sensitive = effective_deploy_resources(view, "sensitive")?
+        .value()
+        .reservations()
+        .and_then(|reservations| reservations.value().memory())
+        .ok_or("sensitive reservation memory expected")?;
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("private-reserved-memory"));
+    for service in ["memory-malformed-number", "memory-malformed-map"] {
+        let reservations = effective_deploy_resources(view, service)?
+            .value()
+            .reservations()
+            .ok_or("malformed reservations")?;
+        assert!(reservations.value().memory().is_none());
+        assert!(
+            reservations.value().unmodeled_fields().iter().any(|field| {
+                field.path() == ["services", service, "deploy", "resources", "reservations", "memory"]
+            })
+        );
+    }
+    assert!(result.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == PROJECT_EXPECTED_FORM
+            && diagnostic.message() == "deploy resource reservations memory must be a YAML string scalar"
+    }));
+    assert!(
+        !result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| { diagnostic.message() == "deploy resource limits memory must be a YAML string scalar" })
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_reservation_generic_resources_append_reset_override_and_sensitivity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3114),
+            DocumentOrigin::new("base", "workspace"),
+            concat!(
+                "services:\n  merged:\n    deploy: {resources: {reservations: {cpus: 2, memory: \"2m\", generic_resources: [{discrete_resource_spec: {kind: gpu, value: 001}}]}}}\n",
+                "  reset:\n    deploy: {resources: {reservations: {generic_resources: [{discrete_resource_spec: {value: 1}}]}}}\n",
+                "  override:\n    deploy: {resources: {reservations: {generic_resources: [{discrete_resource_spec: {value: 1}}]}}}\n",
+                "  sensitive:\n    deploy: {resources: {reservations: {generic_resources: [{discrete_resource_spec: {value: \"${COUNT}\"}}]}}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(3115),
+            DocumentOrigin::new("override", "workspace"),
+            concat!(
+                "services:\n  merged:\n    deploy: {resources: {reservations: {generic_resources: [{discrete_resource_spec: {kind: fpga, value: \"two\"}}]}}}\n",
+                "  reset:\n    deploy: {resources: {reservations: {generic_resources: !reset []}}}\n",
+                "  override:\n    deploy: {resources: {reservations: {generic_resources: !override [{discrete_resource_spec: {value: 1e-3}}]}}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("COUNT", "private-count");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let view = result.view().ok_or("view")?;
+    let generic = |service| {
+        effective_deploy_resources(view, service)
+            .ok()
+            .and_then(|resources| resources.value().reservations())
+            .and_then(|reservations| reservations.value().generic_resources())
+    };
+    let merged_values = generic("merged").ok_or("merged generic resources")?;
+    assert_eq!(merged_values.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(merged_values.value().len(), 2);
+    let first = merged_values
+        .value()
+        .first()
+        .and_then(|item| item.value().discrete_resource_spec())
+        .and_then(|spec| spec.value().value())
+        .ok_or("first value")?;
+    assert!(
+        matches!(first.value(), compose_lens::model::DeployDiscreteResourceValue::YamlNumber(value) if value == "001")
+    );
+    let reset = generic("reset").ok_or("reset generic resources")?;
+    assert!(reset.value().is_empty() && reset.provenance().operation() == MergeOperation::Reset);
+    let overridden = generic("override").ok_or("override generic resources")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    let sensitive = generic("sensitive")
+        .and_then(|items| items.value().first())
+        .ok_or("sensitive generic resource")?;
+    assert!(sensitive.is_sensitive() && !format!("{sensitive:?}").contains("private-count"));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_malformed_reservation_generic_resource_evidence() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  mixed:\n    deploy:\n      resources:\n        reservations:\n          generic_resources:\n            - discrete_resource_spec: {kind: gpu, value: 1}\n            - malformed-item\n            - discrete_resource_spec: malformed-spec\n            - discrete_resource_spec:\n                kind: {broken: mapping}\n                value: 1\n            - discrete_resource_spec:\n                kind: fpga\n                value: {broken: mapping}\n            - discrete_resource_spec: {kind: tpu, value: \"ready\"}\n  outer:\n    deploy: {resources: {reservations: {generic_resources: malformed-collection}}}\n";
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(3117),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let view = result.view().ok_or("project view")?;
+    let reservations = effective_deploy_resources(view, "mixed")?
+        .value()
+        .reservations()
+        .ok_or("mixed reservations")?;
+    let items = reservations
+        .value()
+        .generic_resources()
+        .map(ProjectValue::value)
+        .ok_or("mixed generic resources")?;
+    assert_eq!(items.len(), 6);
+    assert!(matches!(
+        items
+            .iter()
+            .map(|item| item.value().form())
+            .collect::<Vec<_>>()
+            .as_slice(),
+        [
+            compose_lens::project::ProjectDeployGenericResourceForm::Mapping,
+            compose_lens::project::ProjectDeployGenericResourceForm::Unmodeled,
+            compose_lens::project::ProjectDeployGenericResourceForm::Mapping,
+            compose_lens::project::ProjectDeployGenericResourceForm::Mapping,
+            compose_lens::project::ProjectDeployGenericResourceForm::Mapping,
+            compose_lens::project::ProjectDeployGenericResourceForm::Mapping,
+        ]
+    ));
+    assert_eq!(items[1].provenance().operation(), MergeOperation::Authored);
+    assert_eq!(
+        items[1].effective_source().map(|span| &source[span.range()]),
+        Some("malformed-item")
+    );
+    assert!(items[2].value().discrete_resource_spec().is_none());
+    assert!(items[2].value().unmodeled_fields().iter().any(|field| {
+        field.path()
+            == [
+                "services",
+                "mixed",
+                "deploy",
+                "resources",
+                "reservations",
+                "generic_resources",
+                "discrete_resource_spec",
+            ]
+    }));
+    for item in &items[3..5] {
+        assert_eq!(
+            item.value()
+                .discrete_resource_spec()
+                .map(ProjectValue::value)
+                .map(compose_lens::project::ProjectDeployDiscreteResourceSpec::unmodeled_fields)
+                .map(<[_]>::len),
+            Some(1)
+        );
+    }
+    assert!(matches!(
+        items[5]
+            .value()
+            .discrete_resource_spec()
+            .and_then(|spec| spec.value().kind())
+            .map(ProjectValue::value),
+        Some(kind) if kind == "tpu"
+    ));
+    let outer = effective_deploy_resources(view, "outer")?
+        .value()
+        .reservations()
+        .ok_or("outer reservations")?;
+    assert!(outer.value().generic_resources().is_none());
+    assert!(outer.value().unmodeled_fields().iter().any(|field| {
+        field.path()
+            == [
+                "services",
+                "outer",
+                "deploy",
+                "resources",
+                "reservations",
+                "generic_resources",
+            ]
+    }));
+    assert!(result.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == PROJECT_EXPECTED_FORM
+            && diagnostic.message() == "deploy resource generic-resource entries must be mappings"
+            && diagnostic
+                .labels()
+                .iter()
+                .any(|label| &source[label.span().range()] == "malformed-item")
+    }));
+    Ok(())
+}
+
+#[test]
+fn retains_effective_reservation_devices_append_reset_override_and_sensitivity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3118),
+            DocumentOrigin::new("base", "workspace"),
+            concat!(
+                "services:\n  merged:\n    deploy: {resources: {limits: {cpus: 2}, reservations: {devices: [{capabilities: [gpu], driver: nvidia}]}}}\n",
+                "  reset:\n    deploy: {resources: {reservations: {devices: [{capabilities: [old]}]}}}\n",
+                "  override:\n    deploy: {resources: {reservations: {devices: [{capabilities: [old]}]}}}\n",
+                "  sensitive:\n    deploy: {resources: {reservations: {devices: [{capabilities: [\"${CAP}\"], driver: \"${DRIVER}\"}]}}}\n",
+                "  resource-override:\n    deploy: {resources: {reservations: {devices: [{capabilities: [old]}]}}}\n",
+                "  reservation-reset:\n    deploy: {resources: {reservations: {devices: [{capabilities: [old]}]}}}\n",
+                "  resource-reset:\n    deploy: {resources: {reservations: {devices: [{capabilities: [old]}]}}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            SourceId::new(3119),
+            DocumentOrigin::new("override", "workspace"),
+            concat!(
+                "services:\n  merged:\n    deploy: {resources: {reservations: {devices: [{capabilities: [gpu]}]}}}\n",
+                "  reset:\n    deploy: {resources: {reservations: {devices: !reset []}}}\n",
+                "  override:\n    deploy: {resources: {reservations: {devices: !override [{capabilities: [custom]}]}}}\n",
+                "  resource-override:\n    deploy: {resources: !override {reservations: {devices: [{capabilities: [new]}]}}}\n",
+                "  reservation-reset:\n    deploy: {resources: {reservations: !reset {}}}\n",
+                "  resource-reset:\n    deploy: {resources: !reset {}}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("CAP", "private-capability");
+    let _ = environment.insert_sensitive("DRIVER", "private-driver");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let view = result.view().ok_or("view")?;
+    let devices = |service| {
+        effective_deploy_resources(view, service)
+            .ok()
+            .and_then(|resources| resources.value().reservations())
+            .and_then(|reservations| reservations.value().devices())
+    };
+    let merged_devices = devices("merged").ok_or("merged devices")?;
+    assert_eq!(merged_devices.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(merged_devices.value().len(), 2);
+    assert!(matches!(
+        merged_devices.value()[0].value().form(),
+        compose_lens::project::ProjectDeployReservationDeviceForm::Mapping
+    ));
+    assert_eq!(
+        merged_devices.value()[1]
+            .value()
+            .capabilities()
+            .map(ProjectValue::value)
+            .map(|items| items
+                .iter()
+                .filter_map(|item| item.value().value().map(ProjectValue::value).map(String::as_str))
+                .collect::<Vec<_>>()),
+        Some(vec!["gpu"])
+    );
+    let reset = devices("reset").ok_or("reset devices")?;
+    assert!(reset.value().is_empty() && reset.provenance().operation() == MergeOperation::Reset);
+    assert_eq!(
+        devices("override").ok_or("override devices")?.provenance().operation(),
+        MergeOperation::Override
+    );
+    let sensitive = devices("sensitive")
+        .and_then(|devices| devices.value().first())
+        .ok_or("sensitive device")?;
+    assert!(sensitive.is_sensitive() && !format!("{sensitive:?}").contains("private-capability"));
+    let sensitive_driver = sensitive.value().driver().ok_or("sensitive driver")?;
+    assert!(sensitive_driver.is_sensitive() && !format!("{sensitive_driver:?}").contains("private-driver"));
+    assert!(matches!(
+        effective_deploy_resources(view, "merged")?
+            .value()
+            .limits()
+            .and_then(|limits| limits.value().cpus())
+            .map(ProjectValue::value),
+        Some(DeployResourceCpus::YamlNumber(value)) if value == "2"
+    ));
+    assert_eq!(
+        effective_deploy_resources(view, "resource-override")?
+            .provenance()
+            .operation(),
+        MergeOperation::Override
+    );
+    let reservation_reset = effective_deploy_resources(view, "reservation-reset")?
+        .value()
+        .reservations()
+        .ok_or("reservation reset")?;
+    assert!(reservation_reset.value().devices().is_none());
+    assert_eq!(reservation_reset.provenance().operation(), MergeOperation::Reset);
+    let resource_reset = effective_deploy_resources(view, "resource-reset")?;
+    assert!(resource_reset.value().reservations().is_none());
+    assert_eq!(resource_reset.provenance().operation(), MergeOperation::Reset);
+    Ok(())
+}
+
+#[test]
+fn retains_effective_reservation_device_allocation_selectors_and_conflicts() -> Result<(), Box<dyn std::error::Error>> {
+    let base = SourceId::new(3131);
+    let override_id = SourceId::new(3132);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base,
+            DocumentOrigin::new("base", "workspace"),
+            concat!(
+                "services:\n  app:\n    deploy: {resources: {reservations: {devices: [{capabilities: [gpu], count: 2, device_ids: [first, first, \"${ID}\", true, !!timestamp 2023-12-25]}]}}}\n",
+                "  separate:\n    deploy: {resources: {reservations: {devices: [{capabilities: [gpu], count: \"all\"}, {capabilities: [gpu], device_ids: [second]}]}}}\n",
+                "  malformed:\n    deploy: {resources: {reservations: {devices: [{capabilities: [gpu], count: 1.5, device_ids: wrong}, {capabilities: [gpu], count: !!regex 'gpu.*'}]}}}\n",
+                "  reset:\n    deploy: {resources: {reservations: {devices: [{capabilities: [gpu], count: 2}]}}}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  reset:\n    deploy: {resources: {reservations: {devices: !reset []}}}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("ID", "private-id");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let view = result.view().ok_or("view")?;
+    let devices = |name| {
+        effective_deploy_resources(view, name)
+            .ok()
+            .and_then(|resources| resources.value().reservations())
+            .and_then(|reservations| reservations.value().devices())
+            .ok_or("devices")
+    };
+    let app = &devices("app")?.value()[0];
+    assert!(matches!(
+        app.value().count().map(ProjectValue::value),
+        Some(DeployReservationDeviceCount::YamlInteger(value)) if value == "2"
+    ));
+    let ids = app.value().device_ids().ok_or("ids")?;
+    assert_eq!(ids.value().len(), 5);
+    assert!(matches!(
+        ids.value()
+            .iter()
+            .map(|item| item.value().form())
+            .collect::<Vec<_>>()
+            .as_slice(),
+        [
+            compose_lens::project::ProjectDeployReservationDeviceIdForm::String,
+            compose_lens::project::ProjectDeployReservationDeviceIdForm::String,
+            compose_lens::project::ProjectDeployReservationDeviceIdForm::String,
+            compose_lens::project::ProjectDeployReservationDeviceIdForm::Unmodeled,
+            compose_lens::project::ProjectDeployReservationDeviceIdForm::Unmodeled,
+        ]
+    ));
+    assert!(ids.value()[2].is_sensitive() && !format!("{:?}", ids.value()[2]).contains("private-id"));
+    assert!(matches!(
+        devices("separate")?.value()[0].value().count().map(ProjectValue::value),
+        Some(DeployReservationDeviceCount::String(value)) if value == "all"
+    ));
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code()
+                == compose_lens::model::DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT)
+            .count(),
+        2
+    );
+    assert!(
+        devices("malformed")?
+            .value()
+            .iter()
+            .all(|item| item.value().count().is_none())
+    );
+    assert!(devices("reset")?.value().is_empty());
+    assert!(result.diagnostics().iter().any(|diagnostic| diagnostic.message()
+        == "deploy resource reservation device count must be a YAML integer or string scalar"));
+    assert!(
+        result.diagnostics().iter().any(
+            |diagnostic| diagnostic.message() == "deploy resource reservation device device_ids must be a sequence"
+        )
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_reservation_device_options_forms_provenance_and_recovery() -> Result<(), Box<dyn std::error::Error>>
+{
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3141),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  map:\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - capabilities: [gpu]\n              options: {name: \"${VALUE}\", enabled: true, bad: {nested: value}}\n  list:\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - capabilities: [gpu]\n              options: [KEY=VALUE, \"\", KEY=VALUE, true]\n  reset:\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - capabilities: [gpu]\n              options: [old]\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3142),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  reset:\n    deploy: {resources: {reservations: {devices: !reset []}}}\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("VALUE", "private-value");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let view = result.view().ok_or("view")?;
+    let device = |name| {
+        effective_deploy_resources(view, name)
+            .ok()
+            .and_then(|resources| resources.value().reservations())
+            .and_then(|reservations| reservations.value().devices())
+            .and_then(|devices| devices.value().first())
+            .ok_or("device")
+    };
+    let map = device("map")?.value().options().ok_or("options")?;
+    assert!(matches!(map.value().as_map(), Some(entries) if entries.len() == 2));
+    assert!(map.is_sensitive() && !format!("{map:?}").contains("private-value"));
+    assert_eq!(
+        map.value().unmodeled_entries().map(<[ProjectFieldReference]>::len),
+        Some(1)
+    );
+    let list = device("list")?.value().options().ok_or("list options")?;
+    assert!(matches!(
+        list.value()
+            .as_list()
+            .map(<[ProjectValue<compose_lens::project::ProjectDeployReservationDeviceOptionItem>]>::len),
+        Some(4)
+    ));
+    assert!(matches!(
+        list.value()
+            .as_list()
+            .map(|items| items[0].value().value().map(ProjectValue::value).map(String::as_str)),
+        Some(Some("KEY=VALUE"))
+    ));
+    assert!(matches!(
+        list.value().as_list().map(|items| items[3].value().form()),
+        Some(compose_lens::project::ProjectDeployReservationDeviceOptionItemForm::Unmodeled)
+    ));
+    assert!(
+        effective_deploy_resources(view, "reset")?
+            .value()
+            .reservations()
+            .and_then(|reservations| reservations.value().devices())
+            .is_some_and(|devices| devices.value().is_empty())
+    );
+    assert!(
+        result.diagnostics().iter().any(
+            |diagnostic| diagnostic.code() == compose_lens::model::DEPLOY_RESERVATION_DEVICE_OPTIONS_DUPLICATE_ITEM
+        )
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_malformed_reservation_device_evidence() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  malformed:\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - scalar-item\n            - capabilities: no-list\n            - driver: retained\n            - capabilities: [valid, true, {bad: value}]\n  duplicate:\n    deploy: {resources: {reservations: {devices: [{capabilities: [same, same]}]}}}\n  outer:\n    deploy: {resources: {reservations: {devices: bad}}}\n  reset-null:\n    deploy: {resources: {reservations: {devices: !reset null}}}\n";
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(3120),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let view = result.view().ok_or("view")?;
+    let reservations = effective_deploy_resources(view, "malformed")?
+        .value()
+        .reservations()
+        .ok_or("reservations")?;
+    let items = reservations
+        .value()
+        .devices()
+        .map(ProjectValue::value)
+        .ok_or("devices")?;
+    assert_eq!(items.len(), 4);
+    assert!(matches!(
+        items[0].value().form(),
+        compose_lens::project::ProjectDeployReservationDeviceForm::Unmodeled
+    ));
+    assert_eq!(
+        items[0].effective_source().map(|span| &source[span.range()]),
+        Some("scalar-item")
+    );
+    assert!(items[1].value().capabilities().is_none() && items[1].value().unmodeled_fields().len() == 1);
+    assert_eq!(
+        items[2].value().driver().map(ProjectValue::value).map(String::as_str),
+        Some("retained")
+    );
+    assert!(matches!(
+        items[3]
+            .value()
+            .capabilities()
+            .map(ProjectValue::value)
+            .map(|capabilities| capabilities.iter().map(|item| item.value().form()).collect::<Vec<_>>())
+            .as_deref(),
+        Some([
+            compose_lens::project::ProjectDeployReservationDeviceCapabilityForm::String,
+            compose_lens::project::ProjectDeployReservationDeviceCapabilityForm::Unmodeled,
+            compose_lens::project::ProjectDeployReservationDeviceCapabilityForm::Unmodeled,
+        ])
+    ));
+    let outer = effective_deploy_resources(view, "outer")?
+        .value()
+        .reservations()
+        .ok_or("outer")?;
+    assert!(outer.value().devices().is_none());
+    assert!(
+        outer
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path().last() == Some(&"devices".to_owned()))
+    );
+    for code in [PROJECT_EXPECTED_FORM, PROJECT_MISSING_FIELD] {
+        assert!(result.diagnostics().iter().any(|diagnostic| diagnostic.code() == code));
+    }
+    let duplicate = effective_deploy_resources(view, "duplicate")?
+        .value()
+        .reservations()
+        .and_then(|reservations| reservations.value().devices())
+        .and_then(|devices| devices.value().first())
+        .and_then(|device| device.value().capabilities())
+        .map(ProjectValue::value)
+        .ok_or("duplicate capabilities")?;
+    assert_eq!(duplicate.len(), 2);
+    assert!(result.diagnostics().iter().any(|diagnostic| {
+        diagnostic.code() == compose_lens::model::DEPLOY_RESERVATION_DEVICE_CAPABILITY_DUPLICATE_ITEM
+    }));
+    let reset_null = effective_deploy_resources(view, "reset-null")?
+        .value()
+        .reservations()
+        .ok_or("reset null")?;
+    assert!(reset_null.value().devices().is_none());
+    assert!(
+        reset_null
+            .value()
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path().last() == Some(&"devices".to_owned()))
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_non_string_effective_reservation_device_drivers() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "services:\n  invalid:\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - capabilities: [gpu]\n              driver: !!timestamp 2023-12-25\n            - capabilities: [gpu]\n              driver: !!regex 'gpu.*'\n  quoted:\n    deploy:\n      resources:\n        reservations:\n          devices:\n            - capabilities: [gpu]\n              driver: \"2023-12-25\"\n            - capabilities: [gpu]\n              driver: \"gpu.*\"\n";
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(3122),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged")?, None);
+    let devices = effective_deploy_resources(result.view().ok_or("view")?, "invalid")?
+        .value()
+        .reservations()
+        .and_then(|reservations| reservations.value().devices())
+        .map(ProjectValue::value)
+        .ok_or("devices")?;
+    assert!(
+        devices
+            .iter()
+            .all(|device| device.value().driver().is_none() && device.value().unmodeled_fields().len() == 1)
+    );
+    assert!(result.diagnostics().iter().all(|diagnostic| {
+        diagnostic.message() == "deploy resource reservation device driver must be a YAML string scalar"
+    }));
+    let quoted = effective_deploy_resources(result.view().ok_or("view")?, "quoted")?
+        .value()
+        .reservations()
+        .and_then(|reservations| reservations.value().devices())
+        .map(ProjectValue::value)
+        .ok_or("quoted devices")?;
+    assert_eq!(
+        quoted
+            .iter()
+            .filter_map(|device| device.value().driver().map(ProjectValue::value).map(String::as_str))
+            .collect::<Vec<_>>(),
+        ["2023-12-25", "gpu.*"]
     );
     Ok(())
 }
@@ -5216,7 +7732,7 @@ fn assert_source_ids(sources: &[compose_lens::source::SourceSpan], expected: &[S
 }
 
 #[test]
-fn retains_effective_pull_policy_replacement_provenance_sensitivity_and_refresh_evidence()
+fn retains_effective_pull_policy_replacement_provenance_sensitivity_and_pull_refresh_after()
 -> Result<(), Box<dyn std::error::Error>> {
     use compose_lens::model::PullPolicyKind;
 
@@ -5268,14 +7784,132 @@ fn retains_effective_pull_policy_replacement_provenance_sensitivity_and_refresh_
     assert_source_ids(policy.provenance().sources(), &[SourceId::new(660), SourceId::new(661)]);
     assert!(!format!("{policy:?}").contains("every_12h"));
     let refresh = service
-        .unmodeled_fields()
-        .iter()
-        .find(|field| field.path().ends_with(&["pull_refresh_after".to_owned()]))
-        .ok_or("pull_refresh_after evidence expected")?;
+        .pull_refresh_after()
+        .ok_or("effective pull refresh interval expected")?;
+    assert_eq!(refresh.value(), "12h");
     assert_eq!(refresh.provenance().operation(), MergeOperation::Replaced);
     assert_source_ids(
         refresh.provenance().sources(),
         &[SourceId::new(660), SourceId::new(661)],
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_pull_refresh_after_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>>
+{
+    let base_id = SourceId::new(3202);
+    let override_id = SourceId::new(3203);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced:\n    pull_refresh_after: first\n  sensitive:\n    pull_refresh_after: \"${REFRESH_AFTER}\"\n  reset:\n    pull_refresh_after: first\n  override:\n    pull_refresh_after: first\n  malformed:\n    pull_refresh_after: first\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced:\n    pull_refresh_after: second\n  reset:\n    pull_refresh_after: !reset null\n  override:\n    pull_refresh_after: !override replacement\n  malformed:\n    pull_refresh_after: 1\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("REFRESH_AFTER", "private-refresh");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let pull_refresh_after = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::pull_refresh_after)
+            .ok_or("pull refresh interval")
+    };
+    let replaced = pull_refresh_after("replaced")?;
+    assert_eq!(replaced.value(), "second");
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let sensitive = pull_refresh_after("sensitive")?;
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("private-refresh"));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.pull_refresh_after().is_none())
+    );
+    let overridden = pull_refresh_after("override")?;
+    assert_eq!(overridden.value(), "replacement");
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("malformed"))
+            .is_some_and(|service| service.pull_refresh_after().is_none())
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_platform_provenance_sensitivity_and_recovery() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3209);
+    let override_id = SourceId::new(3210);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced:\n    platform: first\n  sensitive:\n    platform: \"${PLATFORM}\"\n  reset:\n    platform: first\n  override:\n    platform: first\n  malformed:\n    platform: first\n",
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced:\n    platform: second\n  reset:\n    platform: !reset null\n  override:\n    platform: !override replacement\n  malformed:\n    platform: 1\n",
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("PLATFORM", "private-platform");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let platform = |name| {
+        result
+            .view()
+            .and_then(|view| view.service(name))
+            .and_then(ProjectService::platform)
+            .ok_or("platform")
+    };
+    let replaced = platform("replaced")?;
+    assert_eq!(replaced.value(), "second");
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+    let sensitive = platform("sensitive")?;
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("private-platform"));
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("reset"))
+            .is_some_and(|service| service.platform().is_none())
+    );
+    let overridden = platform("override")?;
+    assert_eq!(overridden.value(), "replacement");
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(
+        result
+            .view()
+            .and_then(|view| view.service("malformed"))
+            .is_some_and(|service| service.platform().is_none())
+    );
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
     );
     Ok(())
 }
@@ -6254,6 +8888,93 @@ fn retains_merged_privileged_replacement_and_provenance() -> Result<(), Box<dyn 
     assert_eq!(privileged.provenance().operation(), MergeOperation::Replaced);
     assert_source_ids(privileged.provenance().sources(), &[base_id, override_id]);
 
+    Ok(())
+}
+
+#[test]
+fn retains_effective_attach_replacement_reset_override_sensitivity_and_malformed_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3215);
+    let override_id = SourceId::new(3216);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    attach: false\n",
+                "  reset:\n    attach: true\n",
+                "  override:\n    attach: false\n",
+                "  sensitive:\n    attach: \"${ATTACH_SECRET}\"\n",
+                "  malformed:\n    attach: [true]\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  replaced:\n    attach: true\n",
+                "  reset:\n    attach: !reset null\n",
+                "  override:\n    attach: !override true\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("ATTACH_SECRET", "false");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("partial project view expected")?;
+
+    let replaced = view
+        .service("replaced")
+        .and_then(ProjectService::attach)
+        .ok_or("replaced attach expected")?;
+    assert_eq!(replaced.value(), &BooleanValue::Literal(true));
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(replaced.provenance().sources(), &[base_id, override_id]);
+
+    let reset = view.service("reset").ok_or("reset service expected")?;
+    assert!(reset.attach().is_none());
+    assert!(
+        reset
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "reset", "attach"])
+    );
+
+    let overridden = view
+        .service("override")
+        .and_then(ProjectService::attach)
+        .ok_or("overridden attach expected")?;
+    assert_eq!(overridden.value(), &BooleanValue::Literal(true));
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_source_ids(overridden.provenance().sources(), &[base_id, override_id, override_id]);
+
+    let sensitive = view
+        .service("sensitive")
+        .and_then(ProjectService::attach)
+        .ok_or("sensitive attach expected")?;
+    assert_eq!(sensitive.value(), &BooleanValue::Literal(false));
+    assert!(sensitive.is_sensitive());
+    assert!(!format!("{sensitive:?}").contains("false"));
+
+    let malformed = view.service("malformed").ok_or("malformed service expected")?;
+    assert!(malformed.attach().is_none());
+    assert!(
+        malformed
+            .unmodeled_fields()
+            .iter()
+            .any(|field| field.path() == ["services", "malformed", "attach"])
+    );
+    assert!(!result.is_valid());
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
     Ok(())
 }
 
@@ -8600,6 +11321,135 @@ fn assert_effective_build_extra_hosts_collections_and_recovery(
             .diagnostics()
             .iter()
             .any(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+    );
+    Ok(())
+}
+
+#[test]
+fn retains_effective_blkio_nested_provenance_recovery_sensitivity_and_tags() -> Result<(), Box<dyn std::error::Error>> {
+    let base_id = SourceId::new(3227);
+    let override_id = SourceId::new(3228);
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            base_id,
+            DocumentOrigin::new("compose.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  app:\n    blkio_config: {weight: 500, device_read_bps: [{path: /dev/base, rate: 1}]}\n",
+                "  sensitive:\n    blkio_config: {weight: \"${BLKIO_WEIGHT}\"}\n",
+                "  reset:\n    blkio_config: {device_read_bps: [{path: /dev/old, rate: 1}]}\n",
+                "  overridden:\n    blkio_config: {weight: 500, device_read_bps: [{path: /dev/old, rate: 1}]}\n",
+            ),
+        ),
+        DocumentInput::new(
+            override_id,
+            DocumentOrigin::new("compose.override.yaml", "workspace"),
+            concat!(
+                "services:\n",
+                "  app:\n    blkio_config: {weight: \"600\", device_read_bps: [not-a-map, {path: /dev/next, rate: 2, future: retained}, {path: [bad], rate: false}]}\n",
+                "  reset:\n    blkio_config: {device_read_bps: !reset []}\n",
+                "  overridden:\n    blkio_config: !override {weight_device: [{path: /dev/override, weight: 700}]}\n",
+                "  malformed:\n    blkio_config:\n      weight: [bad]\n      device_read_iops: wrong\n      device_write_bps: {bad: value}\n      weight_device: {bad: value}\n",
+            ),
+        ),
+    ])?;
+    let mut environment = MapEnvironment::new();
+    let _ = environment.insert_sensitive("BLKIO_WEIGHT", "900");
+    let interpolation = loaded.interpolate(&environment);
+    let merged = merge_project(&loaded, Some(&interpolation));
+    let result = build_project_view(merged.project().ok_or("merged project")?, None);
+    let view = result.view().ok_or("project view")?;
+    let config = |name| {
+        view.service(name)
+            .and_then(ProjectService::blkio_config)
+            .ok_or("effective blkio config")
+    };
+
+    let app = config("app")?;
+    assert_eq!(app.provenance().operation(), MergeOperation::Merged);
+    let weight = app.value().weight().ok_or("effective weight")?;
+    assert!(matches!(
+        weight.value(),
+        compose_lens::model::BlkioScalar::String(value) if value == "600"
+    ));
+    assert_eq!(weight.provenance().operation(), MergeOperation::Replaced);
+    assert_source_ids(weight.provenance().sources(), &[base_id, override_id]);
+    let rates = app.value().device_read_bps().ok_or("effective rates")?;
+    assert_eq!(rates.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(rates.value().len(), 4);
+    assert_eq!(
+        rates.value()[1].value().form(),
+        compose_lens::project::ProjectBlkioDeviceRateForm::Unmodeled
+    );
+    assert_eq!(rates.value()[2].value().unmodeled_fields().len(), 1);
+    assert_eq!(
+        rates.value()[2].value().unmodeled_fields()[0].path(),
+        ["services", "app", "blkio_config", "device_read_bps", "future"]
+    );
+    assert_eq!(rates.value()[3].value().unmodeled_fields().len(), 2);
+    assert_eq!(
+        rates.value()[3].value().unmodeled_fields()[0].path(),
+        ["services", "app", "blkio_config", "device_read_bps", "path"]
+    );
+    assert_eq!(
+        rates.value()[3].value().unmodeled_fields()[1].path(),
+        ["services", "app", "blkio_config", "device_read_bps", "rate"]
+    );
+    assert_source_ids(rates.value()[2].provenance().sources(), &[override_id]);
+
+    let sensitive = config("sensitive")?.value().weight().ok_or("sensitive weight")?;
+    assert!(sensitive.is_sensitive());
+    let debug = format!("{sensitive:?}");
+    assert!(debug.contains("<redacted>"));
+    assert!(!debug.contains("900"));
+
+    let reset_rates = config("reset")?.value().device_read_bps().ok_or("reset rates")?;
+    assert_eq!(reset_rates.provenance().operation(), MergeOperation::Reset);
+    assert!(reset_rates.value().is_empty());
+
+    let overridden = config("overridden")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(overridden.value().weight().is_none());
+    assert_eq!(
+        overridden
+            .value()
+            .weight_device()
+            .map(|items| items.provenance().operation()),
+        Some(MergeOperation::Authored)
+    );
+
+    assert_malformed_blkio_project_recovery(view, &result)?;
+    Ok(())
+}
+
+fn assert_malformed_blkio_project_recovery(
+    view: &ProjectView,
+    result: &compose_lens::project::ProjectViewResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let malformed = view
+        .service("malformed")
+        .and_then(ProjectService::blkio_config)
+        .ok_or("malformed effective blkio config")?
+        .value();
+    assert!(malformed.weight().is_none());
+    assert!(malformed.device_read_iops().is_none());
+    assert!(malformed.device_write_bps().is_none());
+    assert!(malformed.weight_device().is_none());
+    for path in [
+        ["services", "malformed", "blkio_config", "weight"],
+        ["services", "malformed", "blkio_config", "device_read_iops"],
+        ["services", "malformed", "blkio_config", "device_write_bps"],
+        ["services", "malformed", "blkio_config", "weight_device"],
+    ] {
+        assert!(malformed.unmodeled_fields().iter().any(|field| field.path() == path));
+    }
+    assert!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+            .count()
+            >= 6
     );
     Ok(())
 }

@@ -6,21 +6,29 @@ use crate::merge::{
 };
 use crate::model::{
     ANNOTATIONS_DUPLICATE_NAME, ANNOTATIONS_EMPTY_NAME, ANNOTATIONS_EXPECTED_STRING, ANNOTATIONS_KEY_ONLY,
-    BUILD_DOCKERFILE_INLINE_CONFLICT, BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM, BindOptions, BooleanValue, BuildNoCache,
-    BuildProvenance, BuildSbom, CAP_ADD_DUPLICATE_ITEM, CAP_DROP_DUPLICATE_ITEM, CapabilityAddItem, CapabilityDropItem,
-    Command, ComposeScalar, ConfigDefinition, DEPLOY_ENDPOINT_MODE_PORTABILITY, DEPLOY_MODE_PORTABILITY,
-    DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING, DNS_OPT_DUPLICATE_ITEM,
-    DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING, DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM,
-    DNS_SEARCH_EXPECTED_STRING, DependencyCondition, DeployEndpointMode, DeployMode, DeployPlacementMaxReplicasPerNode,
-    DeployReplicas, DeployRestartCondition, DeployRestartDuration, DeployRestartMaxAttempts, EXPOSE_DUPLICATE_ITEM,
-    EXPOSE_EXPECTED_SCALAR, EXPOSE_EXPECTED_SEQUENCE, EXPOSE_INVALID_ITEM, EXPOSE_PROVIDER_DEPENDENT, Entrypoint,
-    EnvironmentFileFormat, EnvironmentFileFormatKind, ExposeItemKind, ExposeScalarKind, HealthcheckDuration,
-    HealthcheckRetries, HealthcheckTest, HealthcheckTestKind, HostAddress, Hostname, HostnameKind, ImageReference,
-    Ipam, IpamConfig, KeyValueEntry, LOGGING_DRIVER_EXPECTED_STRING, LOGGING_EXPECTED_MAPPING,
-    LOGGING_OPTION_EMPTY_KEY, LOGGING_OPTION_EXPECTED_SCALAR, LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue,
-    Located, LongPort, LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO, MEM_LIMIT_EXPECTED_VALUE,
-    MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind, MemLimitScalarKind,
-    MountType, NetworkDefinition, PIDS_LIMIT_AMBIGUOUS_ZERO, PidsLimit, PidsLimitKind, Port, PullPolicy, RestartPolicy,
+    BUILD_DOCKERFILE_INLINE_CONFLICT, BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM, BindOptions, BlkioScalar, BooleanValue,
+    BuildNoCache, BuildProvenance, BuildSbom, CAP_ADD_DUPLICATE_ITEM, CAP_DROP_DUPLICATE_ITEM, CPU_COUNT_NEGATIVE,
+    CPU_PERCENT_OUT_OF_RANGE, CapabilityAddItem, CapabilityDropItem, CgroupNamespace, Command, ComposeScalar,
+    ConfigDefinition, CpuCount, CpuPercent, CpuPeriod, CpuQuota, CpuRtPeriod, DEPLOY_ENDPOINT_MODE_PORTABILITY,
+    DEPLOY_MODE_PORTABILITY, DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT,
+    DEPLOY_RESERVATION_DEVICE_CAPABILITY_DUPLICATE_ITEM, DEPLOY_RESERVATION_DEVICE_OPTIONS_DUPLICATE_ITEM,
+    DEPLOY_RESERVATION_DEVICE_OPTIONS_INVALID_KEY, DEPLOY_ROLLBACK_CONFIG_ORDER_PORTABILITY,
+    DEPLOY_UPDATE_CONFIG_ORDER_PORTABILITY, DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING, DNS_EXPECTED_FORM,
+    DNS_EXPECTED_STRING, DNS_OPT_DUPLICATE_ITEM, DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING,
+    DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM, DNS_SEARCH_EXPECTED_STRING, DependencyCondition,
+    DeployDiscreteResourceValue, DeployEndpointMode, DeployMode, DeployPlacementMaxReplicasPerNode, DeployReplicas,
+    DeployReservationDeviceCount, DeployResourceCpus, DeployResourceMemory, DeployResourcePids, DeployRestartCondition,
+    DeployRestartDuration, DeployRestartMaxAttempts, DeployRollbackMaxFailureRatio, DeployRollbackOrder,
+    DeployRollbackParallelism, DeployUpdateMaxFailureRatio, DeployUpdateOrder, DeployUpdateParallelism,
+    EXPOSE_DUPLICATE_ITEM, EXPOSE_EXPECTED_SCALAR, EXPOSE_EXPECTED_SEQUENCE, EXPOSE_INVALID_ITEM,
+    EXPOSE_PROVIDER_DEPENDENT, EXTENDS_MISSING_SERVICE, Entrypoint, EnvironmentFileFormat, EnvironmentFileFormatKind,
+    ExposeItemKind, ExposeScalarKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
+    HostAddress, Hostname, HostnameKind, ImageReference, Ipam, IpamConfig, KeyValueEntry,
+    LOGGING_DRIVER_EXPECTED_STRING, LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY, LOGGING_OPTION_EXPECTED_SCALAR,
+    LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue, Located, LongPort, LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO,
+    MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind,
+    MemLimitScalarKind, MountType, NetworkDefinition, PIDS_LIMIT_AMBIGUOUS_ZERO, POST_START_MISSING_COMMAND,
+    PRE_STOP_MISSING_COMMAND, PROVIDER_MISSING_TYPE, PidsLimit, PidsLimitKind, Port, PullPolicy, RestartPolicy,
     SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS, SECURITY_OPT_EMPTY_ITEM,
     SECURITY_OPT_EXPECTED_SEQUENCE, SECURITY_OPT_EXPECTED_STRING, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
     SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS, SECURITY_OPT_SECCOMP_CONFLICT, SECURITY_OPT_SECCOMP_NEAR_MISS,
@@ -97,30 +105,35 @@ impl<T> ProjectValue<T> {
 
     /// Returns the typed effective value.
     /// Returns effective no-cache filter form with collection provenance.
+    /// Returns effective update parallelism with provenance.
     #[must_use]
     pub const fn value(&self) -> &T {
         &self.value
     }
 
     /// Returns the merge operation and contributing spans in processing order.
+    /// Returns effective update delay with provenance.
     #[must_use]
     pub const fn provenance(&self) -> &MergeProvenance {
         &self.provenance
     }
 
     /// Returns the most recent source contributing to this value.
+    /// Returns effective update monitor with provenance.
     #[must_use]
     pub fn effective_source(&self) -> Option<SourceSpan> {
         self.provenance.effective_source()
     }
 
     /// Reports whether this value contains sensitive interpolation output.
+    /// Returns effective update failure action with provenance.
     #[must_use]
     pub const fn is_sensitive(&self) -> bool {
         self.sensitive
     }
 
     /// Removes the provenance wrapper and returns the typed value.
+    /// Returns effective maximum failure ratio with provenance.
     #[must_use]
     pub fn into_value(self) -> T {
         self.value
@@ -172,12 +185,14 @@ impl ProjectKey {
     }
 
     /// Returns the semantic key text.
+    /// Returns effective update order with provenance.
     #[must_use]
     pub fn value(&self) -> &str {
         &self.value
     }
 
     /// Returns authored key locations in merge order.
+    /// Returns malformed and unknown retained update members.
     #[must_use]
     pub fn sources(&self) -> &[SourceSpan] {
         &self.sources
@@ -1736,7 +1751,7 @@ impl ProjectLogging {
     }
 }
 
-/// The effective deploy mapping, with fields outside the native boundary retained as evidence.
+/// The effective deploy mapping, retaining malformed, extension, and future-unknown evidence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectDeploy {
     endpoint_mode: Option<ProjectValue<DeployEndpointMode>>,
@@ -1744,7 +1759,10 @@ pub struct ProjectDeploy {
     mode: Option<ProjectValue<DeployMode>>,
     placement: Option<ProjectValue<ProjectDeployPlacement>>,
     replicas: Option<ProjectValue<DeployReplicas>>,
+    resources: Option<ProjectValue<ProjectDeployResources>>,
     restart_policy: Option<ProjectValue<ProjectDeployRestartPolicy>>,
+    rollback_config: Option<ProjectValue<ProjectDeployRollbackConfig>>,
+    update_config: Option<ProjectValue<ProjectDeployUpdateConfig>>,
     unmodeled_fields: Vec<ProjectFieldReference>,
 }
 
@@ -1779,13 +1797,409 @@ impl ProjectDeploy {
         self.replicas.as_ref()
     }
 
+    /// Returns effective deploy resources without resource-policy interpretation.
+    #[must_use]
+    pub const fn resources(&self) -> Option<&ProjectValue<ProjectDeployResources>> {
+        self.resources.as_ref()
+    }
+
     /// Returns the effective deploy restart policy, separate from service `restart`.
     #[must_use]
     pub const fn restart_policy(&self) -> Option<&ProjectValue<ProjectDeployRestartPolicy>> {
         self.restart_policy.as_ref()
     }
+    /// Returns the effective rollback configuration without rollout interpretation.
+    #[must_use]
+    pub const fn rollback_config(&self) -> Option<&ProjectValue<ProjectDeployRollbackConfig>> {
+        self.rollback_config.as_ref()
+    }
+    /// Returns the effective rolling-update configuration without rollout interpretation.
+    #[must_use]
+    pub const fn update_config(&self) -> Option<&ProjectValue<ProjectDeployUpdateConfig>> {
+        self.update_config.as_ref()
+    }
 
-    /// Returns immediate deploy children outside the current native boundary.
+    /// Returns malformed, extension, and future-unknown deploy-field evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective deploy resources with nested provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployResources {
+    limits: Option<ProjectValue<ProjectDeployResourceLimits>>,
+    reservations: Option<ProjectValue<ProjectDeployResourceReservations>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectDeployResources {
+    /// Returns effective deploy resource limits without defaults or runtime interpretation.
+    #[must_use]
+    pub const fn limits(&self) -> Option<&ProjectValue<ProjectDeployResourceLimits>> {
+        self.limits.as_ref()
+    }
+
+    /// Returns effective resource reservations without scheduling interpretation.
+    #[must_use]
+    pub const fn reservations(&self) -> Option<&ProjectValue<ProjectDeployResourceReservations>> {
+        self.reservations.as_ref()
+    }
+
+    /// Returns extensions, unknown fields, and malformed children retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective deploy resource reservations with nested provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployResourceReservations {
+    cpus: Option<ProjectValue<DeployResourceCpus>>,
+    memory: Option<ProjectValue<DeployResourceMemory>>,
+    generic_resources: Option<ProjectValue<Vec<ProjectValue<ProjectDeployGenericResource>>>>,
+    devices: Option<ProjectValue<Vec<ProjectValue<ProjectDeployReservationDevice>>>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectDeployResourceReservations {
+    /// Returns the effective deploy resource reservation CPU scalar spelling and category.
+    #[must_use]
+    pub const fn cpus(&self) -> Option<&ProjectValue<DeployResourceCpus>> {
+        self.cpus.as_ref()
+    }
+
+    /// Returns the effective deploy resource reservation memory value and its provenance.
+    #[must_use]
+    pub const fn memory(&self) -> Option<&ProjectValue<DeployResourceMemory>> {
+        self.memory.as_ref()
+    }
+
+    /// Returns effective ordered generic-resource reservations, including an explicit empty list.
+    #[must_use]
+    pub const fn generic_resources(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectDeployGenericResource>>>> {
+        self.generic_resources.as_ref()
+    }
+
+    /// Returns effective reservation devices, including an explicit empty list.
+    #[must_use]
+    pub const fn devices(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectDeployReservationDevice>>>> {
+        self.devices.as_ref()
+    }
+
+    /// Returns extensions, unknown fields, and malformed children retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// One effective resource-reservation device with nested provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployReservationDevice {
+    form: ProjectDeployReservationDeviceForm,
+    capabilities: Option<ProjectValue<Vec<ProjectValue<ProjectDeployReservationDeviceCapability>>>>,
+    driver: Option<ProjectValue<String>>,
+    count: Option<ProjectValue<DeployReservationDeviceCount>>,
+    device_ids: Option<ProjectValue<Vec<ProjectValue<ProjectDeployReservationDeviceId>>>>,
+    options: Option<ProjectValue<ProjectDeployReservationDeviceOptions>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectDeployReservationDevice {
+    /// Returns whether this effective item is a mapping or retained unmodeled sequence entry.
+    #[must_use]
+    pub const fn form(&self) -> ProjectDeployReservationDeviceForm {
+        self.form
+    }
+
+    /// Returns the required effective capabilities collection when its form was valid.
+    #[must_use]
+    pub const fn capabilities(
+        &self,
+    ) -> Option<&ProjectValue<Vec<ProjectValue<ProjectDeployReservationDeviceCapability>>>> {
+        self.capabilities.as_ref()
+    }
+
+    /// Returns the optional effective raw device driver and its provenance.
+    #[must_use]
+    pub const fn driver(&self) -> Option<&ProjectValue<String>> {
+        self.driver.as_ref()
+    }
+
+    /// Returns the optional raw effective device allocation count and its provenance.
+    #[must_use]
+    pub const fn count(&self) -> Option<&ProjectValue<DeployReservationDeviceCount>> {
+        self.count.as_ref()
+    }
+
+    /// Returns optional effective ordered device allocation IDs, including an explicit empty list.
+    #[must_use]
+    pub const fn device_ids(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectDeployReservationDeviceId>>>> {
+        self.device_ids.as_ref()
+    }
+
+    /// Returns optional effective schema-shaped device options with full provenance.
+    #[must_use]
+    pub const fn options(&self) -> Option<&ProjectValue<ProjectDeployReservationDeviceOptions>> {
+        self.options.as_ref()
+    }
+
+    /// Returns extensions, unknown fields, and malformed members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective resource-reservation device item shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDeployReservationDeviceForm {
+    /// A mapping-form item.
+    Mapping,
+    /// A non-mapping sequence item retained as evidence.
+    Unmodeled,
+}
+
+/// One effective resource-reservation device allocation ID with item provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployReservationDeviceId {
+    form: ProjectDeployReservationDeviceIdForm,
+    value: Option<ProjectValue<String>>,
+}
+
+impl ProjectDeployReservationDeviceId {
+    /// Returns whether the item was a YAML string or retained unmodeled value.
+    #[must_use]
+    pub const fn form(&self) -> ProjectDeployReservationDeviceIdForm {
+        self.form
+    }
+
+    /// Returns the exact effective string when the item had string form.
+    #[must_use]
+    pub const fn value(&self) -> Option<&ProjectValue<String>> {
+        self.value.as_ref()
+    }
+}
+
+/// Effective resource-reservation device allocation-ID item shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDeployReservationDeviceIdForm {
+    /// A YAML string item.
+    String,
+    /// A non-string sequence item retained as evidence.
+    Unmodeled,
+}
+
+/// Effective schema-shaped resource-reservation device options.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDeployReservationDeviceOptions {
+    /// Ordered mapping entries plus malformed fields retained as evidence.
+    Map {
+        /// Valid map entries with key and value provenance.
+        entries: Vec<ProjectValue<ProjectDeployReservationDeviceOption>>,
+        /// Malformed or duplicate map fields.
+        unmodeled_entries: Vec<ProjectFieldReference>,
+    },
+    /// Ordered list entries, including malformed items.
+    List(Vec<ProjectValue<ProjectDeployReservationDeviceOptionItem>>),
+}
+
+impl ProjectDeployReservationDeviceOptions {
+    /// Returns valid mapping entries when the effective form was a mapping.
+    #[must_use]
+    pub fn as_map(&self) -> Option<&[ProjectValue<ProjectDeployReservationDeviceOption>]> {
+        let Self::Map { entries, .. } = self else { return None };
+        Some(entries)
+    }
+    /// Returns malformed or duplicate mapping fields when the effective form was a mapping.
+    #[must_use]
+    pub fn unmodeled_entries(&self) -> Option<&[ProjectFieldReference]> {
+        let Self::Map { unmodeled_entries, .. } = self else {
+            return None;
+        };
+        Some(unmodeled_entries)
+    }
+    /// Returns ordered list items when the effective form was a sequence.
+    #[must_use]
+    pub fn as_list(&self) -> Option<&[ProjectValue<ProjectDeployReservationDeviceOptionItem>]> {
+        let Self::List(items) = self else { return None };
+        Some(items)
+    }
+}
+
+/// One effective device-options mapping entry with nested provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployReservationDeviceOption {
+    name: ProjectKey,
+    value: ProjectValue<ComposeScalar>,
+}
+impl ProjectDeployReservationDeviceOption {
+    /// Returns the strict non-empty option key and its provenance.
+    #[must_use]
+    pub const fn name(&self) -> &ProjectKey {
+        &self.name
+    }
+    /// Returns the scalar option value and its provenance.
+    #[must_use]
+    pub const fn value(&self) -> &ProjectValue<ComposeScalar> {
+        &self.value
+    }
+}
+
+/// One effective device-options list item retained without splitting or coercion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployReservationDeviceOptionItem {
+    form: ProjectDeployReservationDeviceOptionItemForm,
+    value: Option<ProjectValue<String>>,
+}
+impl ProjectDeployReservationDeviceOptionItem {
+    /// Returns the effective item form.
+    #[must_use]
+    pub const fn form(&self) -> ProjectDeployReservationDeviceOptionItemForm {
+        self.form
+    }
+    /// Returns the exact list string when the item was valid.
+    #[must_use]
+    pub const fn value(&self) -> Option<&ProjectValue<String>> {
+        self.value.as_ref()
+    }
+}
+/// Effective device-options list item form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDeployReservationDeviceOptionItemForm {
+    /// A strict YAML string list item.
+    String,
+    /// A non-string list item retained as evidence.
+    Unmodeled,
+}
+
+/// One effective resource-reservation device capability with item provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployReservationDeviceCapability {
+    form: ProjectDeployReservationDeviceCapabilityForm,
+    value: Option<ProjectValue<String>>,
+}
+
+impl ProjectDeployReservationDeviceCapability {
+    /// Returns whether the item was a YAML string or retained unmodeled value.
+    #[must_use]
+    pub const fn form(&self) -> ProjectDeployReservationDeviceCapabilityForm {
+        self.form
+    }
+
+    /// Returns the exact effective string when the item had string form.
+    #[must_use]
+    pub const fn value(&self) -> Option<&ProjectValue<String>> {
+        self.value.as_ref()
+    }
+}
+
+/// Effective resource-reservation capability item shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDeployReservationDeviceCapabilityForm {
+    /// A YAML string item.
+    String,
+    /// A non-string sequence item retained as evidence.
+    Unmodeled,
+}
+
+/// One effective generic-resource reservation with nested provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployGenericResource {
+    form: ProjectDeployGenericResourceForm,
+    discrete_resource_spec: Option<ProjectValue<ProjectDeployDiscreteResourceSpec>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectDeployGenericResource {
+    /// Returns whether this effective item is a mapping or retained unmodeled sequence entry.
+    #[must_use]
+    pub const fn form(&self) -> ProjectDeployGenericResourceForm {
+        self.form
+    }
+    /// Returns the optional effective discrete-resource specification.
+    #[must_use]
+    pub const fn discrete_resource_spec(&self) -> Option<&ProjectValue<ProjectDeployDiscreteResourceSpec>> {
+        self.discrete_resource_spec.as_ref()
+    }
+    /// Returns extensions, unknown fields, and malformed members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective generic-resource item shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectDeployGenericResourceForm {
+    /// A mapping-form item.
+    Mapping,
+    /// A non-mapping sequence item retained as evidence.
+    Unmodeled,
+}
+
+/// Effective discrete generic-resource specification with member provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployDiscreteResourceSpec {
+    kind: Option<ProjectValue<String>>,
+    value: Option<ProjectValue<DeployDiscreteResourceValue>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectDeployDiscreteResourceSpec {
+    /// Returns the optional effective kind scalar with provenance.
+    #[must_use]
+    pub const fn kind(&self) -> Option<&ProjectValue<String>> {
+        self.kind.as_ref()
+    }
+    /// Returns the optional effective value scalar with provenance.
+    #[must_use]
+    pub const fn value(&self) -> Option<&ProjectValue<DeployDiscreteResourceValue>> {
+        self.value.as_ref()
+    }
+    /// Returns extensions, unknown fields, and malformed members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective deploy resource limits with nested provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployResourceLimits {
+    cpus: Option<ProjectValue<DeployResourceCpus>>,
+    memory: Option<ProjectValue<DeployResourceMemory>>,
+    pids: Option<ProjectValue<DeployResourcePids>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectDeployResourceLimits {
+    /// Returns the effective deploy resource CPU scalar spelling and category.
+    #[must_use]
+    pub const fn cpus(&self) -> Option<&ProjectValue<DeployResourceCpus>> {
+        self.cpus.as_ref()
+    }
+
+    /// Returns the effective deploy resource memory value and its provenance.
+    #[must_use]
+    pub const fn memory(&self) -> Option<&ProjectValue<DeployResourceMemory>> {
+        self.memory.as_ref()
+    }
+
+    /// Returns the effective deploy resource PID scalar spelling and category.
+    #[must_use]
+    pub const fn pids(&self) -> Option<&ProjectValue<DeployResourcePids>> {
+        self.pids.as_ref()
+    }
+
+    /// Returns extensions, unknown fields, and malformed children retained as evidence.
     #[must_use]
     pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
         &self.unmodeled_fields
@@ -1800,6 +2214,104 @@ pub struct ProjectDeployRestartPolicy {
     max_attempts: Option<ProjectValue<DeployRestartMaxAttempts>>,
     window: Option<ProjectValue<DeployRestartDuration>>,
     unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+/// Effective deploy rollback members with independent provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployRollbackConfig {
+    parallelism: Option<ProjectValue<DeployRollbackParallelism>>,
+    delay: Option<ProjectValue<String>>,
+    monitor: Option<ProjectValue<String>>,
+    failure_action: Option<ProjectValue<String>>,
+    max_failure_ratio: Option<ProjectValue<DeployRollbackMaxFailureRatio>>,
+    order: Option<ProjectValue<DeployRollbackOrder>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectDeployRollbackConfig {
+    /// Returns effective rollback parallelism with provenance.
+    #[must_use]
+    pub const fn parallelism(&self) -> Option<&ProjectValue<DeployRollbackParallelism>> {
+        self.parallelism.as_ref()
+    }
+    /// Returns effective rollback delay with provenance.
+    #[must_use]
+    pub const fn delay(&self) -> Option<&ProjectValue<String>> {
+        self.delay.as_ref()
+    }
+    /// Returns effective rollback monitor with provenance.
+    #[must_use]
+    pub const fn monitor(&self) -> Option<&ProjectValue<String>> {
+        self.monitor.as_ref()
+    }
+    /// Returns effective rollback failure action with provenance.
+    #[must_use]
+    pub const fn failure_action(&self) -> Option<&ProjectValue<String>> {
+        self.failure_action.as_ref()
+    }
+    /// Returns effective rollback maximum failure ratio with provenance.
+    #[must_use]
+    pub const fn max_failure_ratio(&self) -> Option<&ProjectValue<DeployRollbackMaxFailureRatio>> {
+        self.max_failure_ratio.as_ref()
+    }
+    /// Returns effective rollback order with provenance.
+    #[must_use]
+    pub const fn order(&self) -> Option<&ProjectValue<DeployRollbackOrder>> {
+        self.order.as_ref()
+    }
+    /// Returns malformed and unknown retained rollback members.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective deploy rolling-update members with independent provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectDeployUpdateConfig {
+    parallelism: Option<ProjectValue<DeployUpdateParallelism>>,
+    delay: Option<ProjectValue<String>>,
+    monitor: Option<ProjectValue<String>>,
+    failure_action: Option<ProjectValue<String>>,
+    max_failure_ratio: Option<ProjectValue<DeployUpdateMaxFailureRatio>>,
+    order: Option<ProjectValue<DeployUpdateOrder>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectDeployUpdateConfig {
+    /// Returns effective update parallelism with provenance.
+    #[must_use]
+    pub const fn parallelism(&self) -> Option<&ProjectValue<DeployUpdateParallelism>> {
+        self.parallelism.as_ref()
+    }
+    /// Returns effective update delay with provenance.
+    #[must_use]
+    pub const fn delay(&self) -> Option<&ProjectValue<String>> {
+        self.delay.as_ref()
+    }
+    /// Returns effective update monitor with provenance.
+    #[must_use]
+    pub const fn monitor(&self) -> Option<&ProjectValue<String>> {
+        self.monitor.as_ref()
+    }
+    /// Returns effective update failure action with provenance.
+    #[must_use]
+    pub const fn failure_action(&self) -> Option<&ProjectValue<String>> {
+        self.failure_action.as_ref()
+    }
+    /// Returns effective maximum failure ratio with provenance.
+    #[must_use]
+    pub const fn max_failure_ratio(&self) -> Option<&ProjectValue<DeployUpdateMaxFailureRatio>> {
+        self.max_failure_ratio.as_ref()
+    }
+    /// Returns effective update order with provenance.
+    #[must_use]
+    pub const fn order(&self) -> Option<&ProjectValue<DeployUpdateOrder>> {
+        self.order.as_ref()
+    }
+    /// Returns malformed and unknown retained update members.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
 }
 
 impl ProjectDeployRestartPolicy {
@@ -1886,6 +2398,317 @@ impl ProjectDeployPlacementPreference {
     }
 }
 
+/// Effective service credential-spec members with independent provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectCredentialSpec {
+    config: Option<ProjectValue<String>>,
+    file: Option<ProjectValue<String>>,
+    registry: Option<ProjectValue<String>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectCredentialSpec {
+    /// Returns the effective config reference without resolving top-level configs.
+    #[must_use]
+    pub const fn config(&self) -> Option<&ProjectValue<String>> {
+        self.config.as_ref()
+    }
+
+    /// Returns the effective file reference without accessing the filesystem.
+    #[must_use]
+    pub const fn file(&self) -> Option<&ProjectValue<String>> {
+        self.file.as_ref()
+    }
+
+    /// Returns the effective registry reference without registry or account access.
+    #[must_use]
+    pub const fn registry(&self) -> Option<&ProjectValue<String>> {
+        self.registry.as_ref()
+    }
+
+    /// Returns malformed, extension, and future-unknown members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// An effective raw service `extends` directive without referenced-service resolution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectExtends {
+    /// A short service reference with field provenance.
+    Short(ProjectValue<String>),
+    /// A long reference mapping with member provenance.
+    Long(ProjectExtendsReference),
+}
+
+/// Effective long service extends reference members.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectExtendsReference {
+    service: Option<ProjectValue<String>>,
+    file: Option<ProjectValue<String>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectExtendsReference {
+    /// Returns the effective referenced service without resolution.
+    #[must_use]
+    pub const fn service(&self) -> Option<&ProjectValue<String>> {
+        self.service.as_ref()
+    }
+
+    /// Returns the effective referenced file without path access.
+    #[must_use]
+    pub const fn file(&self) -> Option<&ProjectValue<String>> {
+        self.file.as_ref()
+    }
+
+    /// Returns malformed, extension, and future-unknown members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// One effective provider option value with scalar category or ordered sequence preserved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectProviderOptionValue {
+    /// One YAML string, number, or boolean scalar.
+    Scalar(ComposeScalar),
+    /// Ordered scalar or malformed sequence items with per-item provenance.
+    Sequence(Vec<ProjectValue<ProjectProviderOptionItem>>),
+}
+
+/// One effective provider-option sequence item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectProviderOptionItem {
+    /// A YAML string, number, or boolean scalar.
+    Scalar(ComposeScalar),
+    /// A malformed item retained with item provenance and sensitivity.
+    Unmodeled,
+}
+
+/// One effective provider option with complete key and value provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectProviderOption {
+    name: ProjectKey,
+    value: ProjectValue<ProjectProviderOptionValue>,
+}
+
+impl ProjectProviderOption {
+    /// Returns the non-empty option name and every authored key location.
+    #[must_use]
+    pub const fn name(&self) -> &ProjectKey {
+        &self.name
+    }
+
+    /// Returns the scalar category or ordered sequence with complete merge provenance.
+    #[must_use]
+    pub const fn value(&self) -> &ProjectValue<ProjectProviderOptionValue> {
+        &self.value
+    }
+}
+
+/// Effective ordered provider options, including an explicitly empty or reset mapping.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectProviderOptions {
+    entries: Vec<ProjectValue<ProjectProviderOption>>,
+    unmodeled_entries: Vec<ProjectFieldReference>,
+}
+
+impl ProjectProviderOptions {
+    /// Returns valid option entries in effective mapping order.
+    #[must_use]
+    pub fn entries(&self) -> &[ProjectValue<ProjectProviderOption>] {
+        &self.entries
+    }
+
+    /// Returns malformed, duplicate, or empty-key entries retained as evidence.
+    #[must_use]
+    pub fn unmodeled_entries(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_entries
+    }
+
+    /// Reports whether the effective options mapping has no valid or malformed entries.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty() && self.unmodeled_entries.is_empty()
+    }
+}
+
+/// An effective service provider mapping without execution or discovery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectProvider {
+    type_: Option<ProjectValue<String>>,
+    options: Option<ProjectValue<ProjectProviderOptions>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectProvider {
+    /// Returns the required strict YAML-string provider type when validly effective.
+    #[must_use]
+    pub const fn type_(&self) -> Option<&ProjectValue<String>> {
+        self.type_.as_ref()
+    }
+
+    /// Returns the ordered provider options mapping, including an explicitly empty one.
+    #[must_use]
+    pub const fn options(&self) -> Option<&ProjectValue<ProjectProviderOptions>> {
+        self.options.as_ref()
+    }
+
+    /// Returns malformed, extension, and unknown provider members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// One effective post-start hook with independently retained member provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectServiceHook {
+    command: Option<ProjectValue<Command>>,
+    environment: Option<ProjectValue<ProjectEnvironment>>,
+    privileged: Option<ProjectValue<BooleanValue>>,
+    user: Option<ProjectValue<String>>,
+    working_dir: Option<ProjectValue<String>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectServiceHook {
+    /// Returns the required command without shell or argv interpretation.
+    #[must_use]
+    pub const fn command(&self) -> Option<&ProjectValue<Command>> {
+        self.command.as_ref()
+    }
+
+    /// Returns the local environment without combining it with service environment values.
+    #[must_use]
+    pub const fn environment(&self) -> Option<&ProjectValue<ProjectEnvironment>> {
+        self.environment.as_ref()
+    }
+
+    /// Returns the explicit hook privilege choice.
+    #[must_use]
+    pub const fn privileged(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.privileged.as_ref()
+    }
+
+    /// Returns the strict YAML-string hook user without default resolution.
+    #[must_use]
+    pub const fn user(&self) -> Option<&ProjectValue<String>> {
+        self.user.as_ref()
+    }
+
+    /// Returns the strict YAML-string hook working directory without path resolution.
+    #[must_use]
+    pub const fn working_dir(&self) -> Option<&ProjectValue<String>> {
+        self.working_dir.as_ref()
+    }
+
+    /// Returns malformed, duplicate, extension, and unknown hook members as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// One effective `post_start` sequence item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectPostStartHook {
+    /// A valid or partially recovered hook mapping.
+    Hook(Box<ProjectServiceHook>),
+    /// A malformed non-mapping item retained with per-item provenance.
+    Unmodeled,
+}
+
+/// One effective `pre_stop` sequence item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectPreStopHook {
+    /// A valid or partially recovered hook mapping.
+    Hook(Box<ProjectServiceHook>),
+    /// A malformed non-mapping item retained with per-item provenance.
+    Unmodeled,
+}
+
+/// One effective pre-start hook with independently retained member provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectPreStartServiceHook {
+    command: Option<ProjectValue<Command>>,
+    image: Option<ProjectValue<String>>,
+    environment: Option<ProjectValue<ProjectEnvironment>>,
+    privileged: Option<ProjectValue<BooleanValue>>,
+    per_replica: Option<ProjectValue<BooleanValue>>,
+    user: Option<ProjectValue<String>>,
+    working_dir: Option<ProjectValue<String>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectPreStartServiceHook {
+    /// Returns the optional command without shell or argv interpretation.
+    #[must_use]
+    pub const fn command(&self) -> Option<&ProjectValue<Command>> {
+        self.command.as_ref()
+    }
+
+    /// Returns the strict raw hook image without image-reference interpretation.
+    #[must_use]
+    pub const fn image(&self) -> Option<&ProjectValue<String>> {
+        self.image.as_ref()
+    }
+
+    /// Returns the local environment without combining it with service environment values.
+    #[must_use]
+    pub const fn environment(&self) -> Option<&ProjectValue<ProjectEnvironment>> {
+        self.environment.as_ref()
+    }
+
+    /// Returns the explicit hook privilege choice.
+    #[must_use]
+    pub const fn privileged(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.privileged.as_ref()
+    }
+
+    /// Returns the explicit per-replica choice without injecting a default.
+    #[must_use]
+    pub const fn per_replica(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.per_replica.as_ref()
+    }
+
+    /// Returns the strict YAML-string hook user without default resolution.
+    #[must_use]
+    pub const fn user(&self) -> Option<&ProjectValue<String>> {
+        self.user.as_ref()
+    }
+
+    /// Returns the strict YAML-string hook working directory without path resolution.
+    #[must_use]
+    pub const fn working_dir(&self) -> Option<&ProjectValue<String>> {
+        self.working_dir.as_ref()
+    }
+
+    /// Returns malformed, duplicate, extension, and unknown hook members as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// One effective `pre_start` sequence item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectPreStartHook {
+    /// A valid or partially recovered hook mapping.
+    Hook(Box<ProjectPreStartServiceHook>),
+    /// A malformed non-mapping item retained with per-item provenance.
+    Unmodeled,
+}
+
 /// One selected service with the native fields needed by the first conversion boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectService {
@@ -1894,8 +2717,19 @@ pub struct ProjectService {
     hostname: Option<ProjectValue<Hostname>>,
     container_name: Option<ProjectValue<String>>,
     image: Option<ProjectValue<ImageReference>>,
+    platform: Option<ProjectValue<String>>,
     entrypoint: Option<ProjectValue<Entrypoint>>,
     command: Option<ProjectValue<Command>>,
+    credential_spec: Option<ProjectValue<ProjectCredentialSpec>>,
+    extends: Option<ProjectValue<ProjectExtends>>,
+    provider: Option<ProjectValue<ProjectProvider>>,
+    post_start: Option<ProjectValue<Vec<ProjectValue<ProjectPostStartHook>>>>,
+    pre_stop: Option<ProjectValue<Vec<ProjectValue<ProjectPreStopHook>>>>,
+    pre_start: Option<ProjectValue<Vec<ProjectValue<ProjectPreStartHook>>>>,
+    blkio_config: Option<ProjectValue<ProjectBlkioConfig>>,
+    cgroup: Option<ProjectValue<CgroupNamespace>>,
+    cgroup_parent: Option<ProjectValue<String>>,
+    attach: Option<ProjectValue<BooleanValue>>,
     init: Option<ProjectValue<BooleanValue>>,
     stdin_open: Option<ProjectValue<BooleanValue>>,
     tty: Option<ProjectValue<BooleanValue>>,
@@ -1919,6 +2753,11 @@ pub struct ProjectService {
     working_dir: Option<ProjectValue<String>>,
     read_only: Option<ProjectValue<BooleanValue>>,
     pids_limit: Option<ProjectValue<PidsLimit>>,
+    cpu_count: Option<ProjectValue<CpuCount>>,
+    cpu_percent: Option<ProjectValue<CpuPercent>>,
+    cpu_period: Option<ProjectValue<CpuPeriod>>,
+    cpu_quota: Option<ProjectValue<CpuQuota>>,
+    cpu_rt_period: Option<ProjectValue<CpuRtPeriod>>,
     shm_size: Option<ProjectValue<ShmSize>>,
     mem_limit: Option<ProjectValue<MemLimit>>,
     tmpfs: Option<ProjectValue<ProjectTmpfs>>,
@@ -1926,7 +2765,9 @@ pub struct ProjectService {
     logging: Option<ProjectValue<ProjectLogging>>,
     ulimits: Option<ProjectValue<ProjectUlimits>>,
     pull_policy: Option<ProjectValue<PullPolicy>>,
+    pull_refresh_after: Option<ProjectValue<String>>,
     restart: Option<ProjectValue<RestartPolicy>>,
+    runtime: Option<ProjectValue<String>>,
     stop_signal: Option<ProjectValue<String>>,
     stop_grace_period: Option<ProjectValue<StopGracePeriod>>,
     healthcheck: Option<ProjectValue<ProjectHealthcheck>>,
@@ -1950,8 +2791,19 @@ impl ProjectService {
             hostname: None,
             container_name: None,
             image: None,
+            platform: None,
             entrypoint: None,
             command: None,
+            credential_spec: None,
+            extends: None,
+            provider: None,
+            post_start: None,
+            pre_stop: None,
+            pre_start: None,
+            blkio_config: None,
+            cgroup: None,
+            cgroup_parent: None,
+            attach: None,
             init: None,
             stdin_open: None,
             tty: None,
@@ -1975,6 +2827,11 @@ impl ProjectService {
             working_dir: None,
             read_only: None,
             pids_limit: None,
+            cpu_count: None,
+            cpu_percent: None,
+            cpu_period: None,
+            cpu_quota: None,
+            cpu_rt_period: None,
             shm_size: None,
             mem_limit: None,
             tmpfs: None,
@@ -1982,7 +2839,9 @@ impl ProjectService {
             logging: None,
             ulimits: None,
             pull_policy: None,
+            pull_refresh_after: None,
             restart: None,
+            runtime: None,
             stop_signal: None,
             stop_grace_period: None,
             healthcheck: None,
@@ -2029,6 +2888,12 @@ impl ProjectService {
         self.image.as_ref()
     }
 
+    /// Returns the strict raw effective service platform string without OCI interpretation.
+    #[must_use]
+    pub const fn platform(&self) -> Option<&ProjectValue<String>> {
+        self.platform.as_ref()
+    }
+
     /// Returns the effective entrypoint without normalizing scalar and list forms.
     #[must_use]
     pub const fn entrypoint(&self) -> Option<&ProjectValue<Entrypoint>> {
@@ -2039,6 +2904,78 @@ impl ProjectService {
     #[must_use]
     pub const fn command(&self) -> Option<&ProjectValue<Command>> {
         self.command.as_ref()
+    }
+
+    /// Returns the effective credential-spec mapping without resolving its references.
+    #[must_use]
+    pub const fn credential_spec(&self) -> Option<&ProjectValue<ProjectCredentialSpec>> {
+        self.credential_spec.as_ref()
+    }
+
+    /// Returns the effective raw extends directive without reference resolution.
+    #[must_use]
+    pub const fn extends(&self) -> Option<&ProjectValue<ProjectExtends>> {
+        self.extends.as_ref()
+    }
+
+    /// Returns effective provider configuration without execution or discovery.
+    #[must_use]
+    pub const fn provider(&self) -> Option<&ProjectValue<ProjectProvider>> {
+        self.provider.as_ref()
+    }
+
+    /// Returns effective post-start hooks in merge order without lifecycle execution or scheduling.
+    #[must_use]
+    pub const fn post_start(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectPostStartHook>>>> {
+        self.post_start.as_ref()
+    }
+
+    /// Returns effective pre-stop hooks in merge order without lifecycle execution or scheduling.
+    #[must_use]
+    pub const fn pre_stop(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectPreStopHook>>>> {
+        self.pre_stop.as_ref()
+    }
+
+    /// Returns effective pre-start hooks in merge order without lifecycle execution or scheduling.
+    #[must_use]
+    pub const fn pre_start(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectPreStartHook>>>> {
+        self.pre_start.as_ref()
+    }
+
+    /// Returns effective block-I/O configuration without controller or runtime interpretation.
+    #[must_use]
+    pub const fn blkio_config(&self) -> Option<&ProjectValue<ProjectBlkioConfig>> {
+        self.blkio_config.as_ref()
+    }
+
+    /// Returns the effective cgroup namespace without controller or runtime interpretation.
+    #[must_use]
+    pub const fn cgroup(&self) -> Option<&ProjectValue<CgroupNamespace>> {
+        self.cgroup.as_ref()
+    }
+
+    /// Returns the effective raw cgroup parent string without path or runtime interpretation.
+    #[must_use]
+    pub const fn cgroup_parent(&self) -> Option<&ProjectValue<String>> {
+        self.cgroup_parent.as_ref()
+    }
+
+    /// Returns the strict raw service runtime string without runtime interpretation.
+    #[must_use]
+    pub const fn runtime(&self) -> Option<&ProjectValue<String>> {
+        self.runtime.as_ref()
+    }
+
+    /// Returns the strict raw effective pull-refresh interval without refresh interpretation.
+    #[must_use]
+    pub const fn pull_refresh_after(&self) -> Option<&ProjectValue<String>> {
+        self.pull_refresh_after.as_ref()
+    }
+
+    /// Returns the effective attach choice without runtime interpretation.
+    #[must_use]
+    pub const fn attach(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.attach.as_ref()
     }
 
     /// Returns the effective platform-specific init-process choice.
@@ -2196,6 +3133,36 @@ impl ProjectService {
         self.pids_limit.as_ref()
     }
 
+    /// Returns the effective CPU-count scalar without quota or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_count(&self) -> Option<&ProjectValue<CpuCount>> {
+        self.cpu_count.as_ref()
+    }
+
+    /// Returns the effective CPU-percentage scalar without CPU or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_percent(&self) -> Option<&ProjectValue<CpuPercent>> {
+        self.cpu_percent.as_ref()
+    }
+
+    /// Returns the effective CPU-period scalar without CPU or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_period(&self) -> Option<&ProjectValue<CpuPeriod>> {
+        self.cpu_period.as_ref()
+    }
+
+    /// Returns the effective CPU-quota scalar without CPU or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_quota(&self) -> Option<&ProjectValue<CpuQuota>> {
+        self.cpu_quota.as_ref()
+    }
+
+    /// Returns the effective real-time CPU-period scalar without CPU or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_rt_period(&self) -> Option<&ProjectValue<CpuRtPeriod>> {
+        self.cpu_rt_period.as_ref()
+    }
+
     /// Returns the effective raw-preserving service shared-memory size.
     #[must_use]
     pub const fn shm_size(&self) -> Option<&ProjectValue<ShmSize>> {
@@ -2328,6 +3295,137 @@ impl ProjectService {
     pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
         &self.unmodeled_fields
     }
+}
+
+/// Effective block-I/O configuration with nested merge provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectBlkioConfig {
+    weight: Option<ProjectValue<BlkioScalar>>,
+    device_read_bps: Option<ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>>,
+    device_read_iops: Option<ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>>,
+    device_write_bps: Option<ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>>,
+    device_write_iops: Option<ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>>,
+    weight_device: Option<ProjectValue<Vec<ProjectValue<ProjectBlkioWeightDevice>>>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectBlkioConfig {
+    /// Returns the optional effective raw overall weight and its provenance.
+    #[must_use]
+    pub const fn weight(&self) -> Option<&ProjectValue<BlkioScalar>> {
+        self.weight.as_ref()
+    }
+    /// Returns effective ordered read-byte-rate entries, including an explicit empty sequence.
+    #[must_use]
+    pub const fn device_read_bps(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>> {
+        self.device_read_bps.as_ref()
+    }
+    /// Returns effective ordered read-I/O-rate entries, including an explicit empty sequence.
+    #[must_use]
+    pub const fn device_read_iops(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>> {
+        self.device_read_iops.as_ref()
+    }
+    /// Returns effective ordered write-byte-rate entries, including an explicit empty sequence.
+    #[must_use]
+    pub const fn device_write_bps(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>> {
+        self.device_write_bps.as_ref()
+    }
+    /// Returns effective ordered write-I/O-rate entries, including an explicit empty sequence.
+    #[must_use]
+    pub const fn device_write_iops(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>> {
+        self.device_write_iops.as_ref()
+    }
+    /// Returns effective ordered device-weight entries, including an explicit empty sequence.
+    #[must_use]
+    pub const fn weight_device(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectBlkioWeightDevice>>>> {
+        self.weight_device.as_ref()
+    }
+    /// Returns extensions, unknown fields, and malformed members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// One effective block-I/O rate item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectBlkioDeviceRate {
+    form: ProjectBlkioDeviceRateForm,
+    path: Option<ProjectValue<String>>,
+    rate: Option<ProjectValue<BlkioScalar>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectBlkioDeviceRate {
+    /// Returns whether this effective entry is a mapping or retained unmodeled sequence item.
+    #[must_use]
+    pub const fn form(&self) -> ProjectBlkioDeviceRateForm {
+        self.form
+    }
+    /// Returns the effective raw device path and its provenance.
+    #[must_use]
+    pub const fn path(&self) -> Option<&ProjectValue<String>> {
+        self.path.as_ref()
+    }
+    /// Returns the effective raw integer-or-string rate and its provenance.
+    #[must_use]
+    pub const fn rate(&self) -> Option<&ProjectValue<BlkioScalar>> {
+        self.rate.as_ref()
+    }
+    /// Returns extensions, unknown fields, and malformed members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective block-I/O device-rate entry shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectBlkioDeviceRateForm {
+    /// A mapping-form entry.
+    Mapping,
+    /// A non-mapping sequence entry retained as evidence.
+    Unmodeled,
+}
+
+/// One effective block-I/O device-weight item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectBlkioWeightDevice {
+    form: ProjectBlkioWeightDeviceForm,
+    path: Option<ProjectValue<String>>,
+    weight: Option<ProjectValue<BlkioScalar>>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectBlkioWeightDevice {
+    /// Returns whether this effective entry is a mapping or retained unmodeled sequence item.
+    #[must_use]
+    pub const fn form(&self) -> ProjectBlkioWeightDeviceForm {
+        self.form
+    }
+    /// Returns the effective raw device path and its provenance.
+    #[must_use]
+    pub const fn path(&self) -> Option<&ProjectValue<String>> {
+        self.path.as_ref()
+    }
+    /// Returns the effective raw integer-or-string weight and its provenance.
+    #[must_use]
+    pub const fn weight(&self) -> Option<&ProjectValue<BlkioScalar>> {
+        self.weight.as_ref()
+    }
+    /// Returns extensions, unknown fields, and malformed members retained as evidence.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective block-I/O device-weight entry shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectBlkioWeightDeviceForm {
+    /// A mapping-form entry.
+    Mapping,
+    /// A non-mapping sequence entry retained as evidence.
+    Unmodeled,
 }
 
 /// One named top-level resource with key and definition provenance kept separately.
@@ -2565,8 +3663,7 @@ impl<'a> Builder<'a> {
 
     fn service(&mut self, entry: &MergedEntry) -> Option<ProjectService> {
         let pending_start = self.pending_unmodeled.len();
-        let value = entry.value();
-        let fields = self.mapping(value, "service definition must be a mapping")?;
+        let fields = self.mapping(entry.value(), "service definition must be a mapping")?;
         let mut service = ProjectService::from_entry(entry);
         let path = ["services".to_owned(), entry.key().to_owned()];
         for field in fields {
@@ -2584,15 +3681,19 @@ impl<'a> Builder<'a> {
                             sensitive: value.sensitive,
                         });
                 }
+                "platform" => self.set_platform(&mut service, field, &path),
                 "entrypoint" => service.entrypoint = self.entrypoint(field.value()),
                 "command" => service.command = self.command(field.value()),
-                "init" => service.init = self.boolean(field.value(), "service init must be a boolean"),
-                "stdin_open" => {
-                    service.stdin_open = self.boolean(field.value(), "service stdin_open must be a boolean");
-                }
-                "tty" => service.tty = self.boolean(field.value(), "service tty must be a boolean"),
-                "privileged" => {
-                    service.privileged = self.boolean(field.value(), "service privileged must be a boolean");
+                "credential_spec" => self.set_credential_spec(&mut service, field, &path),
+                "extends" => self.set_extends(&mut service, field, &path),
+                "provider" => self.set_provider(&mut service, field, &path),
+                "post_start" => self.set_post_start(&mut service, field, &path),
+                "pre_stop" => self.set_pre_stop(&mut service, field, &path),
+                "pre_start" => self.set_pre_start(&mut service, field, &path),
+                "blkio_config" => self.set_blkio_config(&mut service, field, &path),
+                "cgroup" | "cgroup_parent" => self.set_cgroup(&mut service, field, &path),
+                "attach" | "init" | "stdin_open" | "tty" | "privileged" => {
+                    self.set_service_boolean(&mut service, field, &path);
                 }
                 "environment" => service.environment = self.environment(field.value()),
                 "env_file" => service.environment_files = self.environment_files(field.value(), &path),
@@ -2613,12 +3714,10 @@ impl<'a> Builder<'a> {
                 "expose" => service.expose = self.expose(field.value()),
                 "security_opt" => service.security_options = self.security_options(field.value()),
                 "working_dir" => service.working_dir = self.project_string(field.value(), "service working directory"),
-                "read_only" => {
-                    service.read_only = self
-                        .located_boolean(field.value(), "service read_only must be a boolean")
-                        .map(|value| ProjectValue::new(value.into_value(), field.value()));
+                "read_only" => service.read_only = self.read_only(field.value()),
+                "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "pids_limit" => {
+                    self.set_service_count(&mut service, field, &path);
                 }
-                "pids_limit" => service.pids_limit = self.pids_limit(field.value()),
                 "shm_size" => service.shm_size = self.shm_size(field.value()),
                 "mem_limit" => service.mem_limit = self.mem_limit(field.value()),
                 "tmpfs" => service.tmpfs = self.tmpfs(field.value()),
@@ -2638,10 +3737,10 @@ impl<'a> Builder<'a> {
                     }
                 }
                 "pull_policy" => service.pull_policy = self.pull_policy(field.value()),
+                "pull_refresh_after" => self.set_pull_refresh_after(&mut service, field, &path),
                 "restart" => service.restart = self.restart_policy(field.value()),
-                "stop_signal" => {
-                    service.stop_signal = self.project_string(field.value(), "service stop signal");
-                }
+                "runtime" => self.set_runtime(&mut service, field, &path),
+                "stop_signal" => service.stop_signal = self.project_string(field.value(), "service stop signal"),
                 "stop_grace_period" => {
                     service.stop_grace_period = self.stop_grace_period(field.value());
                 }
@@ -2664,8 +3763,13 @@ impl<'a> Builder<'a> {
         Some(service)
     }
 
-    fn boolean(&mut self, field: &MergedValue, message: &'static str) -> Option<ProjectValue<BooleanValue>> {
+    fn boolean(&mut self, field: &MergedValue, message: &str) -> Option<ProjectValue<BooleanValue>> {
         self.located_boolean(field, message)
+            .map(|value| ProjectValue::new(value.into_value(), field))
+    }
+
+    fn read_only(&mut self, field: &MergedValue) -> Option<ProjectValue<BooleanValue>> {
+        self.located_boolean(field, "service read_only must be a boolean")
             .map(|value| ProjectValue::new(value.into_value(), field))
     }
 
@@ -2674,6 +3778,340 @@ impl<'a> Builder<'a> {
         if service.deploy.is_none() {
             service.unmodeled_fields.push(field_reference(path, field));
         }
+    }
+
+    fn set_credential_spec(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.credential_spec = self.credential_spec(field.value(), path);
+        if service.credential_spec.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_extends(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.extends = self.extends(field.value(), path);
+        if service.extends.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_provider(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.provider = self.provider(field.value(), path);
+        if service.provider.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_post_start(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.post_start = self.post_start(field.value(), path);
+        if service.post_start.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_pre_stop(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.pre_stop = self.pre_stop(field.value(), path);
+        if service.pre_stop.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_pre_start(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.pre_start = self.pre_start(field.value(), path);
+        if service.pre_start.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_runtime(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.runtime = self.strict_project_string(field.value(), "service runtime must be a YAML string scalar");
+        if service.runtime.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_pull_refresh_after(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.pull_refresh_after =
+            self.strict_project_string(field.value(), "service pull_refresh_after must be a YAML string scalar");
+        if service.pull_refresh_after.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_platform(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.platform = self.strict_project_string(field.value(), "service platform must be a YAML string scalar");
+        if service.platform.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_attach(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.attach = self.boolean(field.value(), "service attach must be a boolean");
+        if service.attach.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_service_boolean(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        match field.key() {
+            "attach" => self.set_attach(service, field, path),
+            "init" => service.init = self.boolean(field.value(), "service init must be a boolean"),
+            "stdin_open" => {
+                service.stdin_open = self.boolean(field.value(), "service stdin_open must be a boolean");
+            }
+            "tty" => service.tty = self.boolean(field.value(), "service tty must be a boolean"),
+            "privileged" => {
+                service.privileged = self.boolean(field.value(), "service privileged must be a boolean");
+            }
+            _ => {}
+        }
+    }
+
+    fn set_service_count(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        match field.key() {
+            "cpu_count" => {
+                service.cpu_count = self.cpu_count(field.value());
+                if service.cpu_count.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpu_percent" => {
+                service.cpu_percent = self.cpu_percent(field.value());
+                if service.cpu_percent.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpu_period" => {
+                service.cpu_period = self.cpu_period(field.value());
+                if service.cpu_period.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpu_quota" => {
+                service.cpu_quota = self.cpu_quota(field.value());
+                if service.cpu_quota.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpu_rt_period" => {
+                service.cpu_rt_period = self.cpu_rt_period(field.value());
+                if service.cpu_rt_period.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "pids_limit" => service.pids_limit = self.pids_limit(field.value()),
+            _ => {}
+        }
+    }
+
+    fn set_blkio_config(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.blkio_config = self.blkio_config(field.value(), path);
+        if service.blkio_config.is_none() {
+            service.unmodeled_fields.push(field_reference(path, field));
+        }
+    }
+
+    fn set_cgroup(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        match field.key() {
+            "cgroup" => {
+                service.cgroup = self.cgroup_namespace(field.value());
+                if service.cgroup.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cgroup_parent" => {
+                service.cgroup_parent =
+                    self.strict_project_string(field.value(), "service cgroup_parent must be a YAML string scalar");
+                if service.cgroup_parent.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn cgroup_namespace(&mut self, value: &MergedValue) -> Option<ProjectValue<CgroupNamespace>> {
+        let raw = self.strict_project_string(value, "service cgroup must be a YAML string scalar")?;
+        let cgroup = CgroupNamespace::parse(Located::new(raw.value, effective_span(value)));
+        if !cgroup.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    crate::model::CGROUP_NAMESPACE_INVALID,
+                    Severity::Warning,
+                    "service cgroup must be `host`, `private`, or a deferred expression",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    cgroup.raw().span(),
+                    "retained unsupported cgroup namespace",
+                )),
+            );
+        }
+        Some(ProjectValue {
+            value: cgroup,
+            provenance: raw.provenance,
+            sensitive: raw.sensitive,
+        })
+    }
+
+    fn blkio_config(&mut self, value: &MergedValue, path: &[String]) -> Option<ProjectValue<ProjectBlkioConfig>> {
+        let fields = self.mapping(value, "blkio_config must be a mapping")?;
+        let mut config = ProjectBlkioConfig {
+            weight: None,
+            device_read_bps: None,
+            device_read_iops: None,
+            device_write_bps: None,
+            device_write_iops: None,
+            weight_device: None,
+            unmodeled_fields: Vec::new(),
+        };
+        let mut config_path = path.to_vec();
+        config_path.push("blkio_config".to_owned());
+        for field in fields {
+            match field.key() {
+                "weight" => {
+                    if let Some(value) = self.blkio_scalar(field.value()) {
+                        config.weight = Some(value);
+                    } else {
+                        config.unmodeled_fields.push(field_reference(&config_path, field));
+                    }
+                }
+                "device_read_bps" | "device_read_iops" | "device_write_bps" | "device_write_iops" => {
+                    let rates = self.blkio_rates(field.value(), &config_path, field.key());
+                    let malformed = rates.is_none();
+                    match field.key() {
+                        "device_read_bps" => config.device_read_bps = rates,
+                        "device_read_iops" => config.device_read_iops = rates,
+                        "device_write_bps" => config.device_write_bps = rates,
+                        "device_write_iops" => config.device_write_iops = rates,
+                        _ => unreachable!("blkio rate key was matched above"),
+                    }
+                    if malformed {
+                        config.unmodeled_fields.push(field_reference(&config_path, field));
+                    }
+                }
+                "weight_device" => {
+                    config.weight_device = self.blkio_weight_devices(field.value(), &config_path, field.key());
+                    if config.weight_device.is_none() {
+                        config.unmodeled_fields.push(field_reference(&config_path, field));
+                    }
+                }
+                _ => config.unmodeled_fields.push(field_reference(&config_path, field)),
+            }
+        }
+        Some(ProjectValue::new(config, value))
+    }
+
+    fn blkio_scalar(&mut self, value: &MergedValue) -> Option<ProjectValue<BlkioScalar>> {
+        let Some(scalar) = value.as_scalar() else {
+            self.expected(value, "blkio value must be a YAML integer or string scalar");
+            return None;
+        };
+        let parsed = match scalar.kind() {
+            MergedScalarKind::Number if Self::yaml_integer_spelling(scalar.value()) => {
+                BlkioScalar::YamlInteger(scalar.value().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                BlkioScalar::String(scalar.value().to_owned())
+            }
+            _ => {
+                self.expected(value, "blkio value must be a YAML integer or string scalar");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(parsed, value))
+    }
+
+    fn blkio_rates(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+        sequence_name: &str,
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectBlkioDeviceRate>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, "blkio device rates must be a sequence");
+            return None;
+        };
+        let mut item_path = path.to_vec();
+        item_path.push(sequence_name.to_owned());
+        let mut items = Vec::new();
+        for item in values {
+            let mut rate = ProjectBlkioDeviceRate {
+                form: ProjectBlkioDeviceRateForm::Unmodeled,
+                path: None,
+                rate: None,
+                unmodeled_fields: Vec::new(),
+            };
+            if let Some(fields) = self.mapping(item, "blkio device rate entries must be mappings") {
+                rate.form = ProjectBlkioDeviceRateForm::Mapping;
+                for field in fields {
+                    match field.key() {
+                        "path" => {
+                            rate.path = self
+                                .strict_project_string(field.value(), "blkio device path must be a YAML string scalar");
+                            if rate.path.is_none() {
+                                rate.unmodeled_fields.push(field_reference(&item_path, field));
+                            }
+                        }
+                        "rate" => {
+                            rate.rate = self.blkio_scalar(field.value());
+                            if rate.rate.is_none() {
+                                rate.unmodeled_fields.push(field_reference(&item_path, field));
+                            }
+                        }
+                        _ => rate.unmodeled_fields.push(field_reference(&item_path, field)),
+                    }
+                }
+            }
+            items.push(ProjectValue::new(rate, item));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn blkio_weight_devices(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+        sequence_name: &str,
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectBlkioWeightDevice>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, "blkio weight devices must be a sequence");
+            return None;
+        };
+        let mut item_path = path.to_vec();
+        item_path.push(sequence_name.to_owned());
+        let mut items = Vec::new();
+        for item in values {
+            let mut weight = ProjectBlkioWeightDevice {
+                form: ProjectBlkioWeightDeviceForm::Unmodeled,
+                path: None,
+                weight: None,
+                unmodeled_fields: Vec::new(),
+            };
+            if let Some(fields) = self.mapping(item, "blkio weight device entries must be mappings") {
+                weight.form = ProjectBlkioWeightDeviceForm::Mapping;
+                for field in fields {
+                    match field.key() {
+                        "path" => {
+                            weight.path = self.strict_project_string(
+                                field.value(),
+                                "blkio weight device path must be a YAML string scalar",
+                            );
+                            if weight.path.is_none() {
+                                weight.unmodeled_fields.push(field_reference(&item_path, field));
+                            }
+                        }
+                        "weight" => {
+                            weight.weight = self.blkio_scalar(field.value());
+                            if weight.weight.is_none() {
+                                weight.unmodeled_fields.push(field_reference(&item_path, field));
+                            }
+                        }
+                        _ => weight.unmodeled_fields.push(field_reference(&item_path, field)),
+                    }
+                }
+            }
+            items.push(ProjectValue::new(weight, item));
+        }
+        Some(ProjectValue::new(items, value))
     }
 
     fn service_deploy(&mut self, field: &MergedEntry, path: &[String]) -> Option<ProjectValue<ProjectDeploy>> {
@@ -2686,7 +4124,10 @@ impl<'a> Builder<'a> {
             mode: None,
             placement: None,
             replicas: None,
+            resources: None,
             restart_policy: None,
+            rollback_config: None,
+            update_config: None,
             unmodeled_fields: Vec::new(),
         };
         for nested in fields {
@@ -2728,9 +4169,30 @@ impl<'a> Builder<'a> {
                         deploy.unmodeled_fields.push(field_reference(&deploy_path, nested));
                     }
                 }
+                "resources" => {
+                    if let Some(resources) = self.deploy_resources(nested.value(), &deploy_path) {
+                        deploy.resources = Some(resources);
+                    } else {
+                        deploy.unmodeled_fields.push(field_reference(&deploy_path, nested));
+                    }
+                }
                 "restart_policy" => {
                     if let Some(policy) = self.deploy_restart_policy(nested.value(), &deploy_path) {
                         deploy.restart_policy = Some(policy);
+                    } else {
+                        deploy.unmodeled_fields.push(field_reference(&deploy_path, nested));
+                    }
+                }
+                "rollback_config" => {
+                    if let Some(config) = self.deploy_rollback_config(nested.value(), &deploy_path) {
+                        deploy.rollback_config = Some(config);
+                    } else {
+                        deploy.unmodeled_fields.push(field_reference(&deploy_path, nested));
+                    }
+                }
+                "update_config" => {
+                    if let Some(config) = self.deploy_update_config(nested.value(), &deploy_path) {
+                        deploy.update_config = Some(config);
                     } else {
                         deploy.unmodeled_fields.push(field_reference(&deploy_path, nested));
                     }
@@ -2859,6 +4321,721 @@ impl<'a> Builder<'a> {
         Some(ProjectValue::new(replicas, value))
     }
 
+    fn deploy_resources(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<ProjectDeployResources>> {
+        let fields = self.mapping(value, "deploy resources must be a mapping")?;
+        let mut resources_path = path.to_vec();
+        resources_path.push("resources".to_owned());
+        let mut resources = ProjectDeployResources {
+            limits: None,
+            reservations: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            match field.key() {
+                "limits" => {
+                    if let Some(limits) = self.deploy_resource_limits(field.value(), &resources_path) {
+                        resources.limits = Some(limits);
+                    } else {
+                        resources.unmodeled_fields.push(field_reference(&resources_path, field));
+                    }
+                }
+                "reservations" => {
+                    if let Some(reservations) = self.deploy_resource_reservations(field.value(), &resources_path) {
+                        resources.reservations = Some(reservations);
+                    } else {
+                        resources.unmodeled_fields.push(field_reference(&resources_path, field));
+                    }
+                }
+                _ => resources.unmodeled_fields.push(field_reference(&resources_path, field)),
+            }
+        }
+        Some(ProjectValue::new(resources, value))
+    }
+
+    fn deploy_resource_limits(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<ProjectDeployResourceLimits>> {
+        let fields = self.mapping(value, "deploy resource limits must be a mapping")?;
+        let mut limits_path = path.to_vec();
+        limits_path.push("limits".to_owned());
+        let mut limits = ProjectDeployResourceLimits {
+            cpus: None,
+            memory: None,
+            pids: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            match field.key() {
+                "cpus" => {
+                    if let Some(cpus) = self.deploy_resource_cpus(
+                        field.value(),
+                        "deploy resource limits cpus must be a YAML number or string scalar",
+                    ) {
+                        limits.cpus = Some(cpus);
+                    } else {
+                        limits.unmodeled_fields.push(field_reference(&limits_path, field));
+                    }
+                }
+                "memory" => {
+                    if let Some(memory) = self.deploy_resource_memory(
+                        field.value(),
+                        "deploy resource limits memory must be a YAML string scalar",
+                    ) {
+                        limits.memory = Some(memory);
+                    } else {
+                        limits.unmodeled_fields.push(field_reference(&limits_path, field));
+                    }
+                }
+                "pids" => {
+                    if let Some(pids) = self.deploy_resource_pids(field.value()) {
+                        limits.pids = Some(pids);
+                    } else {
+                        limits.unmodeled_fields.push(field_reference(&limits_path, field));
+                    }
+                }
+                _ => limits.unmodeled_fields.push(field_reference(&limits_path, field)),
+            }
+        }
+        Some(ProjectValue::new(limits, value))
+    }
+
+    fn deploy_resource_reservations(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<ProjectDeployResourceReservations>> {
+        let fields = self.mapping(value, "deploy resource reservations must be a mapping")?;
+        let mut reservations_path = path.to_vec();
+        reservations_path.push("reservations".to_owned());
+        let mut reservations = ProjectDeployResourceReservations {
+            cpus: None,
+            memory: None,
+            generic_resources: None,
+            devices: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            match field.key() {
+                "cpus" => {
+                    if let Some(cpus) = self.deploy_resource_cpus(
+                        field.value(),
+                        "deploy resource reservations cpus must be a YAML number or string scalar",
+                    ) {
+                        reservations.cpus = Some(cpus);
+                    } else {
+                        reservations
+                            .unmodeled_fields
+                            .push(field_reference(&reservations_path, field));
+                    }
+                }
+                "memory" => {
+                    if let Some(memory) = self.deploy_resource_memory(
+                        field.value(),
+                        "deploy resource reservations memory must be a YAML string scalar",
+                    ) {
+                        reservations.memory = Some(memory);
+                    } else {
+                        reservations
+                            .unmodeled_fields
+                            .push(field_reference(&reservations_path, field));
+                    }
+                }
+                "generic_resources" => {
+                    if let Some(values) = self.deploy_generic_resources(field.value(), &reservations_path) {
+                        reservations.generic_resources = Some(values);
+                    } else {
+                        reservations
+                            .unmodeled_fields
+                            .push(field_reference(&reservations_path, field));
+                    }
+                }
+                "devices" => {
+                    if let Some(values) = self.deploy_reservation_devices(field.value(), &reservations_path) {
+                        reservations.devices = Some(values);
+                    } else {
+                        reservations
+                            .unmodeled_fields
+                            .push(field_reference(&reservations_path, field));
+                    }
+                }
+                _ => reservations
+                    .unmodeled_fields
+                    .push(field_reference(&reservations_path, field)),
+            }
+        }
+        Some(ProjectValue::new(reservations, value))
+    }
+
+    fn deploy_reservation_devices(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectDeployReservationDevice>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, "deploy resource reservation devices must be a sequence");
+            return None;
+        };
+        let mut item_path = path.to_vec();
+        item_path.push("devices".to_owned());
+        let mut items = Vec::new();
+        for item in values {
+            let Some(fields) = self.mapping(item, "deploy resource reservation device entries must be mappings") else {
+                items.push(ProjectValue::new(
+                    ProjectDeployReservationDevice {
+                        form: ProjectDeployReservationDeviceForm::Unmodeled,
+                        capabilities: None,
+                        driver: None,
+                        count: None,
+                        device_ids: None,
+                        options: None,
+                        unmodeled_fields: Vec::new(),
+                    },
+                    item,
+                ));
+                continue;
+            };
+            let mut device = ProjectDeployReservationDevice {
+                form: ProjectDeployReservationDeviceForm::Mapping,
+                capabilities: None,
+                driver: None,
+                count: None,
+                device_ids: None,
+                options: None,
+                unmodeled_fields: Vec::new(),
+            };
+            let mut has_capabilities = false;
+            let mut count_field = None;
+            let mut device_ids_field = None;
+            for field in fields {
+                match field.key() {
+                    "capabilities" => {
+                        has_capabilities = true;
+                        if let Some(capabilities) = self.deploy_reservation_device_capabilities(field.value()) {
+                            device.capabilities = Some(capabilities);
+                        } else {
+                            device.unmodeled_fields.push(field_reference(&item_path, field));
+                        }
+                    }
+                    "driver" => {
+                        let Some(scalar) = field.value().as_scalar() else {
+                            self.expected(
+                                field.value(),
+                                "deploy resource reservation device driver must be a YAML string scalar",
+                            );
+                            device.unmodeled_fields.push(field_reference(&item_path, field));
+                            continue;
+                        };
+                        if !scalar.is_strict_yaml_string() {
+                            self.expected(
+                                field.value(),
+                                "deploy resource reservation device driver must be a YAML string scalar",
+                            );
+                            device.unmodeled_fields.push(field_reference(&item_path, field));
+                            continue;
+                        }
+                        device.driver = Some(ProjectValue::new(scalar.value().to_owned(), field.value()));
+                    }
+                    "count" => {
+                        count_field.get_or_insert(field);
+                        if let Some(count) = self.deploy_reservation_device_count(field.value()) {
+                            device.count = Some(count);
+                        } else {
+                            device.unmodeled_fields.push(field_reference(&item_path, field));
+                        }
+                    }
+                    "device_ids" => {
+                        device_ids_field.get_or_insert(field);
+                        if let Some(device_ids) = self.deploy_reservation_device_ids(field.value()) {
+                            device.device_ids = Some(device_ids);
+                        } else {
+                            device.unmodeled_fields.push(field_reference(&item_path, field));
+                        }
+                    }
+                    "options" => {
+                        if let Some(options) = self.deploy_reservation_device_options(field.value(), &item_path) {
+                            device.options = Some(options);
+                        } else {
+                            device.unmodeled_fields.push(field_reference(&item_path, field));
+                        }
+                    }
+                    _ => device.unmodeled_fields.push(field_reference(&item_path, field)),
+                }
+            }
+            self.reservation_device_allocation_selector_conflict(count_field, device_ids_field);
+            if !has_capabilities {
+                self.missing(
+                    item,
+                    "deploy resource reservation device is missing required `capabilities`",
+                );
+            }
+            items.push(ProjectValue::new(device, item));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn reservation_device_allocation_selector_conflict(
+        &mut self,
+        count: Option<&MergedEntry>,
+        device_ids: Option<&MergedEntry>,
+    ) {
+        let (Some(count), Some(device_ids)) = (count, device_ids) else {
+            return;
+        };
+        self.diagnostics.push(
+            Diagnostic::new(
+                DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT,
+                Severity::Error,
+                "deploy resource reservation device count and device_ids are mutually exclusive",
+            )
+            .with_label(DiagnosticLabel::primary(entry_span(count), "count retained"))
+            .with_label(DiagnosticLabel::secondary(
+                entry_span(device_ids),
+                "device_ids retained",
+            )),
+        );
+    }
+
+    fn deploy_reservation_device_count(
+        &mut self,
+        value: &MergedValue,
+    ) -> Option<ProjectValue<DeployReservationDeviceCount>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "deploy resource reservation device count must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let count = match scalar.kind() {
+            MergedScalarKind::Number if Self::yaml_integer_spelling(scalar.value()) => {
+                DeployReservationDeviceCount::YamlInteger(scalar.value().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                DeployReservationDeviceCount::String(scalar.value().to_owned())
+            }
+            MergedScalarKind::Number | MergedScalarKind::String | MergedScalarKind::Boolean => {
+                self.expected(
+                    value,
+                    "deploy resource reservation device count must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(count, value))
+    }
+
+    fn deploy_reservation_device_ids(
+        &mut self,
+        value: &MergedValue,
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectDeployReservationDeviceId>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(
+                value,
+                "deploy resource reservation device device_ids must be a sequence",
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        for item in values {
+            let MergedValueKind::Scalar(scalar) = item.kind() else {
+                self.expected(
+                    item,
+                    "deploy resource reservation device device_ids must be string scalars",
+                );
+                items.push(ProjectValue::new(
+                    ProjectDeployReservationDeviceId {
+                        form: ProjectDeployReservationDeviceIdForm::Unmodeled,
+                        value: None,
+                    },
+                    item,
+                ));
+                continue;
+            };
+            if scalar.kind() != MergedScalarKind::String || !scalar.is_strict_yaml_string() {
+                self.expected(
+                    item,
+                    "deploy resource reservation device device_ids must be string scalars",
+                );
+                items.push(ProjectValue::new(
+                    ProjectDeployReservationDeviceId {
+                        form: ProjectDeployReservationDeviceIdForm::Unmodeled,
+                        value: None,
+                    },
+                    item,
+                ));
+                continue;
+            }
+            items.push(ProjectValue::new(
+                ProjectDeployReservationDeviceId {
+                    form: ProjectDeployReservationDeviceIdForm::String,
+                    value: Some(ProjectValue::new(scalar.value().to_owned(), item)),
+                },
+                item,
+            ));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn deploy_reservation_device_options(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<ProjectDeployReservationDeviceOptions>> {
+        match value.kind() {
+            MergedValueKind::Mapping(entries) => {
+                let mut items = Vec::new();
+                let mut unmodeled_entries = Vec::new();
+                let mut option_path = path.to_vec();
+                option_path.push("options".to_owned());
+                for entry in entries {
+                    if entry.key().is_empty() || !entry.is_strict_yaml_string() {
+                        self.diagnostics.push(Diagnostic::new(DEPLOY_RESERVATION_DEVICE_OPTIONS_INVALID_KEY, Severity::Error,
+                            "deploy resource reservation device options mapping keys must be non-empty strict YAML strings")
+                            .with_label(DiagnosticLabel::primary(entry_span(entry), "invalid option key")));
+                        unmodeled_entries.push(field_reference(&option_path, entry));
+                        continue;
+                    }
+                    let Some(option_value) = self.compose_scalar(entry.value(),
+                        "deploy resource reservation device options mapping values must be scalar strings, numbers, booleans, or null") else {
+                        unmodeled_entries.push(field_reference(&option_path, entry));
+                        continue;
+                    };
+                    items.push(ProjectValue::new(
+                        ProjectDeployReservationDeviceOption {
+                            name: ProjectKey::from_entry(entry),
+                            value: ProjectValue::new(option_value, entry.value()),
+                        },
+                        entry.value(),
+                    ));
+                }
+                Some(ProjectValue::new(
+                    ProjectDeployReservationDeviceOptions::Map {
+                        entries: items,
+                        unmodeled_entries,
+                    },
+                    value,
+                ))
+            }
+            MergedValueKind::Sequence(values) => {
+                let mut items = Vec::new();
+                let mut seen = BTreeMap::new();
+                for item in values {
+                    let MergedValueKind::Scalar(scalar) = item.kind() else {
+                        self.expected(item, "deploy resource reservation device options list entries must be strict YAML string scalars");
+                        items.push(ProjectValue::new(
+                            ProjectDeployReservationDeviceOptionItem {
+                                form: ProjectDeployReservationDeviceOptionItemForm::Unmodeled,
+                                value: None,
+                            },
+                            item,
+                        ));
+                        continue;
+                    };
+                    if scalar.kind() != MergedScalarKind::String || !scalar.is_strict_yaml_string() {
+                        self.expected(item, "deploy resource reservation device options list entries must be strict YAML string scalars");
+                        items.push(ProjectValue::new(
+                            ProjectDeployReservationDeviceOptionItem {
+                                form: ProjectDeployReservationDeviceOptionItemForm::Unmodeled,
+                                value: None,
+                            },
+                            item,
+                        ));
+                        continue;
+                    }
+                    let span = effective_span(item);
+                    if let Some(first) = seen.get(scalar.value()) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                DEPLOY_RESERVATION_DEVICE_OPTIONS_DUPLICATE_ITEM,
+                                Severity::Error,
+                                "deploy resource reservation device options list entries must be unique exact strings",
+                            )
+                            .with_label(DiagnosticLabel::primary(span, "duplicate option string"))
+                            .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                        );
+                    } else {
+                        seen.insert(scalar.value().to_owned(), span);
+                    }
+                    items.push(ProjectValue::new(
+                        ProjectDeployReservationDeviceOptionItem {
+                            form: ProjectDeployReservationDeviceOptionItemForm::String,
+                            value: Some(ProjectValue::new(scalar.value().to_owned(), item)),
+                        },
+                        item,
+                    ));
+                }
+                Some(ProjectValue::new(
+                    ProjectDeployReservationDeviceOptions::List(items),
+                    value,
+                ))
+            }
+            _ => {
+                self.expected(
+                    value,
+                    "deploy resource reservation device options must be a mapping or sequence",
+                );
+                None
+            }
+        }
+    }
+
+    fn deploy_reservation_device_capabilities(
+        &mut self,
+        value: &MergedValue,
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectDeployReservationDeviceCapability>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(
+                value,
+                "deploy resource reservation device capabilities must be a sequence of strings",
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        let mut seen = BTreeMap::new();
+        for item in values {
+            let MergedValueKind::Scalar(scalar) = item.kind() else {
+                self.expected(
+                    item,
+                    "deploy resource reservation device capabilities must be string scalars",
+                );
+                items.push(ProjectValue::new(
+                    ProjectDeployReservationDeviceCapability {
+                        form: ProjectDeployReservationDeviceCapabilityForm::Unmodeled,
+                        value: None,
+                    },
+                    item,
+                ));
+                continue;
+            };
+            if scalar.kind() != MergedScalarKind::String {
+                self.expected(
+                    item,
+                    "deploy resource reservation device capabilities must be string scalars",
+                );
+                items.push(ProjectValue::new(
+                    ProjectDeployReservationDeviceCapability {
+                        form: ProjectDeployReservationDeviceCapabilityForm::Unmodeled,
+                        value: None,
+                    },
+                    item,
+                ));
+                continue;
+            }
+            let span = effective_span(item);
+            if let Some(first) = seen.get(scalar.value()) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DEPLOY_RESERVATION_DEVICE_CAPABILITY_DUPLICATE_ITEM,
+                        Severity::Error,
+                        "deploy resource reservation device capabilities must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(span, "duplicate capability string"))
+                    .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                );
+            } else {
+                seen.insert(scalar.value().to_owned(), span);
+            }
+            items.push(ProjectValue::new(
+                ProjectDeployReservationDeviceCapability {
+                    form: ProjectDeployReservationDeviceCapabilityForm::String,
+                    value: Some(ProjectValue::new(scalar.value().to_owned(), item)),
+                },
+                item,
+            ));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn deploy_generic_resources(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectDeployGenericResource>>>> {
+        let Some(values) = value.as_sequence() else {
+            self.expected(
+                value,
+                "deploy resource reservations generic_resources must be a sequence",
+            );
+            return None;
+        };
+        let mut item_path = path.to_vec();
+        item_path.push("generic_resources".to_owned());
+        let mut items = Vec::new();
+        for item in values {
+            let Some(fields) = self.mapping(item, "deploy resource generic-resource entries must be mappings") else {
+                items.push(ProjectValue::new(
+                    ProjectDeployGenericResource {
+                        form: ProjectDeployGenericResourceForm::Unmodeled,
+                        discrete_resource_spec: None,
+                        unmodeled_fields: Vec::new(),
+                    },
+                    item,
+                ));
+                continue;
+            };
+            let mut resource = ProjectDeployGenericResource {
+                form: ProjectDeployGenericResourceForm::Mapping,
+                discrete_resource_spec: None,
+                unmodeled_fields: Vec::new(),
+            };
+            for field in fields {
+                match field.key() {
+                    "discrete_resource_spec" => {
+                        if let Some(spec) = self.deploy_discrete_resource_spec(field.value(), &item_path) {
+                            resource.discrete_resource_spec = Some(spec);
+                        } else {
+                            resource.unmodeled_fields.push(field_reference(&item_path, field));
+                        }
+                    }
+                    _ => resource.unmodeled_fields.push(field_reference(&item_path, field)),
+                }
+            }
+            items.push(ProjectValue::new(resource, item));
+        }
+        Some(ProjectValue::new(items, value))
+    }
+
+    fn deploy_discrete_resource_spec(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<ProjectDeployDiscreteResourceSpec>> {
+        let fields = self.mapping(value, "deploy discrete_resource_spec must be a mapping")?;
+        let mut spec_path = path.to_vec();
+        spec_path.push("discrete_resource_spec".to_owned());
+        let mut spec = ProjectDeployDiscreteResourceSpec {
+            kind: None,
+            value: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            match field.key() {
+                "kind" => {
+                    let MergedValueKind::Scalar(scalar) = field.value().kind() else {
+                        self.expected(
+                            field.value(),
+                            "deploy discrete_resource_spec kind must be a YAML string scalar",
+                        );
+                        spec.unmodeled_fields.push(field_reference(&spec_path, field));
+                        continue;
+                    };
+                    if scalar.kind() == MergedScalarKind::String {
+                        spec.kind = Some(ProjectValue::new(scalar.value().to_owned(), field.value()));
+                    } else {
+                        self.expected(
+                            field.value(),
+                            "deploy discrete_resource_spec kind must be a YAML string scalar",
+                        );
+                        spec.unmodeled_fields.push(field_reference(&spec_path, field));
+                    }
+                }
+                "value" => {
+                    if let Some(number) = self.deploy_discrete_resource_value(field.value()) {
+                        spec.value = Some(number);
+                    } else {
+                        spec.unmodeled_fields.push(field_reference(&spec_path, field));
+                    }
+                }
+                _ => spec.unmodeled_fields.push(field_reference(&spec_path, field)),
+            }
+        }
+        Some(ProjectValue::new(spec, value))
+    }
+
+    fn deploy_discrete_resource_value(
+        &mut self,
+        value: &MergedValue,
+    ) -> Option<ProjectValue<DeployDiscreteResourceValue>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "deploy discrete_resource_spec value must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let scalar_value = match scalar.kind() {
+            MergedScalarKind::Number => DeployDiscreteResourceValue::YamlNumber(scalar.value().to_owned()),
+            MergedScalarKind::String => DeployDiscreteResourceValue::String(scalar.value().to_owned()),
+            MergedScalarKind::Boolean => {
+                self.expected(
+                    value,
+                    "deploy discrete_resource_spec value must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(scalar_value, value))
+    }
+
+    fn deploy_resource_cpus(
+        &mut self,
+        value: &MergedValue,
+        message: &'static str,
+    ) -> Option<ProjectValue<DeployResourceCpus>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, message);
+            return None;
+        };
+        let cpus = match scalar.kind() {
+            MergedScalarKind::Number => DeployResourceCpus::YamlNumber(scalar.value().to_owned()),
+            MergedScalarKind::String => DeployResourceCpus::String(scalar.value().to_owned()),
+            MergedScalarKind::Boolean => {
+                self.expected(value, message);
+                return None;
+            }
+        };
+        Some(ProjectValue::new(cpus, value))
+    }
+
+    fn deploy_resource_memory(
+        &mut self,
+        value: &MergedValue,
+        message: &'static str,
+    ) -> Option<ProjectValue<DeployResourceMemory>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, message);
+            return None;
+        };
+        if scalar.kind() != MergedScalarKind::String {
+            self.expected(value, message);
+            return None;
+        }
+        Some(ProjectValue::new(
+            DeployResourceMemory::parse(scalar.value().to_owned()),
+            value,
+        ))
+    }
+
+    fn deploy_resource_pids(&mut self, value: &MergedValue) -> Option<ProjectValue<DeployResourcePids>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "deploy resource limits pids must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let pids = match scalar.kind() {
+            MergedScalarKind::Number if Self::yaml_integer_spelling(scalar.value()) => {
+                DeployResourcePids::YamlInteger(scalar.value().to_owned())
+            }
+            MergedScalarKind::String => DeployResourcePids::String(scalar.value().to_owned()),
+            MergedScalarKind::Number | MergedScalarKind::Boolean => {
+                self.expected(
+                    value,
+                    "deploy resource limits pids must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(pids, value))
+    }
+
     fn deploy_restart_policy(
         &mut self,
         value: &MergedValue,
@@ -2943,6 +5120,292 @@ impl<'a> Builder<'a> {
             }
         };
         Some(ProjectValue::new(parsed, value))
+    }
+
+    fn deploy_update_config(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<ProjectDeployUpdateConfig>> {
+        let fields = self.mapping(value, "deploy update_config must be a mapping")?;
+        let mut member_path = path.to_vec();
+        member_path.push("update_config".to_owned());
+        let mut config = ProjectDeployUpdateConfig {
+            parallelism: None,
+            delay: None,
+            monitor: None,
+            failure_action: None,
+            max_failure_ratio: None,
+            order: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            let typed = match field.key() {
+                "parallelism" => self.deploy_update_parallelism(field.value()).map(|value| {
+                    config.parallelism = Some(value);
+                }),
+                "delay" => self
+                    .strict_project_string(field.value(), "deploy update_config delay must be a YAML string scalar")
+                    .map(|value| {
+                        config.delay = Some(value);
+                    }),
+                "monitor" => self
+                    .strict_project_string(
+                        field.value(),
+                        "deploy update_config monitor must be a YAML string scalar",
+                    )
+                    .map(|value| {
+                        config.monitor = Some(value);
+                    }),
+                "failure_action" => self
+                    .strict_project_string(
+                        field.value(),
+                        "deploy update_config failure_action must be a YAML string scalar",
+                    )
+                    .map(|value| {
+                        config.failure_action = Some(value);
+                    }),
+                "max_failure_ratio" => self.deploy_update_max_failure_ratio(field.value()).map(|value| {
+                    config.max_failure_ratio = Some(value);
+                }),
+                "order" => self.deploy_update_order(field.value()).map(|value| {
+                    config.order = Some(value);
+                }),
+                _ => {
+                    config.unmodeled_fields.push(field_reference(&member_path, field));
+                    Some(())
+                }
+            };
+            if typed.is_none() {
+                config.unmodeled_fields.push(field_reference(&member_path, field));
+            }
+        }
+        Some(ProjectValue::new(config, value))
+    }
+
+    fn deploy_rollback_config(
+        &mut self,
+        value: &MergedValue,
+        path: &[String],
+    ) -> Option<ProjectValue<ProjectDeployRollbackConfig>> {
+        let fields = self.mapping(value, "deploy rollback_config must be a mapping")?;
+        let mut member_path = path.to_vec();
+        member_path.push("rollback_config".to_owned());
+        let mut config = ProjectDeployRollbackConfig {
+            parallelism: None,
+            delay: None,
+            monitor: None,
+            failure_action: None,
+            max_failure_ratio: None,
+            order: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            let typed = match field.key() {
+                "parallelism" => self.deploy_rollback_parallelism(field.value()).map(|value| {
+                    config.parallelism = Some(value);
+                }),
+                "delay" => self
+                    .strict_project_string(
+                        field.value(),
+                        "deploy rollback_config delay must be a YAML string scalar",
+                    )
+                    .map(|value| {
+                        config.delay = Some(value);
+                    }),
+                "monitor" => self
+                    .strict_project_string(
+                        field.value(),
+                        "deploy rollback_config monitor must be a YAML string scalar",
+                    )
+                    .map(|value| {
+                        config.monitor = Some(value);
+                    }),
+                "failure_action" => self
+                    .strict_project_string(
+                        field.value(),
+                        "deploy rollback_config failure_action must be a YAML string scalar",
+                    )
+                    .map(|value| {
+                        config.failure_action = Some(value);
+                    }),
+                "max_failure_ratio" => self.deploy_rollback_max_failure_ratio(field.value()).map(|value| {
+                    config.max_failure_ratio = Some(value);
+                }),
+                "order" => self.deploy_rollback_order(field.value()).map(|value| {
+                    config.order = Some(value);
+                }),
+                _ => {
+                    config.unmodeled_fields.push(field_reference(&member_path, field));
+                    Some(())
+                }
+            };
+            if typed.is_none() {
+                config.unmodeled_fields.push(field_reference(&member_path, field));
+            }
+        }
+        Some(ProjectValue::new(config, value))
+    }
+
+    fn deploy_rollback_parallelism(&mut self, value: &MergedValue) -> Option<ProjectValue<DeployRollbackParallelism>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "deploy rollback_config parallelism must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let parsed = match scalar.kind() {
+            MergedScalarKind::Number if Self::yaml_integer_spelling(scalar.value()) => {
+                DeployRollbackParallelism::YamlInteger(scalar.value().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                DeployRollbackParallelism::String(scalar.value().to_owned())
+            }
+            _ => {
+                self.expected(
+                    value,
+                    "deploy rollback_config parallelism must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(parsed, value))
+    }
+
+    fn deploy_rollback_max_failure_ratio(
+        &mut self,
+        value: &MergedValue,
+    ) -> Option<ProjectValue<DeployRollbackMaxFailureRatio>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "deploy rollback_config max_failure_ratio must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let parsed = match scalar.kind() {
+            MergedScalarKind::Number => DeployRollbackMaxFailureRatio::YamlNumber(scalar.value().to_owned()),
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                DeployRollbackMaxFailureRatio::String(scalar.value().to_owned())
+            }
+            _ => {
+                self.expected(
+                    value,
+                    "deploy rollback_config max_failure_ratio must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(parsed, value))
+    }
+
+    fn deploy_rollback_order(&mut self, value: &MergedValue) -> Option<ProjectValue<DeployRollbackOrder>> {
+        let raw = self.strict_project_string(value, "deploy rollback_config order must be a YAML string scalar")?;
+        let order = DeployRollbackOrder::parse(raw.value().to_owned());
+        if !order.is_documented() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEPLOY_ROLLBACK_CONFIG_ORDER_PORTABILITY,
+                    Severity::Warning,
+                    "deploy rollback_config order is outside Compose's documented portable values",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "retained provider-specific rollback order",
+                )),
+            );
+        }
+        Some(ProjectValue {
+            value: order,
+            provenance: raw.provenance,
+            sensitive: raw.sensitive,
+        })
+    }
+
+    fn strict_project_string(&mut self, value: &MergedValue, message: &str) -> Option<ProjectValue<String>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, message);
+            return None;
+        };
+        if scalar.kind() != MergedScalarKind::String || !scalar.is_strict_yaml_string() {
+            self.expected(value, message);
+            return None;
+        }
+        Some(ProjectValue::new(scalar.value().to_owned(), value))
+    }
+    fn deploy_update_parallelism(&mut self, value: &MergedValue) -> Option<ProjectValue<DeployUpdateParallelism>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "deploy update_config parallelism must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let parsed = match scalar.kind() {
+            MergedScalarKind::Number if Self::yaml_integer_spelling(scalar.value()) => {
+                DeployUpdateParallelism::YamlInteger(scalar.value().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                DeployUpdateParallelism::String(scalar.value().to_owned())
+            }
+            _ => {
+                self.expected(
+                    value,
+                    "deploy update_config parallelism must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(parsed, value))
+    }
+    fn deploy_update_max_failure_ratio(
+        &mut self,
+        value: &MergedValue,
+    ) -> Option<ProjectValue<DeployUpdateMaxFailureRatio>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "deploy update_config max_failure_ratio must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let parsed = match scalar.kind() {
+            MergedScalarKind::Number => DeployUpdateMaxFailureRatio::YamlNumber(scalar.value().to_owned()),
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                DeployUpdateMaxFailureRatio::String(scalar.value().to_owned())
+            }
+            _ => {
+                self.expected(
+                    value,
+                    "deploy update_config max_failure_ratio must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(ProjectValue::new(parsed, value))
+    }
+    fn deploy_update_order(&mut self, value: &MergedValue) -> Option<ProjectValue<DeployUpdateOrder>> {
+        let raw = self.strict_project_string(value, "deploy update_config order must be a YAML string scalar")?;
+        let order = DeployUpdateOrder::parse(raw.value().to_owned());
+        if !order.is_documented() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEPLOY_UPDATE_CONFIG_ORDER_PORTABILITY,
+                    Severity::Warning,
+                    "deploy update_config order is outside Compose's documented portable values",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "retained provider-specific update order",
+                )),
+            );
+        }
+        Some(ProjectValue {
+            value: order,
+            provenance: raw.provenance,
+            sensitive: raw.sensitive,
+        })
     }
 
     fn deploy_placement(
@@ -3098,7 +5561,7 @@ impl<'a> Builder<'a> {
     ///
     /// This deliberately preserves spelling and accepts only decimal, binary, octal, and
     /// hexadecimal integer forms with optional signs and digit separators. It therefore never
-    /// promotes a float-shaped merged number to either integer-only deploy field.
+    /// promotes a float-shaped merged number to any integer-only deploy field.
     fn yaml_integer_spelling(value: &str) -> bool {
         let digits = value
             .strip_prefix('+')
@@ -4020,6 +6483,159 @@ impl<'a> Builder<'a> {
         }
     }
 
+    fn cpu_count(&mut self, value: &MergedValue) -> Option<ProjectValue<CpuCount>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, "cpu_count must be a YAML integer or string scalar");
+            return None;
+        };
+        let count = match scalar.kind() {
+            MergedScalarKind::Number if CpuCount::yaml_integer_spelling(scalar.raw()) => {
+                CpuCount::yaml_integer(scalar.raw().to_owned())
+            }
+            MergedScalarKind::String
+                if scalar.is_strict_yaml_string()
+                    && scalar.is_plain_style()
+                    && CpuCount::yaml_integer_spelling(scalar.raw()) =>
+            {
+                CpuCount::yaml_integer(scalar.raw().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => CpuCount::String(scalar.value().to_owned()),
+            MergedScalarKind::String | MergedScalarKind::Number | MergedScalarKind::Boolean => {
+                self.expected(value, "cpu_count must be a YAML integer or string scalar");
+                return None;
+            }
+        };
+        if !count.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    CPU_COUNT_NEGATIVE,
+                    Severity::Error,
+                    "cpu_count YAML integers must be nonnegative",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "negative CPU count retained as invalid evidence",
+                )),
+            );
+        }
+        Some(ProjectValue::new(count, value))
+    }
+
+    fn cpu_percent(&mut self, value: &MergedValue) -> Option<ProjectValue<CpuPercent>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, "cpu_percent must be a YAML integer or string scalar");
+            return None;
+        };
+        let percent = match scalar.kind() {
+            MergedScalarKind::Number if CpuPercent::yaml_integer_spelling(scalar.raw()) => {
+                CpuPercent::yaml_integer(scalar.raw().to_owned())
+            }
+            MergedScalarKind::String
+                if scalar.is_strict_yaml_string()
+                    && scalar.is_plain_style()
+                    && CpuPercent::yaml_integer_spelling(scalar.raw()) =>
+            {
+                CpuPercent::yaml_integer(scalar.raw().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => CpuPercent::String(scalar.value().to_owned()),
+            MergedScalarKind::String | MergedScalarKind::Number | MergedScalarKind::Boolean => {
+                self.expected(value, "cpu_percent must be a YAML integer or string scalar");
+                return None;
+            }
+        };
+        if !percent.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    CPU_PERCENT_OUT_OF_RANGE,
+                    Severity::Error,
+                    "cpu_percent YAML integers must be between 0 and 100 inclusive",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "out-of-range CPU percentage retained as invalid evidence",
+                )),
+            );
+        }
+        Some(ProjectValue::new(percent, value))
+    }
+
+    fn cpu_period(&mut self, value: &MergedValue) -> Option<ProjectValue<CpuPeriod>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, "cpu_period must be a YAML number or string scalar");
+            return None;
+        };
+        let period = match scalar.kind() {
+            MergedScalarKind::Number => CpuPeriod::YamlNumber(scalar.raw().to_owned()),
+            MergedScalarKind::String
+                if scalar.is_strict_yaml_string()
+                    && scalar.is_plain_style()
+                    && CpuPeriod::yaml_number_spelling(scalar.raw()) =>
+            {
+                CpuPeriod::YamlNumber(scalar.raw().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => CpuPeriod::String(scalar.value().to_owned()),
+            MergedScalarKind::String | MergedScalarKind::Boolean => {
+                self.expected(value, "cpu_period must be a YAML number or string scalar");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(period, value))
+    }
+
+    fn cpu_quota(&mut self, value: &MergedValue) -> Option<ProjectValue<CpuQuota>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, "cpu_quota must be a YAML number or string scalar");
+            return None;
+        };
+        let quota = match scalar.kind() {
+            MergedScalarKind::Number => CpuQuota::YamlNumber(scalar.raw().to_owned()),
+            MergedScalarKind::String
+                if scalar.is_strict_yaml_string()
+                    && scalar.is_plain_style()
+                    && CpuPeriod::yaml_number_spelling(scalar.raw()) =>
+            {
+                CpuQuota::YamlNumber(scalar.raw().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => CpuQuota::String(scalar.value().to_owned()),
+            MergedScalarKind::String | MergedScalarKind::Boolean => {
+                self.expected(value, "cpu_quota must be a YAML number or string scalar");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(quota, value))
+    }
+
+    fn cpu_rt_period(&mut self, value: &MergedValue) -> Option<ProjectValue<CpuRtPeriod>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, "cpu_rt_period must be a YAML number or string scalar");
+            return None;
+        };
+        let period = match scalar.kind() {
+            MergedScalarKind::Number => CpuRtPeriod::YamlNumber(scalar.raw().to_owned()),
+            MergedScalarKind::String
+                if scalar.is_strict_yaml_string()
+                    && scalar.is_plain_style()
+                    && CpuPeriod::yaml_number_spelling(scalar.raw()) =>
+            {
+                CpuRtPeriod::YamlNumber(scalar.raw().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                CpuRtPeriod::parse_string(scalar.value().to_owned())
+            }
+            MergedScalarKind::String | MergedScalarKind::Boolean => {
+                self.expected(value, "cpu_rt_period must be a YAML number or string scalar");
+                return None;
+            }
+        };
+        if !period.is_valid() {
+            self.invalid(
+                effective_span(value),
+                "cpu_rt_period must match the ComposeLens duration policy using `us`, `ms`, `s`, `m`, or `h`, or contain an interpolation marker",
+            );
+        }
+        Some(ProjectValue::new(period, value))
+    }
+
     fn pids_limit(&mut self, value: &MergedValue) -> Option<ProjectValue<PidsLimit>> {
         let scalar = match value.kind() {
             MergedValueKind::Scalar(scalar) if scalar.kind() != MergedScalarKind::Boolean => scalar,
@@ -4728,6 +7344,406 @@ impl<'a> Builder<'a> {
             }
         };
         Some(ProjectValue::new(form, value))
+    }
+
+    fn credential_spec(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+    ) -> Option<ProjectValue<ProjectCredentialSpec>> {
+        let fields = self.mapping(value, "credential_spec must be a mapping")?;
+        let mut path = service_path.to_vec();
+        path.push("credential_spec".to_owned());
+        let mut credential_spec = ProjectCredentialSpec {
+            config: None,
+            file: None,
+            registry: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            let value = match field.key() {
+                "config" => self
+                    .strict_project_string(field.value(), "credential_spec config must be a YAML string scalar")
+                    .map(|value| credential_spec.config = Some(value)),
+                "file" => self
+                    .strict_project_string(field.value(), "credential_spec file must be a YAML string scalar")
+                    .map(|value| credential_spec.file = Some(value)),
+                "registry" => self
+                    .strict_project_string(field.value(), "credential_spec registry must be a YAML string scalar")
+                    .map(|value| credential_spec.registry = Some(value)),
+                _ => {
+                    credential_spec.unmodeled_fields.push(field_reference(&path, field));
+                    Some(())
+                }
+            };
+            if value.is_none() {
+                credential_spec.unmodeled_fields.push(field_reference(&path, field));
+            }
+        }
+        Some(ProjectValue::new(credential_spec, value))
+    }
+
+    fn extends(&mut self, value: &MergedValue, service_path: &[String]) -> Option<ProjectValue<ProjectExtends>> {
+        match value.kind() {
+            MergedValueKind::Scalar(scalar)
+                if scalar.kind() == MergedScalarKind::String && scalar.is_strict_yaml_string() =>
+            {
+                Some(ProjectValue::new(
+                    ProjectExtends::Short(ProjectValue::new(scalar.value().to_owned(), value)),
+                    value,
+                ))
+            }
+            MergedValueKind::Mapping(fields) => {
+                let mut path = service_path.to_vec();
+                path.push("extends".to_owned());
+                let mut reference = ProjectExtendsReference {
+                    service: None,
+                    file: None,
+                    unmodeled_fields: Vec::new(),
+                };
+                for field in fields {
+                    let typed = match field.key() {
+                        "service" => self
+                            .strict_project_string(field.value(), "extends service must be a YAML string scalar")
+                            .map(|value| reference.service = Some(value)),
+                        "file" => self
+                            .strict_project_string(field.value(), "extends file must be a YAML string scalar")
+                            .map(|value| reference.file = Some(value)),
+                        _ => {
+                            reference.unmodeled_fields.push(field_reference(&path, field));
+                            Some(())
+                        }
+                    };
+                    if typed.is_none() {
+                        reference.unmodeled_fields.push(field_reference(&path, field));
+                    }
+                }
+                if reference.service.is_none() {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            EXTENDS_MISSING_SERVICE,
+                            Severity::Error,
+                            "long extends is missing required `service`",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            effective_span(value),
+                            "long extends mapping retained without service",
+                        )),
+                    );
+                }
+                Some(ProjectValue::new(ProjectExtends::Long(reference), value))
+            }
+            _ => {
+                self.expected(value, "extends must be a YAML string scalar or mapping");
+                None
+            }
+        }
+    }
+
+    fn provider(&mut self, value: &MergedValue, service_path: &[String]) -> Option<ProjectValue<ProjectProvider>> {
+        let fields = self.mapping(value, "provider must be a mapping")?;
+        let mut path = service_path.to_vec();
+        path.push("provider".to_owned());
+        let mut provider = ProjectProvider {
+            type_: None,
+            options: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            let parsed = match field.key() {
+                "type" => self
+                    .strict_project_string(field.value(), "provider type must be a YAML string scalar")
+                    .map(|value| provider.type_ = Some(value)),
+                "options" => self
+                    .provider_options(field.value(), &path)
+                    .map(|value| provider.options = Some(value)),
+                _ => {
+                    provider.unmodeled_fields.push(field_reference(&path, field));
+                    Some(())
+                }
+            };
+            if parsed.is_none() {
+                provider.unmodeled_fields.push(field_reference(&path, field));
+            }
+        }
+        if provider.type_.is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    PROVIDER_MISSING_TYPE,
+                    Severity::Error,
+                    "provider is missing required `type`",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "provider mapping retained without type",
+                )),
+            );
+        }
+        Some(ProjectValue::new(provider, value))
+    }
+
+    fn post_start(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectPostStartHook>>>> {
+        self.lifecycle_hooks(
+            value,
+            service_path,
+            "post_start",
+            POST_START_MISSING_COMMAND,
+            ProjectPostStartHook::Hook,
+            || ProjectPostStartHook::Unmodeled,
+        )
+    }
+
+    fn pre_stop(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectPreStopHook>>>> {
+        self.lifecycle_hooks(
+            value,
+            service_path,
+            "pre_stop",
+            PRE_STOP_MISSING_COMMAND,
+            ProjectPreStopHook::Hook,
+            || ProjectPreStopHook::Unmodeled,
+        )
+    }
+
+    fn pre_start(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectPreStartHook>>>> {
+        let Some(items) = value.as_sequence() else {
+            self.expected(value, "pre_start must be a sequence of hook mappings");
+            return None;
+        };
+        let mut path = service_path.to_vec();
+        path.push("pre_start".to_owned());
+        let mut hooks = Vec::new();
+        for item in items {
+            let hook = if let Some(fields) = item.as_mapping() {
+                ProjectPreStartHook::Hook(Box::new(self.pre_start_service_hook(fields, &path)))
+            } else {
+                self.expected(item, "pre_start items must be hook mappings");
+                ProjectPreStartHook::Unmodeled
+            };
+            hooks.push(ProjectValue::new(hook, item));
+        }
+        Some(ProjectValue::new(hooks, value))
+    }
+
+    fn lifecycle_hooks<T>(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+        name: &str,
+        missing_code: DiagnosticCode,
+        hook_entry: fn(Box<ProjectServiceHook>) -> T,
+        unmodeled_entry: fn() -> T,
+    ) -> Option<ProjectValue<Vec<ProjectValue<T>>>> {
+        let Some(items) = value.as_sequence() else {
+            self.expected(value, &format!("{name} must be a sequence of hook mappings"));
+            return None;
+        };
+        let mut path = service_path.to_vec();
+        path.push(name.to_owned());
+        let mut hooks = Vec::new();
+        for item in items {
+            let hook = if let Some(fields) = item.as_mapping() {
+                hook_entry(Box::new(self.service_hook(item, fields, &path, name, missing_code)))
+            } else {
+                self.expected(item, &format!("{name} items must be hook mappings"));
+                unmodeled_entry()
+            };
+            hooks.push(ProjectValue::new(hook, item));
+        }
+        Some(ProjectValue::new(hooks, value))
+    }
+
+    fn service_hook(
+        &mut self,
+        value: &MergedValue,
+        fields: &[MergedEntry],
+        path: &[String],
+        name: &str,
+        missing_code: DiagnosticCode,
+    ) -> ProjectServiceHook {
+        let mut hook = ProjectServiceHook {
+            command: None,
+            environment: None,
+            privileged: None,
+            user: None,
+            working_dir: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            let parsed = match field.key() {
+                "command" => self.command(field.value()).map(|value| hook.command = Some(value)),
+                "environment" => self
+                    .environment(field.value())
+                    .map(|value| hook.environment = Some(value)),
+                "privileged" => self
+                    .boolean(field.value(), &format!("{name} privileged must be a boolean"))
+                    .map(|value| hook.privileged = Some(value)),
+                "user" => self
+                    .strict_project_string(field.value(), &format!("{name} user must be a YAML string scalar"))
+                    .map(|value| hook.user = Some(value)),
+                "working_dir" => self
+                    .strict_project_string(
+                        field.value(),
+                        &format!("{name} working_dir must be a YAML string scalar"),
+                    )
+                    .map(|value| hook.working_dir = Some(value)),
+                _ => {
+                    hook.unmodeled_fields.push(field_reference(path, field));
+                    Some(())
+                }
+            };
+            if parsed.is_none() {
+                hook.unmodeled_fields.push(field_reference(path, field));
+            }
+        }
+        if hook.command.is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    missing_code,
+                    Severity::Error,
+                    format!("{name} hook is missing required `command`"),
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    format!("{name} hook retained without command"),
+                )),
+            );
+        }
+        hook
+    }
+
+    fn pre_start_service_hook(&mut self, fields: &[MergedEntry], path: &[String]) -> ProjectPreStartServiceHook {
+        let mut hook = ProjectPreStartServiceHook {
+            command: None,
+            image: None,
+            environment: None,
+            privileged: None,
+            per_replica: None,
+            user: None,
+            working_dir: None,
+            unmodeled_fields: Vec::new(),
+        };
+        for field in fields {
+            let parsed = match field.key() {
+                "command" => self.command(field.value()).map(|value| hook.command = Some(value)),
+                "image" => self
+                    .strict_project_string(field.value(), "pre_start image must be a YAML string scalar")
+                    .map(|value| hook.image = Some(value)),
+                "environment" => self
+                    .environment(field.value())
+                    .map(|value| hook.environment = Some(value)),
+                "privileged" => self
+                    .boolean(field.value(), "pre_start privileged must be a boolean")
+                    .map(|value| hook.privileged = Some(value)),
+                "per_replica" => self
+                    .boolean(field.value(), "pre_start per_replica must be a boolean")
+                    .map(|value| hook.per_replica = Some(value)),
+                "user" => self
+                    .strict_project_string(field.value(), "pre_start user must be a YAML string scalar")
+                    .map(|value| hook.user = Some(value)),
+                "working_dir" => self
+                    .strict_project_string(field.value(), "pre_start working_dir must be a YAML string scalar")
+                    .map(|value| hook.working_dir = Some(value)),
+                _ => {
+                    hook.unmodeled_fields.push(field_reference(path, field));
+                    Some(())
+                }
+            };
+            if parsed.is_none() {
+                hook.unmodeled_fields.push(field_reference(path, field));
+            }
+        }
+        hook
+    }
+
+    fn provider_options(
+        &mut self,
+        value: &MergedValue,
+        provider_path: &[String],
+    ) -> Option<ProjectValue<ProjectProviderOptions>> {
+        let Some(entries) = value.as_mapping() else {
+            self.expected(value, "provider options must be a mapping");
+            return None;
+        };
+        let mut path = provider_path.to_vec();
+        path.push("options".to_owned());
+        let mut options = Vec::new();
+        let mut unmodeled_entries = Vec::new();
+        for entry in entries {
+            if entry.key().is_empty() {
+                self.expected(entry.value(), "provider option keys must not be empty");
+                unmodeled_entries.push(field_reference(&path, entry));
+                continue;
+            }
+            let Some(value) = self.provider_option_value(entry.value()) else {
+                unmodeled_entries.push(field_reference(&path, entry));
+                continue;
+            };
+            let option = ProjectProviderOption {
+                name: ProjectKey::from_entry(entry),
+                value: ProjectValue::new(value, entry.value()),
+            };
+            options.push(ProjectValue::new(option, entry.value()));
+        }
+        Some(ProjectValue::new(
+            ProjectProviderOptions {
+                entries: options,
+                unmodeled_entries,
+            },
+            value,
+        ))
+    }
+
+    fn provider_option_value(&mut self, value: &MergedValue) -> Option<ProjectProviderOptionValue> {
+        if let Some(scalar) = Self::provider_option_scalar(value) {
+            return Some(ProjectProviderOptionValue::Scalar(scalar));
+        }
+        let Some(items) = value.as_sequence() else {
+            self.expected(
+                value,
+                "provider option values must be YAML string, number, or boolean scalars or sequences of them",
+            );
+            return None;
+        };
+        let mut parsed = Vec::new();
+        for item in items {
+            let value = if let Some(scalar) = Self::provider_option_scalar(item) {
+                ProjectProviderOptionItem::Scalar(scalar)
+            } else {
+                self.expected(
+                    item,
+                    "provider option sequence items must be YAML string, number, or boolean scalars",
+                );
+                ProjectProviderOptionItem::Unmodeled
+            };
+            parsed.push(ProjectValue::new(value, item));
+        }
+        Some(ProjectProviderOptionValue::Sequence(parsed))
+    }
+
+    fn provider_option_scalar(value: &MergedValue) -> Option<ComposeScalar> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            return None;
+        };
+        match scalar.kind() {
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                Some(ComposeScalar::String(scalar.value().to_owned()))
+            }
+            MergedScalarKind::Number => Some(ComposeScalar::Number(scalar.value().to_owned())),
+            MergedScalarKind::Boolean => Some(ComposeScalar::Boolean(scalar.value().eq_ignore_ascii_case("true"))),
+            MergedScalarKind::String => None,
+        }
     }
 
     fn logging(&mut self, value: &MergedValue, service_path: &[String]) -> Option<ProjectValue<ProjectLogging>> {

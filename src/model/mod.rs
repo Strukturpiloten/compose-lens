@@ -1,9 +1,17 @@
 //! Source-aware native Compose document types.
 
 mod annotation;
+mod blkio;
 mod build_extra_host;
 mod capability;
+mod cgroup;
 mod command;
+mod cpu_count;
+mod cpu_percent;
+mod cpu_period;
+mod cpu_quota;
+mod cpu_rt_period;
+mod credential_spec;
 mod dependency;
 mod device;
 mod dns;
@@ -12,16 +20,19 @@ mod dns_search;
 mod entrypoint;
 mod environment;
 mod expose;
+mod extends;
 mod host;
 mod hostname;
 mod identity;
 mod image;
 mod lifecycle;
+mod lifecycle_hook;
 mod logging;
 mod memory;
 mod network;
 mod pids;
 mod port;
+mod provider;
 mod pull;
 mod resource;
 mod restart;
@@ -35,9 +46,19 @@ mod value;
 mod volume;
 
 pub use annotation::{Annotations, AnnotationsForm};
+pub use blkio::{
+    BlkioConfig, BlkioDeviceRate, BlkioDeviceRateForm, BlkioScalar, BlkioWeightDevice, BlkioWeightDeviceForm,
+};
 pub use build_extra_host::{BuildExtraHostAddresses, BuildExtraHostEntry, BuildExtraHosts};
 pub use capability::{CapabilityAdd, CapabilityAddItem, CapabilityDrop, CapabilityDropItem};
+pub use cgroup::{CgroupNamespace, CgroupNamespaceKind};
 pub use command::Command;
+pub use cpu_count::CpuCount;
+pub use cpu_percent::CpuPercent;
+pub use cpu_period::CpuPeriod;
+pub use cpu_quota::CpuQuota;
+pub use cpu_rt_period::CpuRtPeriod;
+pub use credential_spec::CredentialSpec;
 pub use dependency::{
     DependencyCondition, DependsOn, Healthcheck, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
     HealthcheckTestKind, ServiceDependency,
@@ -54,12 +75,17 @@ pub use environment::{
 };
 pub use expose::{Expose, ExposeItem, ExposeItemKind, ExposePort, ExposeProtocol, ExposeScalarKind};
 pub(crate) use expose::{classify_expose_item, valid_generated_expose_item};
+pub use extends::{Extends, ExtendsReference};
 pub use host::{ExtraHostSeparator, ExtraHosts, HostAddress, HostAddressKind, LongExtraHost, ShortExtraHost};
 pub(crate) use hostname::valid_hostname;
 pub use hostname::{Hostname, HostnameKind};
 pub use identity::{IdentityComponent, UserNamespaceMode, UserNamespaceModeKind, UserSpec};
 pub use image::{ImageDigest, ImageReference};
 pub use lifecycle::StopGracePeriod;
+pub use lifecycle_hook::{
+    PostStartHook, PostStartHooks, PreStartHook, PreStartHooks, PreStartServiceHook, PreStopHook, PreStopHooks,
+    ServiceHook,
+};
 pub use logging::{Logging, LoggingOption, LoggingOptionValue, LoggingOptions};
 pub(crate) use memory::valid_generated_mem_amount;
 pub use memory::{MemLimit, MemLimitKind, MemLimitScalarKind, MemLimitUnit};
@@ -67,15 +93,25 @@ pub use network::{Ipam, IpamConfig, NetworkDefinition, ServiceNetwork, ServiceNe
 pub(crate) use pids::valid_positive_pids_decimal;
 pub use pids::{PidsLimit, PidsLimitKind};
 pub use port::{LongPort, Port, ShortPort};
+pub use provider::{Provider, ProviderOption, ProviderOptionItem, ProviderOptionValue, ProviderOptions};
 pub(crate) use pull::valid_pull_policy_duration;
 pub use pull::{PullPolicy, PullPolicyKind};
 pub use resource::{ConfigDefinition, ConfigGrant, LongGrant, SecretDefinition, SecretGrant, VolumeDefinition};
 pub use restart::{RestartPolicy, RestartPolicyKind};
 pub use sections::{
     Build, BuildAdditionalContexts, BuildArgs, BuildDefinition, BuildField, BuildFieldKind, BuildNoCacheFilter,
-    BuildSsh, BuildSshForm, DeployDefinition, DeployEndpointMode, DeployField, DeployFieldKind, DeployMode,
-    DeployPlacement, DeployPlacementMaxReplicasPerNode, DeployPlacementPreference, DeployReplicas,
-    DeployRestartCondition, DeployRestartDuration, DeployRestartMaxAttempts, DeployRestartPolicy,
+    BuildSsh, BuildSshForm, DeployDefinition, DeployDiscreteResourceSpec, DeployDiscreteResourceValue,
+    DeployEndpointMode, DeployField, DeployFieldKind, DeployGenericResource, DeployGenericResourceForm,
+    DeployGenericResources, DeployMode, DeployPlacement, DeployPlacementMaxReplicasPerNode, DeployPlacementPreference,
+    DeployReplicas, DeployReservationDevice, DeployReservationDeviceCapabilities, DeployReservationDeviceCapability,
+    DeployReservationDeviceCapabilityForm, DeployReservationDeviceCount, DeployReservationDeviceForm,
+    DeployReservationDeviceId, DeployReservationDeviceIdForm, DeployReservationDeviceIds,
+    DeployReservationDeviceOptionItem, DeployReservationDeviceOptionItemForm, DeployReservationDeviceOptions,
+    DeployReservationDevices, DeployResourceCpus, DeployResourceLimits, DeployResourceMemory, DeployResourceMemoryKind,
+    DeployResourceMemoryUnit, DeployResourcePids, DeployResourceReservations, DeployResources, DeployRestartCondition,
+    DeployRestartDuration, DeployRestartMaxAttempts, DeployRestartPolicy, DeployRollbackConfig,
+    DeployRollbackMaxFailureRatio, DeployRollbackOrder, DeployRollbackParallelism, DeployUpdateConfig,
+    DeployUpdateMaxFailureRatio, DeployUpdateOrder, DeployUpdateParallelism,
 };
 pub(crate) use security_option::{SecurityOptionCandidateCounts, classify_security_option};
 pub use security_option::{SecurityOptionItem, SecurityOptionKind, SecurityOptions};
@@ -96,7 +132,7 @@ use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::source::{SourceId, SourceSpan};
 use crate::syntax::{SyntaxDocument, scalar_string_from_source};
 use std::collections::{BTreeMap, BTreeSet};
-use yaml_edit::{AnchorRegistry, AsYaml, Mapping, ScalarType, ScalarValue, YamlNode};
+use yaml_edit::{AnchorRegistry, AsYaml, Mapping, Scalar, ScalarStyle, ScalarType, ScalarValue, YamlNode};
 
 /// A Compose document root must be a mapping.
 pub const DOCUMENT_ROOT_TYPE: DiagnosticCode = DiagnosticCode::new("compose.document.expected-mapping");
@@ -106,11 +142,45 @@ pub const MULTIPLE_DOCUMENTS: DiagnosticCode = DiagnosticCode::new("compose.docu
 
 /// A mapping contains a duplicate field.
 pub const DUPLICATE_FIELD: DiagnosticCode = DiagnosticCode::new("compose.model.duplicate-field");
+/// A strict YAML-string service cgroup namespace is not a documented literal or deferred expression.
+pub const CGROUP_NAMESPACE_INVALID: DiagnosticCode = DiagnosticCode::new("compose.cgroup.invalid-namespace");
 /// A deploy endpoint mode is retained but is outside Compose's documented portable values.
 pub const DEPLOY_ENDPOINT_MODE_PORTABILITY: DiagnosticCode =
     DiagnosticCode::new("compose.deploy.endpoint-mode.portability");
 /// A deploy mode is retained but is outside Compose's documented portable values.
 pub const DEPLOY_MODE_PORTABILITY: DiagnosticCode = DiagnosticCode::new("compose.deploy.mode.portability");
+/// An update-config order is retained but outside Compose's documented portable values.
+pub const DEPLOY_UPDATE_CONFIG_ORDER_PORTABILITY: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.update-config.order.portability");
+/// A rollback-config order is retained but outside Compose's documented portable values.
+pub const DEPLOY_ROLLBACK_CONFIG_ORDER_PORTABILITY: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.rollback-config.order.portability");
+/// A long service `extends` mapping is missing its required `service` member.
+pub const EXTENDS_MISSING_SERVICE: DiagnosticCode = DiagnosticCode::new("compose.extends.missing-service");
+/// A service provider mapping is missing its required `type` member.
+pub const PROVIDER_MISSING_TYPE: DiagnosticCode = DiagnosticCode::new("compose.provider.missing-type");
+/// A `post_start` hook mapping is missing its required command.
+pub const POST_START_MISSING_COMMAND: DiagnosticCode = DiagnosticCode::new("compose.post-start.missing-command");
+/// A `pre_stop` hook mapping is missing its required command.
+pub const PRE_STOP_MISSING_COMMAND: DiagnosticCode = DiagnosticCode::new("compose.pre-stop.missing-command");
+/// A reservation-device capabilities sequence contains an exact duplicate string.
+pub const DEPLOY_RESERVATION_DEVICE_CAPABILITY_DUPLICATE_ITEM: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.reservations.devices.capabilities.duplicate-item");
+/// A reservation-device mapping omits its required capabilities field.
+pub const DEPLOY_RESERVATION_DEVICE_MISSING_CAPABILITIES: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.reservations.devices.missing-capabilities");
+/// A reservation-device mapping supplies incompatible allocation selectors.
+pub const DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.reservations.devices.allocation-selector-conflict");
+/// Reservation-device options must use mapping or sequence syntax.
+pub const DEPLOY_RESERVATION_DEVICE_OPTIONS_EXPECTED_FORM: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.reservations.devices.options.expected-form");
+/// A reservation-device options mapping key is invalid.
+pub const DEPLOY_RESERVATION_DEVICE_OPTIONS_INVALID_KEY: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.reservations.devices.options.invalid-key");
+/// A reservation-device options list repeats an exact string.
+pub const DEPLOY_RESERVATION_DEVICE_OPTIONS_DUPLICATE_ITEM: DiagnosticCode =
+    DiagnosticCode::new("compose.deploy.reservations.devices.options.duplicate-item");
 /// A Build no-cache filter list repeats an exact stage name.
 pub const BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM: DiagnosticCode =
     DiagnosticCode::new("compose.build.no-cache-filter.duplicate-item");
@@ -241,6 +311,34 @@ pub const PIDS_LIMIT_INVALID: DiagnosticCode = DiagnosticCode::new("compose.pids
 
 /// A zero service PID limit has ambiguous and unportable native semantics.
 pub const PIDS_LIMIT_AMBIGUOUS_ZERO: DiagnosticCode = DiagnosticCode::new("compose.pids-limit.ambiguous-zero");
+
+/// A service CPU count is not a YAML integer or string scalar.
+pub const CPU_COUNT_EXPECTED_VALUE: DiagnosticCode =
+    DiagnosticCode::new("compose.cpu-count.expected-integer-or-string");
+
+/// A service CPU count is a negative YAML integer.
+pub const CPU_COUNT_NEGATIVE: DiagnosticCode = DiagnosticCode::new("compose.cpu-count.negative-value");
+
+/// A service CPU percentage YAML integer is outside the schema's inclusive `0..=100` range.
+pub const CPU_PERCENT_OUT_OF_RANGE: DiagnosticCode = DiagnosticCode::new("compose.cpu-percent.out-of-range");
+
+/// A service CPU percentage is not a YAML integer or string scalar.
+pub const CPU_PERCENT_EXPECTED_VALUE: DiagnosticCode =
+    DiagnosticCode::new("compose.cpu-percent.expected-integer-or-string");
+
+/// A service CPU period is not a YAML number or string scalar.
+pub const CPU_PERIOD_EXPECTED_VALUE: DiagnosticCode =
+    DiagnosticCode::new("compose.cpu-period.expected-number-or-string");
+
+/// A service CPU quota is not a YAML number or string scalar.
+pub const CPU_QUOTA_EXPECTED_VALUE: DiagnosticCode = DiagnosticCode::new("compose.cpu-quota.expected-number-or-string");
+
+/// A service real-time CPU period is not a YAML number or string scalar.
+pub const CPU_RT_PERIOD_EXPECTED_VALUE: DiagnosticCode =
+    DiagnosticCode::new("compose.cpu-rt-period.expected-number-or-string");
+
+/// A service real-time CPU-period string is outside the raw Compose duration policy.
+pub const CPU_RT_PERIOD_INVALID: DiagnosticCode = DiagnosticCode::new("compose.cpu-rt-period.invalid-duration");
 
 /// A service shared-memory size is not a number or string scalar.
 pub const SHM_SIZE_EXPECTED_VALUE: DiagnosticCode = DiagnosticCode::new("compose.shm-size.expected-number-or-string");
@@ -734,8 +832,19 @@ pub struct Service {
     hostname: Option<Hostname>,
     container_name: Option<Located<String>>,
     image: Option<Located<ImageReference>>,
+    platform: Option<Located<String>>,
     entrypoint: Option<Entrypoint>,
     command: Option<Command>,
+    credential_spec: Option<CredentialSpec>,
+    extends: Option<Extends>,
+    provider: Option<Provider>,
+    post_start: Option<PostStartHooks>,
+    pre_stop: Option<PreStopHooks>,
+    pre_start: Option<PreStartHooks>,
+    blkio_config: Option<BlkioConfig>,
+    cgroup: Option<CgroupNamespace>,
+    cgroup_parent: Option<Located<String>>,
+    attach: Option<Located<BooleanValue>>,
     init: Option<Located<BooleanValue>>,
     stdin_open: Option<Located<BooleanValue>>,
     tty: Option<Located<BooleanValue>>,
@@ -759,13 +868,20 @@ pub struct Service {
     working_dir: Option<Located<String>>,
     read_only: Option<Located<BooleanValue>>,
     pids_limit: Option<PidsLimit>,
+    cpu_count: Option<Located<CpuCount>>,
+    cpu_percent: Option<Located<CpuPercent>>,
+    cpu_period: Option<Located<CpuPeriod>>,
+    cpu_quota: Option<Located<CpuQuota>>,
+    cpu_rt_period: Option<Located<CpuRtPeriod>>,
     shm_size: Option<ShmSize>,
     mem_limit: Option<MemLimit>,
     tmpfs: Option<Tmpfs>,
     sysctls: Option<Sysctls>,
     logging: Option<Logging>,
     pull_policy: Option<PullPolicy>,
+    pull_refresh_after: Option<Located<String>>,
     restart: Option<RestartPolicy>,
+    runtime: Option<Located<String>>,
     stop_signal: Option<Located<String>>,
     stop_grace_period: Option<Located<StopGracePeriod>>,
     ulimits: Option<Ulimits>,
@@ -791,8 +907,19 @@ impl Service {
             hostname: None,
             container_name: None,
             image: None,
+            platform: None,
             entrypoint: None,
             command: None,
+            credential_spec: None,
+            extends: None,
+            provider: None,
+            post_start: None,
+            pre_stop: None,
+            pre_start: None,
+            blkio_config: None,
+            cgroup: None,
+            cgroup_parent: None,
+            attach: None,
             init: None,
             stdin_open: None,
             tty: None,
@@ -816,13 +943,20 @@ impl Service {
             working_dir: None,
             read_only: None,
             pids_limit: None,
+            cpu_count: None,
+            cpu_percent: None,
+            cpu_period: None,
+            cpu_quota: None,
+            cpu_rt_period: None,
             shm_size: None,
             mem_limit: None,
             tmpfs: None,
             sysctls: None,
             logging: None,
             pull_policy: None,
+            pull_refresh_after: None,
             restart: None,
+            runtime: None,
             stop_signal: None,
             stop_grace_period: None,
             ulimits: None,
@@ -871,6 +1005,12 @@ impl Service {
         self.image.as_ref()
     }
 
+    /// Returns the strict raw service platform string without OCI interpretation.
+    #[must_use]
+    pub const fn platform(&self) -> Option<&Located<String>> {
+        self.platform.as_ref()
+    }
+
     /// Returns the entrypoint without normalizing its authored form.
     #[must_use]
     pub const fn entrypoint(&self) -> Option<&Entrypoint> {
@@ -881,6 +1021,78 @@ impl Service {
     #[must_use]
     pub const fn command(&self) -> Option<&Command> {
         self.command.as_ref()
+    }
+
+    /// Returns the authored credential-spec mapping without resolving its references.
+    #[must_use]
+    pub const fn credential_spec(&self) -> Option<&CredentialSpec> {
+        self.credential_spec.as_ref()
+    }
+
+    /// Returns the authored raw extends directive without resolving its reference.
+    #[must_use]
+    pub const fn extends(&self) -> Option<&Extends> {
+        self.extends.as_ref()
+    }
+
+    /// Returns the authored provider configuration without provider execution or discovery.
+    #[must_use]
+    pub const fn provider(&self) -> Option<&Provider> {
+        self.provider.as_ref()
+    }
+
+    /// Returns ordered post-start hooks without executing them or inferring lifecycle behavior.
+    #[must_use]
+    pub const fn post_start(&self) -> Option<&PostStartHooks> {
+        self.post_start.as_ref()
+    }
+
+    /// Returns ordered pre-stop hooks without executing them or inferring lifecycle behavior.
+    #[must_use]
+    pub const fn pre_stop(&self) -> Option<&PreStopHooks> {
+        self.pre_stop.as_ref()
+    }
+
+    /// Returns ordered pre-start hooks without executing them or inferring lifecycle behavior.
+    #[must_use]
+    pub const fn pre_start(&self) -> Option<&PreStartHooks> {
+        self.pre_start.as_ref()
+    }
+
+    /// Returns authored block-I/O configuration without controller or runtime interpretation.
+    #[must_use]
+    pub const fn blkio_config(&self) -> Option<&BlkioConfig> {
+        self.blkio_config.as_ref()
+    }
+
+    /// Returns the authored cgroup namespace without controller or runtime interpretation.
+    #[must_use]
+    pub const fn cgroup(&self) -> Option<&CgroupNamespace> {
+        self.cgroup.as_ref()
+    }
+
+    /// Returns the authored raw cgroup parent string without path or runtime interpretation.
+    #[must_use]
+    pub const fn cgroup_parent(&self) -> Option<&Located<String>> {
+        self.cgroup_parent.as_ref()
+    }
+
+    /// Returns the strict raw service runtime string without runtime interpretation.
+    #[must_use]
+    pub const fn runtime(&self) -> Option<&Located<String>> {
+        self.runtime.as_ref()
+    }
+
+    /// Returns the strict raw service pull-refresh interval without refresh interpretation.
+    #[must_use]
+    pub const fn pull_refresh_after(&self) -> Option<&Located<String>> {
+        self.pull_refresh_after.as_ref()
+    }
+
+    /// Returns the authored attach choice without runtime interpretation.
+    #[must_use]
+    pub const fn attach(&self) -> Option<&Located<BooleanValue>> {
+        self.attach.as_ref()
     }
 
     /// Returns whether Compose should run its platform-specific init process.
@@ -1019,6 +1231,36 @@ impl Service {
     #[must_use]
     pub const fn pids_limit(&self) -> Option<&PidsLimit> {
         self.pids_limit.as_ref()
+    }
+
+    /// Returns the authored CPU-count scalar without quota or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_count(&self) -> Option<&Located<CpuCount>> {
+        self.cpu_count.as_ref()
+    }
+
+    /// Returns the authored CPU-percentage scalar without CPU or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_percent(&self) -> Option<&Located<CpuPercent>> {
+        self.cpu_percent.as_ref()
+    }
+
+    /// Returns the authored CPU-period scalar without CPU or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_period(&self) -> Option<&Located<CpuPeriod>> {
+        self.cpu_period.as_ref()
+    }
+
+    /// Returns the authored CPU-quota scalar without CPU or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_quota(&self) -> Option<&Located<CpuQuota>> {
+        self.cpu_quota.as_ref()
+    }
+
+    /// Returns the authored real-time CPU-period scalar without CPU or runtime interpretation.
+    #[must_use]
+    pub const fn cpu_rt_period(&self) -> Option<&Located<CpuRtPeriod>> {
+        self.cpu_rt_period.as_ref()
     }
 
     /// Returns the raw-preserving service shared-memory size.
@@ -1525,8 +1767,7 @@ impl Parser {
     }
 
     fn parse_service(&mut self, field: &ParsedField, mapping: &Mapping) -> Service {
-        let mut service = Service::new(field.name.clone(), field.span);
-        let mut seen = BTreeMap::new();
+        let (mut service, mut seen) = (Service::new(field.name.clone(), field.span), BTreeMap::new());
         for service_field in self.fields(mapping) {
             let duplicate = self.record_duplicate(&mut seen, &service_field);
             match service_field.name.value.as_str() {
@@ -1535,28 +1776,30 @@ impl Parser {
                     service.container_name = self.parse_string(&service_field, "container name");
                 }
                 "image" if !duplicate => service.image = self.parse_image(&service_field),
+                "platform" if !duplicate => self.set_service_platform(&mut service, &service_field),
                 "entrypoint" if !duplicate => service.entrypoint = self.parse_entrypoint(&service_field),
                 "command" if !duplicate => service.command = self.parse_command(&service_field),
-                "init" if !duplicate => service.init = self.parse_boolean(&service_field, "service init"),
-                "stdin_open" if !duplicate => service.stdin_open = self.parse_boolean(&service_field, "stdin_open"),
-                "tty" if !duplicate => service.tty = self.parse_boolean(&service_field, "tty"),
-                "privileged" if !duplicate => service.privileged = self.parse_boolean(&service_field, "privileged"),
+                "credential_spec" if !duplicate => service.credential_spec = self.parse_credential_spec(&service_field),
+                "extends" if !duplicate => service.extends = self.parse_extends(&service_field),
+                "provider" if !duplicate => service.provider = self.parse_provider(&service_field),
+                "post_start" | "pre_stop" | "pre_start" if !duplicate => self.hooks(&mut service, &service_field),
+                "blkio_config" if !duplicate => self.set_service_blkio_config(&mut service, &service_field),
+                "cgroup" | "cgroup_parent" if !duplicate => self.set_service_cgroup(&mut service, &service_field),
+                "attach" | "init" | "stdin_open" | "tty" | "privileged" if !duplicate => {
+                    self.set_service_boolean(&mut service, &service_field);
+                }
                 "environment" if !duplicate => service.environment = self.parse_environment(&service_field),
                 "env_file" if !duplicate => service.environment_files = self.parse_environment_files(&service_field),
                 "labels" if !duplicate => service.labels = self.parse_labels(&service_field),
                 "annotations" if !duplicate => service.annotations = self.parse_annotations(&service_field),
                 "extra_hosts" if !duplicate => service.extra_hosts = self.parse_extra_hosts(&service_field),
-                "user" if !duplicate => {
-                    service.user = self.parse_string(&service_field, "service user").map(UserSpec::parse);
-                }
+                "user" if !duplicate => service.user = self.parse_service_user(&service_field),
                 "userns_mode" if !duplicate => {
                     service.userns_mode = self
                         .parse_string(&service_field, "service user namespace mode")
                         .map(UserNamespaceMode::parse);
                 }
-                "group_add" if !duplicate => {
-                    service.group_add = self.parse_string_sequence(&service_field, "service supplementary groups");
-                }
+                "group_add" if !duplicate => service.group_add = self.parse_service_group_add(&service_field),
                 "cap_add" if !duplicate => service.cap_add = self.parse_cap_add(&service_field),
                 "cap_drop" if !duplicate => service.cap_drop = self.parse_cap_drop(&service_field),
                 "devices" if !duplicate => service.devices = self.parse_devices(&service_field),
@@ -1568,17 +1811,21 @@ impl Parser {
                 "working_dir" if !duplicate => {
                     service.working_dir = self.parse_string(&service_field, "service working directory");
                 }
-                "read_only" if !duplicate => {
-                    service.read_only = self.parse_boolean(&service_field, "service read_only");
+                "read_only" if !duplicate => service.read_only = self.parse_service_read_only(&service_field),
+                "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "pids_limit"
+                    if !duplicate =>
+                {
+                    self.set_service_count(&mut service, &service_field);
                 }
-                "pids_limit" if !duplicate => service.pids_limit = self.parse_pids_limit(&service_field),
                 "shm_size" if !duplicate => service.shm_size = self.parse_shm_size(&service_field),
                 "mem_limit" if !duplicate => service.mem_limit = self.parse_mem_limit(&service_field),
                 "tmpfs" if !duplicate => service.tmpfs = self.parse_tmpfs(&service_field),
                 "sysctls" if !duplicate => service.sysctls = self.parse_sysctls(&service_field),
                 "logging" if !duplicate => service.logging = self.parse_logging(&service_field),
                 "pull_policy" if !duplicate => service.pull_policy = self.parse_pull_policy(&service_field),
+                "pull_refresh_after" if !duplicate => self.set_service_pull_refresh_after(&mut service, &service_field),
                 "restart" if !duplicate => service.restart = self.parse_restart_policy(&service_field),
+                "runtime" if !duplicate => self.set_service_runtime(&mut service, &service_field),
                 "stop_signal" if !duplicate => {
                     service.stop_signal = self.parse_string(&service_field, "service stop signal");
                 }
@@ -1592,9 +1839,7 @@ impl Parser {
                 "healthcheck" if !duplicate => {
                     service.healthcheck = self.parse_healthcheck(&service_field);
                 }
-                "build" if !duplicate => {
-                    service.build = self.parse_build(&service_field);
-                }
+                "build" if !duplicate => service.build = self.parse_build(&service_field),
                 "deploy" if !duplicate => {
                     service.deploy = self.parse_deploy(&service_field);
                 }
@@ -1616,14 +1861,303 @@ impl Parser {
                 "secrets" if !duplicate => {
                     service.secrets = self.parse_secret_grants(&service_field).unwrap_or_default();
                 }
-                name if name.starts_with("x-") => {
-                    service.extension_fields.push(service_field.reference());
-                }
+                name if name.starts_with("x-") => service.extension_fields.push(service_field.reference()),
                 _ if duplicate => {}
                 _ => service.unknown_fields.push(service_field.reference()),
             }
         }
         service
+    }
+
+    fn hooks(&mut self, service: &mut Service, field: &ParsedField) {
+        match field.name.value().as_str() {
+            "post_start" => service.post_start = self.parse_post_start(field),
+            "pre_stop" => service.pre_stop = self.parse_pre_stop(field),
+            "pre_start" => service.pre_start = self.parse_pre_start(field),
+            _ => {}
+        }
+    }
+
+    fn parse_service_read_only(&mut self, field: &ParsedField) -> Option<Located<BooleanValue>> {
+        self.parse_boolean(field, "service read_only")
+    }
+
+    fn parse_service_group_add(&mut self, field: &ParsedField) -> Vec<Located<String>> {
+        self.parse_string_sequence(field, "service supplementary groups")
+    }
+
+    fn set_service_count(&mut self, service: &mut Service, field: &ParsedField) {
+        match field.name.value().as_str() {
+            "cpu_count" => {
+                service.cpu_count = self.parse_cpu_count(field);
+                if service.cpu_count.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpu_percent" => {
+                service.cpu_percent = self.parse_cpu_percent(field);
+                if service.cpu_percent.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpu_period" => {
+                service.cpu_period = self.parse_cpu_period(field);
+                if service.cpu_period.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpu_quota" => {
+                service.cpu_quota = self.parse_cpu_quota(field);
+                if service.cpu_quota.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpu_rt_period" => {
+                service.cpu_rt_period = self.parse_cpu_rt_period(field);
+                if service.cpu_rt_period.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "pids_limit" => service.pids_limit = self.parse_pids_limit(field),
+            _ => {}
+        }
+    }
+
+    fn set_service_runtime(&mut self, service: &mut Service, field: &ParsedField) {
+        service.runtime = self.parse_extends_string(field, "service runtime must be a YAML string scalar");
+        if service.runtime.is_none() {
+            service.unknown_fields.push(field.reference());
+        }
+    }
+
+    fn set_service_pull_refresh_after(&mut self, service: &mut Service, field: &ParsedField) {
+        service.pull_refresh_after =
+            self.parse_extends_string(field, "service pull_refresh_after must be a YAML string scalar");
+        if service.pull_refresh_after.is_none() {
+            service.unknown_fields.push(field.reference());
+        }
+    }
+
+    fn set_service_platform(&mut self, service: &mut Service, field: &ParsedField) {
+        service.platform = self.parse_extends_string(field, "service platform must be a YAML string scalar");
+        if service.platform.is_none() {
+            service.unknown_fields.push(field.reference());
+        }
+    }
+
+    fn set_service_attach(&mut self, service: &mut Service, field: &ParsedField) {
+        service.attach = self.parse_boolean(field, "service attach");
+        if service.attach.is_none() {
+            service.unknown_fields.push(field.reference());
+        }
+    }
+
+    fn set_service_boolean(&mut self, service: &mut Service, field: &ParsedField) {
+        match field.name.value().as_str() {
+            "attach" => self.set_service_attach(service, field),
+            "init" => service.init = self.parse_boolean(field, "service init"),
+            "stdin_open" => service.stdin_open = self.parse_boolean(field, "stdin_open"),
+            "tty" => service.tty = self.parse_boolean(field, "tty"),
+            "privileged" => service.privileged = self.parse_boolean(field, "privileged"),
+            _ => {}
+        }
+    }
+
+    fn set_service_blkio_config(&mut self, service: &mut Service, field: &ParsedField) {
+        service.blkio_config = self.parse_blkio_config(field);
+        if service.blkio_config.is_none() {
+            service.unknown_fields.push(field.reference());
+        }
+    }
+
+    fn set_service_cgroup(&mut self, service: &mut Service, field: &ParsedField) {
+        match field.name.value().as_str() {
+            "cgroup" => {
+                service.cgroup = self.parse_cgroup_namespace(field);
+                if service.cgroup.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cgroup_parent" => {
+                service.cgroup_parent =
+                    self.parse_extends_string(field, "service cgroup_parent must be a YAML string scalar");
+                if service.cgroup_parent.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn parse_cgroup_namespace(&mut self, field: &ParsedField) -> Option<CgroupNamespace> {
+        let raw = self.parse_extends_string(field, "service cgroup must be a YAML string scalar")?;
+        let cgroup = CgroupNamespace::parse(raw);
+        if !cgroup.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    CGROUP_NAMESPACE_INVALID,
+                    Severity::Warning,
+                    "service cgroup must be `host`, `private`, or a deferred expression",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    cgroup.raw().span(),
+                    "retained unsupported cgroup namespace",
+                )),
+            );
+        }
+        Some(cgroup)
+    }
+
+    fn parse_blkio_config(&mut self, field: &ParsedField) -> Option<BlkioConfig> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "blkio_config must be a mapping");
+            return None;
+        };
+        let mut config = BlkioConfig::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            match option.name.value().as_str() {
+                name if name.starts_with("x-") => config.push_extension(option.reference()),
+                "weight" => match self.parse_blkio_scalar(&option) {
+                    Some(value) => config.set_weight(value),
+                    None => config.push_unknown(option.reference()),
+                },
+                "device_read_bps" | "device_read_iops" | "device_write_bps" | "device_write_iops" => {
+                    if let Some(values) = self.parse_blkio_device_rates(&option) {
+                        if let Some(items) = config.device_rates_mut(option.name.value()) {
+                            items.extend(values);
+                        }
+                    } else {
+                        config.push_unknown(option.reference());
+                    }
+                }
+                "weight_device" => {
+                    if let Some(values) = self.parse_blkio_weight_devices(&option) {
+                        config.weight_devices_mut().extend(values);
+                    } else {
+                        config.push_unknown(option.reference());
+                    }
+                }
+                _ => config.push_unknown(option.reference()),
+            }
+        }
+        Some(config)
+    }
+
+    fn parse_blkio_scalar(&mut self, field: &ParsedField) -> Option<Located<BlkioScalar>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "blkio value must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer => BlkioScalar::YamlInteger(scalar_string_from_source(&self.source, scalar)),
+            ScalarType::String => BlkioScalar::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "blkio value must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_blkio_device_rates(&mut self, field: &ParsedField) -> Option<Vec<BlkioDeviceRate>> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(EXPECTED_SEQUENCE, field, "blkio device rates must be sequences");
+            return None;
+        };
+        let mut items = Vec::new();
+        for node in sequence.values() {
+            let Some(mapping) = node.as_mapping() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_MAPPING,
+                    &node,
+                    field.span,
+                    "blkio device rate entries must be mappings",
+                );
+                items.push(BlkioDeviceRate::unmodeled(
+                    node_span(self.source_id, &node).unwrap_or(field.span),
+                ));
+                continue;
+            };
+            let mut item = BlkioDeviceRate::new(span_from_position(self.source_id, mapping.byte_range()));
+            let mut seen = BTreeMap::new();
+            for option in self.fields(mapping) {
+                if self.record_duplicate(&mut seen, &option) {
+                    continue;
+                }
+                match option.name.value().as_str() {
+                    name if name.starts_with("x-") => item.push_extension(option.reference()),
+                    "path" => match self.parse_string(&option, "blkio device path") {
+                        Some(value) => item.set_path(value),
+                        None => item.push_unknown(option.reference()),
+                    },
+                    "rate" => match self.parse_blkio_scalar(&option) {
+                        Some(value) => item.set_rate(value),
+                        None => item.push_unknown(option.reference()),
+                    },
+                    _ => item.push_unknown(option.reference()),
+                }
+            }
+            items.push(item);
+        }
+        Some(items)
+    }
+
+    fn parse_blkio_weight_devices(&mut self, field: &ParsedField) -> Option<Vec<BlkioWeightDevice>> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(EXPECTED_SEQUENCE, field, "blkio weight devices must be sequences");
+            return None;
+        };
+        let mut items = Vec::new();
+        for node in sequence.values() {
+            let Some(mapping) = node.as_mapping() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_MAPPING,
+                    &node,
+                    field.span,
+                    "blkio weight device entries must be mappings",
+                );
+                items.push(BlkioWeightDevice::unmodeled(
+                    node_span(self.source_id, &node).unwrap_or(field.span),
+                ));
+                continue;
+            };
+            let mut item = BlkioWeightDevice::new(span_from_position(self.source_id, mapping.byte_range()));
+            let mut seen = BTreeMap::new();
+            for option in self.fields(mapping) {
+                if self.record_duplicate(&mut seen, &option) {
+                    continue;
+                }
+                match option.name.value().as_str() {
+                    name if name.starts_with("x-") => item.push_extension(option.reference()),
+                    "path" => match self.parse_string(&option, "blkio weight device path") {
+                        Some(value) => item.set_path(value),
+                        None => item.push_unknown(option.reference()),
+                    },
+                    "weight" => match self.parse_blkio_scalar(&option) {
+                        Some(value) => item.set_weight(value),
+                        None => item.push_unknown(option.reference()),
+                    },
+                    _ => item.push_unknown(option.reference()),
+                }
+            }
+            items.push(item);
+        }
+        Some(items)
     }
 
     fn parse_hostname(&mut self, field: &ParsedField) -> Option<Hostname> {
@@ -2495,6 +3029,504 @@ impl Parser {
         Some(logging)
     }
 
+    fn parse_credential_spec(&mut self, field: &ParsedField) -> Option<CredentialSpec> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "credential_spec must be a mapping");
+            return None;
+        };
+        let mut credential_spec = CredentialSpec::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &member);
+            match member.name.value().as_str() {
+                "config" if !duplicate => {
+                    if let Some(value) = self
+                        .parse_credential_spec_string(&member, "credential_spec config must be a YAML string scalar")
+                    {
+                        credential_spec.set_config(value);
+                    } else {
+                        credential_spec.push_unknown(member.reference());
+                    }
+                }
+                "file" if !duplicate => {
+                    if let Some(value) =
+                        self.parse_credential_spec_string(&member, "credential_spec file must be a YAML string scalar")
+                    {
+                        credential_spec.set_file(value);
+                    } else {
+                        credential_spec.push_unknown(member.reference());
+                    }
+                }
+                "registry" if !duplicate => {
+                    if let Some(value) = self
+                        .parse_credential_spec_string(&member, "credential_spec registry must be a YAML string scalar")
+                    {
+                        credential_spec.set_registry(value);
+                    } else {
+                        credential_spec.push_unknown(member.reference());
+                    }
+                }
+                name if name.starts_with("x-") => credential_spec.push_extension(member.reference()),
+                _ if duplicate => {}
+                _ => credential_spec.push_unknown(member.reference()),
+            }
+        }
+        Some(credential_spec)
+    }
+
+    fn parse_credential_spec_string(&mut self, field: &ParsedField, message: &'static str) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        }
+        Some(Located::new(
+            scalar_string_from_source(&self.source, scalar),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_extends(&mut self, field: &ParsedField) -> Option<Extends> {
+        match field.value.as_ref() {
+            Some(YamlNode::Scalar(scalar)) if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String => {
+                Some(Extends::Short(Located::new(
+                    scalar_string_from_source(&self.source, scalar),
+                    span_from_position(self.source_id, scalar.byte_range()),
+                )))
+            }
+            Some(YamlNode::Mapping(mapping)) => {
+                let span = span_from_position(self.source_id, mapping.byte_range());
+                let mut reference = ExtendsReference::new(span);
+                let mut seen = BTreeMap::new();
+                for member in self.fields(mapping) {
+                    let duplicate = self.record_duplicate(&mut seen, &member);
+                    match member.name.value().as_str() {
+                        "service" if !duplicate => {
+                            if let Some(value) =
+                                self.parse_extends_string(&member, "extends service must be a YAML string scalar")
+                            {
+                                reference.set_service(value);
+                            } else {
+                                reference.push_unknown(member.reference());
+                            }
+                        }
+                        "file" if !duplicate => {
+                            if let Some(value) =
+                                self.parse_extends_string(&member, "extends file must be a YAML string scalar")
+                            {
+                                reference.set_file(value);
+                            } else {
+                                reference.push_unknown(member.reference());
+                            }
+                        }
+                        name if name.starts_with("x-") => reference.push_extension(member.reference()),
+                        _ if duplicate => {}
+                        _ => reference.push_unknown(member.reference()),
+                    }
+                }
+                if reference.service().is_none() {
+                    self.missing(
+                        EXTENDS_MISSING_SERVICE,
+                        span,
+                        "long extends is missing required `service`",
+                    );
+                }
+                Some(Extends::Long(reference))
+            }
+            _ => {
+                self.expected(
+                    EXPECTED_FIELD_FORM,
+                    field,
+                    "extends must be a YAML string scalar or mapping",
+                );
+                None
+            }
+        }
+    }
+
+    fn parse_extends_string(&mut self, field: &ParsedField, message: impl Into<String>) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        }
+        Some(Located::new(
+            scalar_string_from_source(&self.source, scalar),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_provider(&mut self, field: &ParsedField) -> Option<Provider> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "provider must be a mapping");
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut provider = Provider::new(span);
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &member);
+            match member.name.value().as_str() {
+                "type" if !duplicate => {
+                    if let Some(value) = self.parse_provider_type(&member) {
+                        provider.set_type(value);
+                    } else {
+                        provider.push_unknown(member.reference());
+                    }
+                }
+                "options" if !duplicate => {
+                    if let Some(options) = self.parse_provider_options(&member) {
+                        provider.set_options(options);
+                    } else {
+                        provider.push_unknown(member.reference());
+                    }
+                }
+                name if name.starts_with("x-") => provider.push_extension(member.reference()),
+                _ if duplicate => {}
+                _ => provider.push_unknown(member.reference()),
+            }
+        }
+        if provider.type_().is_none() {
+            self.missing(PROVIDER_MISSING_TYPE, span, "provider is missing required `type`");
+        }
+        Some(provider)
+    }
+
+    fn parse_provider_type(&mut self, field: &ParsedField) -> Option<Located<String>> {
+        self.parse_extends_string(field, "provider type must be a YAML string scalar")
+    }
+
+    fn parse_post_start(&mut self, field: &ParsedField) -> Option<PostStartHooks> {
+        let (span, entries) = self.parse_lifecycle_hooks(
+            field,
+            "post_start",
+            POST_START_MISSING_COMMAND,
+            PostStartHook::Hook,
+            |span| PostStartHook::Unmodeled { span },
+        )?;
+        Some(PostStartHooks::new(span, entries))
+    }
+
+    fn parse_pre_stop(&mut self, field: &ParsedField) -> Option<PreStopHooks> {
+        let (span, entries) =
+            self.parse_lifecycle_hooks(field, "pre_stop", PRE_STOP_MISSING_COMMAND, PreStopHook::Hook, |span| {
+                PreStopHook::Unmodeled { span }
+            })?;
+        Some(PreStopHooks::new(span, entries))
+    }
+
+    fn parse_pre_start(&mut self, field: &ParsedField) -> Option<PreStartHooks> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "pre_start must be a sequence of hook mappings",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut entries = Vec::new();
+        for item in sequence.values() {
+            let Some(mapping) = item.as_mapping() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_MAPPING,
+                    &item,
+                    field.span,
+                    "pre_start items must be hook mappings",
+                );
+                entries.push(PreStartHook::Unmodeled {
+                    span: node_span(self.source_id, &item).unwrap_or(field.span),
+                });
+                continue;
+            };
+            entries.push(PreStartHook::Hook(Box::new(self.parse_pre_start_service_hook(mapping))));
+        }
+        Some(PreStartHooks::new(span, entries))
+    }
+
+    fn parse_lifecycle_hooks<T>(
+        &mut self,
+        field: &ParsedField,
+        name: &str,
+        missing_code: DiagnosticCode,
+        hook_entry: fn(Box<ServiceHook>) -> T,
+        unmodeled_entry: fn(SourceSpan) -> T,
+    ) -> Option<(SourceSpan, Vec<T>)> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                format!("{name} must be a sequence of hook mappings"),
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut entries = Vec::new();
+        for item in sequence.values() {
+            let Some(mapping) = item.as_mapping() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_MAPPING,
+                    &item,
+                    field.span,
+                    format!("{name} items must be hook mappings"),
+                );
+                entries.push(unmodeled_entry(node_span(self.source_id, &item).unwrap_or(field.span)));
+                continue;
+            };
+            entries.push(hook_entry(Box::new(self.parse_service_hook(
+                mapping,
+                name,
+                missing_code,
+            ))));
+        }
+        Some((span, entries))
+    }
+
+    fn parse_service_hook(&mut self, mapping: &Mapping, name: &str, missing_code: DiagnosticCode) -> ServiceHook {
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut hook = ServiceHook::new(span);
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &member);
+            if duplicate {
+                hook.push_unknown(member.reference());
+                continue;
+            }
+            match member.name.value().as_str() {
+                "command" => {
+                    if let Some(value) = self.parse_command(&member) {
+                        hook.set_command(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "environment" => {
+                    if let Some(value) = self.parse_environment(&member) {
+                        hook.set_environment(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "privileged" => {
+                    if let Some(value) = self.parse_boolean(&member, &format!("{name} privileged")) {
+                        hook.set_privileged(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "user" => {
+                    if let Some(value) =
+                        self.parse_extends_string(&member, format!("{name} user must be a YAML string scalar"))
+                    {
+                        hook.set_user(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "working_dir" => {
+                    if let Some(value) =
+                        self.parse_extends_string(&member, format!("{name} working_dir must be a YAML string scalar"))
+                    {
+                        hook.set_working_dir(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                name if name.starts_with("x-") => hook.push_extension(member.reference()),
+                _ => hook.push_unknown(member.reference()),
+            }
+        }
+        if hook.command().is_none() {
+            self.missing(missing_code, span, format!("{name} hook is missing required `command`"));
+        }
+        hook
+    }
+
+    fn parse_pre_start_service_hook(&mut self, mapping: &Mapping) -> PreStartServiceHook {
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut hook = PreStartServiceHook::new(span);
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &member);
+            if duplicate {
+                hook.push_unknown(member.reference());
+                continue;
+            }
+            match member.name.value().as_str() {
+                "command" => {
+                    if let Some(value) = self.parse_command(&member) {
+                        hook.set_command(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "image" => {
+                    if let Some(value) =
+                        self.parse_extends_string(&member, "pre_start image must be a YAML string scalar")
+                    {
+                        hook.set_image(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "environment" => {
+                    if let Some(value) = self.parse_environment(&member) {
+                        hook.set_environment(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "privileged" => {
+                    if let Some(value) = self.parse_boolean(&member, "pre_start privileged") {
+                        hook.set_privileged(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "per_replica" => {
+                    if let Some(value) = self.parse_boolean(&member, "pre_start per_replica") {
+                        hook.set_per_replica(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "user" => {
+                    if let Some(value) =
+                        self.parse_extends_string(&member, "pre_start user must be a YAML string scalar")
+                    {
+                        hook.set_user(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                "working_dir" => {
+                    if let Some(value) =
+                        self.parse_extends_string(&member, "pre_start working_dir must be a YAML string scalar")
+                    {
+                        hook.set_working_dir(value);
+                    } else {
+                        hook.push_unknown(member.reference());
+                    }
+                }
+                name if name.starts_with("x-") => hook.push_extension(member.reference()),
+                _ => hook.push_unknown(member.reference()),
+            }
+        }
+        hook
+    }
+
+    fn parse_provider_options(&mut self, field: &ParsedField) -> Option<ProviderOptions> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "provider options must be a mapping");
+            return None;
+        };
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut entries = Vec::new();
+        let mut unmodeled_entries = Vec::new();
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                unmodeled_entries.push(option.reference());
+                continue;
+            }
+            if option.name.value().is_empty() {
+                self.expected(EXPECTED_FIELD_FORM, &option, "provider option keys must not be empty");
+                unmodeled_entries.push(option.reference());
+                continue;
+            }
+            let Some(value) = self.parse_provider_option_value(&option) else {
+                unmodeled_entries.push(option.reference());
+                continue;
+            };
+            entries.push(ProviderOption::new(option.name, value, option.span));
+        }
+        Some(ProviderOptions::new(span, entries, unmodeled_entries))
+    }
+
+    fn parse_provider_option_value(&mut self, field: &ParsedField) -> Option<ProviderOptionValue> {
+        let Some(value) = field.value.as_ref() else {
+            self.expected(
+                EXPECTED_FIELD_FORM,
+                field,
+                "provider option values must be YAML string, number, or boolean scalars or sequences of them",
+            );
+            return None;
+        };
+        if let Some(scalar) = value.as_scalar() {
+            return self
+                .provider_option_scalar(scalar)
+                .map(ProviderOptionValue::Scalar)
+                .or_else(|| {
+                    self.expected(
+                        EXPECTED_FIELD_FORM,
+                        field,
+                        "provider option values must be YAML string, number, or boolean scalars or sequences of them",
+                    );
+                    None
+                });
+        }
+        let Some(sequence) = value.as_sequence() else {
+            self.expected(
+                EXPECTED_FIELD_FORM,
+                field,
+                "provider option values must be YAML string, number, or boolean scalars or sequences of them",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        for item in sequence.values() {
+            let Some(scalar) = item.as_scalar() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &item,
+                    field.span,
+                    "provider option sequence items must be YAML string, number, or boolean scalars",
+                );
+                items.push(ProviderOptionItem::Unmodeled {
+                    span: node_span(self.source_id, &item).unwrap_or(field.span),
+                });
+                continue;
+            };
+            if let Some(value) = self.provider_option_scalar(scalar) {
+                items.push(ProviderOptionItem::Scalar(value));
+            } else {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &item,
+                    field.span,
+                    "provider option sequence items must be YAML string, number, or boolean scalars",
+                );
+                items.push(ProviderOptionItem::Unmodeled {
+                    span: node_span(self.source_id, &item).unwrap_or(field.span),
+                });
+            }
+        }
+        Some(ProviderOptionValue::Sequence { span, items })
+    }
+
+    fn provider_option_scalar(&self, scalar: &Scalar) -> Option<Located<ComposeScalar>> {
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let value = match scalar_value.scalar_type() {
+            ScalarType::String => ComposeScalar::String(scalar_string_from_source(&self.source, scalar)),
+            ScalarType::Integer | ScalarType::Float => {
+                ComposeScalar::Number(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::Boolean => ComposeScalar::Boolean(scalar_value.to_bool().unwrap_or(false)),
+            ScalarType::Null | ScalarType::Timestamp | ScalarType::Regex => return None,
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
     fn parse_logging_driver(&mut self, field: &ParsedField) -> Option<Located<String>> {
         let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
             self.expected(
@@ -2658,6 +3690,216 @@ impl Parser {
             _ => {}
         }
         Some(limit)
+    }
+
+    fn parse_cpu_count(&mut self, field: &ParsedField) -> Option<Located<CpuCount>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                CPU_COUNT_EXPECTED_VALUE,
+                field,
+                "cpu_count must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let raw = scalar_string_from_source(&self.source, scalar);
+        let count = match scalar_value.scalar_type() {
+            ScalarType::Integer | ScalarType::Float if CpuCount::yaml_integer_spelling(&raw) => {
+                CpuCount::yaml_integer(raw)
+            }
+            ScalarType::String
+                if scalar_value.style() == ScalarStyle::Plain
+                    && !scalar_uses_block_style(&self.source, scalar)
+                    && CpuCount::yaml_integer_spelling(&raw) =>
+            {
+                CpuCount::yaml_integer(raw)
+            }
+            ScalarType::String => CpuCount::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    CPU_COUNT_EXPECTED_VALUE,
+                    field,
+                    "cpu_count must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        if !count.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    CPU_COUNT_NEGATIVE,
+                    Severity::Error,
+                    "cpu_count YAML integers must be nonnegative",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "negative CPU count retained as invalid evidence",
+                )),
+            );
+        }
+        Some(Located::new(count, span))
+    }
+
+    fn parse_cpu_percent(&mut self, field: &ParsedField) -> Option<Located<CpuPercent>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                CPU_PERCENT_EXPECTED_VALUE,
+                field,
+                "cpu_percent must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let raw = scalar_string_from_source(&self.source, scalar);
+        let percent = match scalar_value.scalar_type() {
+            ScalarType::Integer | ScalarType::Float if CpuPercent::yaml_integer_spelling(&raw) => {
+                CpuPercent::yaml_integer(raw)
+            }
+            ScalarType::String
+                if scalar_value.style() == ScalarStyle::Plain
+                    && !scalar_uses_block_style(&self.source, scalar)
+                    && CpuPercent::yaml_integer_spelling(&raw) =>
+            {
+                CpuPercent::yaml_integer(raw)
+            }
+            ScalarType::String => CpuPercent::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    CPU_PERCENT_EXPECTED_VALUE,
+                    field,
+                    "cpu_percent must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        if !percent.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    CPU_PERCENT_OUT_OF_RANGE,
+                    Severity::Error,
+                    "cpu_percent YAML integers must be between 0 and 100 inclusive",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "out-of-range CPU percentage retained as invalid evidence",
+                )),
+            );
+        }
+        Some(Located::new(percent, span))
+    }
+
+    fn parse_cpu_period(&mut self, field: &ParsedField) -> Option<Located<CpuPeriod>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                CPU_PERIOD_EXPECTED_VALUE,
+                field,
+                "cpu_period must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let raw = scalar_string_from_source(&self.source, scalar);
+        let period = match scalar_value.scalar_type() {
+            ScalarType::Integer | ScalarType::Float => CpuPeriod::YamlNumber(raw),
+            ScalarType::String
+                if scalar_value.style() == ScalarStyle::Plain
+                    && !scalar_uses_block_style(&self.source, scalar)
+                    && CpuPeriod::yaml_number_spelling(&raw) =>
+            {
+                CpuPeriod::YamlNumber(raw)
+            }
+            ScalarType::String => CpuPeriod::String(raw),
+            _ => {
+                self.expected(
+                    CPU_PERIOD_EXPECTED_VALUE,
+                    field,
+                    "cpu_period must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(period, span))
+    }
+
+    fn parse_cpu_quota(&mut self, field: &ParsedField) -> Option<Located<CpuQuota>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                CPU_QUOTA_EXPECTED_VALUE,
+                field,
+                "cpu_quota must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let raw = scalar_string_from_source(&self.source, scalar);
+        let quota = match scalar_value.scalar_type() {
+            ScalarType::Integer | ScalarType::Float => CpuQuota::YamlNumber(raw),
+            ScalarType::String
+                if scalar_value.style() == ScalarStyle::Plain
+                    && !scalar_uses_block_style(&self.source, scalar)
+                    && CpuPeriod::yaml_number_spelling(&raw) =>
+            {
+                CpuQuota::YamlNumber(raw)
+            }
+            ScalarType::String => CpuQuota::String(raw),
+            _ => {
+                self.expected(
+                    CPU_QUOTA_EXPECTED_VALUE,
+                    field,
+                    "cpu_quota must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(quota, span))
+    }
+
+    fn parse_cpu_rt_period(&mut self, field: &ParsedField) -> Option<Located<CpuRtPeriod>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                CPU_RT_PERIOD_EXPECTED_VALUE,
+                field,
+                "cpu_rt_period must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let raw = scalar_string_from_source(&self.source, scalar);
+        let period = match scalar_value.scalar_type() {
+            ScalarType::Integer | ScalarType::Float => CpuRtPeriod::YamlNumber(raw),
+            ScalarType::String
+                if scalar_value.style() == ScalarStyle::Plain
+                    && !scalar_uses_block_style(&self.source, scalar)
+                    && CpuPeriod::yaml_number_spelling(&raw) =>
+            {
+                CpuRtPeriod::YamlNumber(raw)
+            }
+            ScalarType::String => CpuRtPeriod::parse_string(raw),
+            _ => {
+                self.expected(
+                    CPU_RT_PERIOD_EXPECTED_VALUE,
+                    field,
+                    "cpu_rt_period must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        if !period.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    CPU_RT_PERIOD_INVALID,
+                    Severity::Error,
+                    "cpu_rt_period must match the ComposeLens duration policy using `us`, `ms`, `s`, `m`, or `h`, or contain an interpolation marker",
+                )
+                .with_label(DiagnosticLabel::primary(span, "invalid service real-time CPU period")),
+            );
+        }
+        Some(Located::new(period, span))
     }
 
     fn parse_shm_size(&mut self, field: &ParsedField) -> Option<ShmSize> {
@@ -2844,6 +4086,10 @@ impl Parser {
                 None
             }
         }
+    }
+
+    fn parse_service_user(&mut self, field: &ParsedField) -> Option<UserSpec> {
+        self.parse_string(field, "service user").map(UserSpec::parse)
     }
 
     fn parse_entrypoint(&mut self, field: &ParsedField) -> Option<Entrypoint> {
@@ -3862,11 +5108,22 @@ impl Parser {
                         .into_iter()
                         .for_each(|value| definition.set_placement(value)),
                     DeployFieldKind::Replicas => self.set_deploy_replicas(&mut definition, &option),
+                    DeployFieldKind::Resources => self
+                        .parse_deploy_resources(&option)
+                        .into_iter()
+                        .for_each(|value| definition.set_resources(value)),
                     DeployFieldKind::RestartPolicy => self
                         .parse_deploy_restart_policy(&option)
                         .into_iter()
                         .for_each(|value| definition.set_restart_policy(value)),
-                    _ => {}
+                    DeployFieldKind::RollbackConfig => self
+                        .parse_deploy_rollback_config(&option)
+                        .into_iter()
+                        .for_each(|value| definition.set_rollback_config(value)),
+                    DeployFieldKind::UpdateConfig => self
+                        .parse_deploy_update_config(&option)
+                        .into_iter()
+                        .for_each(|value| definition.set_update_config(value)),
                 }
             } else if option.name.value().starts_with("x-") {
                 definition.push_extension(option.reference());
@@ -4042,6 +5299,322 @@ impl Parser {
         Some(policy)
     }
 
+    fn parse_deploy_update_config(&mut self, field: &ParsedField) -> Option<DeployUpdateConfig> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "deploy update_config must be a mapping");
+            return None;
+        };
+        let mut config = DeployUpdateConfig::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &member) {
+                continue;
+            }
+            let parsed = match member.name.value().as_str() {
+                name if name.starts_with("x-") => {
+                    config.push_extension(member.reference());
+                    true
+                }
+                "parallelism" => self
+                    .parse_deploy_update_parallelism(&member)
+                    .map(|value| {
+                        config.set_parallelism(value);
+                    })
+                    .is_some(),
+                "delay" => self
+                    .parse_deploy_update_string(&member, "deploy update_config delay must be a YAML string scalar")
+                    .map(|value| {
+                        config.set_delay(value);
+                    })
+                    .is_some(),
+                "monitor" => self
+                    .parse_deploy_update_string(&member, "deploy update_config monitor must be a YAML string scalar")
+                    .map(|value| {
+                        config.set_monitor(value);
+                    })
+                    .is_some(),
+                "failure_action" => self
+                    .parse_deploy_update_string(
+                        &member,
+                        "deploy update_config failure_action must be a YAML string scalar",
+                    )
+                    .map(|value| {
+                        config.set_failure_action(value);
+                    })
+                    .is_some(),
+                "max_failure_ratio" => self
+                    .parse_deploy_update_max_failure_ratio(&member)
+                    .map(|value| {
+                        config.set_max_failure_ratio(value);
+                    })
+                    .is_some(),
+                "order" => self
+                    .parse_deploy_update_order(&member)
+                    .map(|value| {
+                        config.set_order(value);
+                    })
+                    .is_some(),
+                _ => {
+                    config.push_unknown(member.reference());
+                    true
+                }
+            };
+            if !parsed {
+                config.push_unknown(member.reference());
+            }
+        }
+        Some(config)
+    }
+
+    fn parse_deploy_rollback_config(&mut self, field: &ParsedField) -> Option<DeployRollbackConfig> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "deploy rollback_config must be a mapping");
+            return None;
+        };
+        let mut config = DeployRollbackConfig::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &member) {
+                continue;
+            }
+            let parsed = match member.name.value().as_str() {
+                name if name.starts_with("x-") => {
+                    config.push_extension(member.reference());
+                    true
+                }
+                "parallelism" => self
+                    .parse_deploy_rollback_parallelism(&member)
+                    .map(|value| config.set_parallelism(value))
+                    .is_some(),
+                "delay" => self
+                    .parse_deploy_rollback_string(&member, "deploy rollback_config delay must be a YAML string scalar")
+                    .map(|value| config.set_delay(value))
+                    .is_some(),
+                "monitor" => self
+                    .parse_deploy_rollback_string(
+                        &member,
+                        "deploy rollback_config monitor must be a YAML string scalar",
+                    )
+                    .map(|value| config.set_monitor(value))
+                    .is_some(),
+                "failure_action" => self
+                    .parse_deploy_rollback_string(
+                        &member,
+                        "deploy rollback_config failure_action must be a YAML string scalar",
+                    )
+                    .map(|value| config.set_failure_action(value))
+                    .is_some(),
+                "max_failure_ratio" => self
+                    .parse_deploy_rollback_max_failure_ratio(&member)
+                    .map(|value| config.set_max_failure_ratio(value))
+                    .is_some(),
+                "order" => self
+                    .parse_deploy_rollback_order(&member)
+                    .map(|value| config.set_order(value))
+                    .is_some(),
+                _ => {
+                    config.push_unknown(member.reference());
+                    true
+                }
+            };
+            if !parsed {
+                config.push_unknown(member.reference());
+            }
+        }
+        Some(config)
+    }
+
+    fn parse_deploy_rollback_string(&mut self, field: &ParsedField, message: &'static str) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        }
+        Some(Located::new(
+            scalar_string_from_source(&self.source, scalar),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_rollback_parallelism(&mut self, field: &ParsedField) -> Option<Located<DeployRollbackParallelism>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy rollback_config parallelism must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer => {
+                DeployRollbackParallelism::YamlInteger(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String => DeployRollbackParallelism::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "deploy rollback_config parallelism must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_rollback_max_failure_ratio(
+        &mut self,
+        field: &ParsedField,
+    ) -> Option<Located<DeployRollbackMaxFailureRatio>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy rollback_config max_failure_ratio must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer | ScalarType::Float => {
+                DeployRollbackMaxFailureRatio::YamlNumber(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String => {
+                DeployRollbackMaxFailureRatio::String(scalar_string_from_source(&self.source, scalar))
+            }
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "deploy rollback_config max_failure_ratio must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_rollback_order(&mut self, field: &ParsedField) -> Option<Located<DeployRollbackOrder>> {
+        let raw =
+            self.parse_deploy_rollback_string(field, "deploy rollback_config order must be a YAML string scalar")?;
+        let order = DeployRollbackOrder::parse(raw.value().clone());
+        if !order.is_documented() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEPLOY_ROLLBACK_CONFIG_ORDER_PORTABILITY,
+                    Severity::Warning,
+                    "deploy rollback_config order is outside Compose's documented portable values",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    raw.span(),
+                    "retained provider-specific rollback order",
+                )),
+            );
+        }
+        Some(Located::new(order, raw.span()))
+    }
+
+    fn parse_deploy_update_string(&mut self, field: &ParsedField, message: &'static str) -> Option<Located<String>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        }
+        Some(Located::new(
+            scalar_string_from_source(&self.source, scalar),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_update_parallelism(&mut self, field: &ParsedField) -> Option<Located<DeployUpdateParallelism>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy update_config parallelism must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer => {
+                DeployUpdateParallelism::YamlInteger(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String => DeployUpdateParallelism::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "deploy update_config parallelism must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+    fn parse_deploy_update_max_failure_ratio(
+        &mut self,
+        field: &ParsedField,
+    ) -> Option<Located<DeployUpdateMaxFailureRatio>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy update_config max_failure_ratio must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer | ScalarType::Float => {
+                DeployUpdateMaxFailureRatio::YamlNumber(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String => DeployUpdateMaxFailureRatio::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "deploy update_config max_failure_ratio must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+    fn parse_deploy_update_order(&mut self, field: &ParsedField) -> Option<Located<DeployUpdateOrder>> {
+        let raw = self.parse_deploy_update_string(field, "deploy update_config order must be a YAML string scalar")?;
+        let order = DeployUpdateOrder::parse(raw.value().clone());
+        if !order.is_documented() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEPLOY_UPDATE_CONFIG_ORDER_PORTABILITY,
+                    Severity::Warning,
+                    "deploy update_config order is outside Compose's documented portable values",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    raw.span(),
+                    "retained provider-specific update order",
+                )),
+            );
+        }
+        Some(Located::new(order, raw.span()))
+    }
+
     fn parse_deploy_placement(&mut self, field: &ParsedField) -> Option<DeployPlacement> {
         let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
             self.expected(EXPECTED_MAPPING, field, "deploy placement must be a mapping");
@@ -4206,6 +5779,747 @@ impl Parser {
             scalar_string_from_source(&self.source, scalar),
             span_from_position(self.source_id, scalar.byte_range()),
         ))
+    }
+
+    fn parse_deploy_resources(&mut self, field: &ParsedField) -> Option<DeployResources> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "deploy resources must be a mapping");
+            return None;
+        };
+        let mut resources = DeployResources::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            match option.name.value().as_str() {
+                name if name.starts_with("x-") => resources.push_extension(option.reference()),
+                "limits" => self
+                    .parse_deploy_resource_limits(&option)
+                    .into_iter()
+                    .for_each(|value| resources.set_limits(value)),
+                "reservations" => self
+                    .parse_deploy_resource_reservations(&option)
+                    .into_iter()
+                    .for_each(|value| resources.set_reservations(value)),
+                _ => resources.push_unknown(option.reference()),
+            }
+        }
+        Some(resources)
+    }
+
+    fn parse_deploy_resource_limits(&mut self, field: &ParsedField) -> Option<DeployResourceLimits> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(EXPECTED_MAPPING, field, "deploy resource limits must be a mapping");
+            return None;
+        };
+        let mut limits = DeployResourceLimits::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            match option.name.value().as_str() {
+                name if name.starts_with("x-") => limits.push_extension(option.reference()),
+                "cpus" => self
+                    .parse_deploy_resource_cpus(&option, "deploy resource limits cpus")
+                    .into_iter()
+                    .for_each(|value| limits.set_cpus(value)),
+                "memory" => self
+                    .parse_deploy_resource_memory(&option, "deploy resource limits memory must be a YAML string scalar")
+                    .into_iter()
+                    .for_each(|value| limits.set_memory(value)),
+                "pids" => self
+                    .parse_deploy_resource_pids(&option)
+                    .into_iter()
+                    .for_each(|value| limits.set_pids(value)),
+                _ => limits.push_unknown(option.reference()),
+            }
+        }
+        Some(limits)
+    }
+
+    fn parse_deploy_resource_reservations(&mut self, field: &ParsedField) -> Option<DeployResourceReservations> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                EXPECTED_MAPPING,
+                field,
+                "deploy resource reservations must be a mapping",
+            );
+            return None;
+        };
+        let mut reservations =
+            DeployResourceReservations::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            match option.name.value().as_str() {
+                name if name.starts_with("x-") => reservations.push_extension(option.reference()),
+                "cpus" => self
+                    .parse_deploy_resource_cpus(&option, "deploy resource reservations cpus")
+                    .into_iter()
+                    .for_each(|value| reservations.set_cpus(value)),
+                "memory" => self
+                    .parse_deploy_resource_memory(
+                        &option,
+                        "deploy resource reservations memory must be a YAML string scalar",
+                    )
+                    .into_iter()
+                    .for_each(|value| reservations.set_memory(value)),
+                "generic_resources" => {
+                    if let Some(value) = self.parse_deploy_generic_resources(&option) {
+                        reservations.set_generic_resources(value);
+                    } else {
+                        reservations.push_unknown(option.reference());
+                    }
+                }
+                "devices" => {
+                    if let Some(value) = self.parse_deploy_reservation_devices(&option) {
+                        reservations.set_devices(value);
+                    } else {
+                        reservations.push_unknown(option.reference());
+                    }
+                }
+                _ => reservations.push_unknown(option.reference()),
+            }
+        }
+        Some(reservations)
+    }
+
+    fn parse_deploy_resource_pids(&mut self, field: &ParsedField) -> Option<Located<DeployResourcePids>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy resource limits pids must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer => DeployResourcePids::YamlInteger(scalar_string_from_source(&self.source, scalar)),
+            ScalarType::String => DeployResourcePids::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "deploy resource limits pids must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_resource_cpus(
+        &mut self,
+        field: &ParsedField,
+        context: &'static str,
+    ) -> Option<Located<DeployResourceCpus>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                format!("{context} must be a YAML number or string scalar"),
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer | ScalarType::Float => {
+                DeployResourceCpus::YamlNumber(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String => DeployResourceCpus::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    format!("{context} must be a YAML number or string scalar"),
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_resource_memory(
+        &mut self,
+        field: &ParsedField,
+        message: &'static str,
+    ) -> Option<Located<DeployResourceMemory>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        };
+        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        }
+        Some(Located::new(
+            DeployResourceMemory::parse(scalar_string_from_source(&self.source, scalar)),
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_generic_resources(&mut self, field: &ParsedField) -> Option<DeployGenericResources> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "deploy resource reservations generic_resources must be a sequence",
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        for node in sequence.values() {
+            let Some(mapping) = node.as_mapping() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_MAPPING,
+                    &node,
+                    field.span,
+                    "deploy resource generic-resource entries must be mappings",
+                );
+                items.push(DeployGenericResource::unmodeled(
+                    node_span(self.source_id, &node).unwrap_or(field.span),
+                ));
+                continue;
+            };
+            let mut item = DeployGenericResource::new(span_from_position(self.source_id, mapping.byte_range()));
+            let mut seen = BTreeMap::new();
+            for option in self.fields(mapping) {
+                if self.record_duplicate(&mut seen, &option) {
+                    continue;
+                }
+                match option.name.value().as_str() {
+                    name if name.starts_with("x-") => item.push_extension(option.reference()),
+                    "discrete_resource_spec" => {
+                        if let Some(value) = self.parse_deploy_discrete_resource_spec(&option) {
+                            item.set_discrete_resource_spec(value);
+                        } else {
+                            item.push_unknown(option.reference());
+                        }
+                    }
+                    _ => item.push_unknown(option.reference()),
+                }
+            }
+            items.push(item);
+        }
+        Some(DeployGenericResources::new(
+            span_from_position(self.source_id, sequence.byte_range()),
+            items,
+        ))
+    }
+
+    fn parse_deploy_reservation_devices(&mut self, field: &ParsedField) -> Option<DeployReservationDevices> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "deploy resource reservation devices must be a sequence",
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        for node in sequence.values() {
+            let Some(mapping) = node.as_mapping() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_MAPPING,
+                    &node,
+                    field.span,
+                    "deploy resource reservation device entries must be mappings",
+                );
+                items.push(DeployReservationDevice::unmodeled(
+                    node_span(self.source_id, &node).unwrap_or(field.span),
+                ));
+                continue;
+            };
+            let item_span = span_from_position(self.source_id, mapping.byte_range());
+            let mut item = DeployReservationDevice::new(item_span);
+            let mut seen = BTreeMap::new();
+            let mut has_capabilities = false;
+            let mut count_field = None;
+            let mut device_ids_field = None;
+            for option in self.fields(mapping) {
+                if self.record_duplicate(&mut seen, &option) {
+                    continue;
+                }
+                match option.name.value().as_str() {
+                    name if name.starts_with("x-") => item.push_extension(option.reference()),
+                    "capabilities" => {
+                        has_capabilities = true;
+                        if let Some(value) = self.parse_deploy_reservation_device_capabilities(&option) {
+                            item.set_capabilities(value);
+                        } else {
+                            item.push_unknown(option.reference());
+                        }
+                    }
+                    "driver" => {
+                        let Some(scalar) = option.value.as_ref().and_then(YamlNode::as_scalar) else {
+                            self.expected(
+                                EXPECTED_SCALAR,
+                                &option,
+                                "deploy resource reservation device driver must be a YAML string scalar",
+                            );
+                            item.push_unknown(option.reference());
+                            continue;
+                        };
+                        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                            self.expected(
+                                EXPECTED_SCALAR,
+                                &option,
+                                "deploy resource reservation device driver must be a YAML string scalar",
+                            );
+                            item.push_unknown(option.reference());
+                            continue;
+                        }
+                        item.set_driver(Located::new(
+                            scalar_string_from_source(&self.source, scalar),
+                            span_from_position(self.source_id, scalar.byte_range()),
+                        ));
+                    }
+                    "count" => {
+                        count_field.get_or_insert(option.span);
+                        if let Some(value) = self.parse_deploy_reservation_device_count(&option) {
+                            item.set_count(value);
+                        } else {
+                            item.push_unknown(option.reference());
+                        }
+                    }
+                    "device_ids" => {
+                        device_ids_field.get_or_insert(option.span);
+                        if let Some(value) = self.parse_deploy_reservation_device_ids(&option) {
+                            item.set_device_ids(value);
+                        } else {
+                            item.push_unknown(option.reference());
+                        }
+                    }
+                    "options" => self.set_deploy_reservation_device_options(&mut item, &option),
+                    _ => item.push_unknown(option.reference()),
+                }
+            }
+            self.reservation_device_allocation_selector_conflict(count_field, device_ids_field);
+            if !has_capabilities {
+                self.missing(
+                    DEPLOY_RESERVATION_DEVICE_MISSING_CAPABILITIES,
+                    item_span,
+                    "deploy resource reservation device is missing required `capabilities`",
+                );
+            }
+            items.push(item);
+        }
+        Some(DeployReservationDevices::new(
+            span_from_position(self.source_id, sequence.byte_range()),
+            items,
+        ))
+    }
+
+    fn reservation_device_allocation_selector_conflict(
+        &mut self,
+        count: Option<SourceSpan>,
+        device_ids: Option<SourceSpan>,
+    ) {
+        let (Some(count), Some(device_ids)) = (count, device_ids) else {
+            return;
+        };
+        self.diagnostics.push(
+            Diagnostic::new(
+                DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT,
+                Severity::Error,
+                "deploy resource reservation device count and device_ids are mutually exclusive",
+            )
+            .with_label(DiagnosticLabel::primary(count, "count retained"))
+            .with_label(DiagnosticLabel::secondary(device_ids, "device_ids retained")),
+        );
+    }
+
+    fn parse_deploy_reservation_device_count(
+        &mut self,
+        field: &ParsedField,
+    ) -> Option<Located<DeployReservationDeviceCount>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "deploy resource reservation device count must be a YAML integer or string scalar",
+            );
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer => {
+                DeployReservationDeviceCount::YamlInteger(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String => DeployReservationDeviceCount::String(scalar_string_from_source(&self.source, scalar)),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "deploy resource reservation device count must be a YAML integer or string scalar",
+                );
+                return None;
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_reservation_device_ids(&mut self, field: &ParsedField) -> Option<DeployReservationDeviceIds> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "deploy resource reservation device device_ids must be a sequence",
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        for node in sequence.values() {
+            let Some(scalar) = node.as_scalar() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &node,
+                    field.span,
+                    "deploy resource reservation device device_ids must be string scalars",
+                );
+                items.push(DeployReservationDeviceId::unmodeled(
+                    node_span(self.source_id, &node).unwrap_or(field.span),
+                ));
+                continue;
+            };
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &YamlNode::Scalar(scalar.clone()),
+                    field.span,
+                    "deploy resource reservation device device_ids must be string scalars",
+                );
+                items.push(DeployReservationDeviceId::unmodeled(item_span));
+                continue;
+            }
+            items.push(DeployReservationDeviceId::string(Located::new(
+                scalar_string_from_source(&self.source, scalar),
+                item_span,
+            )));
+        }
+        Some(DeployReservationDeviceIds::new(
+            span_from_position(self.source_id, sequence.byte_range()),
+            items,
+        ))
+    }
+
+    fn parse_deploy_reservation_device_options(
+        &mut self,
+        field: &ParsedField,
+    ) -> Option<DeployReservationDeviceOptions> {
+        match field.value.as_ref() {
+            Some(YamlNode::Mapping(mapping)) => Some(self.parse_deploy_reservation_device_options_map(mapping)),
+            Some(YamlNode::Sequence(sequence)) => {
+                let mut items = Vec::new();
+                let mut seen = BTreeMap::new();
+                for node in sequence.values() {
+                    let Some(scalar) = node.as_scalar() else {
+                        self.unsupported_sequence_item(EXPECTED_SCALAR, &node, field.span,
+                            "deploy resource reservation device options list entries must be strict YAML string scalars");
+                        items.push(DeployReservationDeviceOptionItem::unmodeled(
+                            node_span(self.source_id, &node).unwrap_or(field.span),
+                        ));
+                        continue;
+                    };
+                    let span = span_from_position(self.source_id, scalar.byte_range());
+                    if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                        self.unsupported_sequence_item(EXPECTED_SCALAR, &YamlNode::Scalar(scalar.clone()), field.span,
+                            "deploy resource reservation device options list entries must be strict YAML string scalars");
+                        items.push(DeployReservationDeviceOptionItem::unmodeled(span));
+                        continue;
+                    }
+                    let value = scalar_string_from_source(&self.source, scalar);
+                    if let Some(first) = seen.get(&value) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                DEPLOY_RESERVATION_DEVICE_OPTIONS_DUPLICATE_ITEM,
+                                Severity::Error,
+                                "deploy resource reservation device options list entries must be unique exact strings",
+                            )
+                            .with_label(DiagnosticLabel::primary(span, "duplicate option string"))
+                            .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                        );
+                    } else {
+                        seen.insert(value.clone(), span);
+                    }
+                    items.push(DeployReservationDeviceOptionItem::string(Located::new(value, span)));
+                }
+                Some(DeployReservationDeviceOptions::List {
+                    span: span_from_position(self.source_id, sequence.byte_range()),
+                    items,
+                })
+            }
+            _ => {
+                self.expected(
+                    DEPLOY_RESERVATION_DEVICE_OPTIONS_EXPECTED_FORM,
+                    field,
+                    "deploy resource reservation device options must be a mapping or sequence",
+                );
+                None
+            }
+        }
+    }
+
+    fn set_deploy_reservation_device_options(&mut self, device: &mut DeployReservationDevice, field: &ParsedField) {
+        if let Some(options) = self.parse_deploy_reservation_device_options(field) {
+            device.set_options(options);
+        } else {
+            device.push_unknown(field.reference());
+        }
+    }
+
+    fn parse_deploy_reservation_device_options_map(&mut self, mapping: &Mapping) -> DeployReservationDeviceOptions {
+        let mut entries = Vec::new();
+        let mut unmodeled_entries = Vec::new();
+        let mut seen = BTreeMap::new();
+        for entry in mapping.entries() {
+            let Some(key) = entry.key_node() else { continue };
+            let key_span = node_span(self.source_id, &key)
+                .unwrap_or_else(|| span_from_position(self.source_id, mapping.byte_range()));
+            let authored_value = entry.value_node();
+            let value_span = authored_value
+                .as_ref()
+                .and_then(|value| node_span(self.source_id, value));
+            let field_span = value_span.map_or(key_span, |value| union(key_span, value));
+            let Some(scalar) = key.as_scalar() else {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DEPLOY_RESERVATION_DEVICE_OPTIONS_INVALID_KEY,
+                        Severity::Error,
+                        "deploy resource reservation device options mapping keys must be non-empty strict YAML strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(key_span, "invalid option key")),
+                );
+                unmodeled_entries.push(FieldReference {
+                    name: Located::new("<unmodeled-key>".to_owned(), key_span),
+                    span: field_span,
+                    value_span,
+                });
+                continue;
+            };
+            let name = Located::new(
+                scalar_string_from_source(&self.source, scalar),
+                span_from_position(self.source_id, scalar.byte_range()),
+            );
+            let field_span = value_span.map_or(name.span(), |value| union(name.span(), value));
+            let parsed = ParsedField {
+                name,
+                value: authored_value
+                    .map(unwrap_processing_tag)
+                    .map(|value| self.resolve_alias(value)),
+                value_span,
+                span: field_span,
+            };
+            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String || parsed.name.value().is_empty() {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DEPLOY_RESERVATION_DEVICE_OPTIONS_INVALID_KEY,
+                        Severity::Error,
+                        "deploy resource reservation device options mapping keys must be non-empty strict YAML strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(parsed.name.span(), "invalid option key")),
+                );
+                unmodeled_entries.push(parsed.reference());
+                continue;
+            }
+            if self.record_duplicate(&mut seen, &parsed) {
+                unmodeled_entries.push(parsed.reference());
+                continue;
+            }
+            let Some(value) = self.compose_scalar_from_field(&parsed,
+                "deploy resource reservation device options mapping values must be scalar strings, numbers, booleans, or null") else {
+                unmodeled_entries.push(parsed.reference()); continue;
+            };
+            entries.push(KeyValueEntry::new(parsed.name, value, parsed.span));
+        }
+        DeployReservationDeviceOptions::Map {
+            span: span_from_position(self.source_id, mapping.byte_range()),
+            entries,
+            unmodeled_entries,
+        }
+    }
+
+    fn compose_scalar_from_field(
+        &mut self,
+        field: &ParsedField,
+        message: &'static str,
+    ) -> Option<Located<ComposeScalar>> {
+        let Some(node) = field.value.as_ref() else {
+            return Some(Located::new(ComposeScalar::Null, field.name.span()));
+        };
+        let Some(scalar) = node.as_scalar() else {
+            self.expected(EXPECTED_SCALAR, field, message);
+            return None;
+        };
+        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Null => ComposeScalar::Null,
+            ScalarType::Boolean => ComposeScalar::Boolean(ScalarValue::from_scalar(scalar).to_bool().unwrap_or(false)),
+            ScalarType::Integer | ScalarType::Float => {
+                ComposeScalar::Number(scalar_string_from_source(&self.source, scalar))
+            }
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
+                ComposeScalar::String(scalar_string_from_source(&self.source, scalar))
+            }
+        };
+        Some(Located::new(
+            value,
+            span_from_position(self.source_id, scalar.byte_range()),
+        ))
+    }
+
+    fn parse_deploy_reservation_device_capabilities(
+        &mut self,
+        field: &ParsedField,
+    ) -> Option<DeployReservationDeviceCapabilities> {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(
+                EXPECTED_SEQUENCE,
+                field,
+                "deploy resource reservation device capabilities must be a sequence of strings",
+            );
+            return None;
+        };
+        let mut items = Vec::new();
+        let mut seen = BTreeMap::new();
+        for node in sequence.values() {
+            let Some(scalar) = node.as_scalar() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &node,
+                    field.span,
+                    "deploy resource reservation device capabilities must be string scalars",
+                );
+                items.push(DeployReservationDeviceCapability::unmodeled(
+                    node_span(self.source_id, &node).unwrap_or(field.span),
+                ));
+                continue;
+            };
+            let item_span = span_from_position(self.source_id, scalar.byte_range());
+            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &YamlNode::Scalar(scalar.clone()),
+                    field.span,
+                    "deploy resource reservation device capabilities must be string scalars",
+                );
+                items.push(DeployReservationDeviceCapability::unmodeled(item_span));
+                continue;
+            }
+            let value = scalar_string_from_source(&self.source, scalar);
+            if let Some(first) = seen.get(&value) {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DEPLOY_RESERVATION_DEVICE_CAPABILITY_DUPLICATE_ITEM,
+                        Severity::Error,
+                        "deploy resource reservation device capabilities must be unique exact strings",
+                    )
+                    .with_label(DiagnosticLabel::primary(item_span, "duplicate capability string"))
+                    .with_label(DiagnosticLabel::secondary(*first, "first identical string")),
+                );
+            } else {
+                seen.insert(value.clone(), item_span);
+            }
+            items.push(DeployReservationDeviceCapability::string(Located::new(
+                value, item_span,
+            )));
+        }
+        Some(DeployReservationDeviceCapabilities::new(
+            span_from_position(self.source_id, sequence.byte_range()),
+            items,
+        ))
+    }
+
+    fn parse_deploy_discrete_resource_spec(&mut self, field: &ParsedField) -> Option<DeployDiscreteResourceSpec> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                EXPECTED_MAPPING,
+                field,
+                "deploy discrete_resource_spec must be a mapping",
+            );
+            return None;
+        };
+        let mut spec = DeployDiscreteResourceSpec::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &option) {
+                continue;
+            }
+            match option.name.value().as_str() {
+                name if name.starts_with("x-") => spec.push_extension(option.reference()),
+                "kind" => {
+                    if let Some(scalar) = option.value.as_ref().and_then(YamlNode::as_scalar) {
+                        if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String {
+                            spec.set_kind(Located::new(
+                                scalar_string_from_source(&self.source, scalar),
+                                span_from_position(self.source_id, scalar.byte_range()),
+                            ));
+                        } else {
+                            self.expected(
+                                EXPECTED_SCALAR,
+                                &option,
+                                "deploy discrete_resource_spec kind must be a YAML string scalar",
+                            );
+                            spec.push_unknown(option.reference());
+                        }
+                    } else {
+                        self.expected(
+                            EXPECTED_SCALAR,
+                            &option,
+                            "deploy discrete_resource_spec kind must be a YAML string scalar",
+                        );
+                        spec.push_unknown(option.reference());
+                    }
+                }
+                "value" => {
+                    if let Some(scalar) = option.value.as_ref().and_then(YamlNode::as_scalar) {
+                        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+                            ScalarType::Integer | ScalarType::Float => Some(DeployDiscreteResourceValue::YamlNumber(
+                                scalar_string_from_source(&self.source, scalar),
+                            )),
+                            ScalarType::String => Some(DeployDiscreteResourceValue::String(scalar_string_from_source(
+                                &self.source,
+                                scalar,
+                            ))),
+                            _ => None,
+                        };
+                        if let Some(value) = value {
+                            spec.set_value(Located::new(
+                                value,
+                                span_from_position(self.source_id, scalar.byte_range()),
+                            ));
+                        } else {
+                            self.expected(
+                                EXPECTED_SCALAR,
+                                &option,
+                                "deploy discrete_resource_spec value must be a YAML number or string scalar",
+                            );
+                            spec.push_unknown(option.reference());
+                        }
+                    } else {
+                        self.expected(
+                            EXPECTED_SCALAR,
+                            &option,
+                            "deploy discrete_resource_spec value must be a YAML number or string scalar",
+                        );
+                        spec.push_unknown(option.reference());
+                    }
+                }
+                _ => spec.push_unknown(option.reference()),
+            }
+        }
+        Some(spec)
     }
 
     fn source_column(&self, offset: usize) -> usize {
@@ -5652,7 +7966,7 @@ impl Parser {
         );
     }
 
-    fn missing(&mut self, code: DiagnosticCode, span: SourceSpan, message: &'static str) {
+    fn missing(&mut self, code: DiagnosticCode, span: SourceSpan, message: impl Into<String>) {
         self.diagnostics.push(
             Diagnostic::new(code, Severity::Error, message)
                 .with_label(DiagnosticLabel::primary(span, "incomplete long syntax")),
@@ -5695,6 +8009,16 @@ impl ParsedField {
             value_span: self.value_span,
         }
     }
+}
+
+fn scalar_uses_block_style(source: &str, scalar: &Scalar) -> bool {
+    let start = scalar.byte_range().start as usize;
+    source[start..].trim_start().starts_with(['|', '>'])
+        || source[..start]
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .is_some_and(|header| header.contains(": |") || header.contains(": >"))
 }
 
 fn node_span(source_id: SourceId, node: &YamlNode) -> Option<SourceSpan> {

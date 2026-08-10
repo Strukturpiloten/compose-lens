@@ -205,9 +205,9 @@ impl BuildDefinition {
     }
 
     /// Returns the complete mapping span.
-    /// Returns the complete restart-policy mapping span.
-    /// Returns the complete restart-policy mapping span.
-    /// Returns the complete restart-policy mapping span.
+    /// Returns the complete update-config mapping span.
+    /// Returns the complete update-config mapping span.
+    /// Returns the complete update-config mapping span.
     #[must_use]
     pub const fn span(&self) -> SourceSpan {
         self.span
@@ -217,7 +217,7 @@ impl BuildDefinition {
     ///
     /// Other build subfields remain source-addressable references and are not semantically
     /// interpreted by this model.
-    /// Returns the explicit restart condition.
+    /// Returns the raw update parallelism scalar.
     #[must_use]
     pub const fn context(&self) -> Option<&Located<String>> {
         self.values.context.as_ref()
@@ -228,7 +228,7 @@ impl BuildDefinition {
     /// List entries remain raw ordered strings, including duplicates and `NAME=VALUE` spelling.
     /// Mapping entries retain scalar kinds and authored order. This model does not interpret
     /// names, paths, URLs, images, service schemes, or builder behavior.
-    /// Returns the raw delay spelling.
+    /// Returns the raw update delay string.
     #[must_use]
     pub const fn additional_contexts(&self) -> Option<&BuildAdditionalContexts> {
         self.values.additional_contexts.as_ref()
@@ -239,7 +239,7 @@ impl BuildDefinition {
     /// Explicit emptiness remains distinct from omission. This model retains duplicates and does
     /// not infer entitlement allowlists, privilege state, `BuildKit` or platform support, build
     /// execution, or runtime effect.
-    /// Returns the raw maximum-attempts YAML scalar.
+    /// Returns the raw update monitor string.
     #[must_use]
     pub fn entitlements(&self) -> Option<&[Located<String>]> {
         self.values.entitlements.as_deref().map(Vec::as_slice)
@@ -250,7 +250,7 @@ impl BuildDefinition {
     /// List entries retain raw `=`/`:` spelling, IPv4/IPv6 brackets, `host-gateway`, and unknown
     /// values. Mapping values retain either a scalar string or ordered string list; no address
     /// normalization, validation, DNS lookup, host inspection, or build behavior is performed.
-    /// Returns the raw restart window spelling.
+    /// Returns the raw update failure-action string.
     #[must_use]
     pub const fn extra_hosts(&self) -> Option<&BuildExtraHosts> {
         self.values.extra_hosts.as_ref()
@@ -260,7 +260,7 @@ impl BuildDefinition {
     ///
     /// Mapping entries retain their string, number, boolean, or null scalar kinds. List entries
     /// remain raw ordered strings, including duplicates and bare argument names.
-    /// Returns retained restart-policy extensions.
+    /// Returns the raw update maximum-failure-ratio scalar.
     #[must_use]
     pub const fn args(&self) -> Option<&BuildArgs> {
         self.values.args.as_ref()
@@ -271,7 +271,7 @@ impl BuildDefinition {
     /// An explicit empty sequence remains distinct from omission. Entries are raw string scalars;
     /// this model preserves duplicates and does not parse cache type, reference, source, path,
     /// image, credentials, or builder behavior.
-    /// Returns retained unknown restart-policy fields.
+    /// Returns the update order.
     #[must_use]
     pub fn cache_from(&self) -> Option<&[Located<String>]> {
         self.values.cache_from.as_deref().map(Vec::as_slice)
@@ -282,6 +282,7 @@ impl BuildDefinition {
     /// An explicit empty sequence remains distinct from omission. Entries are raw string scalars;
     /// this model preserves duplicates and does not parse cache type, reference, destination,
     /// path, image, credentials, or builder behavior.
+    /// Returns retained update-config extensions.
     #[must_use]
     pub fn cache_to(&self) -> Option<&[Located<String>]> {
         self.values.cache_to.as_deref().map(Vec::as_slice)
@@ -291,6 +292,7 @@ impl BuildDefinition {
     ///
     /// Other build subfields remain source-addressable references and are not semantically
     /// interpreted by this model.
+    /// Returns retained update-config malformed or unknown fields.
     #[must_use]
     pub const fn dockerfile(&self) -> Option<&Located<String>> {
         self.values.dockerfile.as_ref()
@@ -759,7 +761,10 @@ pub struct DeployDefinition {
     mode: Option<Located<DeployMode>>,
     placement: Option<Box<DeployPlacement>>,
     replicas: Option<Located<DeployReplicas>>,
+    resources: Option<Box<DeployResources>>,
     restart_policy: Option<Box<DeployRestartPolicy>>,
+    rollback_config: Option<Box<DeployRollbackConfig>>,
+    update_config: Option<Box<DeployUpdateConfig>>,
     fields: Vec<DeployField>,
     extension_fields: Vec<FieldReference>,
     unknown_fields: Vec<FieldReference>,
@@ -774,7 +779,10 @@ impl DeployDefinition {
             mode: None,
             placement: None,
             replicas: None,
+            resources: None,
             restart_policy: None,
+            rollback_config: None,
+            update_config: None,
             fields: Vec::new(),
             extension_fields: Vec::new(),
             unknown_fields: Vec::new(),
@@ -805,8 +813,18 @@ impl DeployDefinition {
         self.replicas = Some(replicas);
     }
 
+    pub(super) fn set_resources(&mut self, resources: DeployResources) {
+        self.resources = Some(Box::new(resources));
+    }
+
     pub(super) fn set_restart_policy(&mut self, restart_policy: DeployRestartPolicy) {
         self.restart_policy = Some(Box::new(restart_policy));
+    }
+    pub(super) fn set_rollback_config(&mut self, rollback_config: DeployRollbackConfig) {
+        self.rollback_config = Some(Box::new(rollback_config));
+    }
+    pub(super) fn set_update_config(&mut self, update_config: DeployUpdateConfig) {
+        self.update_config = Some(Box::new(update_config));
     }
 
     pub(super) fn push_extension(&mut self, field: FieldReference) {
@@ -853,10 +871,26 @@ impl DeployDefinition {
         self.replicas.as_ref()
     }
 
+    /// Returns authored deploy resources without resource-policy interpretation.
+    #[must_use]
+    pub fn resources(&self) -> Option<&DeployResources> {
+        self.resources.as_deref()
+    }
+
     /// Returns the authored deploy restart policy without using service `restart` semantics.
     #[must_use]
     pub fn restart_policy(&self) -> Option<&DeployRestartPolicy> {
         self.restart_policy.as_deref()
+    }
+    /// Returns the authored rollback configuration without rollout interpretation.
+    #[must_use]
+    pub fn rollback_config(&self) -> Option<&DeployRollbackConfig> {
+        self.rollback_config.as_deref()
+    }
+    /// Returns the authored rolling-update configuration without rollout interpretation.
+    #[must_use]
+    pub fn update_config(&self) -> Option<&DeployUpdateConfig> {
+        self.update_config.as_deref()
     }
 
     /// Returns recognized deploy fields in authored order.
@@ -948,6 +982,999 @@ pub enum DeployReplicas {
     YamlNumber(String),
     /// A YAML string scalar, including empty and deferred expressions.
     String(String),
+}
+
+/// Authored deploy resources with source-aware child fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployResources {
+    span: SourceSpan,
+    limits: Option<Box<DeployResourceLimits>>,
+    reservations: Option<Box<DeployResourceReservations>>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl DeployResources {
+    pub(super) const fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            limits: None,
+            reservations: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+
+    pub(super) fn set_limits(&mut self, limits: DeployResourceLimits) {
+        self.limits = Some(Box::new(limits));
+    }
+
+    pub(super) fn set_reservations(&mut self, reservations: DeployResourceReservations) {
+        self.reservations = Some(Box::new(reservations));
+    }
+
+    pub(super) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+
+    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+
+    /// Returns the complete resources mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns authored resource limits without default or runtime interpretation.
+    #[must_use]
+    pub fn limits(&self) -> Option<&DeployResourceLimits> {
+        self.limits.as_deref()
+    }
+
+    /// Returns authored resource reservations without scheduling interpretation.
+    #[must_use]
+    pub fn reservations(&self) -> Option<&DeployResourceReservations> {
+        self.reservations.as_deref()
+    }
+
+    /// Returns retained resources extensions.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+
+    /// Returns retained unknown resources fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Authored deploy resource reservations with source-aware child fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployResourceReservations {
+    span: SourceSpan,
+    cpus: Option<Located<DeployResourceCpus>>,
+    memory: Option<Located<DeployResourceMemory>>,
+    generic_resources: Option<DeployGenericResources>,
+    devices: Option<DeployReservationDevices>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl DeployResourceReservations {
+    pub(super) const fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            cpus: None,
+            memory: None,
+            generic_resources: None,
+            devices: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+
+    pub(super) fn set_cpus(&mut self, cpus: Located<DeployResourceCpus>) {
+        self.cpus = Some(cpus);
+    }
+
+    pub(super) fn set_memory(&mut self, memory: Located<DeployResourceMemory>) {
+        self.memory = Some(memory);
+    }
+
+    pub(super) fn set_generic_resources(&mut self, generic_resources: DeployGenericResources) {
+        self.generic_resources = Some(generic_resources);
+    }
+
+    pub(super) fn set_devices(&mut self, devices: DeployReservationDevices) {
+        self.devices = Some(devices);
+    }
+
+    pub(super) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+
+    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+
+    /// Returns the complete resource-reservations mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns the authored deploy resource reservation CPU scalar spelling and category.
+    #[must_use]
+    pub const fn cpus(&self) -> Option<&Located<DeployResourceCpus>> {
+        self.cpus.as_ref()
+    }
+
+    /// Returns the authored deploy resource reservation memory value and its source location.
+    #[must_use]
+    pub const fn memory(&self) -> Option<&Located<DeployResourceMemory>> {
+        self.memory.as_ref()
+    }
+
+    /// Returns authored ordered generic-resource reservations, including an explicit empty list.
+    #[must_use]
+    pub const fn generic_resources(&self) -> Option<&DeployGenericResources> {
+        self.generic_resources.as_ref()
+    }
+
+    /// Returns authored reservation devices, including an explicit empty list.
+    #[must_use]
+    pub const fn devices(&self) -> Option<&DeployReservationDevices> {
+        self.devices.as_ref()
+    }
+
+    /// Returns retained resource-reservation extensions.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+
+    /// Returns retained unknown resource-reservation fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Ordered schema-backed deploy resource-reservation devices.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployReservationDevices {
+    span: SourceSpan,
+    items: Vec<DeployReservationDevice>,
+}
+
+impl DeployReservationDevices {
+    pub(super) const fn new(span: SourceSpan, items: Vec<DeployReservationDevice>) -> Self {
+        Self { span, items }
+    }
+
+    /// Returns the complete devices sequence span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns items in authored order, including duplicate and partially recovered entries.
+    #[must_use]
+    pub fn items(&self) -> &[DeployReservationDevice] {
+        &self.items
+    }
+}
+
+/// One schema-backed deploy resource-reservation device item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployReservationDevice {
+    span: SourceSpan,
+    form: DeployReservationDeviceForm,
+    capabilities: Option<DeployReservationDeviceCapabilities>,
+    driver: Option<Located<String>>,
+    count: Option<Located<DeployReservationDeviceCount>>,
+    device_ids: Option<DeployReservationDeviceIds>,
+    options: Option<DeployReservationDeviceOptions>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl DeployReservationDevice {
+    pub(super) fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            form: DeployReservationDeviceForm::Mapping,
+            capabilities: None,
+            driver: None,
+            count: None,
+            device_ids: None,
+            options: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+
+    pub(super) fn unmodeled(span: SourceSpan) -> Self {
+        Self {
+            span,
+            form: DeployReservationDeviceForm::Unmodeled,
+            capabilities: None,
+            driver: None,
+            count: None,
+            device_ids: None,
+            options: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+
+    pub(super) fn set_capabilities(&mut self, capabilities: DeployReservationDeviceCapabilities) {
+        self.capabilities = Some(capabilities);
+    }
+
+    pub(super) fn set_driver(&mut self, driver: Located<String>) {
+        self.driver = Some(driver);
+    }
+
+    pub(super) fn set_count(&mut self, count: Located<DeployReservationDeviceCount>) {
+        self.count = Some(count);
+    }
+
+    pub(super) fn set_device_ids(&mut self, device_ids: DeployReservationDeviceIds) {
+        self.device_ids = Some(device_ids);
+    }
+
+    pub(super) fn set_options(&mut self, options: DeployReservationDeviceOptions) {
+        self.options = Some(options);
+    }
+
+    pub(super) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+
+    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+
+    /// Returns the complete item span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns whether the item was a mapping or an unmodeled sequence entry.
+    #[must_use]
+    pub const fn form(&self) -> DeployReservationDeviceForm {
+        self.form
+    }
+
+    /// Returns the required capabilities list when its form was valid.
+    #[must_use]
+    pub const fn capabilities(&self) -> Option<&DeployReservationDeviceCapabilities> {
+        self.capabilities.as_ref()
+    }
+
+    /// Returns the optional raw device driver when its form was valid.
+    #[must_use]
+    pub const fn driver(&self) -> Option<&Located<String>> {
+        self.driver.as_ref()
+    }
+
+    /// Returns the optional raw device allocation count when its scalar form was valid.
+    #[must_use]
+    pub const fn count(&self) -> Option<&Located<DeployReservationDeviceCount>> {
+        self.count.as_ref()
+    }
+
+    /// Returns optional ordered device allocation IDs, including an explicit empty list.
+    #[must_use]
+    pub const fn device_ids(&self) -> Option<&DeployReservationDeviceIds> {
+        self.device_ids.as_ref()
+    }
+
+    /// Returns optional raw device options without provider-specific interpretation.
+    #[must_use]
+    pub const fn options(&self) -> Option<&DeployReservationDeviceOptions> {
+        self.options.as_ref()
+    }
+
+    /// Returns retained extensions.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+
+    /// Returns retained unknown or malformed fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Authored resource-reservation device item shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployReservationDeviceForm {
+    /// A mapping-form item.
+    Mapping,
+    /// A non-mapping sequence item retained as evidence.
+    Unmodeled,
+}
+
+/// Raw resource-reservation device allocation-count scalar spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployReservationDeviceCount {
+    /// An exact YAML integer scalar spelling.
+    YamlInteger(String),
+    /// An exact YAML string scalar spelling.
+    String(String),
+}
+
+/// Ordered raw resource-reservation device allocation IDs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployReservationDeviceIds {
+    span: SourceSpan,
+    items: Vec<DeployReservationDeviceId>,
+}
+
+impl DeployReservationDeviceIds {
+    pub(super) const fn new(span: SourceSpan, items: Vec<DeployReservationDeviceId>) -> Self {
+        Self { span, items }
+    }
+
+    /// Returns the complete device-IDs sequence span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns IDs in authored order, including duplicates and unmodeled entries.
+    #[must_use]
+    pub fn items(&self) -> &[DeployReservationDeviceId] {
+        &self.items
+    }
+}
+
+/// One resource-reservation device allocation ID retained without interpretation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployReservationDeviceId {
+    span: SourceSpan,
+    form: DeployReservationDeviceIdForm,
+    value: Option<Located<String>>,
+}
+
+impl DeployReservationDeviceId {
+    pub(super) fn string(value: Located<String>) -> Self {
+        Self {
+            span: value.span(),
+            form: DeployReservationDeviceIdForm::String,
+            value: Some(value),
+        }
+    }
+
+    pub(super) const fn unmodeled(span: SourceSpan) -> Self {
+        Self {
+            span,
+            form: DeployReservationDeviceIdForm::Unmodeled,
+            value: None,
+        }
+    }
+
+    /// Returns the complete item span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns whether the item was a YAML string or retained unmodeled value.
+    #[must_use]
+    pub const fn form(&self) -> DeployReservationDeviceIdForm {
+        self.form
+    }
+
+    /// Returns the exact YAML string when the item had string form.
+    #[must_use]
+    pub const fn value(&self) -> Option<&Located<String>> {
+        self.value.as_ref()
+    }
+}
+
+/// Resource-reservation device allocation-ID item shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployReservationDeviceIdForm {
+    /// A YAML string item.
+    String,
+    /// A non-string sequence item retained as evidence.
+    Unmodeled,
+}
+
+/// Schema-shaped resource-reservation device options retaining map or list syntax.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployReservationDeviceOptions {
+    /// Ordered mapping entries plus malformed or duplicate fields retained as evidence.
+    Map {
+        /// Complete mapping span.
+        span: SourceSpan,
+        /// Valid non-empty strict-string keyed scalar entries.
+        entries: Vec<KeyValueEntry>,
+        /// Malformed or duplicate mapping fields.
+        unmodeled_entries: Vec<FieldReference>,
+    },
+    /// Ordered list entries, including malformed entries.
+    List {
+        /// Complete sequence span.
+        span: SourceSpan,
+        /// Items in authored order.
+        items: Vec<DeployReservationDeviceOptionItem>,
+    },
+}
+
+impl DeployReservationDeviceOptions {
+    /// Returns the complete authored collection span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        match self {
+            Self::Map { span, .. } | Self::List { span, .. } => *span,
+        }
+    }
+
+    /// Returns valid map entries when the authored form was a mapping.
+    #[must_use]
+    pub fn as_map(&self) -> Option<&[KeyValueEntry]> {
+        let Self::Map { entries, .. } = self else { return None };
+        Some(entries)
+    }
+
+    /// Returns malformed or duplicate map fields when the authored form was a mapping.
+    #[must_use]
+    pub fn unmodeled_entries(&self) -> Option<&[FieldReference]> {
+        let Self::Map { unmodeled_entries, .. } = self else {
+            return None;
+        };
+        Some(unmodeled_entries)
+    }
+
+    /// Returns ordered list entries when the authored form was a sequence.
+    #[must_use]
+    pub fn as_list(&self) -> Option<&[DeployReservationDeviceOptionItem]> {
+        let Self::List { items, .. } = self else { return None };
+        Some(items)
+    }
+}
+
+/// One device-options list item retained without splitting or coercion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployReservationDeviceOptionItem {
+    span: SourceSpan,
+    form: DeployReservationDeviceOptionItemForm,
+    value: Option<Located<String>>,
+}
+
+impl DeployReservationDeviceOptionItem {
+    pub(super) fn string(value: Located<String>) -> Self {
+        Self {
+            span: value.span(),
+            form: DeployReservationDeviceOptionItemForm::String,
+            value: Some(value),
+        }
+    }
+    pub(super) const fn unmodeled(span: SourceSpan) -> Self {
+        Self {
+            span,
+            form: DeployReservationDeviceOptionItemForm::Unmodeled,
+            value: None,
+        }
+    }
+    /// Returns the complete item span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns whether the item was a strict YAML string or retained unmodeled value.
+    #[must_use]
+    pub const fn form(&self) -> DeployReservationDeviceOptionItemForm {
+        self.form
+    }
+    /// Returns the exact string when the item had string form.
+    #[must_use]
+    pub const fn value(&self) -> Option<&Located<String>> {
+        self.value.as_ref()
+    }
+}
+
+/// Resource-reservation device-options list item shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployReservationDeviceOptionItemForm {
+    /// A strict YAML string list item.
+    String,
+    /// A non-string list item retained as evidence.
+    Unmodeled,
+}
+
+/// Ordered required resource-reservation device capabilities.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployReservationDeviceCapabilities {
+    span: SourceSpan,
+    items: Vec<DeployReservationDeviceCapability>,
+}
+
+impl DeployReservationDeviceCapabilities {
+    pub(super) const fn new(span: SourceSpan, items: Vec<DeployReservationDeviceCapability>) -> Self {
+        Self { span, items }
+    }
+
+    /// Returns the complete capabilities sequence span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns items in authored order, including duplicates and unmodeled entries.
+    #[must_use]
+    pub fn items(&self) -> &[DeployReservationDeviceCapability] {
+        &self.items
+    }
+}
+
+/// One resource-reservation device capability retained without name interpretation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployReservationDeviceCapability {
+    span: SourceSpan,
+    form: DeployReservationDeviceCapabilityForm,
+    value: Option<Located<String>>,
+}
+
+impl DeployReservationDeviceCapability {
+    pub(super) fn string(value: Located<String>) -> Self {
+        Self {
+            span: value.span(),
+            form: DeployReservationDeviceCapabilityForm::String,
+            value: Some(value),
+        }
+    }
+
+    pub(super) const fn unmodeled(span: SourceSpan) -> Self {
+        Self {
+            span,
+            form: DeployReservationDeviceCapabilityForm::Unmodeled,
+            value: None,
+        }
+    }
+
+    /// Returns the complete item span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns whether the item was a YAML string or retained unmodeled value.
+    #[must_use]
+    pub const fn form(&self) -> DeployReservationDeviceCapabilityForm {
+        self.form
+    }
+
+    /// Returns the exact YAML string when the item had string form.
+    #[must_use]
+    pub const fn value(&self) -> Option<&Located<String>> {
+        self.value.as_ref()
+    }
+}
+
+/// Resource-reservation device capability item shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployReservationDeviceCapabilityForm {
+    /// A YAML string item.
+    String,
+    /// A non-string sequence item retained as evidence.
+    Unmodeled,
+}
+
+/// Ordered schema-backed deploy generic-resource reservations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployGenericResources {
+    span: SourceSpan,
+    items: Vec<DeployGenericResource>,
+}
+
+impl DeployGenericResources {
+    pub(super) const fn new(span: SourceSpan, items: Vec<DeployGenericResource>) -> Self {
+        Self { span, items }
+    }
+
+    /// Returns the complete generic-resources sequence span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns items in authored order, including duplicates and partially recovered entries.
+    #[must_use]
+    pub fn items(&self) -> &[DeployGenericResource] {
+        &self.items
+    }
+}
+
+/// One schema-backed generic-resource reservation item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployGenericResource {
+    span: SourceSpan,
+    form: DeployGenericResourceForm,
+    discrete_resource_spec: Option<DeployDiscreteResourceSpec>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl DeployGenericResource {
+    pub(super) fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            form: DeployGenericResourceForm::Mapping,
+            discrete_resource_spec: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(super) fn unmodeled(span: SourceSpan) -> Self {
+        Self {
+            span,
+            form: DeployGenericResourceForm::Unmodeled,
+            discrete_resource_spec: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(super) fn set_discrete_resource_spec(&mut self, value: DeployDiscreteResourceSpec) {
+        self.discrete_resource_spec = Some(value);
+    }
+    pub(super) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+    /// Returns this item mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns whether the item was a mapping or an unmodeled sequence entry.
+    #[must_use]
+    pub const fn form(&self) -> DeployGenericResourceForm {
+        self.form
+    }
+    /// Returns the optional schema-backed discrete resource specification.
+    #[must_use]
+    pub const fn discrete_resource_spec(&self) -> Option<&DeployDiscreteResourceSpec> {
+        self.discrete_resource_spec.as_ref()
+    }
+    /// Returns retained extensions.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+    /// Returns retained unknown or malformed fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Authored generic-resource item shape retained without coercion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployGenericResourceForm {
+    /// A mapping-form item.
+    Mapping,
+    /// A non-mapping sequence item retained as evidence.
+    Unmodeled,
+}
+
+/// Schema-backed discrete generic-resource specification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployDiscreteResourceSpec {
+    span: SourceSpan,
+    kind: Option<Located<String>>,
+    value: Option<Located<DeployDiscreteResourceValue>>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl DeployDiscreteResourceSpec {
+    pub(super) fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            kind: None,
+            value: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(super) fn set_kind(&mut self, value: Located<String>) {
+        self.kind = Some(value);
+    }
+    pub(super) fn set_value(&mut self, value: Located<DeployDiscreteResourceValue>) {
+        self.value = Some(value);
+    }
+    pub(super) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+    /// Returns the complete discrete-resource-spec mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns the optional raw kind scalar.
+    #[must_use]
+    pub const fn kind(&self) -> Option<&Located<String>> {
+        self.kind.as_ref()
+    }
+    /// Returns the optional raw value scalar category.
+    #[must_use]
+    pub const fn value(&self) -> Option<&Located<DeployDiscreteResourceValue>> {
+        self.value.as_ref()
+    }
+    /// Returns retained extensions.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+    /// Returns retained unknown or malformed members.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Raw scalar category for a discrete generic-resource value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployDiscreteResourceValue {
+    /// A YAML numeric scalar retained without numeric interpretation.
+    YamlNumber(String),
+    /// A YAML string scalar retained without schema-specific interpretation.
+    String(String),
+}
+
+/// Authored deploy resource limits with source-aware child fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployResourceLimits {
+    span: SourceSpan,
+    cpus: Option<Located<DeployResourceCpus>>,
+    memory: Option<Located<DeployResourceMemory>>,
+    pids: Option<Located<DeployResourcePids>>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl DeployResourceLimits {
+    pub(super) const fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            cpus: None,
+            memory: None,
+            pids: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+
+    pub(super) fn set_pids(&mut self, pids: Located<DeployResourcePids>) {
+        self.pids = Some(pids);
+    }
+
+    pub(super) fn set_cpus(&mut self, cpus: Located<DeployResourceCpus>) {
+        self.cpus = Some(cpus);
+    }
+
+    pub(super) fn set_memory(&mut self, memory: Located<DeployResourceMemory>) {
+        self.memory = Some(memory);
+    }
+
+    pub(super) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+
+    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+
+    /// Returns the complete resource-limits mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+
+    /// Returns the authored deploy resource PID scalar spelling and category.
+    #[must_use]
+    pub const fn pids(&self) -> Option<&Located<DeployResourcePids>> {
+        self.pids.as_ref()
+    }
+
+    /// Returns the authored deploy resource CPU scalar spelling and category.
+    #[must_use]
+    pub const fn cpus(&self) -> Option<&Located<DeployResourceCpus>> {
+        self.cpus.as_ref()
+    }
+
+    /// Returns the authored deploy resource memory value and its source location.
+    #[must_use]
+    pub const fn memory(&self) -> Option<&Located<DeployResourceMemory>> {
+        self.memory.as_ref()
+    }
+
+    /// Returns retained resource-limit extensions.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+
+    /// Returns retained unknown resource-limit fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Raw deploy resource PID scalar category and spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployResourcePids {
+    /// A YAML integer scalar without range validation.
+    YamlInteger(String),
+    /// A YAML string scalar without numeric validation.
+    String(String),
+}
+
+/// Raw deploy resource CPU scalar category and spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployResourceCpus {
+    /// A YAML integer or floating-point scalar without numeric validation or normalization.
+    YamlNumber(String),
+    /// A YAML string scalar without numeric validation.
+    String(String),
+}
+
+/// Raw-preserving deploy resource memory value with deploy-specific classification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployResourceMemory {
+    raw: String,
+    kind: DeployResourceMemoryKind,
+}
+
+impl DeployResourceMemory {
+    pub(crate) fn parse(raw: String) -> Self {
+        let kind = if raw.contains('$') {
+            DeployResourceMemoryKind::Expression
+        } else if let Some((amount_raw, unit)) = split_deploy_resource_memory_unit(&raw) {
+            if deploy_resource_memory_lexical_zero(amount_raw) {
+                DeployResourceMemoryKind::Zero {
+                    amount_raw: amount_raw.to_owned(),
+                    unit: Some(unit),
+                }
+            } else {
+                DeployResourceMemoryKind::Documented {
+                    amount_raw: amount_raw.to_owned(),
+                    unit,
+                }
+            }
+        } else if deploy_resource_memory_lexical_zero(&raw) {
+            DeployResourceMemoryKind::Zero {
+                amount_raw: raw.clone(),
+                unit: None,
+            }
+        } else {
+            DeployResourceMemoryKind::ProviderDependentString
+        };
+        Self { raw, kind }
+    }
+
+    /// Returns the exact deploy resource memory scalar text without normalization.
+    #[must_use]
+    pub fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    /// Returns the non-destructive deploy resource memory classification.
+    #[must_use]
+    pub const fn kind(&self) -> &DeployResourceMemoryKind {
+        &self.kind
+    }
+}
+
+/// Raw-preserving semantic family of a deploy resource memory string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployResourceMemoryKind {
+    /// A string ending in one documented lowercase byte suffix.
+    Documented {
+        /// Exact text before the suffix; no amount grammar is inferred.
+        amount_raw: String,
+        /// Exact documented suffix family.
+        unit: DeployResourceMemoryUnit,
+    },
+    /// An all-zero amount spelling whose runtime meaning is not inferred.
+    Zero {
+        /// Exact all-zero amount spelling.
+        amount_raw: String,
+        /// Documented suffix when one was present.
+        unit: Option<DeployResourceMemoryUnit>,
+    },
+    /// A dollar-bearing string deferred to Compose interpolation.
+    Expression,
+    /// A string outside the documented lowercase-suffix family.
+    ProviderDependentString,
+}
+
+/// One lowercase byte-unit suffix documented for deploy resource memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum DeployResourceMemoryUnit {
+    /// Bytes (`b`).
+    B,
+    /// Kilobytes (`k`).
+    K,
+    /// Kilobytes (`kb`).
+    Kb,
+    /// Megabytes (`m`).
+    M,
+    /// Megabytes (`mb`).
+    Mb,
+    /// Gigabytes (`g`).
+    G,
+    /// Gigabytes (`gb`).
+    Gb,
+}
+
+impl DeployResourceMemoryUnit {
+    /// Returns the exact lowercase documented suffix.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::B => "b",
+            Self::K => "k",
+            Self::Kb => "kb",
+            Self::M => "m",
+            Self::Mb => "mb",
+            Self::G => "g",
+            Self::Gb => "gb",
+        }
+    }
+}
+
+fn split_deploy_resource_memory_unit(value: &str) -> Option<(&str, DeployResourceMemoryUnit)> {
+    for (suffix, unit) in [
+        ("kb", DeployResourceMemoryUnit::Kb),
+        ("mb", DeployResourceMemoryUnit::Mb),
+        ("gb", DeployResourceMemoryUnit::Gb),
+        ("b", DeployResourceMemoryUnit::B),
+        ("k", DeployResourceMemoryUnit::K),
+        ("m", DeployResourceMemoryUnit::M),
+        ("g", DeployResourceMemoryUnit::G),
+    ] {
+        if let Some(amount) = value.strip_suffix(suffix) {
+            if !amount.is_empty() {
+                return Some((amount, unit));
+            }
+        }
+    }
+    None
+}
+
+fn deploy_resource_memory_lexical_zero(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|byte| byte == b'0')
 }
 
 /// A deploy restart-policy mapping with independent raw-preserving members.
@@ -1078,6 +2105,284 @@ pub enum DeployRestartMaxAttempts {
     YamlNumber(String),
     /// A YAML string scalar without numeric validation.
     String(String),
+}
+
+/// A deploy rollback configuration with independent raw-preserving members.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployRollbackConfig {
+    span: SourceSpan,
+    parallelism: Option<Located<DeployRollbackParallelism>>,
+    delay: Option<Located<String>>,
+    monitor: Option<Located<String>>,
+    failure_action: Option<Located<String>>,
+    max_failure_ratio: Option<Located<DeployRollbackMaxFailureRatio>>,
+    order: Option<Located<DeployRollbackOrder>>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+impl DeployRollbackConfig {
+    pub(super) const fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            parallelism: None,
+            delay: None,
+            monitor: None,
+            failure_action: None,
+            max_failure_ratio: None,
+            order: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(super) fn set_parallelism(&mut self, value: Located<DeployRollbackParallelism>) {
+        self.parallelism = Some(value);
+    }
+    pub(super) fn set_delay(&mut self, value: Located<String>) {
+        self.delay = Some(value);
+    }
+    pub(super) fn set_monitor(&mut self, value: Located<String>) {
+        self.monitor = Some(value);
+    }
+    pub(super) fn set_failure_action(&mut self, value: Located<String>) {
+        self.failure_action = Some(value);
+    }
+    pub(super) fn set_max_failure_ratio(&mut self, value: Located<DeployRollbackMaxFailureRatio>) {
+        self.max_failure_ratio = Some(value);
+    }
+    pub(super) fn set_order(&mut self, value: Located<DeployRollbackOrder>) {
+        self.order = Some(value);
+    }
+    pub(super) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+    /// Returns the complete rollback-config mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns the raw rollback parallelism scalar.
+    #[must_use]
+    pub const fn parallelism(&self) -> Option<&Located<DeployRollbackParallelism>> {
+        self.parallelism.as_ref()
+    }
+    /// Returns the raw rollback delay string.
+    #[must_use]
+    pub const fn delay(&self) -> Option<&Located<String>> {
+        self.delay.as_ref()
+    }
+    /// Returns the raw rollback monitor string.
+    #[must_use]
+    pub const fn monitor(&self) -> Option<&Located<String>> {
+        self.monitor.as_ref()
+    }
+    /// Returns the raw rollback failure action.
+    #[must_use]
+    pub const fn failure_action(&self) -> Option<&Located<String>> {
+        self.failure_action.as_ref()
+    }
+    /// Returns the raw rollback maximum failure ratio.
+    #[must_use]
+    pub const fn max_failure_ratio(&self) -> Option<&Located<DeployRollbackMaxFailureRatio>> {
+        self.max_failure_ratio.as_ref()
+    }
+    /// Returns the rollback order.
+    #[must_use]
+    pub const fn order(&self) -> Option<&Located<DeployRollbackOrder>> {
+        self.order.as_ref()
+    }
+    /// Returns retained rollback-config extensions.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+    /// Returns retained rollback-config malformed or unknown fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+/// Raw rollback parallelism scalar category and spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployRollbackParallelism {
+    /// A YAML integer scalar without range validation.
+    YamlInteger(String),
+    /// A strict YAML string scalar without numeric validation.
+    String(String),
+}
+/// Raw rollback maximum-failure-ratio scalar category and spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployRollbackMaxFailureRatio {
+    /// A YAML number scalar without range validation.
+    YamlNumber(String),
+    /// A strict YAML string scalar without numeric validation.
+    String(String),
+}
+/// Rollback order with unsupported values retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployRollbackOrder {
+    /// Stop the old task before starting the new task.
+    StopFirst,
+    /// Start the new task before stopping the old task.
+    StartFirst,
+    /// A retained provider-specific order.
+    Other(String),
+}
+impl DeployRollbackOrder {
+    pub(crate) fn parse(value: String) -> Self {
+        match value.as_str() {
+            "stop-first" => Self::StopFirst,
+            "start-first" => Self::StartFirst,
+            _ => Self::Other(value),
+        }
+    }
+    pub(crate) const fn is_documented(&self) -> bool {
+        matches!(self, Self::StopFirst | Self::StartFirst)
+    }
+}
+
+/// A deploy rolling-update configuration with independent raw-preserving members.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeployUpdateConfig {
+    span: SourceSpan,
+    parallelism: Option<Located<DeployUpdateParallelism>>,
+    delay: Option<Located<String>>,
+    monitor: Option<Located<String>>,
+    failure_action: Option<Located<String>>,
+    max_failure_ratio: Option<Located<DeployUpdateMaxFailureRatio>>,
+    order: Option<Located<DeployUpdateOrder>>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+impl DeployUpdateConfig {
+    pub(super) const fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            parallelism: None,
+            delay: None,
+            monitor: None,
+            failure_action: None,
+            max_failure_ratio: None,
+            order: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(super) fn set_parallelism(&mut self, value: Located<DeployUpdateParallelism>) {
+        self.parallelism = Some(value);
+    }
+    pub(super) fn set_delay(&mut self, value: Located<String>) {
+        self.delay = Some(value);
+    }
+    pub(super) fn set_monitor(&mut self, value: Located<String>) {
+        self.monitor = Some(value);
+    }
+    pub(super) fn set_failure_action(&mut self, value: Located<String>) {
+        self.failure_action = Some(value);
+    }
+    pub(super) fn set_max_failure_ratio(&mut self, value: Located<DeployUpdateMaxFailureRatio>) {
+        self.max_failure_ratio = Some(value);
+    }
+    pub(super) fn set_order(&mut self, value: Located<DeployUpdateOrder>) {
+        self.order = Some(value);
+    }
+    pub(super) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+    pub(super) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+    /// Returns the complete update-config mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns the raw update parallelism scalar.
+    #[must_use]
+    pub const fn parallelism(&self) -> Option<&Located<DeployUpdateParallelism>> {
+        self.parallelism.as_ref()
+    }
+    /// Returns the raw update delay string.
+    #[must_use]
+    pub const fn delay(&self) -> Option<&Located<String>> {
+        self.delay.as_ref()
+    }
+    /// Returns the raw update monitor string.
+    #[must_use]
+    pub const fn monitor(&self) -> Option<&Located<String>> {
+        self.monitor.as_ref()
+    }
+    /// Returns the raw update failure action.
+    #[must_use]
+    pub const fn failure_action(&self) -> Option<&Located<String>> {
+        self.failure_action.as_ref()
+    }
+    /// Returns the raw maximum failure ratio.
+    #[must_use]
+    pub const fn max_failure_ratio(&self) -> Option<&Located<DeployUpdateMaxFailureRatio>> {
+        self.max_failure_ratio.as_ref()
+    }
+    /// Returns the update order.
+    #[must_use]
+    pub const fn order(&self) -> Option<&Located<DeployUpdateOrder>> {
+        self.order.as_ref()
+    }
+    /// Returns retained update-config extensions.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+    /// Returns retained update-config malformed or unknown fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+/// Raw update parallelism scalar category and spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployUpdateParallelism {
+    /// A YAML integer scalar without range validation.
+    YamlInteger(String),
+    /// A strict YAML string scalar without numeric validation.
+    String(String),
+}
+/// Raw update maximum-failure-ratio scalar category and spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployUpdateMaxFailureRatio {
+    /// A YAML number scalar without range validation.
+    YamlNumber(String),
+    /// A strict YAML string scalar without numeric validation.
+    String(String),
+}
+/// Update order with unsupported values retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeployUpdateOrder {
+    /// Stop the old task before starting the new task.
+    StopFirst,
+    /// Start the new task before stopping the old task.
+    StartFirst,
+    /// A retained provider-specific order.
+    Other(String),
+}
+impl DeployUpdateOrder {
+    pub(crate) fn parse(value: String) -> Self {
+        match value.as_str() {
+            "stop-first" => Self::StopFirst,
+            "start-first" => Self::StartFirst,
+            _ => Self::Other(value),
+        }
+    }
+    pub(crate) const fn is_documented(&self) -> bool {
+        matches!(self, Self::StopFirst | Self::StartFirst)
+    }
 }
 
 /// Authored deploy placement with source-aware child fields.

@@ -6,30 +6,22 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
-## [0.1.16] - 2026-08-07
+## [0.1.16] - 2026-08-10
 
 ### Added
 
-- Effective Build-family support for `additional_contexts`, context, args, labels, Build-specific `extra_hosts`, raw caches and entitlements, Dockerfile/inline Dockerfile/target/network/platforms/no_cache/no_cache_filter/privileged/sbom/provenance/pull/`shm_size`/tags, service-equivalent `ulimits`, secrets, opaque `isolation`, and sensitive `build.ssh` forms.
-  Values retain provenance and recovery; SSH values redact by default, and no reference, path,
-  credential, socket, agent, mode, platform, privilege, or builder behavior is inferred.
-- Native authored/effective `deploy.endpoint_mode`, `deploy.mode`, and raw-preserving `deploy.replicas` support with
-  portability and scalar-category evidence; no count/default, scheduling, runtime, or conversion semantics are inferred.
-- Native authored/effective map/list `deploy.labels` support, distinct from service container labels, with provenance,
-  sensitivity, duplicate evidence, and no deployment/runtime or conversion semantics.
-- Native authored/effective deploy restart-policy members with raw spelling and provenance, distinct from service
-  restart behavior.
-- Native authored/effective deploy placement constraints, preferences, and max-replicas-per-node
-  scalar categories with merge provenance and recovery, without scheduling or runtime semantics.
-- Native service `stdin_open`, `tty`, and `privileged` support across authored, effective-project,
-  generated, and public API boundaries without inferring terminal, security, runtime, or
-  cross-format behavior.
-- Loss-aware service `logging` with merged provenance and parse-back-validated generation.
-- Generated service-network attachments with optional raw IPv4 and IPv6 identities.
-- Top-level networks retain authored and merged IPAM; generated application-owned networks add
-  drivers, scalar-kind-aware options, `internal`/IPv6 booleans, and labels.
-- Generated application-owned volumes with drivers, scalar-kind-aware options, and labels; authored
-  external-volume configuration conflicts now receive actionable diagnostics.
+- Expands loss-aware authored and effective Build support, including contexts, inputs, caches,
+  Dockerfiles, resource settings, and redacted SSH forms.
+- Expands the Deploy model with endpoint and replica settings, labels, lifecycle configuration,
+  placement, limits and reservations, and schema-only device and resource evidence.
+- Adds source-aware service configuration for `credential_spec`, `extends`, `provider`, lifecycle
+  hooks, runtime/pull/platform strings, cgroup values, and CPU scalar categories.
+- Adds `attach` and `blkio_config` preservation, terminal/security and logging support, and
+  generated service-network attachments.
+- Expands authored and merged IPAM plus generated application-owned network and volume drivers,
+  options, labels, and conflict diagnostics.
+- Preserves 0.1.x source compatibility and Rust 1.85.0+ support; provider and runtime behavior
+  remain outside the evidence boundary.
 
 ## [0.1.15] - 2026-08-07
 

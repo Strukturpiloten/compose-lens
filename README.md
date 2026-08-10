@@ -27,8 +27,27 @@ It is designed for tools that need more than strict deserialization: source-awar
   runtime, or cross-format behavior.
 - Preserve, merge, inspect, and generate service `privileged` choices without inferring security,
   runtime, or cross-format behavior.
-- Preserve, merge, inspect, and generate service image pull policies without inventing provider
-  behavior or discarding schema-only refresh evidence.
+- Preserve, merge, and inspect service `attach` choices without a default, generated API, logging,
+  runtime, provider, CLI, compatibility, or cross-format behavior.
+- Preserve authored and effective service `blkio_config` scalar spelling and ordered device entries
+  without defaults, controller, runtime, provider, I/O, or cross-format interpretation.
+- Preserve authored and effective service `cgroup` namespace spelling, validity classification, and
+  provenance without defaults, controller, runtime, provider, I/O, or cross-format interpretation.
+- Preserve authored and effective raw service `cgroup_parent` strings with source and merge
+  provenance without path, controller, runtime, provider, or cross-format interpretation.
+- Preserve authored and effective service `cpu_count` YAML integer/string categories and exact
+  spelling without numeric conversion, quota, host, runtime, provider, or cross-format interpretation.
+- Preserve authored and effective service `cpu_percent` YAML integer/string categories, including
+  out-of-range integer evidence, without percentage calculation, CPU, host, runtime, provider, or
+  cross-format interpretation.
+- Preserve authored and effective service `cpu_period` YAML number/string categories without numeric,
+  duration, CPU, host, runtime, provider, or cross-format interpretation.
+- Preserve authored and effective service `cpu_quota` YAML number/string categories without numeric,
+  quota, duration, CPU, host, runtime, provider, or cross-format interpretation.
+- Preserve authored and effective service `cpu_rt_period` YAML number, duration, expression, and
+  other-string categories without CPU, scheduler, host, runtime, provider, or cross-format interpretation.
+- Preserve, merge, and inspect service image pull policies and raw `pull_refresh_after` strings
+  without inventing provider behavior, refresh semantics, or defaults.
 - Preserve, merge, inspect, and generate independent service stop signals and raw Compose stop
   grace periods without normalizing them into another lifecycle manager's units.
 - Preserve, merge, inspect, and generate service PID limits without fixed-width parsing, default
@@ -83,13 +102,35 @@ It is designed for tools that need more than strict deserialization: source-awar
   lists, interpolation provenance, and generic merge evidence without conflating service hosts or
   performing address validation, DNS/host access, build generation, or conversion.
 - Preserve Deploy `endpoint_mode`, `mode`, raw `replicas` scalars, and distinct map/list deployment labels through
-  authored and effective views while retaining all other deploy children as evidence and inferring no count, container,
-  platform, discovery, or runtime behavior.
+  authored and effective views while retaining malformed, extension, and future-unknown deploy evidence and inferring
+  no count, container, platform, discovery, or runtime behavior.
 - Preserve deploy restart-policy members with raw condition, duration, and attempt spellings without service-restart
   defaults, precedence, simulation, or runtime interpretation.
+- Preserve deploy update_config member spelling, malformed evidence, and merge provenance without rollout,
+  scheduling, runtime, or conversion interpretation.
+- Preserve distinct deploy rollback_config member spelling, malformed evidence, and merge provenance without rollout,
+  scheduling, runtime, or conversion interpretation.
 - Preserve deploy placement constraints, preferences, and max-replicas-per-node spelling through
   authored and effective views with append/reset/override provenance, malformed recovery, and no
   scheduling, node-selection, default, runtime, or conversion interpretation.
+- Preserve deploy resource-limit CPU number/string, memory string, and PID integer/string spelling,
+  plus reservation CPU number/string and memory string spelling, through authored and effective views with nested
+  merge/reset/override provenance and no service, host, cgroup, runtime, or conversion interpretation.
+- Preserve schema-backed reservation generic-resource lists with raw nested kind/value spelling,
+  collection/item/member provenance, and no scheduling, device, runtime, or conversion interpretation.
+- Preserve schema-only reservation device lists with raw counts, IDs, map/list options, capabilities,
+  drivers, conflict and malformed evidence, merge provenance, and no device selection, runtime, or conversion interpretation.
+- Preserve service credential-spec mappings and raw config/file/registry references through authored and effective
+  views without resolving configurations, files, registries, accounts, platforms, or runtime behavior.
+- Preserve raw service `extends` short references and long service/file mappings through authored
+  and effective views, including provenance and recovery, without expanding referenced services or
+  resolving files, paths, cycles, resources, providers, platforms, runtimes, or conversion behavior.
+- Preserve raw service provider mappings with strict-string types, scalar/sequence options,
+  provenance, and recovery without execution, discovery, provider grammar, compatibility, or
+  conversion behavior.
+- Preserve ordered service `post_start`, `pre_stop`, and `pre_start` hooks plus raw `runtime`,
+  `pull_refresh_after`, and `platform` strings with provenance and recovery without executing,
+  scheduling, or otherwise interpreting lifecycle, refresh, or OCI behavior.
 - Preserve raw service security options and expose conflict-aware lexical candidates without
   selecting policy, inspecting the host, or claiming runtime behavior.
 - Preserve, inspect, and generate ordered service `env_file` short/long syntax and options; retain
@@ -142,7 +183,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
-- [0.1.16 release notes](docs/releases/0.1.16.md) — Build-family project values, native service terminal/security choices, logging, and generated network and volume configuration
+- [0.1.16 release notes](docs/releases/0.1.16.md) — Build, Deploy, source-aware service configuration, and generated network/volume support
 - [0.1.15 release notes](docs/releases/0.1.15.md) — DNS, expose, annotations, and security options
 - [0.1.14 release notes](docs/releases/0.1.14.md)
 - [Release process](docs/releasing.md)

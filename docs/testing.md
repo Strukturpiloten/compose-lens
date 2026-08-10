@@ -13,12 +13,29 @@ Cover scalars, mappings, sequences, anchors, aliases, comments where supported, 
 Cover every field in the documented [typed boundary](typed-model.md), all supported syntax variants,
 unknown fields, extensions, image references, ports, volumes, host/container path separation,
 environment values, environment-file short/long forms and options, service-label forms,
-entrypoints, commands,
-extra hosts, service hostnames, service annotations, service logging drivers and options, ordered service capability additions and drops, ordered mixed service devices, raw service DNS scalar/list forms, raw service security options, raw identities, service-level PID limits, service and Build shared-memory sizes, service memory limits, service-level temporary filesystems, service sysctls, restart and image pull policies, independent stop signals and raw
+entrypoints, commands, service `attach` booleans/expressions and malformed recovery, raw
+`cpu_count`/`cpu_percent`/`cpu_period`/`cpu_quota`/`cpu_rt_period` scalar categories and malformed recovery,
+extra hosts, service hostnames, service annotations, service logging drivers and options, ordered service capability additions and drops, ordered mixed service devices, raw service DNS scalar/list forms, raw service security options, raw identities, service-level PID limits, service and Build shared-memory sizes, service memory limits, service-level temporary filesystems, service sysctls, restart and image pull policies, raw `pull_refresh_after` and `platform` strings, independent stop signals and raw
 lifecycle grace periods, ulimits, health checks, dependency conditions, short/long build contexts,
 non-empty Dockerfile, map/list build arguments, opaque target/network scalars, ordered raw platforms/tags, and
 map/list-preserving build labels with retained conflict evidence and unmodeled build/deploy identities, networks,
 profiles, configs, secrets, top-level resources, and discriminated unions.
+Deploy rollback-config tests cover the authored six-member map, explicit empties, malformed sibling
+recovery, duplicate and extension/unknown evidence, strict YAML-string boundaries, portability
+diagnostics, recursive merge, reset/override provenance, sensitivity redaction, and separation from
+update-config values.
+Credential-spec tests cover mapping-only authored recovery, strict-string scalar boundaries,
+spans, duplicates, extensions, unknown members, recursive merge, reset/override/null-reset
+provenance, sensitivity redaction, and the public authored/effective API.
+Extends tests cover schema-supported short strings and long mappings, strict-string `service`/`file`
+members, explicit empty service values, missing-service diagnostics, spans, duplicates,
+extensions, malformed/unknown recovery, generic recursive merge, reset/override/null-reset,
+sensitivity redaction, and the public authored/effective API without service expansion or file
+lookup. Separate project-processing coverage validates local long-form `service` edges without
+`file` while retaining the no-expansion and no-I/O boundary.
+Provider tests cover strict-string type recovery, empty types, ordered scalar/sequence option
+categories, duplicate/empty/malformed evidence, spans, interpolation redaction, generic merge,
+reset/override provenance, public APIs, and the no-execution/discovery boundary.
 
 ### Processing tests
 
@@ -134,7 +151,7 @@ documented in the [real-world corpus guide](real-world-corpus.md).
 
 Cargo-discovered integration tests live in [`../tests/`](../tests/README.md), with private helpers in `tests/support/`. Fixtures live in [`../fixtures/`](../fixtures/README.md) and are validated against the versioned [fixture manifest contract](fixture-format.md). Product suites are added only with implemented behavior and meaningful assertions.
 
-The initial syntax corpus exercises comments, anchors, aliases, duplicate keys, extension fields, scalar spelling, interpolation-shaped text, tag-plus-digest image references, Unicode, CRLF input, malformed flow syntax, complete comma-containing block plain scalars, hyphenated anchor names and direct aliased block values, unquoted option-like sequence items, blank lines before indented mapping values, incomplete syntax-tree fail-safe detection, source spans, and exact parse/render/parse stability. The Phase 2 typed-model corpus covers its complete field boundary, capability-add and capability-drop omission/empty/duplicate/case/malformed recovery and coexistence, PID-limit, pull-policy, service-tmpfs classification, service-sysctls form/scalar/duplicate behavior, service-ulimits name/range/value recovery, malformed recovery, deferred expressions, empty and null values, extensions and unknowns, partial invalid-input recovery, and stable source-spanned diagnostics. It also keeps short `:z`, short `:Z,ro`, and long `bind.selinux: Z` volume mounts distinct. The first processing corpus protects every interpolation operator, nested expressions, escaped dollars, missing-variable policies, required-value redaction, sensitivity propagation, and nesting recovery. It also covers ordered multi-file loading, explicit origin retention, first-file base-directory selection, duplicate source IDs, recoverable diagnostics, and one per-file interpolation overlay before merge. Field-aware merge fixtures cover mapping recursion, including nested soft/hard ulimit mappings, ordinary append including duplicate-preserving service `tmpfs` and `sysctls` lists, exact-key sysctls maps, independent exact-scalar capability-add and capability-drop uniqueness, command replacement, mixed environment and label forms, ordered environment files, unique ports, volumes, devices, configs, and secrets, YAML merge keys, unknown fields, reset/override tags, provenance, and sensitive-value debug redaction. Native project-view fixtures cover profile filtering, direct native images, commands, environments, environment-file short/long forms, capability-add and capability-drop field/item provenance and sensitivity, raw PID-limit and pull-policy replacement provenance, service-tmpfs and service-sysctls form/item provenance and sensitivity, ordered service-ulimits field/member provenance and sensitivity, retained `pull_refresh_after` evidence, sequence and mapping extra hosts, `host-gateway`, bracketed IPv6, ports, volumes, service config/secret grants, networks, top-level resources, unmodeled-field references, mismatched selections, recoverable invalid forms, sensitive-value redaction, unique-by-target nested-field retention, and field/item/collection provenance across two source files. Post-merge fixtures cover explicit and all-profile selection, profile reset behavior, inactive-service exclusion, relative and caller-supplied home path origins, named-resource references, inactive and missing service edges, documented defaults, no-default policy behavior, and rejection of selections from another project. Compatibility fixtures cover exact version parsing and ranges, selected-service feature discovery, Docker's documented `!override` boundary, distinct provider/runtime identities, conservative `podman-compose` unknowns, tolerant notes, source preservation, evidence scope, stable diagnostics, and sensitive-value redaction. Canonical-rendering fixtures cover exact presentation, multi-file output, retained Compose forms and tags, profile filtering, parse-render stability, recoverable aliases, trailing empty values, redaction, default formatting compatibility, and customized semantic stability. Preservation-edit fixtures cover typed exact-span changes, scalar-style retention and fallback, atomic failures, byte-identical unrelated syntax, reparsing, and redaction.
+The initial syntax corpus exercises comments, anchors, aliases, duplicate keys, extension fields, scalar spelling, interpolation-shaped text, tag-plus-digest image references, Unicode, CRLF input, malformed flow syntax, complete comma-containing block plain scalars, hyphenated anchor names and direct aliased block values, unquoted option-like sequence items, blank lines before indented mapping values, incomplete syntax-tree fail-safe detection, source spans, and exact parse/render/parse stability. The Phase 2 typed-model corpus covers its complete field boundary, capability-add and capability-drop omission/empty/duplicate/case/malformed recovery and coexistence, PID-limit, pull-policy, strict raw `pull_refresh_after` strings, service-tmpfs classification, service-sysctls form/scalar/duplicate behavior, service-ulimits name/range/value recovery, malformed recovery, deferred expressions, empty and null values, extensions and unknowns, partial invalid-input recovery, and stable source-spanned diagnostics. It also keeps short `:z`, short `:Z,ro`, and long `bind.selinux: Z` volume mounts distinct. The first processing corpus protects every interpolation operator, nested expressions, escaped dollars, missing-variable policies, required-value redaction, sensitivity propagation, and nesting recovery. It also covers ordered multi-file loading, explicit origin retention, first-file base-directory selection, duplicate source IDs, recoverable diagnostics, and one per-file interpolation overlay before merge. Field-aware merge fixtures cover mapping recursion, including nested soft/hard ulimit mappings, ordinary append including duplicate-preserving service `tmpfs` and `sysctls` lists, exact-key sysctls maps, independent exact-scalar capability-add and capability-drop uniqueness, command replacement, mixed environment and label forms, ordered environment files, unique ports, volumes, devices, configs, and secrets, YAML merge keys, unknown fields, reset/override tags, provenance, and sensitive-value debug redaction. Native project-view fixtures cover profile filtering, direct native images, commands, environments, environment-file short/long forms, capability-add and capability-drop field/item provenance and sensitivity, raw PID-limit, pull-policy, and `pull_refresh_after` replacement provenance, service-tmpfs and service-sysctls form/item provenance and sensitivity, ordered service-ulimits field/member provenance and sensitivity, sequence and mapping extra hosts, `host-gateway`, bracketed IPv6, ports, volumes, service config/secret grants, networks, top-level resources, unmodeled-field references, mismatched selections, recoverable invalid forms, sensitive-value redaction, unique-by-target nested-field retention, and field/item/collection provenance across two source files. Post-merge fixtures cover explicit and all-profile selection, profile reset behavior, inactive-service exclusion, relative and caller-supplied home path origins, named-resource references, inactive and missing service edges, documented defaults, no-default policy behavior, and rejection of selections from another project. Compatibility fixtures cover exact version parsing and ranges, selected-service feature discovery, Docker's documented `!override` boundary, distinct provider/runtime identities, conservative `podman-compose` unknowns, tolerant notes, source preservation, evidence scope, stable diagnostics, and sensitive-value redaction. Canonical-rendering fixtures cover exact presentation, multi-file output, retained Compose forms and tags, profile filtering, parse-render stability, recoverable aliases, trailing empty values, redaction, default formatting compatibility, and customized semantic stability. Preservation-edit fixtures cover typed exact-span changes, scalar-style retention and fallback, atomic failures, byte-identical unrelated syntax, reparsing, and redaction.
 
 DNS regressions protect authored forms, merge/reset behavior, provenance, generation safety, and
 typed parse-back.
@@ -143,9 +160,34 @@ Build regressions protect short/long context, non-empty Dockerfile, opaque targe
 They cover empties, duplicates, per-file interpolation sensitivity, source/provenance, append/replacement/reset/override, partial malformed recovery, and `dockerfile`/`dockerfile_inline` conflict evidence.
 All remaining build siblings stay source-addressable unmodeled evidence.
 
+Lifecycle-hook regressions protect post-start, pre-stop, and pre-start ordered hook recovery, explicit null commands, local environment
+forms, extension/duplicate evidence, interpolation redaction, and generic append/reset/override provenance.
+
+Runtime, pull-refresh, and platform regressions protect strict YAML-string recovery, empty/deferred
+spelling, scalar replacement/reset/override provenance, sensitivity redaction, and no runtime,
+refresh, or OCI interpretation.
+
+Attach regressions protect literal/deferred parsing, duplicate and malformed recovery, source and
+merge provenance, reset/override, sensitivity redaction, and the absence of default, generated,
+logging, runtime, provider, CLI, compatibility, or cross-format behavior.
+
+Blkio regressions protect all six schema members, integer/string spelling, ordered duplicate items,
+partial recovery, and generic mapping/sequence merge provenance without `extends` inheritance claims.
+
+Cgroup regressions protect strict-string classification, invalid retained spelling, duplicate and
+malformed recovery, scalar replacement/reset/override provenance, and sensitive interpolation redaction.
+
+Cgroup-parent regressions protect strict-string preservation for empty, whitespace, deferred, and
+arbitrary spellings; duplicate/malformed recovery; scalar replacement/reset/override provenance;
+and sensitive interpolation redaction without path or runtime interpretation.
+
+CPU-count regressions protect exact zero, unbounded, base, separator, negative-zero, negative,
+quoted, empty, and deferred spelling; malformed/duplicate recovery; scalar merge provenance;
+sensitivity redaction; and canonical rendering without quota or runtime interpretation.
+
 Deploy endpoint-mode regressions protect authored documented/provider-specific/interpolated values,
 duplicates, malformed recovery, scalar merge/reset/override provenance, sensitivity, and nested
-unmodeled evidence for the remaining immediate deploy children.
+resource coverage plus malformed, extension, and future-unknown deploy evidence.
 Deploy-mode regressions additionally protect global/replicated/raw/empty/deferred values, omission,
 and global coexistence with replicas and service scale without scheduling diagnostics. Deploy-replica
 regressions protect raw YAML number spelling, distinct string/empty/deferred values, malformed
@@ -158,11 +200,45 @@ Deploy restart-policy regressions protect all members, condition spelling, raw d
 attempt scalar categories, partial nested merge and replacement provenance, reset/malformed nested
 evidence, and separation from service `restart` without defaults, precedence, simulation, runtime,
 or conversion inference.
+Update-config regressions protect map recovery, scalar boundaries, retained extensions and unknowns,
+provider-specific order diagnostics, generic merge/reset/override provenance, and redaction.
 Deploy placement regressions protect YAML-string constraints and optional preference spreads,
 empty and duplicate items, YAML integer/string maximum categories, nested extensions/unknowns,
 partial malformed recovery, append/replacement/reset/override provenance, and sensitive
 interpolation redaction without constraint grammar, node-selection, default, scheduling, runtime,
 or conversion inference.
+Deploy resource-limit PID regressions protect integer/string scalar categories, nested recursive
+merge, leaf/mapping reset and override provenance, extensions/unknowns, malformed recovery,
+sensitivity redaction, and independence from service `pids_limit` without unlimited, range/default,
+host, cgroup, runtime, or conversion inference.
+Deploy resource-limit CPU regressions protect number/string scalar categories, exact numeric
+spelling, nested recursive merge, leaf/mapping reset and override provenance, extensions/unknowns,
+malformed recovery, sensitivity redaction, and independence from service CPU and `mem_limit`
+without range/default, host, cgroup, runtime, or conversion inference.
+Deploy resource-limit memory regressions protect YAML-string-only acceptance; documented lowercase
+units; lexical zero, deferred, and provider-dependent states; nested recursive merge; leaf/mapping
+reset and override provenance; malformed recovery; sensitivity redaction; and independence from
+service `mem_limit` and reservations without amount parsing, range/default, host, cgroup, runtime,
+or conversion inference.
+Deploy resource-reservation CPU and memory regressions protect numeric/string and string-only raw
+categories respectively, exact spelling, recursive merge, leaf/mapping/resource reset and override
+provenance, extensions/unknowns, malformed recovery, sensitivity redaction, and independence from
+limits and service CPU/`mem_limit` without validation, rounding, defaults, scheduling, provider,
+runtime, target, or conversion inference.
+Generic-resource regressions protect schema-only list evidence: ordinary append and
+reset/override provenance, item order/forms, optional raw discrete `kind` and number-or-string
+`value`, malformed recovery, nested evidence, spans, and sensitivity. They make no prose,
+version, provider, matching, scheduling, device, runtime, or conversion claim; reservation
+device semantics remain a separate boundary.
+Reservation-device regressions protect required ordered raw capability strings, optional strict
+YAML-string drivers, raw integer-or-string counts, ordered strict-string device IDs, exact duplicate
+capability diagnostics without collapsing items, allocation-selector conflicts, mapping/unmodeled
+recovery, nested unknown evidence, spans, sensitivity, and append/reset/override provenance. They
+reject timestamp/regex styles, other scalar kinds, and collections for strict strings; infer no
+device selection/loading, capability/driver grammar, count range/sign/default/`all`, allocation or
+GPU/device matching, CDI, host, scheduling, provider/version, runtime, cgroup, or conversion
+behavior. Options regressions cover map/list forms, scalar kinds, exact duplicate list strings,
+malformed recovery, sensitivity, and generic merge provenance.
 
 Logging regressions protect empty mappings, scalar-kind fidelity, malformed sibling recovery,
 recursive merge provenance, value-only interpolation, generation safety, and typed parse-back.

@@ -7,8 +7,8 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 use yaml_edit::{
-    AnchorRegistry, AsYaml, Mapping, MappingMergedExt, Parse, ParseErrorKind, Scalar, ScalarType, ScalarValue,
-    YamlFile, YamlNode,
+    AnchorRegistry, AsYaml, Mapping, MappingMergedExt, Parse, ParseErrorKind, Scalar, ScalarStyle, ScalarType,
+    ScalarValue, YamlFile, YamlNode,
 };
 
 /// A generic YAML syntax error not covered by a more specific code.
@@ -210,6 +210,8 @@ pub(crate) struct MergeSyntaxScalar {
     pub(crate) raw: String,
     pub(crate) value: String,
     pub(crate) kind: MergeScalarKind,
+    pub(crate) plain: bool,
+    pub(crate) strict_yaml_string: bool,
     pub(crate) span: SourceSpan,
 }
 
@@ -769,15 +771,21 @@ fn extract_merge_value(
         }
         YamlNode::TaggedNode(tagged) => {
             let span = yaml_node_span(source_id, &YamlNode::TaggedNode(tagged.clone()));
-            let value = tagged
+            let tag = tagged.tag().unwrap_or_default();
+            let mut value = tagged
                 .as_node()
                 .and_then(|node| node.children().find_map(YamlNode::from_syntax))
                 .map_or_else(
                     || MergeSyntaxValue::Empty(span),
                     |value| extract_merge_value(source_id, source, value, registry, aliases),
                 );
+            if matches!(tag.as_str(), "!!timestamp" | "!!regex") {
+                if let MergeSyntaxValue::Scalar(scalar) = &mut value {
+                    scalar.strict_yaml_string = false;
+                }
+            }
             MergeSyntaxValue::Tagged {
-                tag: tagged.tag().unwrap_or_default(),
+                tag,
                 value: Box::new(value),
                 span,
             }
@@ -924,7 +932,8 @@ fn resolve_alias(node: YamlNode, registry: &AnchorRegistry) -> YamlNode {
 }
 
 fn extract_merge_scalar(source_id: SourceId, source: &str, scalar: &Scalar) -> MergeSyntaxScalar {
-    let kind = match ScalarValue::from_scalar(scalar).scalar_type() {
+    let scalar_type = ScalarValue::from_scalar(scalar).scalar_type();
+    let kind = match scalar_type {
         ScalarType::Boolean => MergeScalarKind::Boolean,
         ScalarType::Integer | ScalarType::Float => MergeScalarKind::Number,
         ScalarType::Null => MergeScalarKind::Null,
@@ -934,8 +943,21 @@ fn extract_merge_scalar(source_id: SourceId, source: &str, scalar: &Scalar) -> M
         raw: scalar_raw_from_source(source, scalar),
         value: scalar_string_from_source(source, scalar),
         kind,
+        plain: ScalarValue::from_scalar(scalar).style() == ScalarStyle::Plain
+            && !scalar_uses_block_style(source, scalar),
+        strict_yaml_string: scalar_type == ScalarType::String,
         span: position_span(source_id, scalar.byte_range()),
     }
+}
+
+fn scalar_uses_block_style(source: &str, scalar: &Scalar) -> bool {
+    let start = scalar.byte_range().start as usize;
+    source[start..].trim_start().starts_with(['|', '>'])
+        || source[..start]
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .is_some_and(|header| header.contains(": |") || header.contains(": >"))
 }
 
 fn yaml_node_span(source_id: SourceId, node: &YamlNode) -> SourceSpan {
@@ -969,7 +991,7 @@ fn collect_scalar(source_id: SourceId, source: &str, scalar: &Scalar, values: &m
 
 #[cfg(test)]
 mod tests {
-    use super::{SyntaxDocument, parser_compatible_source, unparsed_input_offset};
+    use super::{MergeSyntaxScalar, MergeSyntaxValue, SyntaxDocument, parser_compatible_source, unparsed_input_offset};
     use crate::source::SourceId;
     use yaml_edit::YamlFile;
 
@@ -1011,5 +1033,40 @@ mod tests {
         let source = "quoted: \"*not-an-alias\"\nplain: echo &not-an-anchor\n# *also-not-an-alias\n";
 
         assert_eq!(parser_compatible_source(source), None);
+    }
+
+    #[test]
+    fn merge_scalars_retain_strict_yaml_string_identity() -> Result<(), Box<dyn std::error::Error>> {
+        let parsed = SyntaxDocument::parse(
+            SourceId::new(2),
+            "plain: gpu\ntimestamp: !!timestamp 2023-12-25\nregex: !!regex 'gpu.*'\nquoted-timestamp: \"2023-12-25\"\nquoted-regex: \"gpu.*\"\n",
+        )?;
+        let root = parsed.document().merge_root().ok_or("merge root")?;
+        let scalar = |name| -> Option<&MergeSyntaxScalar> {
+            let MergeSyntaxValue::Mapping { entries, .. } = &root else {
+                return None;
+            };
+            let value = &entries.iter().find(|entry| entry.key.value == name)?.value;
+            match value {
+                MergeSyntaxValue::Scalar(scalar) => Some(scalar),
+                MergeSyntaxValue::Tagged { value, .. } => match value.as_ref() {
+                    MergeSyntaxValue::Scalar(scalar) => Some(scalar),
+                    _ => None,
+                },
+                _ => None,
+            }
+        };
+        assert!(scalar("plain").is_some_and(|value| value.strict_yaml_string));
+        for name in ["timestamp", "regex"] {
+            assert!(
+                scalar(name).is_some_and(|value| !value.strict_yaml_string),
+                "{name}: {:?}",
+                scalar(name)
+            );
+        }
+        for name in ["quoted-timestamp", "quoted-regex"] {
+            assert!(scalar(name).is_some_and(|value| value.strict_yaml_string));
+        }
+        Ok(())
     }
 }

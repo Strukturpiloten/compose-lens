@@ -1490,6 +1490,521 @@ fn recursively_merges_ulimit_ranges_and_preserves_reset_override_and_shape_repla
     Ok(())
 }
 
+#[test]
+fn merges_provider_options_with_generic_mapping_scalar_and_sequence_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3171),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  app:\n    provider:\n      type: base\n      options:\n        replaced: first\n        values: [one]\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3172),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  app:\n    provider:\n      options:\n        replaced: second\n        values: [two]\n        added: true\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let options = project
+        .value(&["services", "app", "provider", "options"])
+        .ok_or("provider options")?;
+    assert_eq!(options.provenance().operation(), MergeOperation::Merged);
+    assert_eq!(merged_scalar(options.get("replaced")), Some("second"));
+    assert_eq!(
+        options.get("replaced").map(|value| value.provenance().operation()),
+        Some(MergeOperation::Replaced)
+    );
+    assert_eq!(
+        options
+            .get("values")
+            .and_then(MergedValue::as_sequence)
+            .map(sequence_strings),
+        Some(vec!["one", "two"])
+    );
+    assert_eq!(merged_scalar(options.get("added")), Some("true"));
+    Ok(())
+}
+
+#[test]
+fn merges_post_start_with_generic_sequence_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3176),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  appended:\n    post_start: [{command: base}]\n  reset:\n    post_start: [{command: old}]\n  override:\n    post_start: [{command: old}]\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3177),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  appended:\n    post_start: [{command: later}]\n  reset:\n    post_start: !reset []\n  override:\n    post_start: !override [{command: replacement}]\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let post_start = |service| project.value(&["services", service, "post_start"]).ok_or("post-start");
+    let appended = post_start("appended")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(appended.as_sequence().map(<[MergedValue]>::len), Some(2));
+    let reset = post_start("reset")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    let overridden = post_start("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        overridden
+            .as_sequence()
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("command"))
+            .and_then(MergedValue::as_scalar)
+            .map(MergedScalar::value),
+        Some("replacement")
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_pre_stop_with_generic_sequence_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3183),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  appended:\n    pre_stop: [{command: base}]\n  reset:\n    pre_stop: [{command: old}]\n  reset-null:\n    pre_stop: [{command: old}]\n  override:\n    pre_stop: [{command: old}]\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3184),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  appended:\n    pre_stop: [{command: later}]\n  reset:\n    pre_stop: !reset []\n  reset-null:\n    pre_stop: !reset null\n  override:\n    pre_stop: !override [{command: replacement}]\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let pre_stop = |service| project.value(&["services", service, "pre_stop"]).ok_or("pre-stop");
+    let appended = pre_stop("appended")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(appended.as_sequence().map(<[MergedValue]>::len), Some(2));
+    for service in ["reset", "reset-null"] {
+        let reset = pre_stop(service)?;
+        assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+        assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    }
+    let overridden = pre_stop("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        overridden
+            .as_sequence()
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("command"))
+            .and_then(MergedValue::as_scalar)
+            .map(MergedScalar::value),
+        Some("replacement")
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_pre_start_with_generic_sequence_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3188),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  appended:\n    pre_start: [{command: base}]\n  reset:\n    pre_start: [{command: old}]\n  reset-null:\n    pre_start: [{command: old}]\n  override:\n    pre_start: [{command: old}]\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3189),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  appended:\n    pre_start: [{command: later}]\n  reset:\n    pre_start: !reset []\n  reset-null:\n    pre_start: !reset null\n  override:\n    pre_start: !override [{command: replacement}]\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let pre_start = |service| project.value(&["services", service, "pre_start"]).ok_or("pre-start");
+    let appended = pre_start("appended")?;
+    assert_eq!(appended.provenance().operation(), MergeOperation::Appended);
+    assert_eq!(appended.as_sequence().map(<[MergedValue]>::len), Some(2));
+    for service in ["reset", "reset-null"] {
+        let reset = pre_start(service)?;
+        assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+        assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    }
+    let overridden = pre_start("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        overridden
+            .as_sequence()
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("command"))
+            .and_then(MergedValue::as_scalar)
+            .map(MergedScalar::value),
+        Some("replacement")
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_service_runtime_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3195),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced:\n    runtime: first\n  reset:\n    runtime: first\n  override:\n    runtime: first\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3196),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced:\n    runtime: second\n  reset:\n    runtime: !reset null\n  override:\n    runtime: !override replacement\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let runtime = |service| project.value(&["services", service, "runtime"]).ok_or("runtime");
+    let replaced = runtime("replaced")?;
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(replaced.as_scalar().map(MergedScalar::value), Some("second"));
+    let reset = runtime("reset")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.kind(), compose_lens::merge::MergedValueKind::Null(_)));
+    let overridden = runtime("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(overridden.as_scalar().map(MergedScalar::value), Some("replacement"));
+    Ok(())
+}
+
+#[test]
+fn merges_cgroup_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3232),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cgroup: host}\n  reset: {cgroup: host}\n  override: {cgroup: host}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3233),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cgroup: private}\n  reset: {cgroup: !reset null}\n  override: {cgroup: !override private}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let cgroup = |service| project.value(&["services", service, "cgroup"]).ok_or("cgroup");
+    let replaced = cgroup("replaced")?;
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(replaced.as_scalar().map(MergedScalar::value), Some("private"));
+    let reset = cgroup("reset")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.kind(), compose_lens::merge::MergedValueKind::Null(_)));
+    let overridden = cgroup("override")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(overridden.as_scalar().map(MergedScalar::value), Some("private"));
+    Ok(())
+}
+
+#[test]
+fn merges_cgroup_parent_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3242),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cgroup_parent: base}\n  reset: {cgroup_parent: base}\n  override: {cgroup_parent: base}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3243),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cgroup_parent: replacement}\n  reset: {cgroup_parent: !reset null}\n  override: {cgroup_parent: !override explicit}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let parent = |service| {
+        project
+            .value(&["services", service, "cgroup_parent"])
+            .ok_or("cgroup parent")
+    };
+    assert_eq!(parent("replaced")?.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(
+        parent("replaced")?.as_scalar().map(MergedScalar::value),
+        Some("replacement")
+    );
+    assert_eq!(parent("reset")?.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(
+        parent("reset")?.kind(),
+        compose_lens::merge::MergedValueKind::Null(_)
+    ));
+    assert_eq!(parent("override")?.provenance().operation(), MergeOperation::Override);
+    assert_eq!(
+        parent("override")?.as_scalar().map(MergedScalar::value),
+        Some("explicit")
+    );
+    Ok(())
+}
+
+#[test]
+fn merges_cpu_count_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3252),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_count: 1}\n  reset: {cpu_count: 1}\n  override: {cpu_count: 1}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3253),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_count: 0xCA_FE}\n  reset: {cpu_count: !reset null}\n  override: {cpu_count: !override \"custom\"}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let count = |service| project.value(&["services", service, "cpu_count"]).ok_or("cpu count");
+    assert_eq!(count("replaced")?.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(count("replaced")?.as_scalar().map(MergedScalar::value), Some("0xCA_FE"));
+    assert_eq!(count("reset")?.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(
+        count("reset")?.kind(),
+        compose_lens::merge::MergedValueKind::Null(_)
+    ));
+    assert_eq!(count("override")?.provenance().operation(), MergeOperation::Override);
+    assert_eq!(count("override")?.as_scalar().map(MergedScalar::value), Some("custom"));
+    Ok(())
+}
+
+#[test]
+fn merges_cpu_percent_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3262),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_percent: 1}\n  reset: {cpu_percent: 1}\n  override: {cpu_percent: 1}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3263),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_percent: 0x64}\n  reset: {cpu_percent: !reset null}\n  override: {cpu_percent: !override \"101\"}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let percent = |service| {
+        project
+            .value(&["services", service, "cpu_percent"])
+            .ok_or("cpu percent")
+    };
+    assert_eq!(percent("replaced")?.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(percent("replaced")?.as_scalar().map(MergedScalar::value), Some("0x64"));
+    assert_eq!(percent("reset")?.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(
+        percent("reset")?.kind(),
+        compose_lens::merge::MergedValueKind::Null(_)
+    ));
+    assert_eq!(percent("override")?.provenance().operation(), MergeOperation::Override);
+    assert_eq!(percent("override")?.as_scalar().map(MergedScalar::value), Some("101"));
+    Ok(())
+}
+
+#[test]
+fn merges_cpu_period_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3270),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_period: 1}\n  reset: {cpu_period: 1}\n  override: {cpu_period: 1}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3271),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_period: 1e6}\n  reset: {cpu_period: !reset null}\n  override: {cpu_period: !override \"opaque\"}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let period = |service| project.value(&["services", service, "cpu_period"]).ok_or("cpu period");
+    assert_eq!(period("replaced")?.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(period("reset")?.provenance().operation(), MergeOperation::Reset);
+    assert_eq!(period("override")?.provenance().operation(), MergeOperation::Override);
+    Ok(())
+}
+
+#[test]
+fn merges_cpu_quota_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3278),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_quota: 1}\n  reset: {cpu_quota: 1}\n  override: {cpu_quota: 1}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3279),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_quota: 1e6}\n  reset: {cpu_quota: !reset null}\n  override: {cpu_quota: !override \"opaque\"}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let quota = |service| project.value(&["services", service, "cpu_quota"]).ok_or("cpu quota");
+    assert_eq!(quota("replaced")?.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(quota("reset")?.provenance().operation(), MergeOperation::Reset);
+    assert_eq!(quota("override")?.provenance().operation(), MergeOperation::Override);
+    Ok(())
+}
+
+#[test]
+fn merges_cpu_rt_period_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3286),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced: {cpu_rt_period: 1s}\n  reset: {cpu_rt_period: 1s}\n  override: {cpu_rt_period: 1s}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3287),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced: {cpu_rt_period: 1m30s}\n  reset: {cpu_rt_period: !reset null}\n  override: {cpu_rt_period: !override \"opaque\"}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let period = |service| {
+        project
+            .value(&["services", service, "cpu_rt_period"])
+            .ok_or("cpu rt period")
+    };
+    assert_eq!(period("replaced")?.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(period("reset")?.provenance().operation(), MergeOperation::Reset);
+    assert_eq!(period("override")?.provenance().operation(), MergeOperation::Override);
+    Ok(())
+}
+
+#[test]
+fn merges_pull_refresh_after_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3204),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced:\n    pull_refresh_after: first\n  reset:\n    pull_refresh_after: first\n  override:\n    pull_refresh_after: first\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3205),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced:\n    pull_refresh_after: second\n  reset:\n    pull_refresh_after: !reset null\n  override:\n    pull_refresh_after: !override replacement\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let pull_refresh_after = |service| project.value(&["services", service, "pull_refresh_after"]);
+    let replaced = pull_refresh_after("replaced").ok_or("pull refresh interval")?;
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(replaced.as_scalar().map(MergedScalar::value), Some("second"));
+    let reset = pull_refresh_after("reset").ok_or("pull refresh interval")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.kind(), compose_lens::merge::MergedValueKind::Null(_)));
+    let overridden = pull_refresh_after("override").ok_or("pull refresh interval")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(overridden.as_scalar().map(MergedScalar::value), Some("replacement"));
+    Ok(())
+}
+
+#[test]
+fn merges_platform_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3211),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced:\n    platform: first\n  reset:\n    platform: first\n  override:\n    platform: first\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3212),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced:\n    platform: second\n  reset:\n    platform: !reset null\n  override:\n    platform: !override replacement\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let platform = |service| project.value(&["services", service, "platform"]);
+    let replaced = platform("replaced").ok_or("platform")?;
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(replaced.as_scalar().map(MergedScalar::value), Some("second"));
+    let reset = platform("reset").ok_or("platform")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.kind(), compose_lens::merge::MergedValueKind::Null(_)));
+    let overridden = platform("override").ok_or("platform")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(overridden.as_scalar().map(MergedScalar::value), Some("replacement"));
+    Ok(())
+}
+
+#[test]
+fn merges_attach_with_generic_scalar_reset_and_override_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3217),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  replaced:\n    attach: false\n  reset:\n    attach: true\n  override:\n    attach: false\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3218),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  replaced:\n    attach: true\n  reset:\n    attach: !reset null\n  override:\n    attach: !override true\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("merged project")?;
+    let attach = |service| project.value(&["services", service, "attach"]);
+    let replaced = attach("replaced").ok_or("attach")?;
+    assert_eq!(replaced.provenance().operation(), MergeOperation::Replaced);
+    assert_eq!(replaced.as_scalar().map(MergedScalar::value), Some("true"));
+    let reset = attach("reset").ok_or("attach")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(matches!(reset.kind(), compose_lens::merge::MergedValueKind::Null(_)));
+    let overridden = attach("override").ok_or("attach")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert_eq!(overridden.as_scalar().map(MergedScalar::value), Some("true"));
+    Ok(())
+}
+
+#[test]
+fn merges_blkio_config_with_generic_mapping_and_sequence_rules() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([
+        DocumentInput::new(
+            SourceId::new(3224),
+            DocumentOrigin::new("base", "workspace"),
+            "services:\n  app:\n    blkio_config:\n      weight: 500\n      device_read_bps: [{path: /dev/a, rate: 1}]\n  reset:\n    blkio_config: {device_read_bps: [{path: /dev/reset, rate: 1}]}\n  overridden:\n    blkio_config: {weight: 500}\n",
+        ),
+        DocumentInput::new(
+            SourceId::new(3225),
+            DocumentOrigin::new("override", "workspace"),
+            "services:\n  app:\n    blkio_config:\n      weight: 600\n      device_read_bps: [{path: /dev/a, rate: 2}]\n  reset:\n    blkio_config: {device_read_bps: !reset []}\n  overridden:\n    blkio_config: !override {weight_device: [{path: /dev/override, weight: 700}]}\n",
+        ),
+    ])?;
+    let merged = merge_project(&loaded, None);
+    let project = merged.project().ok_or("project")?;
+    let blkio = project.value(&["services", "app", "blkio_config"]).ok_or("blkio")?;
+    assert_eq!(blkio.provenance().operation(), MergeOperation::Merged);
+    assert_eq!(
+        blkio
+            .get("weight")
+            .and_then(MergedValue::as_scalar)
+            .map(MergedScalar::value),
+        Some("600")
+    );
+    assert_eq!(
+        blkio
+            .get("device_read_bps")
+            .and_then(MergedValue::as_sequence)
+            .map(<[MergedValue]>::len),
+        Some(2)
+    );
+    let reset = project
+        .value(&["services", "reset", "blkio_config", "device_read_bps"])
+        .ok_or("reset rates")?;
+    assert_eq!(reset.provenance().operation(), MergeOperation::Reset);
+    assert!(reset.as_sequence().is_some_and(<[MergedValue]>::is_empty));
+    let overridden = project
+        .value(&["services", "overridden", "blkio_config"])
+        .ok_or("overridden config")?;
+    assert_eq!(overridden.provenance().operation(), MergeOperation::Override);
+    assert!(overridden.get("weight").is_none());
+    Ok(())
+}
+
 fn merged_scalar(value: Option<&MergedValue>) -> Option<&str> {
     value.and_then(MergedValue::as_scalar).map(MergedScalar::value)
 }
