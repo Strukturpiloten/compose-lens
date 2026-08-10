@@ -48,7 +48,7 @@ fn runtime_effect_matrix_is_exact_isolated_and_complete() -> Result<(), String> 
             .parse()
             .map_err(|_| format!("context `{id}` runtime version is not exact"))?;
         let expected_release = match runtime {
-            "podman" => format!("https://github.com/containers/podman/releases/tag/v{runtime_version}"),
+            "podman" => format!("https://github.com/podman-container-tools/podman/releases/tag/v{runtime_version}"),
             "docker-engine" if runtime_version == "29.6.2" => {
                 "https://docs.docker.com/engine/release-notes/29/#2962".to_owned()
             }
