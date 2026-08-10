@@ -24,6 +24,27 @@ fn repository_supply_chain_has_single_sources_and_immutable_pins() -> Result<(),
 }
 
 #[test]
+fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
+    const ACTION: &str = "obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9";
+    const CONFIGURATION: &str = "package: compose-lens\n          release-type: patch";
+
+    for workflow_name in ["ci.yml", "release.yml"] {
+        let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
+        let workflow = fs::read_to_string(&workflow_path)
+            .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
+
+        let configured_action = format!("uses: {ACTION}\n        with:\n          {CONFIGURATION}");
+        if workflow.matches(ACTION).count() != 1 || workflow.matches(&configured_action).count() != 1 {
+            return Err(format!(
+                "{workflow_name} must contain one pinned cargo-semver-checks action for compose-lens patch releases"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn release_workflow_uses_the_create_response_as_its_draft_identity() -> Result<(), String> {
     let workflow_path = repository_root().join(".github/workflows/release.yml");
     let workflow = fs::read_to_string(&workflow_path)

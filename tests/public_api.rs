@@ -4,13 +4,13 @@ use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
-    BooleanValue, Build, BuildAdditionalContexts, BuildArgs, BuildExtraHostAddresses, BuildExtraHosts, BuildNoCache,
-    BuildSbom, BuildSshForm, ComposeDocument, DependencyCondition, DeployDiscreteResourceValue, DeployEndpointMode,
-    DeployMode, DeployPlacementMaxReplicasPerNode, DeployReplicas, DeployReservationDeviceCount, DeployResourceCpus,
-    DeployResourceMemoryKind, DeployResourceMemoryUnit, DeployResourcePids, DeployRestartCondition, Entrypoint,
-    EnvironmentFileFormatKind, HealthcheckDuration, HostAddressKind, HostnameKind, IdentityComponent, MemLimitKind,
-    MemLimitScalarKind, MemLimitUnit, PidsLimitKind, PullPolicyKind, RestartPolicyKind, ShmSizeKind, ShmSizeScalarKind,
-    ShmSizeUnit, StopGracePeriod, UserNamespaceModeKind,
+    BooleanValue, Build, BuildAdditionalContexts, BuildArgs, BuildExtraHostAddresses, BuildExtraHosts, BuildFieldKind,
+    BuildNoCache, BuildSbom, BuildSshForm, ComposeDocument, DependencyCondition, DeployDiscreteResourceValue,
+    DeployEndpointMode, DeployMode, DeployPlacementMaxReplicasPerNode, DeployReplicas, DeployReservationDeviceCount,
+    DeployResourceCpus, DeployResourceMemoryKind, DeployResourceMemoryUnit, DeployResourcePids, DeployRestartCondition,
+    Entrypoint, EnvironmentFileFormatKind, HealthcheckDuration, HostAddressKind, HostnameKind, IdentityComponent,
+    MemLimitKind, MemLimitScalarKind, MemLimitUnit, PidsLimitKind, PullPolicyKind, RestartPolicyKind, ShmSizeKind,
+    ShmSizeScalarKind, ShmSizeUnit, StopGracePeriod, UserNamespaceModeKind,
 };
 use compose_lens::profiles::{ProfileRequest, select_profiles};
 use compose_lens::project::{
@@ -30,6 +30,41 @@ use compose_lens::render::{
     GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption,
     GeneratedVolumeDriverOptionValue, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
+
+#[test]
+fn preserves_build_field_kind_discriminants() {
+    let published = [
+        (BuildFieldKind::AdditionalContexts, 0),
+        (BuildFieldKind::Args, 1),
+        (BuildFieldKind::CacheFrom, 2),
+        (BuildFieldKind::CacheTo, 3),
+        (BuildFieldKind::Context, 4),
+        (BuildFieldKind::Dockerfile, 5),
+        (BuildFieldKind::DockerfileInline, 6),
+        (BuildFieldKind::Entitlements, 7),
+        (BuildFieldKind::ExtraHosts, 8),
+        (BuildFieldKind::Isolation, 9),
+        (BuildFieldKind::Labels, 10),
+        (BuildFieldKind::Network, 11),
+        (BuildFieldKind::NoCache, 12),
+        (BuildFieldKind::Platforms, 13),
+        (BuildFieldKind::Privileged, 14),
+        (BuildFieldKind::Provenance, 15),
+        (BuildFieldKind::Pull, 16),
+        (BuildFieldKind::Sbom, 17),
+        (BuildFieldKind::Secrets, 18),
+        (BuildFieldKind::Ssh, 19),
+        (BuildFieldKind::ShmSize, 20),
+        (BuildFieldKind::Tags, 21),
+        (BuildFieldKind::Target, 22),
+        (BuildFieldKind::Ulimits, 23),
+        (BuildFieldKind::NoCacheFilter, 24),
+    ];
+
+    for (kind, discriminant) in published {
+        assert_eq!(kind as usize, discriminant);
+    }
+}
 
 #[test]
 fn exposes_authored_effective_and_generated_annotations_contracts() -> Result<(), Box<dyn std::error::Error>> {

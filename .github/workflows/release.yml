@@ -131,7 +131,7 @@ jobs:
           CRATE: ${{ steps.metadata.outputs.crate }}
         run: |
           set -euo pipefail
-          cargo package --locked
+          cargo ci-package
           sha256sum "${CRATE}" > "${CRATE}.sha256"
 
       - name: Attest release package

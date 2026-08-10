@@ -693,8 +693,6 @@ pub enum BuildFieldKind {
     Network,
     /// Disable build cache.
     NoCache,
-    /// Select build stages excluded from cache.
-    NoCacheFilter,
     /// Target platforms.
     Platforms,
     /// Privileged build mode.
@@ -717,6 +715,8 @@ pub enum BuildFieldKind {
     Target,
     /// Build-container resource limits.
     Ulimits,
+    /// Select build stages excluded from cache.
+    NoCacheFilter,
 }
 
 impl BuildFieldKind {
