@@ -6,11 +6,13 @@ mod preserved;
 pub use generated::{
     ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument, GeneratedDevice,
     GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile,
-    GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLongDevice,
-    GeneratedMemLimit, GeneratedMount, GeneratedNetworkAttachment, GeneratedPidsLimit, GeneratedPort,
-    GeneratedProtocol, GeneratedPullPolicy, GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux,
-    GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs,
-    GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GenerationError,
+    GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLogging,
+    GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount,
+    GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
+    GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPort, GeneratedProtocol, GeneratedPullPolicy,
+    GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedShmSize, GeneratedString,
+    GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits,
+    GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, GenerationError,
 };
 
 pub use preserved::{

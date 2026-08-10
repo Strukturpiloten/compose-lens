@@ -21,7 +21,7 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - an optional explicit runtime `container_name` validated against Compose's portable grammar;
 - image references, including `name:tag@digest` spellings;
 - independent string/list entrypoints and exec/shell commands, including explicitly empty forms;
-- an explicit boolean init-process choice;
+- independent explicit boolean `init`, `stdin_open`, `tty`, and `privileged` choices;
 - ordered environment-file short and long declarations with optional `required` and `format: raw`;
 - ordered literal and host-resolved environment entries;
 - ordered service metadata labels with explicit, potentially empty string values;
@@ -39,6 +39,7 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - quoted positive canonical service memory limits with explicit documented lowercase units;
 - scalar/list service-level temporary filesystems, including explicit empty lists and raw options;
 - mapping/list service sysctls, including explicit empty collections and ordered quoted strings;
+- service logging with an explicit uninterpreted string driver and ordered string/number/null options;
 - ordered service ulimits with quoted single or required soft/hard values and explicit empty maps;
 - service-level `no`, `always`, `on-failure[:max-retries]`, and `unless-stopped` restart policies;
 - documented service image pull policies, including exact custom interval spelling;
@@ -46,9 +47,12 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 - ordered short-form host mappings;
 - protocol-aware target/published/host-address ports;
 - named, anonymous, and bind mounts;
-- ordered network attachments and aliases; and
-- application-owned or external top-level network and volume definitions, with optional exact
-  platform-level names.
+- ordered network attachments with aliases and optional raw per-attachment IPv4/IPv6 addresses; and
+- application-owned top-level network definitions with optional opaque drivers and scalar-kind-aware
+  driver options; and
+- application-owned top-level volume definitions with optional opaque drivers and distinct
+  scalar-kind-aware driver options; and
+- application-owned or external top-level volume definitions, with optional exact platform-level names.
 
 Generated collections retain insertion order and reject duplicate names where Compose mapping
 syntax would otherwise overwrite intent. Singleton service fields reject a second assignment.
@@ -149,6 +153,11 @@ resolved non-negative ASCII decimal or `-1`; missing range members, multiline, N
 dollar-bearing, provider-specific strings, and `host` are rejected. Generation injects no default,
 normalizes no provider value, and makes no runtime enforcement or host-resource claim.
 
+`GeneratedLogging` always emits one explicit quoted driver plus `options`, including an explicit
+empty map. Option keys are non-empty and unique; values select quoted string, validated unquoted
+YAML number, or explicit null. Ordering and sensitivity are retained. No driver vocabulary,
+defaults, option meanings, provider behavior, or runtime behavior are inferred.
+
 `GeneratedPullPolicy` is non-exhaustive and represents documented literal forms plus the retained
 `if_not_present` alias. Its custom `Every(GeneratedString)` form receives the duration after the
 `every_` prefix, validates integer `w`, `d`, `h`, `m`, and `s` components, and preserves exact
@@ -160,6 +169,9 @@ provider or cross-format equivalence claim.
 `GeneratedService::set_init` accepts an explicit boolean and rejects a second assignment. The
 renderer emits an unquoted YAML boolean and parse-back validation must recover the same literal.
 Leaving the setter unused omits `init`; generation does not invent `false` for an omitted choice.
+The same set-once, omitted-versus-literal, deterministic parse-back boundary applies independently
+to `set_stdin_open`, `set_tty`, and `set_privileged`; no terminal, security, runtime, or
+cross-format policy is inferred.
 
 `GeneratedService::set_stop_signal` accepts any NUL-free `GeneratedString`, including named,
 numeric, and empty spellings, without inventing a signal grammar. The quoted empty spelling remains
@@ -174,6 +186,37 @@ and sensitivity. The renderer does not normalize values into target-runtime seco
 uses it when an application-owned observed network or volume must keep its exact platform name;
 without that field Compose would derive a new project-scoped name. Lifecycle ownership and exact
 runtime naming remain separate choices.
+
+`GeneratedNetworkDefinition` is a distinct additive API for top-level networks that need optional
+opaque `driver`, ordered unique `driver_opts`, literal `enable_ipv6` and `internal` choices, or
+ordered unique string-valued `labels`;
+`GeneratedResource` remains the basic/external network and volume API. Each boolean preserves
+omission versus explicit `false` or `true`; no default is injected. Driver option values explicitly
+select quoted string or validated unquoted number YAML shape, so text such as `"2"` is never
+conflated with numeric `2`. Empty options remain explicit when selected. Definitions are
+application-owned because Compose external networks may only configure `name`; use
+`GeneratedResource::external` for that compatible path. Generation does not validate driver,
+IPAM, plugin, provider, runtime, or option semantics, and does not generate `enable_ipv4`.
+Network labels are set once and retain omission versus an explicit empty mapping. They reuse
+`GeneratedLabel`, emit deterministic mapping syntax, and do not represent key-only, null, number,
+boolean, provider-injected, or runtime-equivalent labels. Resolved unique `key=value` labels are
+the cross-format exact subset; Compose-native construction retains `GeneratedLabel`'s established
+acceptance contract.
+
+`GeneratedNetworkAttachment` always emits long service-network syntax. Aliases retain order, and
+optional `ipv4_address` and `ipv6_address` values remain attached to that named network in a fixed
+field order. Address setters preserve omission and caller spelling through `GeneratedString`,
+reject duplicate assignment, and deliberately perform no IP, IPAM-pool, provider, or runtime
+validation.
+
+`GeneratedVolumeDefinition` uses the same set-once ordered mapping contract for volume `labels`
+through `GeneratedLabel`. Omission remains distinct from `labels: {}`, duplicate names fail before
+rendering, and explicit string values are quoted deterministically before parse-back validation.
+One sensitive label value redacts generated debug output. The compatible
+`GeneratedResource::external` path remains the sole external-volume lifecycle API. Authored literal
+`external: true` with any labels attribute, including `{}` or `[]`, retains the labels and emits
+`compose.volume.external-labels-configuration`; it does not suppress the independent
+driver-configuration diagnostic.
 
 ## Short and long syntax
 
@@ -229,6 +272,15 @@ the builder and generated document while limit names remain ordinary uninterpola
 Generated capability-add and capability-drop items use the same boundary; one sensitive item
 redacts the builder and generated document while explicit output access still returns the exact
 ordered strings.
+Generated per-network IPv4 and IPv6 addresses use the same boundary; one sensitive address redacts
+the builder and generated document while deployable text remains available explicitly.
+Generated network drivers and driver-option values use the same boundary; one sensitive value
+redacts the builder and generated document while deployable text remains available explicitly.
+Generated volume drivers and their distinct driver-option values use the same boundary. External
+volumes retain the compatible `GeneratedResource::external` lifecycle API and cannot be configured
+with drivers through the application-owned volume-definition API.
+Generated volume-label values use the same boundary; one sensitive label redacts the complete
+generated document's debug output while explicit text access remains available.
 
 ## Validation boundary
 

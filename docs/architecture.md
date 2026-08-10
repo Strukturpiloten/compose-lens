@@ -36,10 +36,10 @@ Typed nodes retain source references and unknown fields. Parsing into typed data
 Short and long syntax remain distinct field-specific variants. They are not normalized merely because they describe similar concepts: defaults, available options, and runtime behavior can differ. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md) defines the representation-fidelity rule.
 
 The completed native boundary types images, build field identities, commands, environment,
-environment-file declarations, service hostnames, explicit container names, labels, extra hosts, service capability additions and drops, raw user and
+environment-file declarations, service hostnames, explicit container names, independent service lifecycle booleans, labels, extra hosts, service capability additions and drops, raw user and
 user-namespace values, ordered mixed service devices, raw service DNS servers and resolver options,
 ordered service exposed ports, raw service security options, PID limits, shared-memory sizes, service-level temporary filesystems,
-service sysctls, image pull policies, independent stop signals and stop grace periods, ulimits, health checks,
+service sysctls, service logging drivers and options, image pull policies, independent stop signals and stop grace periods, ulimits, health checks,
 dependencies, deploy field identities, ports, volumes, service networks, profiles, config and secret grants, and the
 corresponding top-level network, volume, config, and secret definitions. Deferred interpolation
 expressions, empty values, extensions, and unknown fields remain distinguishable. Container paths
@@ -114,6 +114,10 @@ generic recursive merge. Keys remain uninterpolated, values retain each file's e
 interpolation result, scalar/range mismatches replace, reset produces an explicit empty mapping,
 and override replaces the whole field. The project view exposes this behavior without applying
 runtime defaults or resource semantics.
+
+Service `logging` uses ordinary recursive mapping merge. `driver` remains an uninterpreted string;
+colliding drivers and option values replace with complete provenance, while non-colliding ordered
+options remain. Mapping keys never interpolate. Reset and override use the generic merge state.
 
 The `project` module builds a native consumer view directly from a merged project and an optional
 matching profile selection. It exposes the first conversion fields through native Compose types,
@@ -251,6 +255,21 @@ Generated service `ulimits` retains ordered single and required soft/hard forms 
 empty map. Lowercase names are unique and uninterpolated. Values are quoted resolved `-1` or
 non-negative ASCII decimals; missing members, multiline, NUL-bearing, deferred, and arbitrary
 schema strings are rejected without injecting provider defaults or claiming runtime enforcement.
+Generated service `logging` requires one explicit string driver and an ordered unique non-empty-key
+options mapping. Values retain explicit YAML string, number, or null kind; numeric spelling is
+validated, output is deterministic, and no defaults or provider semantics are applied.
+Generated service-network attachments retain aliases plus optional raw IPv4 and IPv6 addresses in
+deterministic long syntax. Address omission, spelling, named-network scope, and sensitivity remain
+explicit without IP grammar or IPAM-pool validation.
+Generated top-level network definitions are distinct from the shared basic `GeneratedResource`
+boundary and are application-owned; external networks remain on its compatible external path.
+Optional opaque drivers and ordered unique options preserve string-versus-number YAML scalar
+identity, sensitivity, and deterministic parse-back validation without plugin, provider, or runtime
+semantics.
+Generated top-level volume definitions likewise retain ordered unique `GeneratedLabel` mappings,
+including explicit empty maps, deterministic parse-back output, and sensitivity without changing
+the shared external-volume lifecycle API. Literal external volumes that also retain labels receive
+a distinct source-aware diagnostic; driver and label violations remain independent.
 Generated hostnames use a separate non-exhaustive Compose-owned API and accept only resolved ASCII
 RFC-1123 values. They remain independent from explicit runtime container names; generation does
 not derive either value from the other or synthesize a hostname when omitted.

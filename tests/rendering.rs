@@ -185,6 +185,79 @@ fn canonical_render_debug_output_redacts_interpolated_values() -> Result<(), Box
     Ok(())
 }
 
+#[test]
+fn canonical_rendering_preserves_cpu_count_scalar_spelling() -> Result<(), Box<dyn std::error::Error>> {
+    let project = one_file_project(
+        "services:\n  app:\n    cpu_count: 0xCA_FE\n  quoted:\n    cpu_count: \"007\"\n",
+        3258,
+    )?;
+    let rendered = render_canonical(&project, None);
+    assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
+    assert!(rendered.output().contains("\"cpu_count\": \"0xCA_FE\""));
+    assert!(rendered.output().contains("\"cpu_count\": \"007\""));
+    Ok(())
+}
+
+#[test]
+fn canonical_rendering_preserves_cpu_percent_scalar_spelling() -> Result<(), Box<dyn std::error::Error>> {
+    let project = one_file_project(
+        "services:\n  app:\n    cpu_percent: 0x64\n  quoted:\n    cpu_percent: \"101\"\n",
+        3266,
+    )?;
+    let rendered = render_canonical(&project, None);
+    assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
+    assert!(
+        rendered.output().contains("\"cpu_percent\": 0x64"),
+        "{}",
+        rendered.output()
+    );
+    assert!(
+        rendered.output().contains("\"cpu_percent\": \"101\""),
+        "{}",
+        rendered.output()
+    );
+    Ok(())
+}
+
+#[test]
+fn canonical_rendering_preserves_cpu_period_scalar_spelling() -> Result<(), Box<dyn std::error::Error>> {
+    let project = one_file_project(
+        "services:\n  app:\n    cpu_period: 1e6\n  quoted:\n    cpu_period: \"1000\"\n",
+        3274,
+    )?;
+    let rendered = render_canonical(&project, None);
+    assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
+    assert!(rendered.output().contains("\"cpu_period\": 1e6"));
+    assert!(rendered.output().contains("\"cpu_period\": \"1000\""));
+    Ok(())
+}
+
+#[test]
+fn canonical_rendering_preserves_cpu_quota_scalar_spelling() -> Result<(), Box<dyn std::error::Error>> {
+    let project = one_file_project(
+        "services:\n  app:\n    cpu_quota: 1e6\n  quoted:\n    cpu_quota: \"1000\"\n",
+        3280,
+    )?;
+    let rendered = render_canonical(&project, None);
+    assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
+    assert!(rendered.output().contains("\"cpu_quota\": 1e6"));
+    assert!(rendered.output().contains("\"cpu_quota\": \"1000\""));
+    Ok(())
+}
+
+#[test]
+fn canonical_rendering_preserves_cpu_rt_period_scalar_spelling() -> Result<(), Box<dyn std::error::Error>> {
+    let project = one_file_project(
+        "services:\n  numeric:\n    cpu_rt_period: 1e6\n  duration:\n    cpu_rt_period: \"1m30s\"\n",
+        3288,
+    )?;
+    let rendered = render_canonical(&project, None);
+    assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
+    assert!(rendered.output().contains("\"cpu_rt_period\": 1e6"));
+    assert!(rendered.output().contains("\"cpu_rt_period\": \"1m30s\""));
+    Ok(())
+}
+
 fn canonical_project() -> Result<MergedProject, Box<dyn std::error::Error>> {
     let loaded = LoadedProject::load([
         DocumentInput::new(

@@ -33,7 +33,7 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 | Surface | Project typed | Document typed only | Syntax-preserved only |
 | --- | ---: | ---: | ---: |
 | Top level | 6 | 0 | 3 |
-| Service | 34 | 3 | 56 |
+| Service | 66 | 0 | 27 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
@@ -55,42 +55,69 @@ project-typed.
 
 The effective project view currently exposes:
 
-`annotations`, `command`, `configs`, `container_name`, `depends_on`, `entrypoint`, `env_file`,
-`environment`, `extra_hosts`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`,
-`expose`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `labels`, `networks`, `ports`,
-`profiles`, `read_only`, `pids_limit`, `pull_policy`, `restart`, `secrets`, `security_opt`,
-`shm_size`, `stop_grace_period`, `stop_signal`, `sysctls`, `tmpfs`, `ulimits`, `user`,
+`annotations`, `blkio_config`, `cgroup`, `cgroup_parent`, `command`, `configs`, `container_name`, `cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `credential_spec`, `depends_on`, `entrypoint`, `env_file`,
+`environment`, `extends`, `extra_hosts`, `provider`, `build.additional_contexts`, `build.context`, `build.args`, `build.cache_from`, `build.cache_to`, `build.dockerfile`, `build.dockerfile_inline`, `build.entitlements`, `build.extra_hosts`, `build.target`, `build.network`, `build.isolation`, `build.platforms`, `build.no_cache`, `build.privileged`, `build.sbom`, `build.pull`, `build.shm_size`, `build.tags`, `build.labels`, `build.secrets`, `build.ssh`, `build.ulimits`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`,
+`expose`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `platform`, `stdin_open`, `tty`, `privileged`, `attach`, `labels`, `logging`, `networks`, `ports`,
+`post_start`, `pre_stop`, `pre_start`, `profiles`, `read_only`, `pids_limit`, `pull_policy`, `pull_refresh_after`, `restart`, `runtime`, `secrets`, `security_opt`,
+`shm_size`, `mem_limit`, `stop_grace_period`, `stop_signal`, `sysctls`, `tmpfs`, `ulimits`, `user`,
 `userns_mode`, `volumes`, and `working_dir`.
+
+`deploy.endpoint_mode`, `deploy.labels`, `deploy.mode`, `deploy.placement`, `deploy.replicas`, and
+`deploy.resources.limits.cpus`, `deploy.resources.limits.memory`, `deploy.resources.limits.pids`,
+`deploy.resources.reservations.cpus`, `deploy.resources.reservations.devices[].capabilities`,
+`deploy.resources.reservations.devices[].driver`,
+`deploy.resources.reservations.devices[].count`,
+`deploy.resources.reservations.devices[].device_ids`,
+`deploy.resources.reservations.devices[].options`,
+`deploy.resources.reservations.generic_resources`, `deploy.resources.reservations.memory`, `deploy.rollback_config`, and `deploy.update_config` are also native in
+the effective project view: exact `vip`/`dnsrr` and `global`/`replicated` remain distinct from raw
+portability-diagnosed `Other` strings, replicas preserves its exact YAML number spelling or distinct
+string category, labels retain mapping scalar/null or ordered raw list forms separately from
+service container labels, placement retains raw constraints, preferences, and maximum scalar
+categories with complete merge provenance, resource-limit CPUs retain number/string categories,
+memory retains string-only conservative classification, PIDs retain integer/string categories, and
+reservation CPUs retain number/string categories while reservation memory reuses the string-only
+classification. Reservation generic resources retain schema-only ordered list evidence: ordinary
+append/reset/override provenance, mapping/unmodeled item form, and optional raw discrete kind/value
+members. They make no prose, version, provider, matching, scheduling, device, runtime, or
+conversion claim. Reservation-device capabilities, strict YAML-string drivers, raw integer/string
+counts, and ordered strict-string IDs retain schema-only ordered evidence with duplicate and
+conflict diagnostics, without selection/loading, allocation, grammar, scheduling, CDI, host,
+runtime, or conversion claim. Options retain map/list syntax, scalar fidelity, malformed evidence,
+duplicates, and generic provenance without provider interpretation. All current immediate deploy
+children are native values; only malformed, extension, and future-unknown child evidence, plus the
+explicitly bounded nested resource forms, remain unmodeled.
+The prose `vip` default and schema lack of an effective default conflict, so no default,
+integer/positive/zero rule, mode coupling, container-label, platform, discovery, VIP, DNS, replica,
+scale, allocation, scheduling, placement, job, deployment, runtime, or conversion interpretation is
+applied.
 
 ### Document-only service keys
 
-These keys are source-aware in one document but are not yet effective-project values:
+All current service and immediate deploy keys have an effective-project path. Nested resource
+coverage remains limited to the explicitly listed forms; malformed, extension, and future-unknown
+deploy child evidence remains source-addressable.
 
-- `build` — all current immediate subkeys are recognized as field references:
-  `additional_contexts`, `args`, `cache_from`, `cache_to`, `context`, `dockerfile`,
-  `dockerfile_inline`, `entitlements`, `extra_hosts`, `isolation`, `labels`, `network`,
-  `no_cache`, `no_cache_filter`, `platforms`, `privileged`, `provenance`, `pull`, `sbom`,
-  `secrets`, `shm_size`, `ssh`, `tags`, `target`, and `ulimits`;
-- `deploy` — all current immediate subkeys are recognized as field references: `endpoint_mode`,
-  `labels`, `mode`, `placement`, `replicas`, `resources`, `restart_policy`, `rollback_config`, and
-  `update_config`.
-
-Build and deploy field recognition is not a claim that every nested value is semantically typed.
+The effective build view promotes raw list/scalar-map `additional_contexts`, scalar/long `context`, ordered raw `cache_from`/`cache_to`/`entitlements`, non-empty `dockerfile`, exact-string `dockerfile_inline`, Build-specific list/map `extra_hosts` with scalar or nested-list raw addresses, opaque `target`/`network`/`isolation`, ordered raw `platforms`/`tags`, map/list `args`/`labels`, boolean/string `no_cache`/`sbom`, boolean/expression `privileged`/`pull`, raw-preserving `shm_size`, service-equivalent ordered `ulimits`, short/long `secrets`, and sensitive list/scalar-map `ssh` with form, sensitivity, provenance, duplicates, empties, reset/override, and partial recovery.
+Cache descriptors and platforms remain raw, `no_cache` and `sbom` strings remain uncoerced, and `pull` remains unresolved: none receives reference, path, credential, default, or build-execution inference. `sbom` does not parse generators or expose generated data.
+`build.ssh` does not parse identifiers, paths, PEM, sockets, agents, mounts, or builder behavior; all grant values remain redacted by default. `build.entitlements` has no allowlist, privilege, BuildKit/platform, execution, or runtime claim; Docker Compose v2.27.0 is a badge with earlier/removal boundaries unknown. `build.dockerfile_inline` retains exact strings and conflict evidence with `dockerfile` but performs no Containerfile parsing, path/context access, secret scanning, build, Docker, BuildKit, or runtime inference; Docker Compose v2.17.0 is a badge with earlier/removal boundaries unknown. `build.shm_size` does not infer builder defaults, host state, allocation, or runtime behavior. Every other build subkey remains an unmodeled source reference.
+`build.privileged` retains literal booleans or deferred dollar expressions. Ordinary quoted
+non-expression strings remain diagnosed source evidence rather than coerced booleans. Docker
+Compose v2.15.0 is a badge with earlier/removal boundaries unknown; no privilege, platform,
+runtime, or build behavior is inferred.
+`build.provenance` retains only YAML boolean or opaque string form and no attestation parsing, generation, publication, validation, builder execution, or runtime claim; Docker Compose v2.39.0 is a badge with earlier/removal boundaries unknown.
 
 ### Syntax-preserved-only service keys
 
-The following 50 current service keys do not yet have a dedicated typed model:
+The following 27 current service keys do not yet have a dedicated typed model:
 
-`attach`, `blkio_config`, `cgroup`, `cgroup_parent`,
-`cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `cpu_rt_runtime`,
-`cpu_shares`, `cpus`, `cpuset`, `credential_spec`, `develop`, `device_cgroup_rules`,
-`domainname`, `extends`,
+`cpu_rt_runtime`, `cpu_shares`, `cpus`, `cpuset`, `develop`, `device_cgroup_rules`,
+`domainname`,
 `external_links`, `gpus`, `ipc`, `isolation`, `label_file`, `links`,
-`logging`, `mac_address`, `mem_limit`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
-`models`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `platform`,
-`post_start`, `pre_start`, `pre_stop`, `privileged`, `provider`, `pull_refresh_after`, `runtime`,
-`scale`, `stdin_open`,
-`storage_opt`, `tty`, `use_api_socket`,
+`mac_address`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
+`models`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`,
+`scale`,
+`storage_opt`, `use_api_socket`,
 `uts`, and `volumes_from`.
 
 ## Nested resource gaps
@@ -115,46 +142,40 @@ claimed.
 The 93-key service ledger above classifies immediate service keys. The following closed nested
 keys also remain without dedicated semantic value types. Open-ended user maps such as labels,
 environment variables, driver options, and extension fields are intentionally not enumerated.
+Service logging's `driver` and ordered scalar `options` are typed.
 
-- `blkio_config`: `device_read_bps`, `device_read_iops`, `device_write_bps`,
-  `device_write_iops`, `weight`, and `weight_device`; each rate entry has `path` and `rate`, and
-  each weight entry has `path` and `weight`;
-- `credential_spec`: `config`, `file`, and `registry`;
-- GPU/device-reservation entries: `capabilities`, `count`, `device_ids`, `driver`, and `options`;
-- `extends`: `file` and `service`;
-- `logging`: `driver` and `options`;
 - service `models` entries: `endpoint_var` and `model_var`;
-- `provider`: `options` and `type`;
 - long volume mounts: `consistency`, `image`, `tmpfs`, and `volume`; additionally
   `bind.recursive`, `image.subpath`, `tmpfs.mode`, `tmpfs.size`, `volume.labels`,
   `volume.nocopy`, and `volume.subpath` are not typed. The other current long-mount and bind
   fields are typed;
 - `develop.watch[]`: `action`, `exec`, `ignore`, `include`, `initial_sync`, `path`, and `target`;
   the nested `exec` hook has `command`, `environment`, `privileged`, `user`, and `working_dir`;
-- `post_start[]` and `pre_stop[]` hooks: `command`, `environment`, `privileged`, `user`, and
-  `working_dir`;
-- `pre_start[]` hooks: `command`, `environment`, `image`, `per_replica`, `privileged`, `user`,
-  and `working_dir`.
 
-`build` and `deploy` currently recognize their immediate keys as source field references, not as
-semantic value types. Their complete closed-key boundary is therefore still open:
+`deploy.endpoint_mode`, `deploy.labels`, `deploy.mode`, `deploy.placement`, `deploy.replicas`,
+`deploy.resources.limits.cpus`, `deploy.resources.limits.memory`, `deploy.resources.limits.pids`,
+`deploy.resources.reservations.cpus`, `deploy.resources.reservations.devices[].capabilities`,
+`deploy.resources.reservations.devices[].driver`,
+`deploy.resources.reservations.devices[].count`,
+`deploy.resources.reservations.devices[].device_ids`,
+`deploy.resources.reservations.devices[].options`,
+`deploy.resources.reservations.generic_resources`,
+`deploy.resources.reservations.memory`, `deploy.restart_policy`, `deploy.rollback_config`, and `deploy.update_config` complete the current immediate deploy children. Nested resource coverage remains
+limited to the explicitly listed forms, while malformed, extension, and future-unknown deploy
+children remain source field references. Placement retains ordered raw
+constraints/preferences and YAML integer/string maximum categories with merge provenance, but no
+constraint grammar, node selection, count/default, scheduling, runtime, or conversion
+interpretation. Restart-policy members retain raw spelling and member provenance without
+service-restart fallback/default/precedence, simulation, runtime, or conversion interpretation.
+map/list `build.additional_contexts`, `build.context`, map/list `build.args`, `build.labels`, and Build-specific `build.extra_hosts`, ordered raw `build.cache_from`/`build.cache_to`/`build.entitlements`, non-empty `build.dockerfile`, exact-string `build.dockerfile_inline`, opaque
+`build.target`/`build.network`/`build.isolation`, ordered raw `build.platforms`/`build.tags`, boolean/string `build.no_cache`/`build.sbom`/`build.provenance`, scalar/list `build.no_cache_filter`, boolean/expression `build.privileged`/`build.pull`, raw-preserving `build.shm_size`, service-equivalent `build.ulimits`, and short/long `build.secrets`
+are the promoted build values; their complete closed-key boundary remains open:
 
-- `build`: `additional_contexts`, `args`, `cache_from`, `cache_to`, `context`, `dockerfile`,
-  `dockerfile_inline`, `entitlements`, `extra_hosts`, `isolation`, `labels`, `network`,
-  `no_cache`, `no_cache_filter`, `platforms`, `privileged`, `provenance`, `pull`, `sbom`,
-  `secrets`, `shm_size`, `ssh`, `tags`, `target`, and `ulimits`;
-- `deploy`: `endpoint_mode`, `labels`, `mode`, `placement`, `replicas`, `resources`,
-  `restart_policy`, `rollback_config`, and `update_config`;
-- `deploy.placement`: `constraints`, `max_replicas_per_node`, and `preferences[].spread`;
-- `deploy.resources.limits`: `cpus`, `memory`, and `pids`;
-- `deploy.resources.reservations`: `cpus`, `devices`, `generic_resources`, and `memory`;
-- `deploy.resources.reservations.devices[]`: `capabilities`, `count`, `device_ids`, `driver`,
-  and `options`;
-- `deploy.resources.reservations.generic_resources[].discrete_resource_spec`: `kind` and
-  `value`;
-- `deploy.restart_policy`: `condition`, `delay`, `max_attempts`, and `window`; and
-- both `deploy.rollback_config` and `deploy.update_config`: `delay`, `failure_action`,
-  `max_failure_ratio`, `monitor`, `order`, and `parallelism`.
+- `build`: all current immediate subkeys are promoted;
+- `deploy`: all current immediate subkeys are promoted; nested resource coverage remains bounded;
+- `deploy.resources.limits`: complete;
+- `deploy.resources.reservations`: complete;
+- `deploy.resources.reservations.devices[]`: complete;
 
 Conversely, the current nested keys under `depends_on`, `env_file`, `healthcheck`, service
 `networks`, service `ports`, service config/secret grants, network `ipam`, and service `ulimits`
@@ -164,10 +185,33 @@ hiding a nested semantic gap.
 ## Generated-document boundary
 
 Generated documents currently cover project `name`, services, networks, and volumes. Generated
-services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `env_file`, `environment`, `labels`, `annotations`, `user`,
+services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `stdin_open`, `tty`, `privileged`, `env_file`, `environment`, `labels`, `annotations`, `logging`, `user`,
 `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`,
 `stop_grace_period`, `extra_hosts`, `ports`,
 `volumes`, and `networks`.
+Generated long-form service-network attachments retain aliases plus optional raw `ipv4_address`
+and `ipv6_address` values with omission, sensitivity, and named-network scope intact.
+Generated top-level network definitions add optional opaque `driver` and ordered unique
+string-or-number `driver_opts` without changing the shared basic/external `GeneratedResource`
+network API. They are application-owned; external definitions remain `GeneratedResource::external`
+because Compose permits only `name` alongside `external`. Driver/plugin and provider-specific option
+semantics remain outside generation.
+
+Generated top-level volume definitions use a separate application-owned API with optional opaque
+`driver` and ordered unique string-or-number `driver_opts`. It preserves explicit empty maps and
+scalar shape without accepting driver-configured external volumes; `GeneratedResource::external`
+remains the compatible external lifecycle API. BoxFerry owns conversion outcomes for general
+volume driver options, image drivers, external lifecycle, and platform names.
+Application-owned generated volume definitions also retain ordered unique explicit-string `labels`,
+including omission, explicit empty maps, deterministic parse-back output, and sensitivity. Literal
+external volumes that retain labels have distinct source-aware diagnostics; external lifecycle
+remains unavailable on the application-owned definition API.
+
+Generated application-owned network definitions also retain optional literal `enable_ipv6` and
+`internal` choices, including omission versus explicit `false` or `true`, without defaults or
+driver/IPAM/provider/runtime validation. `enable_ipv4` remains deliberately absent from this
+generated API because it has no native Quadlet/Podman network-create counterpart; BoxFerry owns
+the non-representable diagnostic.
 
 All other typed or preserved service/resource keys remain open for generated construction. A key
 is generated only after syntax-form choice, validation, sensitivity, deterministic rendering, and
@@ -184,9 +228,21 @@ parse-back tests are defined.
 - [x] Type independent `stop_grace_period` and `stop_signal` fields through generated output.
 - [x] Type and generate raw-preserving `pull_policy` values while keeping schema-only `refresh`
   distinct and provider evidence planned.
-- [ ] Type `stdin_open` and `tty`.
-- [ ] Type `pull_refresh_after`, `platform`, and `runtime` with deferred-value retention and
-  provider-specific compatibility evidence.
+- [x] Type `stdin_open` as an independent source-aware/interpolation-preserving boolean and add
+  deterministic generated output.
+- [x] Type `tty` as an independent source-aware/interpolation-preserving boolean and add
+  deterministic generated output.
+- [x] Type `privileged` as an independent source-aware/interpolation-preserving boolean and add
+  deterministic generated output without inferring security or runtime behavior.
+- [x] Type `attach` as an independent source-aware/interpolation-preserving boolean through the
+  authored and effective views, without a default, generated API, logging, runtime, provider, CLI,
+  compatibility, or cross-format behavior.
+- [x] Type `pull_refresh_after` as a strict raw YAML string with deferred-value retention and no
+  refresh, provider, or compatibility inference.
+- [x] Type `runtime` as a strict raw YAML string with deferred-value retention and no provider or
+  compatibility inference.
+- [x] Type `platform` as a strict raw YAML string with deferred-value retention and no OCI, host,
+  image, build, provider, or compatibility inference.
 - [ ] Add generated construction only after each field's null/empty/short/long behavior is fixed.
 
 ### Phase 2: limits, security, devices, and storage
@@ -206,14 +262,47 @@ parse-back tests are defined.
 - [x] Promote `ulimits` through recursive mapping merge, the effective project view, and safe
   generated output while retaining ordered names, single/range form, nested provenance,
   sensitivity, empty/reset/override state, and planned-only provider evidence.
-- [ ] Promote `build` and `deploy` into the effective project view before deepening their semantic
-  types.
+- [x] Promote the Build value family—`additional_contexts`, context, args, labels, Build-specific `extra_hosts`, raw `cache_from`/`cache_to`/`entitlements`, Dockerfile/inline Dockerfile/target/network/isolation/platforms/no_cache/privileged/sbom/pull/shm_size/tags, `ulimits`, and short/long `build.secrets`—with source form, sensitivity, provenance, recovery, and retained conflict evidence; remaining siblings stay unmodeled.
+- [x] Promote `deploy.endpoint_mode`, map/list `deploy.labels`, `deploy.mode`, and raw-preserving `deploy.replicas`
+  into the effective project view with provenance and nested unmodeled siblings; no container-label, integer/default,
+  mode-coupling, scheduling, runtime, or conversion semantics are inferred before deepening further deploy types.
+- [x] Promote deploy-specific `restart_policy` members through authored and effective views with
+  raw condition/duration/attempt spelling, member provenance, and nested malformed/reset evidence;
+  no service-restart fallback/default/precedence, simulation, runtime, or conversion behavior is
+  inferred.
+- [x] Promote deploy `placement` constraints, preferences, and max-replicas-per-node scalar
+  categories through authored and effective views with nested provenance and recovery, without
+  scheduling, node-selection, default, runtime, or conversion semantics.
+- [x] Promote deploy `resources.limits.pids` through authored and effective views with exact
+  integer/string spelling, nested provenance, recovery, and no service-PID, host, cgroup, runtime,
+  or conversion semantics.
+- [x] Promote deploy `resources.limits.cpus` through authored and effective views with exact
+  number/string spelling, nested provenance, recovery, and no service CPU, `mem_limit`, host,
+  cgroup, runtime, or conversion semantics.
+- [x] Promote deploy `resources.limits.memory` through authored and effective views with raw
+  YAML-string spelling, conservative lowercase-unit classification, nested provenance, recovery,
+  and no service `mem_limit`, reservation, host, cgroup, runtime, or conversion semantics.
+- [x] Promote deploy `resources.reservations.cpus` through authored and effective views with exact
+  number/string spelling, nested provenance, recovery, and no limit/service CPU, scheduling, host,
+  cgroup, runtime, target, or conversion semantics.
+- [x] Promote deploy `resources.reservations.memory` through authored and effective views with raw
+  YAML-string spelling, conservative lowercase-unit classification, nested provenance, recovery,
+  and no limit/service `mem_limit`, scheduling, host, cgroup, runtime, target, or conversion semantics.
+- [x] Promote schema-backed deploy `resources.reservations.generic_resources` lists with optional
+  discrete-specification kind/value members, raw scalar spelling, provenance, recovery, and no
+  matching, scheduling, GPU/device, runtime, target, or conversion semantics.
+- [x] Promote schema-only deploy `resources.reservations.devices[]` capability lists, strict
+  YAML-string `.driver`, raw integer-or-string `.count`, and ordered strict-string `.device_ids`
+  with duplicate/conflict diagnostics, nested provenance, recovery, and no selection/loading,
+  allocation, grammar, scheduling, CDI, host, runtime, cgroup, provider/version, or conversion
+  semantics. Options retain map/list syntax, scalar fidelity, malformed evidence, duplicates, and
+  generic provenance without provider interpretation.
 - [ ] Type all CPU, memory, PID, OOM, and block-I/O keys without applying host defaults.
 - [x] Type service `devices` through authored, Compose-Go-compatible target merge,
   effective-project, and generated boundaries while preserving mixed raw short/long forms,
   CDI/deferred/opaque evidence, duplicates, nested provenance, reset/override, and planned-only
   provider evidence without device, permissions, CDI, GPU, or runtime validation.
-- [ ] Type GPU reservations, `gpus`, `privileged`, `credential_spec`, `storage_opt`,
+- [ ] Type GPU reservations, `gpus`, `storage_opt`,
   cgroup, IPC, PID, and UTS namespace choices.
 - [x] Type service-level `tmpfs` through authored, ordinary-append merge, effective-project, and
   generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,
@@ -229,12 +318,19 @@ parse-back tests are defined.
   invalid authored states, complete merge provenance, and planned-only provider evidence.
 - [x] Type and generate service DNS settings with their documented merge rules and raw evidence.
 - [x] Type and generate exposed ports with scalar-kind-aware uniqueness.
+- [x] Generate optional raw per-attachment IPv4/IPv6 addresses in deterministic long-form service
+  networks without inferring IPAM defaults or validating address/pool relationships.
+- [x] Generate top-level network drivers and scalar-kind-aware ordered driver options without
+  changing the shared basic/external resource API, while keeping external networks on its
+  name-only-compatible path and not validating plugins or provider semantics.
 - [x] Preserve and generate raw service security options with non-selecting diagnostic candidates.
 - [ ] Type domain name, MAC addresses, network modes,
   external links, and links.
 - [x] Type service annotations through authored mapping/list syntax, keyed effective merge,
   provenance-preserving diagnostics, and safe generated mapping output.
-- [ ] Type `label_file`, logging, and remaining config/secret metadata fields.
+- [x] Type service `logging` through authored, recursively merged, effective-project, and generated
+  boundaries with uninterpreted drivers, ordered string/number/null options, and no provider policy.
+- [ ] Type `label_file` and remaining config/secret metadata fields.
 - [ ] Preserve provider/runtime-specific value spellings and attach compatibility evidence instead
   of enforcing one implementation's grammar globally.
 
@@ -242,8 +338,7 @@ parse-back tests are defined.
 
 - [ ] Implement top-level `include` as explicit caller-authorized project loading with cycle,
   provenance, project-directory, and environment-file rules.
-- [ ] Type `extends` and define its processing order relative to include, interpolation, and merge.
-- [ ] Type `develop`, lifecycle hooks, `provider`, service/top-level `models`, `scale`, and
+- [ ] Type `develop`, service/top-level `models`, `scale`, and
   `use_api_socket` without implying that every provider executes them.
 - [ ] Keep file reads, environment access, and provider invocation outside parsing APIs.
 

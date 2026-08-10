@@ -97,6 +97,92 @@ Service `ulimits` uses the same generic recursive mapping merge, including indep
 range-member values use the explicit per-file interpolation overlay. Reset produces an explicit
 empty mapping, and override replaces the complete mapping with its operation retained.
 
+Build `ulimits` uses the identical recursive mapping rule and native scalar/range representation.
+It retains case and source evidence for rejected names, scalar spelling, independent `soft`/`hard`
+provenance, explicit empty/reset/override mappings, and malformed siblings without inferring
+defaults, host limits, builder behavior, or runtime enforcement.
+
+Service `logging` is likewise an ordinary recursively merged mapping. Driver and colliding option
+values replace with full provenance; mapping keys remain uninterpolated while string values use
+each file's explicit interpolation overlay. Reset and override retain their generic operations.
+
+Build `platforms` is an ordinary raw scalar sequence: list values append with duplicates retained,
+while reset and override remain explicit. It has no OCI grammar, availability, service-platform,
+default, or build-execution interpretation.
+
+Build `cache_from` and `cache_to` are ordinary raw string-scalar sequences: list values append
+with duplicates retained, while reset and override remain explicit. Cache type, reference, source,
+destination, path, image, credential, and builder semantics remain uninterpreted.
+
+Build `entitlements` is an ordinary opaque string-scalar sequence: list values append with
+duplicates and empty strings retained, while reset and override remain explicit. Values interpolate
+per file before merging; ComposeLens infers no allowlist, privilege state, BuildKit/platform
+support, execution, or runtime effect. Docker Compose v2.27.0 is a documented implementation
+badge only; earlier and removal boundaries are unknown.
+
+Build `dockerfile_inline` is an exact YAML string scalar: empty and multiline content remain
+distinct from omission, values interpolate per file before merging, and scalar replacement plus
+reset/override provenance remain explicit. ComposeLens does not parse Containerfile syntax,
+resolve paths or contexts, scan content for secrets, build images, or infer Docker, BuildKit, or
+runtime behavior. Docker Compose v2.17.0 is an implementation badge only; earlier and removal
+boundaries are unknown.
+
+Build `provenance` retains YAML boolean or opaque string form, including empty and interpolated
+strings, with scalar replacement/reset/override provenance and malformed recovery. It does not
+parse, generate, publish, or validate attestations or infer builder/runtime behavior. Docker
+Compose v2.39.0 is an implementation badge only; earlier and removal boundaries are unknown.
+
+Build `no_cache` is a scalar value with an explicit YAML boolean/string distinction. Strings,
+including empty and interpolation-shaped values, interpolate per file before merging but never
+coerce to booleans. Scalar replacement and reset/override provenance remain visible; no default,
+builder execution, or cache behavior is inferred.
+
+Build `sbom` is a scalar value with the same explicit YAML boolean/string distinction. Strings,
+including empty, generator-shaped, and interpolation-shaped values, interpolate per file before
+merging but never coerce to booleans. Scalar replacement and reset/override provenance remain
+visible; ComposeLens neither parses generators nor exposes generated SBOM data or infers builder
+behavior.
+
+Build `privileged` accepts YAML literal booleans and deferred dollar expressions. Scalar
+replacement and reset/override provenance remain visible. Ordinary quoted non-expression strings
+are invalid schema ambiguity rather than coerced booleans, and remain source-addressable unmodeled
+evidence with diagnostics. Docker Compose v2.15.0 is an implementation badge only; earlier and
+removal boundaries are unknown. ComposeLens infers no privilege, platform, runtime, or build
+behavior.
+
+Build `shm_size` is a scalar value using the same raw-preserving number/string, documented
+lowercase-unit, lexical-zero, deferred-expression, and provider-dependent classification as
+service `shm_size`. It interpolates per file before scalar merging; replacement, reset, override,
+and sensitivity remain visible. ComposeLens does not infer builder defaults, allocation, host
+shared-memory state, or runtime behavior.
+
+Build `isolation` is an opaque YAML string scalar. It interpolates per file before scalar merging
+and retains replacement, reset/override, and sensitivity evidence. ComposeLens does not validate
+modes, platforms, defaults, privileges, `BUILDAH_ISOLATION`, or service-level isolation behavior.
+
+Build `ssh` accepts an ordered string sequence or a scalar mapping. Sequences append, mappings
+recursively merge, mixed forms replace, and reset/override retain generic provenance. Values
+interpolate per file but mapping keys do not; every effective SSH value and mapping entry is
+sensitive even without interpolation and is redacted by default. ComposeLens does not parse or
+access identifiers, paths, PEM material, sockets, agents, mounts, or a builder.
+
+Build `additional_contexts` uses the generic collection rules: mappings recursively merge by exact
+uninterpolated key, sequences append raw string items, mixed forms replace, and reset/override
+remain visible. Values interpolate per file before merging; names, `=`, paths, URLs, images, and
+`service:` schemes remain uninterpreted.
+
+Build `extra_hosts` is independent from service `extra_hosts`: its raw-string lists append with
+duplicates retained, while mappings recursively merge hostname keys and their scalar or nested-list
+string addresses. Mixed forms replace; reset and override remain visible. Values interpolate per
+file, keys do not, and the view performs no address normalization/validation, DNS or host lookup,
+build generation, or conversion.
+
+Top-level network `labels` retain their authored list or mapping form and use the generic
+Compose Specification map/sequence merge rules, including `!reset` and `!override`. Current
+Compose-Go's observed `mergeToSequence` special case is an implementation divergence, not
+normative behavior; ComposeLens does not adopt it without separately versioned evidence and a
+decision.
+
 The operation accepts an optional set of matching per-file interpolation overlays. Omitting them is
 an explicit request to merge authored expressions. A mismatched project/overlay pair is rejected.
 Implementation compatibility classification remains a later stage. The evidence and remaining
@@ -124,8 +210,8 @@ services. A selection created from a different project returns the same stable m
 used by the other post-merge operations.
 
 The native view covers project name, services, service hostnames, explicit container names, images, entrypoints,
-commands, init-process choices, merged environment, service labels, extra host
-mappings, service annotations, ordered service capability additions and drops, ordered mixed service devices, raw service DNS servers, ordered service exposed ports, raw service security options, raw service PID limits, raw service shared-memory sizes, raw service memory limits, service-level temporary filesystems, service sysctls, ordered service ulimits, image pull policies, health checks, service dependencies, independent stop signals and stop grace periods,
+commands, credential specifications, raw extends directives, raw provider mappings, attach, init-process, standard-input-open, terminal-allocation, and privileged choices, merged environment, service labels, extra host
+mappings, service annotations, service logging configuration, ordered service capability additions and drops, ordered mixed service devices, raw service DNS servers, ordered service exposed ports, raw service security options, raw service PID limits, raw service shared-memory sizes, raw service memory limits, service-level temporary filesystems, service sysctls, ordered service ulimits, image pull policies, raw runtime strings, health checks, service dependencies, independent stop signals and stop grace periods,
 ports, volume mounts, service config and secret grants, service networks, profiles, and top-level
 network, volume, config, and secret definitions.
 Environment and service-label values are keyed after field-specific Compose merging, while each
@@ -143,6 +229,152 @@ This operation does not render or parse generated YAML. It also does not read fi
 environment provider, apply defaults, validate an implementation, or perform conversion. Native
 coverage is documented in [ADR 0016](decisions/0016-native-merged-project-view.md).
 
+Service `attach` retains literal booleans or deferred dollar expressions under ordinary scalar
+replacement/reset/override merge, while invalid forms remain source-addressable evidence. It has no
+default, generated, logging, runtime, provider, CLI, compatibility, or conversion interpretation.
+
+Service `blkio_config` uses generic recursive mapping and sequence append/reset/override behavior.
+Its current raw view does not resolve `extends` or claim the specification's path-keyed rate-array
+inheritance; weights/rates remain integer-or-string spelling with no units, ranges, defaults,
+controller, runtime, provider, I/O, or conversion interpretation.
+
+Service `cgroup` uses ordinary scalar replacement/reset/override behavior. Its strict YAML-string
+view retains `host`, `private`, dollar-bearing deferred expressions, and diagnosed `Other` values
+without controller, cgroup version, rootless, systemd, provider, runtime, `extends`, generation,
+or conversion interpretation.
+
+Service `cgroup_parent` uses ordinary scalar replacement/reset/override behavior. Its strict raw
+YAML-string view retains empty, whitespace, deferred, and arbitrary strings without grammar, path,
+controller, host, runtime, provider, version, default, `extends`, generation, or conversion interpretation.
+
+Service `cpu_count` uses ordinary scalar replacement/reset/override behavior. Its YAML
+integer/string view retains exact spelling and interpolation sensitivity; nonnegative integers are
+not normalized, while negative YAML integers diagnose as retained invalid evidence. It applies no
+quota, host, scheduler, runtime, provider, OS, version, default, `extends`, generation, or conversion interpretation.
+
+Service `cpu_percent` uses ordinary scalar replacement/reset/override behavior. Its YAML
+integer/string view retains exact spelling and interpolation sensitivity; only YAML integers are
+classified against the schema's inclusive `0..=100` range, while strings are never coerced or
+range-checked. It applies no percentage calculation, CPU, quota, host, scheduler, runtime,
+provider, OS, version, default, `extends`, generation, or conversion interpretation.
+
+Service `cpu_period` uses ordinary scalar replacement/reset/override behavior. Its YAML
+number/string view retains exact spelling and interpolation sensitivity without numeric conversion
+or semantic validation. It applies no duration, microsecond, CFS, CPU, host, runtime, provider,
+OS, version, default, `extends`, generation, or conversion interpretation.
+
+Service `cpu_quota` uses ordinary scalar replacement/reset/override behavior. Its YAML
+number/string view retains exact spelling and interpolation sensitivity without numeric conversion
+or semantic validation. It applies no numeric quota, duration, microsecond, CFS, CPU, host, runtime,
+provider, OS, version, default, `extends`, generation, or conversion interpretation.
+
+Service `cpu_rt_period` uses ordinary scalar replacement/reset/override behavior. Its YAML-number,
+duration, expression, and other-string view retains exact spelling and interpolation sensitivity;
+other strings diagnose without loss. It applies no CPU calculation, microsecond conversion,
+realtime scheduler, OS, host, default, provider, version, runtime, generation, or conversion interpretation.
+
+Service `credential_spec` retains an explicit mapping with optional strict YAML-string `config`,
+`file`, and `registry` members, nested provenance, reset/override recovery, and interpolation
+sensitivity. It performs no top-level-config resolution, file/registry/account access, URI,
+Windows/gMSA, platform, provider, runtime, or conversion interpretation.
+
+Service `extends` retains a YAML-string short reference or a mapping with optional strict
+YAML-string `service` and `file` members, nested provenance, reset/override recovery,
+interpolation sensitivity, and malformed/extension/unknown evidence. Missing long-form `service`
+is diagnosed without dropping the mapping. Generic scalar replacement and recursive mapping merge
+apply; this stage never expands or merges a referenced service, looks up files, normalizes paths,
+traverses cycles, or imports resources. Separately, `validate_references` may validate a same-file
+long-form `service` edge when `file` is absent, without performing any of those operations.
+
+Service `provider` retains a strict YAML-string `type` and an optional ordered `options` mapping
+of YAML string/number/boolean scalars or sequences. Generic mapping, scalar replacement, sequence
+append, reset, and override provenance remains visible; malformed siblings and items remain
+evidence. This view never executes or discovers a provider, calls setup/teardown, injects
+environment, resolves credentials, validates provider-specific grammar or compatibility, or
+performs conversion.
+
+Service `post_start` and `pre_stop` retain ordered hook mappings with a required null/scalar/list `command` and
+optional local map/list `environment`, boolean `privileged`, strict YAML-string `user`, and strict
+YAML-string `working_dir`. Generic sequence append, reset, and override provenance remains visible;
+malformed items and members remain evidence. The view does not execute or schedule hooks, expand
+commands, calculate environment inheritance, resolve users or paths, decide privilege, validate
+provider compatibility, or perform conversion.
+
+Service `pre_start` retains its distinct ordered hook mappings with optional null/scalar/list
+`command`, strict raw `image`, optional local map/list `environment`, boolean `privileged` and
+`per_replica`, and strict YAML-string `user` and `working_dir`. Generic sequence append, reset,
+and override provenance remains visible; this view does not apply defaults, execute/schedule hooks,
+calculate inheritance, resolve images/users/paths, or infer provider, runtime, or conversion behavior.
+
+Service `runtime` retains strict YAML-string values, including empty and deferred spelling, with
+ordinary scalar replacement/reset/override provenance. This view supplies no runtime grammar,
+default, host/provider/image/platform compatibility, execution, generation, or conversion behavior.
+
+Deploy handling currently exposes `endpoint_mode`, `mode`, `replicas`, placement, resource-limit CPUs, memory, and PIDs, resource-reservation CPUs and memory, and distinct deployment
+`labels`: `vip`/`dnsrr` and
+`global`/`replicated` classify directly, while other interpolated or raw strings remain a
+portability diagnostic with their value and provenance. `replicas` preserves its exact YAML number
+spelling or distinct string category, including empty or deferred strings, without integer,
+positive/zero/default, mode-coupling, scale, allocation, scheduling, runtime, or conversion
+interpretation. All current immediate deploy children are native values; malformed, extension, and
+future-unknown child evidence and explicitly bounded nested resource forms remain unmodeled. The
+prose names `vip` as a default while the schema does not yield an effective default; ComposeLens records
+the conflict and injects neither value. In particular, `global` with `replicas` and service
+`scale` does not create a consistency or scheduling inference.
+
+Deployment labels retain mapping scalar/null categories or raw list entries separately from service
+container labels. Mapping keys merge by key while lists append and preserve duplicate fallible-input
+evidence; reset and override provenance remains visible. They infer no container, service, runtime,
+platform, deployment, or conversion behavior.
+
+Deploy `restart_policy` remains independent from service `restart`. Its `condition`, `delay`,
+`max_attempts`, and `window` members retain their raw spelling and individual merge provenance.
+`max_attempts` accepts a YAML integer or string scalar, never a floating-point number;
+malformed or reset members remain nested unmodeled evidence. This view applies no fallback,
+default, precedence, attempt simulation, runtime, or conversion interpretation.
+
+Update_config is a separate recursively merged mapping with member provenance and no rollout,
+scheduling, pause, rollback, monitoring, failure-rate, default, runtime, or conversion behavior.
+
+Rollback_config is a distinct recursively merged mapping with the same raw scalar preservation and
+member provenance boundary; it makes no rollout, execution, order, monitor, failure-rate, default,
+scheduler, provider, runtime, version, or conversion claim.
+
+Deploy `placement` retains ordered YAML-string constraints and preference mappings with optional
+YAML-string `spread` values; sequence merges append, including duplicates. Its
+`max_replicas_per_node` retains a YAML-integer or YAML-string category, with replacement, reset,
+and override provenance. Extensions, unknowns, and malformed nested values remain source-addressable
+evidence. The view supplies no constraint/spread grammar, node selection, count/range/default,
+mode coupling, scheduling, runtime, or conversion interpretation.
+
+Deploy `resources.limits.cpus` retains YAML-number or YAML-string scalar category and exact
+spelling; `resources.limits.memory` accepts only YAML strings and conservatively retains raw text
+as documented lowercase-unit, lexical-zero, deferred, or provider-dependent; and `limits.pids`
+retains YAML-integer or YAML-string categories. Resource and limit mappings merge recursively; leaf
+reset remains nested unmodeled reset evidence, while mapping reset/override provenance stays visible.
+Extensions, unknowns, malformed values, and sensitivity remain source-addressable. These values
+infer no service CPU, `mem_limit`, unlimited, positivity, range/default, host, cgroup, runtime,
+consistency, or conversion behavior.
+
+Deploy `resources.reservations.cpus` separately retains YAML-number or YAML-string scalar category
+and exact spelling, while `resources.reservations.memory` accepts only YAML strings with the same
+raw lowercase-unit, lexical-zero, deferred, and provider-dependent classification as limit memory.
+Its resource/reservation mappings merge recursively with replacement, reset,
+override, sensitivity, extension, unknown, and malformed evidence. It infers no relationship to
+limit CPU, service CPU, scheduling, provider, runtime, target, or conversion behavior.
+
+Deploy `resources.reservations.devices` retains schema-only ordered mapping/unmodeled items. A
+mapping's required capabilities sequence preserves exact raw strings, duplicates, malformed
+members, sensitivity, and ordinary append/reset/override provenance; its optional `driver` retains
+only an exact YAML string scalar. `count` retains raw YAML-integer or strict YAML-string spelling,
+including arbitrary strings such as `all`, while `device_ids` retains an ordered strict-YAML-string
+sequence with malformed items preserved. Timestamp/regex styles, other scalar kinds, and collections
+remain unmodeled evidence. Simultaneous count and IDs are diagnosed but neither is selected or
+discarded. This does not select/load devices, parse capability/driver grammar, apply count range,
+sign, default, or allocation semantics, interpret CDI, inspect the host/cgroups/runtime, claim
+provider/version behavior, or convert. Options retain map/list syntax, scalar fidelity, malformed
+evidence, exact duplicate list strings, and generic provenance without provider interpretation.
+
 ### Resolve references and paths
 
 `resolve_paths` classifies the supported host paths and retains their raw text, source span,
@@ -155,7 +387,8 @@ remain project resources.
 
 `validate_references` inspects active services and distinguishes found, missing, and
 profile-inactive targets. The boundary covers networks, named volumes, configs, secrets,
-`depends_on`, service namespace modes, links, and local `extends`. A `service_healthy` dependency
+`depends_on`, service namespace modes, links, and local long-form `extends.service` edges without
+`file`. A `service_healthy` dependency
 with no Compose health check produces a warning because image metadata is unavailable; an
 explicitly disabled health check produces an error. Diagnostics never delete or rewrite the
 authored reference. Long dependencies with `required: false` remain visible but downgrade missing,

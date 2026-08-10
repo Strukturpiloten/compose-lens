@@ -6,6 +6,23 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-08-10
+
+### Added
+
+- Expands loss-aware authored and effective Build support, including contexts, inputs, caches,
+  Dockerfiles, resource settings, and redacted SSH forms.
+- Expands the Deploy model with endpoint and replica settings, labels, lifecycle configuration,
+  placement, limits and reservations, and schema-only device and resource evidence.
+- Adds source-aware service configuration for `credential_spec`, `extends`, `provider`, lifecycle
+  hooks, runtime/pull/platform strings, cgroup values, and CPU scalar categories.
+- Adds `attach` and `blkio_config` preservation, terminal/security and logging support, and
+  generated service-network attachments.
+- Expands authored and merged IPAM plus generated application-owned network and volume drivers,
+  options, labels, and conflict diagnostics.
+- Preserves 0.1.x source compatibility and Rust 1.85.0+ support; provider and runtime behavior
+  remain outside the evidence boundary.
+
 ## [0.1.15] - 2026-08-07
 
 ### Added

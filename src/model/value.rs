@@ -12,6 +12,40 @@ pub enum BooleanValue {
     Expression(String),
 }
 
+/// A Compose Build `no_cache` value with its YAML scalar category retained.
+///
+/// Compose accepts either a YAML boolean or a string for this field. Strings, including empty
+/// and interpolation-shaped values, remain strings and are never coerced to booleans.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BuildNoCache {
+    /// A YAML boolean scalar.
+    Boolean(bool),
+    /// A YAML string scalar without boolean coercion.
+    String(String),
+}
+
+/// A Compose Build `sbom` value with its YAML scalar category retained.
+///
+/// Compose accepts either a YAML boolean or a string for this field. Strings, including empty,
+/// generator-shaped, and interpolation-shaped values, remain strings and are never coerced to
+/// booleans or interpreted as generated SBOM data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BuildSbom {
+    /// A YAML boolean scalar.
+    Boolean(bool),
+    /// A YAML string scalar without boolean coercion or generator parsing.
+    String(String),
+}
+
+/// A Compose Build `provenance` value with its YAML scalar category retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BuildProvenance {
+    /// A YAML boolean scalar.
+    Boolean(bool),
+    /// A YAML string scalar without attestation parsing or generation.
+    String(String),
+}
+
 /// A YAML scalar retained without applying Compose interpolation or coercion.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ComposeScalar {

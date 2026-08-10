@@ -12,7 +12,7 @@ The owners' release channels identified these current stable candidates on the e
 - [Docker Compose 5.3.1](https://github.com/docker/compose/releases/tag/v5.3.1)
 - [`containers/podman-compose` 1.5.0](https://github.com/containers/podman-compose/releases/tag/v1.5.0)
 - [Docker Engine 29.6.2](https://docs.docker.com/engine/release-notes/29/#2962)
-- [Podman 6.0.2](https://github.com/containers/podman/releases/tag/v6.0.2)
+- [Podman 6.0.2](https://github.com/podman-container-tools/podman/releases/tag/v6.0.2)
 
 These values document research context only. ComposeLens has no “latest” profile and makes no
 blanket support claim for these releases. A caller supplies the exact versions it wants assessed.

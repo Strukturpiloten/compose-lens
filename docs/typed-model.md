@@ -47,6 +47,73 @@ interpolation remain distinct, omission remains omitted, and complete-value repl
 every contributing source. ComposeLens does not invent a default or select or inspect the
 platform-specific init binary.
 
+Service `stdin_open` is independently source-aware at both layers. Literal `true`/`false` and
+deferred interpolation remain distinct, omission remains omitted, and complete-value replacement
+retains every contributing source. ComposeLens does not infer a terminal, runtime, or cross-format
+policy from either boolean.
+
+Service `tty` has the same independent source-aware boundary. Literal `true`/`false` and deferred
+interpolation remain distinct, omission remains omitted, and complete-value replacement retains
+every contributing source. ComposeLens does not infer terminal, runtime, or cross-format policy.
+
+Service `privileged` is independently source-aware at both layers. Literal `true`/`false` and
+deferred interpolation remain distinct, omission remains omitted, and complete-value replacement
+retains every contributing source. ComposeLens does not infer security, runtime, or cross-format
+policy from this boolean.
+
+Service `blkio_config` is native at both layers as one mapping with optional integer-or-string
+`weight`, ordered integer-or-string `rate` entries in `device_read_bps`, `device_read_iops`,
+`device_write_bps`, and `device_write_iops`, and ordered integer-or-string `weight` entries in
+`weight_device`. Mapping entries retain optional YAML-string `path`, source spans or nested merge
+provenance, extensions, unknown members, duplicates, and non-mapping sequence items as explicit
+unmodeled entries. Generic recursive mapping and sequence append/reset/override behavior applies.
+The raw view neither resolves `extends` nor claims the specification's path-keyed rate-array
+inheritance. It applies no unit, range, default, path/device, cgroup/controller, runtime,
+provider, I/O, generated-document, or conversion interpretation.
+
+Service `cgroup` is native at both layers as a strict YAML string with a source-aware raw value
+and a distinct `Host`, `Private`, deferred dollar-bearing `Expression`, or diagnosed `Other`
+classification. Exact lowercase `host` and `private` are the only resolved valid literals; empty,
+case-variant, and other strings remain available without coercion. Scalar replacement, reset, and
+override retain provenance and sensitivity. The model supplies no default or controller, cgroup
+v1/v2, rootless, systemd, provider, version, runtime, `extends`, generated-document, or conversion
+interpretation.
+
+Service `cgroup_parent` is native at both layers as a strict raw YAML string independent from
+`cgroup`. Empty, whitespace, deferred, and arbitrary spellings remain exact; scalar replacement,
+reset, and override retain provenance and sensitivity. The model supplies no grammar, path,
+controller, host, runtime, provider, version, default, `extends`, generated-document, or conversion
+interpretation.
+
+Service `cpu_count` is native at both layers as a raw YAML integer/string category. Nonnegative
+integers retain unbounded, base-prefixed, separator, and negative-zero spelling without numeric
+conversion; quoted numeric, empty, and deferred values remain strings. Negative YAML integers are
+retained with diagnostics. The model supplies no quota, host, scheduler, runtime, provider, OS,
+version, default, `extends`, generated-document, or conversion interpretation.
+
+Service `cpu_percent` is native at both layers as a raw YAML integer/string category. The schema's
+integer branch is classified against its inclusive `0..=100` range without fixed-width conversion:
+base-prefixed, separator, signed-zero, and arbitrarily long spelling remain exact. Out-of-range YAML
+integers are retained with diagnostics, while quoted, block, empty, and deferred strings are not
+coerced or range-checked. The model supplies no percentage calculation, CPU, quota, host, scheduler,
+runtime, provider, OS, version, default, `extends`, generated-document, or conversion interpretation.
+
+Service `cpu_period` is native at both layers as a raw YAML number/string category. Numeric YAML
+spellings retain their exact text without conversion or validation; quoted, block, empty, and deferred
+strings remain strings. The model supplies no duration, microsecond, CFS, CPU, host, runtime,
+provider, OS, version, default, `extends`, generated-document, or conversion interpretation.
+
+Service `cpu_quota` is native at both layers as a raw YAML number/string category. Numeric YAML
+spellings retain their exact text without conversion or validation; quoted, block, empty, and deferred
+strings remain strings. The model supplies no numeric quota, duration, microsecond, CFS, CPU, host,
+runtime, provider, OS, version, default, `extends`, generated-document, or conversion interpretation.
+
+Service `cpu_rt_period` is native at both layers as a YAML number, Compose-duration, expression,
+or diagnosed other-string category. Durations retain exact `us`/`ms`/`s`/`m`/`h` segments and
+fractional spelling without conversion; dollar-bearing strings are expressions. It supplies no CPU,
+microsecond conversion, realtime scheduler, OS, host, default, provider, version, runtime,
+generated-document, or conversion interpretation.
+
 Execution identity and context are native at both document and merged-project layers. Effective
 `user`, `userns_mode`, `group_add`, `working_dir`, and `read_only` values retain raw spelling,
 field provenance, and, for supplementary groups, per-item provenance. No account, group, path, or
@@ -92,6 +159,11 @@ Service `annotations` retains mapping/list syntax, scalar evidence, raw list ite
 effective contributors. Mapping keys do not interpolate, and key-only list items remain explicit
 ambiguity rather than becoming empty label values.
 
+Service `logging` retains an optional uninterpreted YAML string `driver`, an ordered `options`
+mapping including explicit empty state, and exact string/number/null option kinds. Option keys are
+non-empty and never interpolate; extensions, unknown fields, malformed entries, and valid siblings
+remain source-addressable.
+
 An explicit `container_name` is a source-aware scalar at both layers. The effective project view
 retains ordinary Compose scalar replacement provenance across files. The parser does not confuse
 the custom runtime name with the service key or infer one when the field is absent.
@@ -115,8 +187,8 @@ deferred. Fractions, signs other than the exact `-1`, exponents, and arbitrary s
 without deleting their service. ComposeLens injects no default and performs no runtime or cgroup
 inspection.
 
-Service `shm_size` is raw-preserving at both layers and remains separate from `build.shm_size`,
-IPC and pod grouping, CPU or memory limits, and runtime `/dev/shm` inspection. YAML number and
+Service and Build `shm_size` are raw-preserving at both layers and remain separate from IPC and
+pod grouping, CPU or memory limits, and runtime `/dev/shm` inspection. YAML number and
 string scalars are accepted and retain their exact value, span, and scalar category. Dollar-bearing
 strings are deferred. Strings ending in the documented lowercase `b`, `k`, `kb`, `m`, `mb`, `g`,
 or `gb` family expose that unit and retain the complete `amount_raw` without imposing an integer,
@@ -173,8 +245,10 @@ fractions, `us`, and `ms` are retained as `Other`. `every_0s` is schema-valid an
 `Every`, while its prose semantics stay explicitly ambiguous. Interpolation-shaped values remain
 deferred. The schema-only `refresh` spelling is classified separately from both documented forms
 and invalid/provider-specific values; that classification is not a provider support claim.
-`pull_refresh_after` remains an unknown/unmodeled field with source and merge provenance until its
-relationship to `refresh` has a separate native contract and exact provider evidence.
+`pull_refresh_after` is independently retained as a strict raw YAML string, including empty and
+deferred values. It keeps scalar replacement/reset/override provenance, source spans, sensitivity,
+and malformed-field evidence, but does not parse an interval, supply a default, couple to
+`pull_policy: refresh`, calculate refresh state, infer provider/version support, generate, or convert.
 
 Service `stop_signal` and `stop_grace_period` are independent optional values at both layers.
 Signals retain the complete scalar without imposing a token grammar not defined by Compose. A
@@ -210,7 +284,7 @@ stage, not the typed parser, applies the tag's semantics.
 | Location | Phase 2 fields |
 | --- | --- |
 | Document | `name`, `services`, `networks`, `volumes`, `configs`, `secrets` |
-| Service | `hostname`, `container_name`, `image`, `build`, `entrypoint`, `command`, `init`, `environment`, `env_file`, `labels`, `annotations`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `restart`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
+| Service | `hostname`, `container_name`, `image`, `platform`, `build`, `entrypoint`, `command`, `credential_spec`, `extends`, `provider`, `post_start`, `pre_stop`, `pre_start`, `blkio_config`, `attach`, `init`, `stdin_open`, `tty`, `privileged`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `pull_refresh_after`, `restart`, `runtime`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
 | Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name` |
 | Volume definition | `driver`, `driver_opts`, `external`, `labels`, `name` |
 | Config definition | `file`, `environment`, `content`, `external`, `name` |
@@ -225,7 +299,7 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 
 - entrypoint and command: independent explicit null, scalar, or list values, including empty
   scalar and empty list;
-- init: a literal boolean or deferred interpolation expression;
+- attach, init, stdin_open, tty, and privileged: independent literal booleans or deferred interpolation expressions;
 - capability additions and drops: independent omitted or explicit ordered string sequences with
   exact duplicates retained for diagnostics and case variants kept distinct;
 - service devices: an omitted or explicit ordered sequence of mixed raw short strings and long
@@ -247,12 +321,16 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 - health-check tests: shell-command scalar or tokenized list;
 - PID limit: unlimited, arbitrary-precision positive decimal, ambiguous zero, deferred expression,
   or retained unsupported scalar;
+
 - shared-memory size: exact YAML number/string provenance, documented lowercase unit plus raw
   amount, ambiguous zero, deferred expression, or distinct provider-dependent number/string state;
 - service temporary filesystems: omitted, scalar, or ordered list form with explicit empty list,
   exact duplicates, colon-delimited documented assignments, and retained raw target options;
 - service sysctls: omitted, ordered mapping or ordered list form with explicit empty collections,
   exact scalar kind/spelling, uninterpolated map keys, and retained duplicate list evidence;
+- service logging: omitted or mapping form, optional uninterpreted string driver, ordered
+  string/number/null options including explicit empty state, extensions, unknowns, and malformed
+  sibling recovery;
 - restart policy: a known literal, optional raw-preserving `on-failure` retry count, deferred
   expression, or retained invalid/provider-specific scalar;
 - pull policy: documented literals, a retained alias, exact custom interval spelling, deferred
@@ -261,9 +339,16 @@ Field-specific variants retain forms whose behavior or meaning can differ:
   duration value/expression/other state;
 - ulimits: an ordered lowercase-name mapping with one number/string scalar or required separate
   soft/hard values, including an explicit empty mapping;
-- build: scalar context or a mapping of independently identified specification fields;
+- build: raw list/scalar-map `additional_contexts`, short scalar or long mapping context, raw ordered `cache_from`/`cache_to`, non-empty `dockerfile`, opaque `target`/`network`/`isolation`, raw ordered `platforms`/`tags`, map/list `args`/`labels`, boolean/string `no_cache` and `sbom`, scalar boolean/expression `pull`, raw-preserving `shm_size`, short/long `secrets`, and sensitive list/scalar-map `ssh` retain source evidence and recovery.
+  Cache descriptors receive no type, reference, source, destination, path, image, credential, or builder interpretation. Platforms receive no OCI parsing; string `no_cache` and `sbom` values retain type and spelling without boolean coercion, while `pull` receives no interpolation, default, or execution inference. `sbom` does not parse generators, expose generated SBOM data, or trigger builds.
+  No build resolves top-level secrets, materializes contents, parses SSH grants/paths/sockets/agents, or generates builds;
 - service and resource labels: list or mapping. Service-label list entries retain the complete
   scalar so values containing additional `=` characters are not truncated.
+
+`attach` preserves literal booleans or deferred dollar expressions with source and scalar merge
+provenance; invalid forms remain source-addressable evidence. It has no default or generated API,
+and it makes no logging, runtime, provider, CLI, compatibility, BoxFerry, or other cross-format
+inference.
 
 The raw short volume and port strings remain authoritative. Conservative helper parsing must not
 turn platform-dependent path or address grammars into false certainty. ADR 0003 defines the full
@@ -290,9 +375,142 @@ warning because the image may contain health metadata. An explicitly disabled he
 error for a required `service_healthy` edge. `required: false` downgrades unavailable dependency
 diagnostics to warnings without hiding the reference.
 
-Build and deploy definitions expose every current top-level subfield as its own stable kind and
-source reference. This is intentionally field-level evaluation, not a claim that every nested
-value is already semantically typed or supported by every converter.
+Build and deploy definitions expose every current top-level subfield as its own stable kind and source reference; the project view promotes map/list `build.additional_contexts`, `build.context`, map/list `build.args`/`build.labels`, Build-specific list/map `build.extra_hosts` with scalar or nested-list raw string addresses, raw ordered `build.cache_from`/`build.cache_to`/`build.entitlements`, `dockerfile`, exact-string `dockerfile_inline`, `target`, `network`, opaque string `isolation`, raw ordered `platforms`/`tags`, boolean/string `no_cache`/`sbom`, boolean/expression `privileged`/`pull`, raw-preserving `shm_size`, service-equivalent ordered `build.ulimits`, and short/long `build.secrets`.
+Platforms retain per-item source, sensitivity, append/reset/override provenance, duplicates, explicit empties, and malformed evidence without OCI or runtime inference.
+`dockerfile_inline` retains exact empty or multiline string content, source spans, interpolation sensitivity, scalar merge provenance, and mutual-exclusion evidence with `dockerfile`; it does not parse Containerfiles, access paths or contexts, scan secrets, build, or infer Docker, BuildKit, or runtime behavior. Docker Compose v2.17.0 is an implementation badge only, with earlier and removal boundaries unknown. Other fields remain source-addressable, and no build is resolved, materialized, or generated.
+`build.provenance` has a distinct boolean-or-opaque-string model with spans, interpolation sensitivity, scalar merge provenance, and malformed evidence; it performs no attestation parsing, generation, publication, validation, builder execution, or runtime inference. Docker Compose v2.39.0 is an implementation badge only, with earlier and removal boundaries unknown.
+`build.privileged` accepts YAML literal booleans or deferred dollar expressions. Ordinary quoted
+non-expression strings are invalid schema ambiguity rather than coerced booleans; they retain
+source-addressable unmodeled evidence with diagnostics. Docker Compose v2.15.0 is an
+implementation badge only, with earlier and removal boundaries unknown. No privilege, platform,
+runtime, or build behavior is inferred.
+
+`deploy.endpoint_mode` is independently typed as `vip`, `dnsrr`, or a raw retained `Other` value.
+The latter remains a portability diagnostic rather than a rejected value; non-string forms retain
+their source reference with diagnostics. The prose's `vip` default and the schema's lack of an
+effective default are recorded as an evidence conflict, so ComposeLens injects no default. It does
+not infer platform, service discovery, VIP, DNS, replica, deployment, runtime, or conversion behavior.
+
+`deploy.mode` likewise retains `global`, `replicated`, or raw `Other` strings. Empty, deferred,
+and provider-specific strings are portability diagnostics rather than coerced defaults; omission
+remains absent rather than becoming `replicated`. No replica, scale, placement, job, deployment,
+runtime, or conversion behavior is inferred.
+
+`deploy.replicas` retains only its exact YAML number spelling or distinct YAML string spelling in
+`DeployReplicas`; strings include empty and deferred values. It applies no integer grammar,
+positive/zero/default rule, mode coupling, scale, allocation, scheduling, runtime, or conversion
+interpretation, and has no version-boundary badge.
+
+`deploy.labels` is distinct from service container labels. It retains mapping scalar categories and
+nulls or ordered list bare/`KEY=VALUE` spellings. Mapping keys merge and replace by key; lists
+append with duplicate evidence retained despite schema `uniqueItems`. No container-label, service,
+runtime, platform, deployment, or conversion behavior is claimed, and there is no version boundary.
+Update_config and the distinct rollback_config are independent typed mappings: parallelism preserves
+YAML-integer or strict-string spelling; delay, monitor, and failure action are strict strings;
+maximum failure ratio preserves YAML-number or strict-string spelling; and order retains documented
+or provider-specific values. The current [Deploy update section](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#update_config)
+and [rollback section](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#rollback_config)
+name `continue` and `pause` for rollback `failure_action`, while the current
+[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+accepts any string; this API follows the schema and retains it without rejection. The schema
+enumerates `order`, so other strings are retained with a mapping-specific portability diagnostic.
+Neither those sources nor the [Compose merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
+provide an introduction/removal/provider boundary or defaults; generic mapping merge applies and
+ComposeLens injects none.
+
+`credential_spec` is a mapping-only service value with optional strict YAML-string `config`, `file`,
+and `registry` members, including explicit empties and malformed/unknown evidence. The current
+[Compose service reference](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#credential_spec)
+describes URI-like `file`/`registry` forms, while the current
+[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+models all three as strings in one mapping; ComposeLens retains raw spelling without resolving that
+prose/mapping ambiguity. The [Compose merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
+therefore apply as generic recursive mapping merge. No file, registry, account, top-level config,
+Windows/gMSA, platform, provider, runtime, or conversion behavior is inferred.
+
+`extends` accepts either a schema-supported YAML-string short reference or a long mapping. The
+long form retains optional strict YAML-string `service` and `file` members, explicit empties,
+mapping span, extensions, and malformed or unknown members; a missing `service` remains retained
+with a diagnostic. The [Compose service reference](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#extends)
+focuses on the mapping while the [schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+also permits the short string. The [merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
+apply only generic scalar replacement or recursive mapping merge. These raw types never expand or
+merge a referenced service, look up files, normalize paths, traverse cycles, or import resources.
+The separate `validate_references` stage may validate a same-file long-form `service` edge when
+`file` is absent; it performs none of those operations or provider, platform, runtime, or conversion inference.
+
+`provider` is a closed mapping with a required strict YAML-string `type` and optional `options`
+mapping, as defined by the [Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json).
+Option keys are nonempty; each value is a YAML string, number, or boolean scalar or an ordered
+sequence of those categories. Empty types remain valid, while malformed or duplicate
+members and sequence items remain source-aware evidence and a missing type is diagnosed. Generic
+mapping/scalar/sequence merge applies with no provider execution, discovery, setup/teardown,
+environment injection, secret or credential resolution, provider grammar/compatibility validation,
+or conversion behavior.
+
+`post_start` and `pre_stop` are ordered sequences of closed hook mappings. Each hook requires a `command` in the
+existing null/scalar/list form and may carry a local map/list `environment`, boolean `privileged`,
+and strict YAML-string `user` or `working_dir`; extensions and malformed entries remain evidence.
+Generic sequence merge applies without command execution, environment inheritance, lifecycle scheduling,
+privilege decisions, provider compatibility claims, or conversion.
+
+`pre_start` is a distinct ordered hook sequence. Its `command` is optional and preserves the
+existing null/scalar/list forms; strict raw `image`, local map/list `environment`, boolean
+`privileged`/`per_replica`, and strict YAML-string `user`/`working_dir` members remain optional
+and source-aware. It applies no image, environment, identity, replica, lifecycle, or runtime default.
+
+Service `runtime` retains only a strict YAML-string scalar, including empty and deferred values.
+Ordinary scalar replacement/reset/override provenance remains visible without a runtime grammar,
+allowlist, default, host inspection, provider compatibility, execution, generation, or conversion claim.
+
+Service `pull_refresh_after` retains only a strict YAML-string scalar, including empty and deferred
+values. Ordinary scalar replacement/reset/override provenance remains visible without an interval
+grammar, minimum, default, refresh-state calculation, `pull_policy: refresh` coupling, provider
+compatibility, execution, generation, or conversion claim.
+
+Service `platform` retains only a strict YAML-string scalar, including empty and deferred values.
+Ordinary scalar replacement/reset/override provenance remains visible without OCI component parsing,
+normalization, alias/case handling, host or image-manifest inspection, build feasibility, provider
+support, `build.platforms` coupling, defaults, generation, or conversion claim.
+
+`deploy.restart_policy` is distinct from service `restart`. Its condition retains `none`,
+`on-failure`, `any`, deferred, and unknown values; delay/window and max-attempts retain raw
+spellings and YAML integer/string category. No fallback, default, precedence, attempt simulation,
+runtime, or conversion behavior is inferred.
+
+`deploy.placement` retains ordered YAML-string `constraints`, preference mappings with an optional
+YAML-string `spread`, and `max_replicas_per_node` as a YAML-integer or YAML-string scalar category.
+Extensions, unknown members, and malformed siblings remain source-aware evidence. Its effective
+view keeps collection, item, and nested-member provenance across generic append, replacement,
+reset, and override behavior. ComposeLens applies no constraint/spread grammar, node selection,
+count/range/default, mode coupling, scheduling, runtime, or conversion interpretation.
+
+`deploy.resources.limits.cpus` retains YAML-number or YAML-string scalar category and exact
+spelling, `deploy.resources.limits.memory` accepts only YAML strings and retains raw text with
+documented lowercase-unit, lexical-zero, deferred, and provider-dependent classification, while
+`limits.pids` retains YAML-integer or YAML-string categories; `reservations.cpus` independently
+retains YAML-number or YAML-string scalar categories, while `reservations.memory` reuses the same
+YAML-string-only raw classification as deploy resource-limit memory. Extensions, unknown members, and malformed
+values remain source-aware evidence, while the effective view retains recursive mapping,
+replacement, reset, override, and sensitivity provenance. These values infer no service CPU,
+`mem_limit`, unlimited, positivity, range/default, host, cgroup, runtime, consistency, or conversion behavior.
+
+`deploy.resources.reservations.generic_resources` is retained as schema-only evidence, not a
+resource-matching model. Ordinary sequences append; reset and override retain collection and item
+provenance. Mapping items expose optional raw `discrete_resource_spec.kind` and number-or-string
+`value`, while non-mapping items and malformed members remain source-addressable evidence. No
+prose, version, provider, matching, scheduling, device, runtime, or conversion behavior is
+inferred; reservation-device semantics remain outside the generic-resource boundary.
+
+`deploy.resources.reservations.devices` retains schema-only ordered mapping/unmodeled item evidence.
+Each valid mapping requires a capabilities sequence of exact raw strings and may retain an optional
+strict YAML-string `driver`, raw YAML-integer-or-string `count`, and ordered strict-YAML-string
+`device_ids`; duplicates remain in order and malformed members remain unmodeled. Count and IDs
+conflict diagnostically without a winner. Ordinary append/reset/override and nested provenance
+remain observable without device selection/loading, capability or driver grammar, count range,
+sign, default, `all`, allocation/GPU/device matching, CDI, host, scheduling, provider/version,
+runtime, cgroup, or conversion behavior. Options retain map/list syntax, scalar fidelity, malformed
+evidence, exact duplicate list strings, and generic provenance without provider interpretation.
 
 Podman `keep-id`, `auto`, and `nomap` user-namespace values and the `host-gateway` token have native
 classifications. Their compatibility findings cite official implementation documentation and do

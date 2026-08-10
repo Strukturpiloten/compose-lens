@@ -82,6 +82,8 @@ pub struct MergedScalar {
     raw: String,
     value: String,
     kind: MergedScalarKind,
+    plain: bool,
+    strict_yaml_string: bool,
     sensitive: bool,
 }
 
@@ -104,6 +106,18 @@ impl MergedScalar {
         self.kind
     }
 
+    /// Returns whether the scalar was a YAML string rather than a timestamp or regex style.
+    #[must_use]
+    pub(crate) const fn is_strict_yaml_string(&self) -> bool {
+        self.strict_yaml_string
+    }
+
+    /// Reports whether the scalar used YAML plain style before interpolation.
+    #[must_use]
+    pub(crate) const fn is_plain_style(&self) -> bool {
+        self.plain
+    }
+
     /// Reports whether interpolation inserted sensitive content.
     #[must_use]
     pub const fn is_sensitive(&self) -> bool {
@@ -118,6 +132,8 @@ impl fmt::Debug for MergedScalar {
             .field("raw", &self.raw)
             .field("value", &if self.sensitive { "<redacted>" } else { &self.value })
             .field("kind", &self.kind)
+            .field("plain", &self.plain)
+            .field("strict_yaml_string", &self.strict_yaml_string)
             .field("sensitive", &self.sensitive)
             .finish()
     }
@@ -149,6 +165,7 @@ pub struct MergedEntry {
     key: String,
     key_sources: Vec<SourceSpan>,
     key_sensitive: bool,
+    strict_yaml_string: bool,
     syntax: EntrySyntax,
     raw_list_item: Option<MergedScalar>,
     value: MergedValue,
@@ -161,6 +178,7 @@ impl fmt::Debug for MergedEntry {
             .field("key", &if self.key_sensitive { "<redacted>" } else { &self.key })
             .field("key_sources", &self.key_sources)
             .field("key_sensitive", &self.key_sensitive)
+            .field("strict_yaml_string", &self.strict_yaml_string)
             .field("syntax", &self.syntax)
             .field("raw_list_item", &self.raw_list_item)
             .field("value", &self.value)
@@ -185,6 +203,12 @@ impl MergedEntry {
     #[must_use]
     pub const fn is_key_sensitive(&self) -> bool {
         self.key_sensitive
+    }
+
+    /// Reports whether the effective key was authored as a strict YAML string.
+    #[must_use]
+    pub(crate) const fn is_strict_yaml_string(&self) -> bool {
+        self.strict_yaml_string
     }
 
     /// Returns the most recent authored syntax form for this entry.
@@ -493,6 +517,7 @@ fn convert_entry(
         key: entry.key.value,
         key_sources: vec![entry.key.span],
         key_sensitive: false,
+        strict_yaml_string: entry.key.strict_yaml_string,
         syntax: EntrySyntax::Mapping,
         raw_list_item: None,
         value: convert_value(entry.value, interpolation, diagnostics),
@@ -514,6 +539,8 @@ fn convert_scalar(value: MergeSyntaxScalar, interpolation: Option<&DocumentInter
             raw: value.raw,
             value: semantic,
             kind,
+            plain: value.plain,
+            strict_yaml_string: value.strict_yaml_string,
             sensitive,
         }),
         value.span,
@@ -648,6 +675,7 @@ fn merge_mappings(
             existing.value = merge_value(existing.value.clone(), incoming_entry.value, &child_path, diagnostics);
             extend_sources(&mut existing.key_sources, &incoming_entry.key_sources);
             existing.key_sensitive |= incoming_entry.key_sensitive;
+            existing.strict_yaml_string = incoming_entry.strict_yaml_string;
             existing.syntax = incoming_entry.syntax;
             existing.raw_list_item = incoming_entry.raw_list_item;
         } else {
@@ -888,6 +916,8 @@ fn normalize_keyed(value: MergedValue) -> Option<MergedValue> {
                             raw: entry_value.to_owned(),
                             value: entry_value.to_owned(),
                             kind: MergedScalarKind::String,
+                            plain: true,
+                            strict_yaml_string: true,
                             sensitive: scalar.sensitive,
                         }),
                         provenance: value.provenance.clone(),
@@ -905,6 +935,7 @@ fn normalize_keyed(value: MergedValue) -> Option<MergedValue> {
                     key,
                     key_sources: vec![key_source],
                     key_sensitive: scalar.sensitive,
+                    strict_yaml_string: true,
                     syntax,
                     raw_list_item: Some(scalar.clone()),
                     value: entry_value,
