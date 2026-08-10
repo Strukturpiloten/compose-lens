@@ -75,6 +75,8 @@ publishes the crate, and then publishes the GitHub release. The semver action is
 commit and exact release tag; Renovate maintains both. A failure before the final step leaves the
 GitHub release as a draft for inspection and retry.
 
+Normal CI runs the same patch-level public-API comparison before a change can merge.
+
 ## Recovering a failed workflow
 
 The crates.io publication-state probe runs before the workflow creates a tag, attestation, or

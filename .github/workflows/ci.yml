@@ -87,6 +87,18 @@ jobs:
           command: check
           arguments: --all-features
 
+  api:
+    name: Public API compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - name: Compare with the latest published release
+        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
+        with:
+          package: compose-lens
+          release-type: patch
+
   documentation:
     name: Documentation
     runs-on: ubuntu-24.04
