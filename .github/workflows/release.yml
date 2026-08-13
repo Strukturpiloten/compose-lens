@@ -82,6 +82,14 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo ci-doc
+      - name: Install LLVM coverage tools
+        run: rustup component add llvm-tools-preview
+      - name: Install pinned cargo-llvm-cov
+        run: cargo install --locked --version 0.8.7 cargo-llvm-cov
+      - name: Measure and enforce coarse coverage ratchet
+        run: >-
+          cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only
+          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
       - name: Audit dependencies, licenses, bans, and sources
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:

@@ -47,6 +47,21 @@ jobs:
       - name: Verify release package
         run: cargo ci-package
 
+  coverage:
+    name: Coverage ratchet
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - *checkout
+      - name: Install LLVM coverage tools
+        run: rustup component add llvm-tools-preview
+      - name: Install pinned cargo-llvm-cov
+        run: cargo install --locked --version 0.8.7 cargo-llvm-cov
+      - name: Measure and enforce coarse coverage ratchet
+        run: >-
+          cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only
+          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
+
   msrv:
     name: MSRV
     runs-on: ubuntu-24.04

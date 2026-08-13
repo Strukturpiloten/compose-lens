@@ -45,6 +45,28 @@ fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
 }
 
 #[test]
+fn coverage_ratchet_runs_in_ci_and_release() -> Result<(), String> {
+    const INSTALL: &str = "cargo install --locked --version 0.8.7 cargo-llvm-cov";
+    const COMMAND: &str = "cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only\n          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89";
+
+    for workflow_name in ["ci.yml", "release.yml"] {
+        let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
+        let workflow = fs::read_to_string(&workflow_path)
+            .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
+
+        for required in ["rustup component add llvm-tools-preview", INSTALL, COMMAND] {
+            if workflow.matches(required).count() != 1 {
+                return Err(format!(
+                    "{workflow_name} must contain one pinned ComposeLens coverage guard `{required}`"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn release_workflow_uses_the_create_response_as_its_draft_identity() -> Result<(), String> {
     let workflow_path = repository_root().join(".github/workflows/release.yml");
     let workflow = fs::read_to_string(&workflow_path)

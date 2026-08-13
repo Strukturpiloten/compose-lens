@@ -169,3 +169,93 @@ impl fmt::Display for InvalidVersionRange {
 }
 
 impl Error for InvalidVersionRange {}
+
+#[cfg(test)]
+mod tests {
+    use super::{ImplementationVersion, InvalidVersionRange, VersionParseError, VersionRange};
+
+    #[test]
+    fn exact_versions_accept_documented_spelling_and_expose_every_component() -> Result<(), VersionParseError> {
+        let plain: ImplementationVersion = "2.40.3".parse()?;
+        let prefixed: ImplementationVersion = "v0.1.17".parse()?;
+
+        assert_eq!(plain, ImplementationVersion::new(2, 40, 3));
+        assert_eq!((plain.major(), plain.minor(), plain.patch()), (2, 40, 3));
+        assert_eq!(plain.to_string(), "2.40.3");
+        assert_eq!(prefixed.to_string(), "0.1.17");
+        Ok(())
+    }
+
+    #[test]
+    fn exact_versions_reject_missing_extra_non_numeric_and_overflowing_components() {
+        for spelling in [
+            "",
+            "v",
+            "2",
+            "2.40",
+            "2.40.3.1",
+            ".40.3",
+            "2..3",
+            "2.40.",
+            "2.forty.3",
+            "2.40.3-beta",
+            " 2.40.3",
+            "4294967296.0.0",
+        ] {
+            assert!(
+                spelling.parse::<ImplementationVersion>().is_err(),
+                "unexpectedly accepted {spelling:?}"
+            );
+        }
+
+        assert_eq!(
+            "private-version-value"
+                .parse::<ImplementationVersion>()
+                .err()
+                .map(|error| error.to_string()),
+            Some("expected a three-component numeric implementation version".to_owned())
+        );
+    }
+
+    #[test]
+    fn range_constructors_and_boundaries_are_inclusive() -> Result<(), InvalidVersionRange> {
+        let older = ImplementationVersion::new(5, 4, 0);
+        let newer = ImplementationVersion::new(6, 0, 2);
+
+        let bounded = VersionRange::new(Some(older), Some(newer))?;
+        assert_eq!(bounded.minimum(), Some(older));
+        assert_eq!(bounded.maximum(), Some(newer));
+        assert!(bounded.contains(older));
+        assert!(bounded.contains(newer));
+        assert!(!bounded.contains(ImplementationVersion::new(5, 3, 9)));
+        assert!(!bounded.contains(ImplementationVersion::new(6, 0, 3)));
+
+        let minimum = VersionRange::from_minimum(older);
+        assert!(minimum.contains(older));
+        assert!(minimum.contains(ImplementationVersion::new(u32::MAX, 0, 0)));
+
+        let exact = VersionRange::exact(newer);
+        assert!(exact.contains(newer));
+        assert!(!exact.contains(older));
+
+        let unbounded = VersionRange::unbounded();
+        assert_eq!(unbounded, VersionRange::default());
+        assert!(unbounded.contains(ImplementationVersion::new(0, 0, 0)));
+        assert!(unbounded.contains(ImplementationVersion::new(u32::MAX, u32::MAX, u32::MAX)));
+        Ok(())
+    }
+
+    #[test]
+    fn range_rejects_an_inverted_pair_without_echoing_values() {
+        let result = VersionRange::new(
+            Some(ImplementationVersion::new(6, 0, 2)),
+            Some(ImplementationVersion::new(5, 4, 0)),
+        );
+
+        assert_eq!(result, Err(InvalidVersionRange));
+        assert_eq!(
+            result.err().map(|error| error.to_string()),
+            Some("minimum implementation version is newer than maximum".to_owned())
+        );
+    }
+}
