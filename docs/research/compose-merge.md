@@ -57,17 +57,17 @@ overridden. Unknown fields must follow generic mapping or sequence behavior with
 
 Field-aware behavior must initially cover:
 
-| Field | Required rule |
-| --- | --- |
-| ordinary mappings | recursively merge by key |
-| ordinary sequences | append |
-| `command`, `entrypoint`, `healthcheck.test` | replace |
-| `environment`, `labels` | merge by variable or label key across mapping/list forms |
-| service `volumes`, `devices` | unique by container target |
-| service `configs`, `secrets` | unique by container target |
-| service `ports` | unique by IP, target, published port, and protocol |
-| tagged `!reset` value | clear to the field's default or empty value |
-| tagged `!override` value | replace without normal merge |
+| Field                                       | Required rule                                            |
+| ------------------------------------------- | -------------------------------------------------------- |
+| ordinary mappings                           | recursively merge by key                                 |
+| ordinary sequences                          | append                                                   |
+| `command`, `entrypoint`, `healthcheck.test` | replace                                                  |
+| `environment`, `labels`                     | merge by variable or label key across mapping/list forms |
+| service `volumes`, `devices`                | unique by container target                               |
+| service `configs`, `secrets`                | unique by container target                               |
+| service `ports`                             | unique by IP, target, published port, and protocol       |
+| tagged `!reset` value                       | clear to the field's default or empty value              |
+| tagged `!override` value                    | replace without normal merge                             |
 
 Short and long forms must remain distinguishable after a uniqueness match. For example, merging a
 volume entry by target must not silently discard whether SELinux behavior was authored using short

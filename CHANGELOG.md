@@ -13,6 +13,13 @@ All notable changes to ComposeLens will be documented in this file. The project 
 - Paired positive and negative tests for exact implementation-version parsing, component access,
   inclusive ranges, overflow, malformed input, and inverted bounds.
 - A pinned CI and release coverage ratchet for the locked all-feature, all-target test suite.
+- A shared VS Code and Dev Container workflow with one-command Rust, file-quality, policy,
+  coverage, MSRV, offline-link, package, and API checks.
+
+### Fixed
+
+- Local API checks always use an isolated writable Cargo cache instead of the container image's
+  potentially read-only global package lock.
 
 ## [0.1.16] - 2026-08-10
 

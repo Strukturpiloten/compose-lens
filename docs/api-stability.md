@@ -25,14 +25,14 @@ rename a diagnostic code.
 
 The 0.1 consumer contract covers these explicit stages:
 
-| Stage | Public modules |
-| --- | --- |
-| Source and diagnostics | `source`, `diagnostic`, `syntax` |
-| Native Compose types | `model` |
-| Caller-owned environment and project inputs | `interpolation`, `loader` |
-| Merge and post-merge views | `merge`, `profiles`, `project`, `resolution` |
-| Versioned compatibility reports | `validation` |
-| Canonical/generated output and scalar preservation edits | `render` |
+| Stage                                                    | Public modules                               |
+| -------------------------------------------------------- | -------------------------------------------- |
+| Source and diagnostics                                   | `source`, `diagnostic`, `syntax`             |
+| Native Compose types                                     | `model`                                      |
+| Caller-owned environment and project inputs              | `interpolation`, `loader`                    |
+| Merge and post-merge views                               | `merge`, `profiles`, `project`, `resolution` |
+| Versioned compatibility reports                          | `validation`                                 |
+| Canonical/generated output and scalar preservation edits | `render`                                     |
 
 The compile-and-behavior contract in `tests/public_api.rs` exercises these paths as an external crate
 consumer would. The additive `project` module provides native values without hiding loading,

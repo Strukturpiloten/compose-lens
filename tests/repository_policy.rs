@@ -67,6 +67,147 @@ fn coverage_ratchet_runs_in_ci_and_release() -> Result<(), String> {
 }
 
 #[test]
+fn local_developer_workflow_covers_format_lint_test_and_release_checks() -> Result<(), String> {
+    let script = read_repository_file("scripts/check-all.sh")?;
+
+    for required in [
+        "cargo fmt --all",
+        "bash scripts/check-files.sh --fix",
+        "git --no-pager diff --check",
+        "actionlint",
+        "zizmor .github/workflows",
+        "cargo ci-check",
+        "cargo ci-policy",
+        "cargo ci-clippy",
+        "cargo ci-test",
+        "cargo ci-doctest",
+        "cargo ci-doc",
+        "cargo test --locked --test conformance",
+        "cargo test --locked --test runtime_conformance",
+        "cargo test --locked --test real_world",
+        "cargo test --locked --test public_api",
+        "cargo test --locked --test generated_rendering",
+        "cargo package --locked --allow-dirty",
+        "cargo llvm-cov --locked --workspace --all-features",
+        "cargo \"+${msrv}\" ci-check",
+        "cargo \"+${msrv}\" ci-policy",
+        "cargo deny --all-features check",
+        "lychee --config lychee.toml --root-dir . --offline",
+        "semver_cargo_home",
+        "${CARGO_TARGET_DIR:-${repository_root}/target}/cargo-home",
+        "env CARGO_HOME=\"${semver_cargo_home}\"",
+        "cargo semver-checks check-release",
+        "--package compose-lens --release-type patch",
+    ] {
+        if !script.contains(required) {
+            return Err(format!("local validation runner missing `{required}`"));
+        }
+    }
+
+    if script.contains("semver_cargo_home=\"${CARGO_HOME:-}\"") {
+        return Err("local SemVer checks must not reuse ambient CARGO_HOME".to_owned());
+    }
+
+    for (path, required) in [
+        (
+            ".vscode/settings.json",
+            &["rust-analyzer.check.command", "editor.formatOnSave"][..],
+        ),
+        (
+            ".vscode/extensions.json",
+            &[
+                "DavidAnson.vscode-markdownlint",
+                "esbenp.prettier-vscode",
+                "mkhl.shfmt",
+                "tamasfe.even-better-toml",
+                "timonwong.shellcheck",
+            ][..],
+        ),
+        (
+            ".vscode/tasks.json",
+            &[
+                "ComposeLens: Format, lint, and test all",
+                "scripts/check-all.sh",
+                "ComposeLens: Required Rust checks",
+                "ComposeLens: Package",
+            ][..],
+        ),
+    ] {
+        let contents = read_repository_file(path)?;
+        for value in required {
+            if !contents.contains(value) {
+                return Err(format!("{path} is missing `{value}`"));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
+    let script = read_repository_file("scripts/check-files.sh")?;
+    for required in [
+        "git ls-files --cached --others --exclude-standard",
+        ":(exclude,glob)fixtures/**",
+        ":(exclude,glob)conformance/records/**",
+        "markdownlint-cli2 --fix",
+        "prettier --write",
+        "prettier --check",
+        "taplo fmt",
+        "taplo check",
+        "shfmt -w",
+        "shellcheck --",
+        "hadolint",
+    ] {
+        if !script.contains(required) {
+            return Err(format!("non-Rust file runner missing `{required}`"));
+        }
+    }
+
+    let lock = read_repository_file("package-lock.json")?;
+    for package in ["markdownlint-cli2", "prettier"] {
+        if !lock.contains(&format!("\"{package}\"")) {
+            return Err(format!("package-lock.json must lock `{package}`"));
+        }
+    }
+
+    for workflow_name in ["ci.yml", "release.yml"] {
+        let workflow = read_repository_file(&format!(".github/workflows/{workflow_name}"))?;
+        for required in [
+            "npm ci --ignore-scripts",
+            "bash scripts/install-file-tools.sh /usr/local/bin",
+            "bash scripts/check-files.sh --check",
+        ] {
+            if !workflow.contains(required) {
+                return Err(format!("{workflow_name} is missing `{required}`"));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn routine_link_checks_are_offline_and_external_checks_are_scheduled() -> Result<(), String> {
+    let ci = read_repository_file(".github/workflows/ci.yml")?;
+    for required in ["--config lychee.toml", "--offline"] {
+        if !ci.contains(required) {
+            return Err(format!("CI local-link check is missing `{required}`"));
+        }
+    }
+
+    let external = read_repository_file(".github/workflows/documentation-links.yml")?;
+    for required in ["schedule:", "workflow_dispatch:", "path: .lycheecache", "--cache"] {
+        if !external.contains(required) {
+            return Err(format!("scheduled external-link workflow is missing `{required}`"));
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn release_workflow_uses_the_create_response_as_its_draft_identity() -> Result<(), String> {
     let workflow_path = repository_root().join(".github/workflows/release.yml");
     let workflow = fs::read_to_string(&workflow_path)
@@ -227,4 +368,9 @@ summary = "Must not be accepted."
 
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+fn read_repository_file(path: &str) -> Result<String, String> {
+    let path = repository_root().join(path);
+    fs::read_to_string(&path).map_err(|error| format!("failed to read {}: {error}", path.display()))
 }

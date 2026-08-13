@@ -266,6 +266,8 @@ Every bug fix adds the smallest fixture that failed before the fix. When an exte
 The crate uses Rust 2024 with an MSRV of 1.85.0. `rust-toolchain.toml` pins the normal development toolchain; the explicit MSRV command prevents that pin from hiding accidental use of newer language or library features.
 
 ```shell
+./scripts/check-all.sh
+./scripts/check-files.sh --check
 cargo fmt --all -- --check
 cargo ci-check
 cargo ci-policy
@@ -285,6 +287,10 @@ cargo test --locked --test public_api
 cargo test --locked --test generated_rendering
 cargo package --locked
 ```
+
+`scripts/check-all.sh` is the one-command local gate. It formats owned files before checking the
+same deterministic Rust, coverage, MSRV, dependency, offline-link, and patch-SemVer boundaries
+used for release preparation. The ignored provider capture remains opt-in.
 
 The `ci-*` aliases use `--locked`, all workspace features, and all targets where the Cargo command
 supports them. CI also runs markdownlint and lychee over the documentation. The ordinary

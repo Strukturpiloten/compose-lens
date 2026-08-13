@@ -6,11 +6,11 @@ This evaluation supports [ADR 0002](../decisions/0002-loss-aware-yaml-syntax.md)
 
 Evaluated on 2026-07-31 with the project MSRV of Rust 1.85.0 and the pinned development toolchain.
 
-| Candidate | Version | License | Declared Rust version |
-| --- | ---: | --- | ---: |
-| [`yaml-edit`](https://docs.rs/yaml-edit/0.2.3/yaml_edit/) | 0.2.3 | Apache-2.0 | 1.70 |
-| [`tree-sitter`](https://docs.rs/tree-sitter/0.26.11/tree_sitter/) plus [`tree-sitter-yaml`](https://docs.rs/tree-sitter-yaml/0.7.2/tree_sitter_yaml/) | 0.26.11 / 0.7.2 | MIT | 1.77 / undeclared |
-| [`saphyr-parser`](https://docs.rs/saphyr-parser/0.0.11/saphyr_parser/) | 0.0.11 | MIT OR Apache-2.0 | 1.85.0 in package metadata |
+| Candidate                                                                                                                                             |         Version | License           |      Declared Rust version |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------: | ----------------- | -------------------------: |
+| [`yaml-edit`](https://docs.rs/yaml-edit/0.2.3/yaml_edit/)                                                                                             |           0.2.3 | Apache-2.0        |                       1.70 |
+| [`tree-sitter`](https://docs.rs/tree-sitter/0.26.11/tree_sitter/) plus [`tree-sitter-yaml`](https://docs.rs/tree-sitter-yaml/0.7.2/tree_sitter_yaml/) | 0.26.11 / 0.7.2 | MIT               |          1.77 / undeclared |
+| [`saphyr-parser`](https://docs.rs/saphyr-parser/0.0.11/saphyr_parser/)                                                                                |          0.0.11 | MIT OR Apache-2.0 | 1.85.0 in package metadata |
 
 All evaluated licenses are already allowed by `deny.toml`.
 
@@ -30,16 +30,16 @@ The committed `syntax` and `roundtrip` integration tests extend that probe with 
 
 ## Findings
 
-| Requirement | `yaml-edit` | Tree-sitter YAML | `saphyr-parser` |
-| --- | --- | --- | --- |
-| Concrete tree retains trivia | Yes | Comments are nodes; other trivia requires retaining source separately | No; semantic event stream |
-| Exact tree rendering | Yes in the probe | No standalone emitter from the syntax tree | No |
-| Anchors and aliases | Retained as syntax | Retained as grammar nodes | Retained as semantic events and IDs |
-| Duplicate mapping keys | Retained in the concrete tree | Retained in the parse tree | Events are available before object mapping |
-| Positioned malformed-input recovery | Tree plus positioned errors | Error and missing nodes | Positioned parse error; event processing stops |
-| Semantic YAML 1.2 role | Partial and still maturing | Grammar, not a semantic validator | Strongest evaluated semantic parser |
-| Build/runtime cost | Pure Rust Rowan tree | Tree-sitter runtime plus generated C grammar | Pure Rust event parser |
-| API coupling risk | Manageable behind a private adapter | Manageable but requires a larger adapter | Event model cannot satisfy source preservation alone |
+| Requirement                         | `yaml-edit`                         | Tree-sitter YAML                                                      | `saphyr-parser`                                      |
+| ----------------------------------- | ----------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------- |
+| Concrete tree retains trivia        | Yes                                 | Comments are nodes; other trivia requires retaining source separately | No; semantic event stream                            |
+| Exact tree rendering                | Yes in the probe                    | No standalone emitter from the syntax tree                            | No                                                   |
+| Anchors and aliases                 | Retained as syntax                  | Retained as grammar nodes                                             | Retained as semantic events and IDs                  |
+| Duplicate mapping keys              | Retained in the concrete tree       | Retained in the parse tree                                            | Events are available before object mapping           |
+| Positioned malformed-input recovery | Tree plus positioned errors         | Error and missing nodes                                               | Positioned parse error; event processing stops       |
+| Semantic YAML 1.2 role              | Partial and still maturing          | Grammar, not a semantic validator                                     | Strongest evaluated semantic parser                  |
+| Build/runtime cost                  | Pure Rust Rowan tree                | Tree-sitter runtime plus generated C grammar                          | Pure Rust event parser                               |
+| API coupling risk                   | Manageable behind a private adapter | Manageable but requires a larger adapter                              | Event model cannot satisfy source preservation alone |
 
 ## Selection
 

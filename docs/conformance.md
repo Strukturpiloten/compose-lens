@@ -9,12 +9,12 @@ runtime observations. A released version is a candidate for measurement, not pro
 
 The current stable releases found in their owners' release channels on the review date are:
 
-| Component | Current stable candidate | Primary source |
-| --- | --- | --- |
-| Docker Compose | 5.3.1 | [docker/compose v5.3.1](https://github.com/docker/compose/releases/tag/v5.3.1) |
-| `containers/podman-compose` | 1.5.0 | [containers/podman-compose v1.5.0](https://github.com/containers/podman-compose/releases/tag/v1.5.0) |
-| Docker Engine | 29.6.2 | [Docker Engine 29.6.2 release notes](https://docs.docker.com/engine/release-notes/29/#2962) |
-| Podman | 6.0.2 | [Podman v6.0.2](https://github.com/podman-container-tools/podman/releases/tag/v6.0.2) |
+| Component                   | Current stable candidate | Primary source                                                                                       |
+| --------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Docker Compose              | 5.3.1                    | [docker/compose v5.3.1](https://github.com/docker/compose/releases/tag/v5.3.1)                       |
+| `containers/podman-compose` | 1.5.0                    | [containers/podman-compose v1.5.0](https://github.com/containers/podman-compose/releases/tag/v1.5.0) |
+| Docker Engine               | 29.6.2                   | [Docker Engine 29.6.2 release notes](https://docs.docker.com/engine/release-notes/29/#2962)          |
+| Podman                      | 6.0.2                    | [Podman v6.0.2](https://github.com/podman-container-tools/podman/releases/tag/v6.0.2)                |
 
 These entries will become stale. The exact provider-config matrix remains reproducible when they
 do because it never resolves a moving release alias.
