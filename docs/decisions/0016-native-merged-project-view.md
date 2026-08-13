@@ -94,6 +94,7 @@ ComposeLens adds the public `project` module and `build_project_view` operation:
     rather than coerced and remain source-addressable unmodeled evidence with diagnostics. Docker
     Compose v2.15.0 is an implementation badge only, with earlier and removal boundaries unknown;
     no privilege, platform, runtime, or build behavior is inferred.
+
 22. Effective service `credential_spec` retains an explicit empty mapping and optional strict
     YAML-string `config`, `file`, and `registry` members with nested provenance, malformed/unknown
     evidence, and generic recursive merge. It does not resolve top-level configs, paths, files,

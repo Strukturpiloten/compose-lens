@@ -47,6 +47,21 @@ jobs:
       - name: Verify release package
         run: cargo ci-package
 
+  coverage:
+    name: Coverage ratchet
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - *checkout
+      - name: Install LLVM coverage tools
+        run: rustup component add llvm-tools-preview
+      - name: Install pinned cargo-llvm-cov
+        run: cargo install --locked --version 0.8.7 cargo-llvm-cov
+      - name: Measure and enforce coarse coverage ratchet
+        run: >-
+          cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only
+          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
+
   msrv:
     name: MSRV
     runs-on: ubuntu-24.04
@@ -100,21 +115,30 @@ jobs:
           release-type: patch
 
   documentation:
-    name: Documentation
+    name: Repository files and documentation
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - *checkout
-      - name: Lint Markdown
-        uses: DavidAnson/markdownlint-cli2-action@6bf21b07787794f89a243495939cd651942aeabe # v24.1.0
+      - name: Install pinned Node.js toolchain
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          globs: "**/*.md"
-      - name: Check links
+          node-version: 24.18.1
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked Node file-quality tools
+        run: |
+          npm ci --ignore-scripts
+          printf '%s\n' "${GITHUB_WORKSPACE}/node_modules/.bin" >> "${GITHUB_PATH}"
+      - name: Install checksum-pinned native file-quality tools
+        run: sudo bash scripts/install-file-tools.sh /usr/local/bin
+      - name: Check non-Rust file formatting and lint
+        run: bash scripts/check-files.sh --check
+      - name: Check local documentation links without network access
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: >-
-            --root-dir '${{ github.workspace }}' --no-progress --max-retries 2
-            --retry-wait-time 2 --accept '100..=103,200..=299,429'
-            --exclude-path '(^|/)target/' './**/*.md'
+            --config lychee.toml --root-dir '${{ github.workspace }}' --offline
+            './**/*.md'
           fail: true
           token: ${{ secrets.GITHUB_TOKEN }}

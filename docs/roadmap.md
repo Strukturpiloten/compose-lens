@@ -7,13 +7,13 @@ surface that is not yet available through a native typed API. It is not a delive
 
 ComposeLens has several independent coverage layers:
 
-| State | Meaning |
-| --- | --- |
-| Syntax-preserved | The YAML parser retains the key, spelling, order, source range, extensions, and unknown fields where recoverable. |
-| Document typed | One authored document exposes a native source-aware value. |
-| Project typed | The effective merged/profile-selected project exposes the value with provenance. |
-| Generated | New Compose YAML can be constructed through typed values and parse-back validation. |
-| Compatibility-evidenced | Provider/runtime/version behavior is backed by documented or observed evidence. |
+| State                   | Meaning                                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Syntax-preserved        | The YAML parser retains the key, spelling, order, source range, extensions, and unknown fields where recoverable. |
+| Document typed          | One authored document exposes a native source-aware value.                                                        |
+| Project typed           | The effective merged/profile-selected project exposes the value with provenance.                                  |
+| Generated               | New Compose YAML can be constructed through typed values and parse-back validation.                               |
+| Compatibility-evidenced | Provider/runtime/version behavior is backed by documented or observed evidence.                                   |
 
 “Not typed” does not mean “cannot be read.” Every key below remains available through the
 loss-aware syntax document. It means callers cannot yet consume that key through a dedicated
@@ -30,10 +30,10 @@ compose-spec repository is not the sole compatibility authority.
 
 The audited schema currently contains 9 top-level keys and 93 service keys.
 
-| Surface | Project typed | Document typed only | Syntax-preserved only |
-| --- | ---: | ---: | ---: |
-| Top level | 6 | 0 | 3 |
-| Service | 66 | 0 | 27 |
+| Surface   | Project typed | Document typed only | Syntax-preserved only |
+| --------- | ------------: | ------------------: | --------------------: |
+| Top level |             6 |                   0 |                     3 |
+| Service   |            66 |                   0 |                    27 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
@@ -222,124 +222,124 @@ parse-back tests are defined.
 ### Phase 1: high-value process and lifecycle parity
 
 - [x] Type `entrypoint` at document and project layers without conflating it with `command`, and
-  add deterministic generated string, list, and empty forms.
+      add deterministic generated string, list, and empty forms.
 - [x] Type `init` as a source-aware/interpolation-preserving boolean and add deterministic
-  generated output.
+      generated output.
 - [x] Type independent `stop_grace_period` and `stop_signal` fields through generated output.
 - [x] Type and generate raw-preserving `pull_policy` values while keeping schema-only `refresh`
-  distinct and provider evidence planned.
+      distinct and provider evidence planned.
 - [x] Type `stdin_open` as an independent source-aware/interpolation-preserving boolean and add
-  deterministic generated output.
+      deterministic generated output.
 - [x] Type `tty` as an independent source-aware/interpolation-preserving boolean and add
-  deterministic generated output.
+      deterministic generated output.
 - [x] Type `privileged` as an independent source-aware/interpolation-preserving boolean and add
-  deterministic generated output without inferring security or runtime behavior.
+      deterministic generated output without inferring security or runtime behavior.
 - [x] Type `attach` as an independent source-aware/interpolation-preserving boolean through the
-  authored and effective views, without a default, generated API, logging, runtime, provider, CLI,
-  compatibility, or cross-format behavior.
+      authored and effective views, without a default, generated API, logging, runtime, provider, CLI,
+      compatibility, or cross-format behavior.
 - [x] Type `pull_refresh_after` as a strict raw YAML string with deferred-value retention and no
-  refresh, provider, or compatibility inference.
+      refresh, provider, or compatibility inference.
 - [x] Type `runtime` as a strict raw YAML string with deferred-value retention and no provider or
-  compatibility inference.
+      compatibility inference.
 - [x] Type `platform` as a strict raw YAML string with deferred-value retention and no OCI, host,
-  image, build, provider, or compatibility inference.
+      image, build, provider, or compatibility inference.
 - [ ] Add generated construction only after each field's null/empty/short/long behavior is fixed.
 
 ### Phase 2: limits, security, devices, and storage
 
 - [x] Type service `pids_limit` through the authored, effective-project, and generated boundaries
-  without normalizing zero or conflating it with `deploy.resources.limits.pids`.
+      without normalizing zero or conflating it with `deploy.resources.limits.pids`.
 - [x] Type service `shm_size` through the authored, effective-project, and generated boundaries
-  with exact YAML scalar provenance, documented lowercase units, ambiguous zero, provider-dependent
-  states, and no injected default or runtime inspection.
+      with exact YAML scalar provenance, documented lowercase units, ambiguous zero, provider-dependent
+      states, and no injected default or runtime inspection.
 - [x] Type service `cap_drop` through authored, exact-scalar merge, effective-project, and generated
-  boundaries while preserving explicit empty state, case, provenance, and planned-only provider
-  evidence without target logic or a capability whitelist.
+      boundaries while preserving explicit empty state, case, provenance, and planned-only provider
+      evidence without target logic or a capability whitelist.
 - [x] Type service `cap_add` through authored, exact-scalar merge, effective-project, and generated
-  boundaries while preserving explicit empty state, case, provenance, independent coexistence
-  with `cap_drop`, and planned-only provider evidence without target logic or a capability
-  whitelist.
+      boundaries while preserving explicit empty state, case, provenance, independent coexistence
+      with `cap_drop`, and planned-only provider evidence without target logic or a capability
+      whitelist.
 - [x] Promote `ulimits` through recursive mapping merge, the effective project view, and safe
-  generated output while retaining ordered names, single/range form, nested provenance,
-  sensitivity, empty/reset/override state, and planned-only provider evidence.
+      generated output while retaining ordered names, single/range form, nested provenance,
+      sensitivity, empty/reset/override state, and planned-only provider evidence.
 - [x] Promote the Build value family—`additional_contexts`, context, args, labels, Build-specific `extra_hosts`, raw `cache_from`/`cache_to`/`entitlements`, Dockerfile/inline Dockerfile/target/network/isolation/platforms/no_cache/privileged/sbom/pull/shm_size/tags, `ulimits`, and short/long `build.secrets`—with source form, sensitivity, provenance, recovery, and retained conflict evidence; remaining siblings stay unmodeled.
 - [x] Promote `deploy.endpoint_mode`, map/list `deploy.labels`, `deploy.mode`, and raw-preserving `deploy.replicas`
-  into the effective project view with provenance and nested unmodeled siblings; no container-label, integer/default,
-  mode-coupling, scheduling, runtime, or conversion semantics are inferred before deepening further deploy types.
+      into the effective project view with provenance and nested unmodeled siblings; no container-label, integer/default,
+      mode-coupling, scheduling, runtime, or conversion semantics are inferred before deepening further deploy types.
 - [x] Promote deploy-specific `restart_policy` members through authored and effective views with
-  raw condition/duration/attempt spelling, member provenance, and nested malformed/reset evidence;
-  no service-restart fallback/default/precedence, simulation, runtime, or conversion behavior is
-  inferred.
+      raw condition/duration/attempt spelling, member provenance, and nested malformed/reset evidence;
+      no service-restart fallback/default/precedence, simulation, runtime, or conversion behavior is
+      inferred.
 - [x] Promote deploy `placement` constraints, preferences, and max-replicas-per-node scalar
-  categories through authored and effective views with nested provenance and recovery, without
-  scheduling, node-selection, default, runtime, or conversion semantics.
+      categories through authored and effective views with nested provenance and recovery, without
+      scheduling, node-selection, default, runtime, or conversion semantics.
 - [x] Promote deploy `resources.limits.pids` through authored and effective views with exact
-  integer/string spelling, nested provenance, recovery, and no service-PID, host, cgroup, runtime,
-  or conversion semantics.
+      integer/string spelling, nested provenance, recovery, and no service-PID, host, cgroup, runtime,
+      or conversion semantics.
 - [x] Promote deploy `resources.limits.cpus` through authored and effective views with exact
-  number/string spelling, nested provenance, recovery, and no service CPU, `mem_limit`, host,
-  cgroup, runtime, or conversion semantics.
+      number/string spelling, nested provenance, recovery, and no service CPU, `mem_limit`, host,
+      cgroup, runtime, or conversion semantics.
 - [x] Promote deploy `resources.limits.memory` through authored and effective views with raw
-  YAML-string spelling, conservative lowercase-unit classification, nested provenance, recovery,
-  and no service `mem_limit`, reservation, host, cgroup, runtime, or conversion semantics.
+      YAML-string spelling, conservative lowercase-unit classification, nested provenance, recovery,
+      and no service `mem_limit`, reservation, host, cgroup, runtime, or conversion semantics.
 - [x] Promote deploy `resources.reservations.cpus` through authored and effective views with exact
-  number/string spelling, nested provenance, recovery, and no limit/service CPU, scheduling, host,
-  cgroup, runtime, target, or conversion semantics.
+      number/string spelling, nested provenance, recovery, and no limit/service CPU, scheduling, host,
+      cgroup, runtime, target, or conversion semantics.
 - [x] Promote deploy `resources.reservations.memory` through authored and effective views with raw
-  YAML-string spelling, conservative lowercase-unit classification, nested provenance, recovery,
-  and no limit/service `mem_limit`, scheduling, host, cgroup, runtime, target, or conversion semantics.
+      YAML-string spelling, conservative lowercase-unit classification, nested provenance, recovery,
+      and no limit/service `mem_limit`, scheduling, host, cgroup, runtime, target, or conversion semantics.
 - [x] Promote schema-backed deploy `resources.reservations.generic_resources` lists with optional
-  discrete-specification kind/value members, raw scalar spelling, provenance, recovery, and no
-  matching, scheduling, GPU/device, runtime, target, or conversion semantics.
+      discrete-specification kind/value members, raw scalar spelling, provenance, recovery, and no
+      matching, scheduling, GPU/device, runtime, target, or conversion semantics.
 - [x] Promote schema-only deploy `resources.reservations.devices[]` capability lists, strict
-  YAML-string `.driver`, raw integer-or-string `.count`, and ordered strict-string `.device_ids`
-  with duplicate/conflict diagnostics, nested provenance, recovery, and no selection/loading,
-  allocation, grammar, scheduling, CDI, host, runtime, cgroup, provider/version, or conversion
-  semantics. Options retain map/list syntax, scalar fidelity, malformed evidence, duplicates, and
-  generic provenance without provider interpretation.
+      YAML-string `.driver`, raw integer-or-string `.count`, and ordered strict-string `.device_ids`
+      with duplicate/conflict diagnostics, nested provenance, recovery, and no selection/loading,
+      allocation, grammar, scheduling, CDI, host, runtime, cgroup, provider/version, or conversion
+      semantics. Options retain map/list syntax, scalar fidelity, malformed evidence, duplicates, and
+      generic provenance without provider interpretation.
 - [ ] Type all CPU, memory, PID, OOM, and block-I/O keys without applying host defaults.
 - [x] Type service `devices` through authored, Compose-Go-compatible target merge,
-  effective-project, and generated boundaries while preserving mixed raw short/long forms,
-  CDI/deferred/opaque evidence, duplicates, nested provenance, reset/override, and planned-only
-  provider evidence without device, permissions, CDI, GPU, or runtime validation.
+      effective-project, and generated boundaries while preserving mixed raw short/long forms,
+      CDI/deferred/opaque evidence, duplicates, nested provenance, reset/override, and planned-only
+      provider evidence without device, permissions, CDI, GPU, or runtime validation.
 - [ ] Type GPU reservations, `gpus`, `storage_opt`,
-  cgroup, IPC, PID, and UTS namespace choices.
+      cgroup, IPC, PID, and UTS namespace choices.
 - [x] Type service-level `tmpfs` through authored, ordinary-append merge, effective-project, and
-  generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,
-  provenance, sensitivity, reset/override, and planned-only provider evidence.
+      generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,
+      provenance, sensitivity, reset/override, and planned-only provider evidence.
 - [x] Type service `sysctls` through authored, generic map/list merge, effective-project, and
-  generated boundaries while preserving form, scalar spelling, duplicate evidence, provenance,
-  sensitivity, reset/override, and planned-only provider evidence without runtime interpretation.
+      generated boundaries while preserving form, scalar spelling, duplicate evidence, provenance,
+      sensitivity, reset/override, and planned-only provider evidence without runtime interpretation.
 - [ ] Type `volumes_from` and remaining mount-specific nested semantics.
 
 ### Phase 3: networking, identity, and metadata
 
 - [x] Type and generate service `hostname` with conservative RFC-1123 validation, deferred and
-  invalid authored states, complete merge provenance, and planned-only provider evidence.
+      invalid authored states, complete merge provenance, and planned-only provider evidence.
 - [x] Type and generate service DNS settings with their documented merge rules and raw evidence.
 - [x] Type and generate exposed ports with scalar-kind-aware uniqueness.
 - [x] Generate optional raw per-attachment IPv4/IPv6 addresses in deterministic long-form service
-  networks without inferring IPAM defaults or validating address/pool relationships.
+      networks without inferring IPAM defaults or validating address/pool relationships.
 - [x] Generate top-level network drivers and scalar-kind-aware ordered driver options without
-  changing the shared basic/external resource API, while keeping external networks on its
-  name-only-compatible path and not validating plugins or provider semantics.
+      changing the shared basic/external resource API, while keeping external networks on its
+      name-only-compatible path and not validating plugins or provider semantics.
 - [x] Preserve and generate raw service security options with non-selecting diagnostic candidates.
 - [ ] Type domain name, MAC addresses, network modes,
-  external links, and links.
+      external links, and links.
 - [x] Type service annotations through authored mapping/list syntax, keyed effective merge,
-  provenance-preserving diagnostics, and safe generated mapping output.
+      provenance-preserving diagnostics, and safe generated mapping output.
 - [x] Type service `logging` through authored, recursively merged, effective-project, and generated
-  boundaries with uninterpreted drivers, ordered string/number/null options, and no provider policy.
+      boundaries with uninterpreted drivers, ordered string/number/null options, and no provider policy.
 - [ ] Type `label_file` and remaining config/secret metadata fields.
 - [ ] Preserve provider/runtime-specific value spellings and attach compatibility evidence instead
-  of enforcing one implementation's grammar globally.
+      of enforcing one implementation's grammar globally.
 
 ### Phase 4: orchestration and processing-only features
 
 - [ ] Implement top-level `include` as explicit caller-authorized project loading with cycle,
-  provenance, project-directory, and environment-file rules.
+      provenance, project-directory, and environment-file rules.
 - [ ] Type `develop`, service/top-level `models`, `scale`, and
-  `use_api_socket` without implying that every provider executes them.
+      `use_api_socket` without implying that every provider executes them.
 - [ ] Keep file reads, environment access, and provider invocation outside parsing APIs.
 
 ### Phase 5: generation, compatibility, and conformance
@@ -348,7 +348,7 @@ parse-back tests are defined.
 - [ ] Add Docker Compose and Podman Compose provider/version evidence for promoted keys.
 - [ ] Promote real-world corpus gaps into minimal licensed fixtures.
 - [ ] Add a maintained schema-audit manifest and a policy test that fails when official closed-key
-  inventories change without a roadmap classification.
+      inventories change without a roadmap classification.
 
 ## Completion rule
 

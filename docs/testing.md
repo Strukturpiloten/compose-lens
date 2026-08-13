@@ -266,6 +266,8 @@ Every bug fix adds the smallest fixture that failed before the fix. When an exte
 The crate uses Rust 2024 with an MSRV of 1.85.0. `rust-toolchain.toml` pins the normal development toolchain; the explicit MSRV command prevents that pin from hiding accidental use of newer language or library features.
 
 ```shell
+./scripts/check-all.sh
+./scripts/check-files.sh --check
 cargo fmt --all -- --check
 cargo ci-check
 cargo ci-policy
@@ -273,6 +275,8 @@ cargo ci-clippy
 cargo ci-test
 cargo ci-doctest
 RUSTDOCFLAGS="-D warnings" cargo ci-doc
+cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only \
+  --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
 cargo +1.85.0 ci-check
 cargo +1.85.0 ci-policy
 cargo deny check
@@ -284,8 +288,17 @@ cargo test --locked --test generated_rendering
 cargo package --locked
 ```
 
+`scripts/check-all.sh` is the one-command local gate. It formats owned files before checking the
+same deterministic Rust, coverage, MSRV, dependency, offline-link, and patch-SemVer boundaries
+used for release preparation. The ignored provider capture remains opt-in.
+
 The `ci-*` aliases use `--locked`, all workspace features, and all targets where the Cargo command
 supports them. CI also runs markdownlint and lychee over the documentation. The ordinary
 conformance command validates matrix policy and leaves its external runner ignored. The explicit
 collection command is documented in [`../conformance/README.md`](../conformance/README.md). Add
-property and fuzz commands here before those harnesses become required checks.
+deterministic property-style commands here before any additional harness becomes a required check.
+
+The pinned `cargo-llvm-cov` 0.8.7 gate runs the locked workspace with all features and targets.
+Its coarse integer floors—88% regions, 87% functions, and 89% lines—are regression guards, not a
+claim that line execution proves behavior. Positive and negative assertions remain required at
+each supported boundary.

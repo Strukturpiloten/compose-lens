@@ -30,6 +30,13 @@ Do not silence an advisory, allow a Git source, clarify a license, or skip a dup
 
 Run `cargo deny check` after installing `cargo-deny`. CI checks advisories, licenses, bans, and sources. Renovate proposes Cargo, lockfile, Rust toolchain, and GitHub Actions updates; updates still require the same tests and review as human-authored dependency changes.
 
+Repository-only file quality uses tools outside the published Rust dependency graph:
+markdownlint-cli2 and Prettier for Markdown, Prettier for JSON and YAML, Taplo for TOML, shfmt and
+ShellCheck for shell, and Hadolint for Dockerfiles. `package-lock.json` fixes the complete Node
+tool graph, while `scripts/install-file-tools.sh` pins native Linux release assets and SHA-256
+checksums. The Dev Container provides them, and CI plus release validation run the same
+`scripts/check-files.sh --check` boundary. These tools do not affect the library package or MSRV.
+
 ## Current representation dependency
 
 `yaml-edit` 0.2.3 is pinned exactly with default features disabled. This keeps its optional binary/base64 support out of the dependency graph. The dependency and alternatives are reviewed in [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md) and the [YAML representation evaluation](research/yaml-representation.md). No `yaml-edit` type may appear in the public API.

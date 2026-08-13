@@ -26,10 +26,10 @@ Options and commands are passed to that provider.
 
 Consequently, compatibility context has two independent axes:
 
-| Axis | Initial values |
-| --- | --- |
+| Axis             | Initial values                                                            |
+| ---------------- | ------------------------------------------------------------------------- |
 | Compose provider | specification, Docker Compose version, `podman-compose` version, tolerant |
-| Backend runtime | Docker Engine version, Podman version, or unspecified |
+| Backend runtime  | Docker Engine version, Podman version, or unspecified                     |
 
 The wrapper version is operational context but does not replace the provider identity.
 

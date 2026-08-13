@@ -6,12 +6,12 @@ presentation-only choices while producing the same YAML data model.
 
 ## Available choices
 
-| Option | Canonical-v1 default | Supported values |
-| --- | --- | --- |
-| Indentation width | two spaces | any positive `u8` number of spaces |
-| Line ending | LF | LF or CRLF |
-| YAML document marker | omitted | emit or omit `---` |
-| Final line ending | emitted | emit or omit |
+| Option               | Canonical-v1 default | Supported values                   |
+| -------------------- | -------------------- | ---------------------------------- |
+| Indentation width    | two spaces           | any positive `u8` number of spaces |
+| Line ending          | LF                   | LF or CRLF                         |
+| YAML document marker | omitted              | emit or omit `---`                 |
+| Final line ending    | emitted              | emit or omit                       |
 
 ```rust
 use compose_lens::render::{CanonicalFormatting, IndentWidth, LineEnding};

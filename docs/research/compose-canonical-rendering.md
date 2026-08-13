@@ -22,20 +22,20 @@ short and long Compose syntax are not normalized into one another.
 
 ## Canonical-v1 format
 
-| Property | Fixed behavior |
-| --- | --- |
-| Encoding | UTF-8 |
-| Line endings | LF, including one final newline |
-| Document marker | omitted |
-| Indentation | two spaces |
+| Property                   | Fixed behavior                          |
+| -------------------------- | --------------------------------------- |
+| Encoding                   | UTF-8                                   |
+| Line endings               | LF, including one final newline         |
+| Document marker            | omitted                                 |
+| Indentation                | two spaces                              |
 | Mapping and sequence order | retained from the merged semantic model |
-| Mapping keys | JSON-compatible double-quoted strings |
-| String scalars | JSON-compatible double-quoted strings |
-| Booleans | lowercase `true` and `false` |
-| Null-like values | `null` |
-| Numbers | retained semantic spelling |
-| Empty collections | inline `{}` and `[]` |
-| Compose short/long forms | retained; never implicitly interchanged |
+| Mapping keys               | JSON-compatible double-quoted strings   |
+| String scalars             | JSON-compatible double-quoted strings   |
+| Booleans                   | lowercase `true` and `false`            |
+| Null-like values           | `null`                                  |
+| Numbers                    | retained semantic spelling              |
+| Empty collections          | inline `{}` and `[]`                    |
+| Compose short/long forms   | retained; never implicitly interchanged |
 
 `CanonicalFormatting::default()` is exactly this table. ADR 0011 permits explicit indentation,
 LF/CRLF, document-marker, and final-line-ending changes without changing ordering, quoting safety,

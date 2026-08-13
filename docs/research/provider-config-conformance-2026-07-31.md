@@ -8,14 +8,14 @@ The Docker Compose binaries were verified against their official release checksu
 
 ## Reviewed results
 
-| Provider | Tag + digest | Short SELinux | Long SELinux | `!reset` | `!override` | `x-` fields | Unknown field |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Docker Compose 2.24.3 | retained | config accepted | config accepted | applied | accepted but appended instead of replacing | retained | rejected |
-| Docker Compose 2.24.4 | retained | config accepted | config accepted | applied | applied | retained | rejected |
-| Docker Compose 2.40.3 | retained | config accepted | config accepted | applied | applied | retained | rejected |
-| Docker Compose 5.3.1 | retained | config accepted | config accepted | applied | applied | retained | rejected |
-| `podman-compose` 1.3.0 | retained | config accepted | config accepted | rejected | rejected | retained | retained |
-| `podman-compose` 1.5.0 | retained | config accepted | config accepted | rejected | applied | retained | retained |
+| Provider               | Tag + digest | Short SELinux   | Long SELinux    | `!reset` | `!override`                                | `x-` fields | Unknown field |
+| ---------------------- | ------------ | --------------- | --------------- | -------- | ------------------------------------------ | ----------- | ------------- |
+| Docker Compose 2.24.3  | retained     | config accepted | config accepted | applied  | accepted but appended instead of replacing | retained    | rejected      |
+| Docker Compose 2.24.4  | retained     | config accepted | config accepted | applied  | applied                                    | retained    | rejected      |
+| Docker Compose 2.40.3  | retained     | config accepted | config accepted | applied  | applied                                    | retained    | rejected      |
+| Docker Compose 5.3.1   | retained     | config accepted | config accepted | applied  | applied                                    | retained    | rejected      |
+| `podman-compose` 1.3.0 | retained     | config accepted | config accepted | rejected | rejected                                   | retained    | retained      |
+| `podman-compose` 1.5.0 | retained     | config accepted | config accepted | rejected | applied                                    | retained    | retained      |
 
 “Config accepted” for an SELinux form is deliberately weaker than runtime support. It proves only that the provider accepted and rendered the request. Relabel effects require an enforcing SELinux host and one of the separately planned runtime contexts.
 

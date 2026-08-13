@@ -1,0 +1,129 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ComposeLens: Format, lint, and test all",
+      "type": "process",
+      "command": "${workspaceFolder}/scripts/check-all.sh",
+      "problemMatcher": "$rustc",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "ComposeLens: Format non-Rust files",
+      "type": "process",
+      "command": "${workspaceFolder}/scripts/check-files.sh",
+      "args": ["--fix"],
+      "problemMatcher": []
+    },
+    {
+      "label": "ComposeLens: Format check",
+      "type": "process",
+      "command": "cargo",
+      "args": ["fmt", "--all", "--", "--check"],
+      "problemMatcher": []
+    },
+    {
+      "label": "ComposeLens: Check",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-check"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Policy",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-policy"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Clippy",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-clippy"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Test",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-test"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Doctest",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-doctest"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Documentation",
+      "type": "process",
+      "command": "cargo",
+      "args": ["ci-doc"],
+      "options": {
+        "env": {
+          "RUSTDOCFLAGS": "-D warnings"
+        }
+      },
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Required Rust checks",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "ComposeLens: Format check",
+        "ComposeLens: Check",
+        "ComposeLens: Policy",
+        "ComposeLens: Clippy",
+        "ComposeLens: Test",
+        "ComposeLens: Doctest",
+        "ComposeLens: Documentation"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "ComposeLens: Build",
+      "type": "process",
+      "command": "cargo",
+      "args": ["build", "--locked", "--workspace", "--all-features"],
+      "problemMatcher": "$rustc",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "ComposeLens: Conformance contracts",
+      "type": "process",
+      "command": "cargo",
+      "args": ["test", "--locked", "--test", "conformance"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Real-world fixtures",
+      "type": "process",
+      "command": "cargo",
+      "args": ["test", "--locked", "--test", "real_world"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Public API",
+      "type": "process",
+      "command": "cargo",
+      "args": ["test", "--locked", "--test", "public_api"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Package",
+      "type": "process",
+      "command": "cargo",
+      "args": ["package", "--locked", "--allow-dirty"],
+      "problemMatcher": "$rustc"
+    }
+  ]
+}

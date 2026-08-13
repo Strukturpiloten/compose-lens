@@ -49,18 +49,18 @@ implementation versions and runtime evidence in addition to this specification-o
 
 ## Defaults in the initial provider
 
-| Omission | Specification-oriented value |
-| --- | --- |
-| Service networks absent or empty | attach to `default` |
-| Top-level `default` network absent when needed | implicit network named `default` |
-| Port protocol | `tcp` |
-| Port publication mode | `ingress` |
-| Volume access | read-write (`read_only = false`) |
-| Config short target on Linux | `/<source>` |
-| Config short target on Windows | `C:\\<source>` |
-| Config or secret mode | `0444` |
-| Secret target | source name, mounted by the runtime under its secrets directory |
-| Restart policy | `no` |
+| Omission                                       | Specification-oriented value                                    |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| Service networks absent or empty               | attach to `default`                                             |
+| Top-level `default` network absent when needed | implicit network named `default`                                |
+| Port protocol                                  | `tcp`                                                           |
+| Port publication mode                          | `ingress`                                                       |
+| Volume access                                  | read-write (`read_only = false`)                                |
+| Config short target on Linux                   | `/<source>`                                                     |
+| Config short target on Windows                 | `C:\\<source>`                                                  |
+| Config or secret mode                          | `0444`                                                          |
+| Secret target                                  | source name, mounted by the runtime under its secrets directory |
+| Restart policy                                 | `no`                                                            |
 
 The table describes requests that `ComposeDefaults` may answer. The merged source continues to
 represent each field as omitted. Long-form explicit values always take precedence, and future

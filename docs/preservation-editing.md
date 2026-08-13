@@ -50,13 +50,13 @@ replacement was inserted. Diagnostics identify source spans but never contain re
 
 ## Style behavior
 
-| Authored target | String replacement behavior |
-| --- | --- |
-| Double quoted | remains double quoted with deterministic escaping |
-| Single quoted | remains single quoted when safe; apostrophes are doubled |
-| Plain | remains plain only when it parses as one complete YAML string |
-| Unsafe plain or single-quoted replacement | falls back to double quotes |
-| Block or multiline scalar | rejected by this operation |
+| Authored target                           | String replacement behavior                                   |
+| ----------------------------------------- | ------------------------------------------------------------- |
+| Double quoted                             | remains double quoted with deterministic escaping             |
+| Single quoted                             | remains single quoted when safe; apostrophes are doubled      |
+| Plain                                     | remains plain only when it parses as one complete YAML string |
+| Unsafe plain or single-quoted replacement | falls back to double quotes                                   |
+| Block or multiline scalar                 | rejected by this operation                                    |
 
 Boolean replacements use lowercase YAML spelling. Numeric spelling is retained after validation.
 Null replacements use `null`. Typed replacement kinds are explicit, so replacing a quoted string
