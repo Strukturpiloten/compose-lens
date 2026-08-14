@@ -1,10 +1,12 @@
 # Native Compose coverage
 
 This document distinguishes source preservation from typed consumer coverage. It was audited
-against the current official
+against the commit-pinned official
 [Compose service reference](https://docs.docker.com/reference/compose-file/services/) on
-2026-08-06. The exact current untyped-key inventory and promotion order live in the
-[roadmap](roadmap.md).
+2026-08-14. The exact root/service-key inventory is committed in
+[`schema/compose-key-inventory.json`](../schema/compose-key-inventory.json); it covers only the
+current closed root and immediate service properties. Nested-schema drift remains intentionally
+outside this bounded inventory and the promotion order lives in the [roadmap](roadmap.md).
 
 ## Coverage layers
 
@@ -21,6 +23,8 @@ provenance.
 The closed-schema audit is now complete: resource metadata and `develop.watch.exec` children are
 native at document and effective-project layers. They retain malformed evidence and sensitivity,
 but deliberately have no generated, file, provider, driver, watcher, command, or runtime behavior.
+Repository policy tests bind the claim to the official snapshot digest, exact 9 root/93 service key
+sets, closed object shapes, and `x-*` extension allowance.
 
 ## Current service boundary
 
@@ -84,7 +88,7 @@ paths, registries, accounts, Windows/gMSA, platform, provider, or runtime semant
 `service` and `file` members, including explicit empties, extensions, unknown/malformed evidence,
 and nested merge provenance. It preserves the schema-supported short form even though the
 [Compose service reference](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#extends)
-focuses on mappings; the [schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+focuses on mappings; the [schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json)
 and [merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md) apply only
 generic scalar replacement or recursive mapping merge here. These raw views do not expand or merge
 a referenced service, look up files, normalize paths, traverse cycles, or import resources. The

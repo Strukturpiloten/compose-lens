@@ -36,6 +36,21 @@ Maintain a machine-readable inventory of closed Compose keys and fail policy che
 official schema changes without a classification. New keys must be marked typed, preserved-only,
 or intentionally unsupported before coverage claims are updated.
 
+The committed snapshot is pinned to an upstream commit and verified offline by repository policy
+tests. A scheduled/manual-only drift workflow compares it with upstream `main`; ordinary pull
+request and MSRV policy checks never fetch the schema.
+
+To update the snapshot deliberately:
+
+1. Run `bash scripts/check-specification-drift.sh` and review its digest plus added/removed key
+   output.
+2. Replace `schema/compose-spec.json` with the reviewed official upstream file, then update the
+   commit, blob, SHA-256, and exact root/service classifications in
+   `schema/compose-key-inventory.json`.
+3. Add or update typed-model, preservation, or intentional-unsupported evidence and focused
+   policy tests. Keep nested-schema drift outside this phase unless separately scoped.
+4. Run the offline repository policy test and normal file checks before submitting the update.
+
 ### 2. Complete high-value semantics and diagnostics
 
 Prioritize behavior that affects real consumers:

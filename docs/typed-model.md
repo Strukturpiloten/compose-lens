@@ -440,7 +440,7 @@ maximum failure ratio preserves YAML-number or strict-string spelling; and order
 or provider-specific values. The current [Deploy update section](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#update_config)
 and [rollback section](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#rollback_config)
 name `continue` and `pause` for rollback `failure_action`, while the current
-[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json)
 accepts any string; this API follows the schema and retains it without rejection. The schema
 enumerates `order`, so other strings are retained with a mapping-specific portability diagnostic.
 Neither those sources nor the [Compose merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
@@ -451,7 +451,7 @@ ComposeLens injects none.
 and `registry` members, including explicit empties and malformed/unknown evidence. The current
 [Compose service reference](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#credential_spec)
 describes URI-like `file`/`registry` forms, while the current
-[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json)
 models all three as strings in one mapping; ComposeLens retains raw spelling without resolving that
 prose/mapping ambiguity. The [Compose merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
 therefore apply as generic recursive mapping merge. No file, registry, account, top-level config,
@@ -461,7 +461,7 @@ Windows/gMSA, platform, provider, runtime, or conversion behavior is inferred.
 long form retains optional strict YAML-string `service` and `file` members, explicit empties,
 mapping span, extensions, and malformed or unknown members; a missing `service` remains retained
 with a diagnostic. The [Compose service reference](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#extends)
-focuses on the mapping while the [schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+focuses on the mapping while the [schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json)
 also permits the short string. The [merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
 apply only generic scalar replacement or recursive mapping merge. These raw types never expand or
 merge a referenced service, look up files, normalize paths, traverse cycles, or import resources.
@@ -469,7 +469,7 @@ The separate `validate_references` stage may validate a same-file long-form `ser
 `file` is absent; it performs none of those operations or provider, platform, runtime, or conversion inference.
 
 `provider` is a closed mapping with a required strict YAML-string `type` and optional `options`
-mapping, as defined by the [Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json).
+mapping, as defined by the [Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json).
 Option keys are nonempty; each value is a YAML string, number, or boolean scalar or an ordered
 sequence of those categories. Empty types remain valid, while malformed or duplicate
 members and sequence items remain source-aware evidence and a missing type is diagnosed. Generic

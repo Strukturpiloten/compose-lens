@@ -24,8 +24,9 @@ ComposeLens semantic type.
 
 ## Specification snapshot
 
-This ledger was audited on 2026-08-06 against the current official
-[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json),
+This ledger was audited on 2026-08-14 against the official
+[Compose JSON schema snapshot](../schema/compose-spec.json) from
+[compose-spec commit 11296e387ba76c77db1db768b9153a4304a3c9bd](https://github.com/compose-spec/compose-spec/blob/11296e387ba76c77db1db768b9153a4304a3c9bd/schema/compose-spec.json),
 [Compose Specification](https://github.com/compose-spec/compose-spec/blob/main/spec.md), and
 [Docker Compose file reference](https://docs.docker.com/reference/compose-file/).
 Provider additions remain eligible when real Docker Compose or Podman Compose accepts them; the
@@ -40,6 +41,15 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
+
+The closed root/service-key snapshot and its strict classification inventory are maintained in
+[`schema/`](../schema/). Offline repository policy tests verify the pinned digest, the closed
+`additionalProperties: false` shape, the sole `^x-` extension allowance, and exact 9/93 key sets.
+Scheduled or manually dispatched upstream drift checks only report differences; they never modify
+the repository or create issues. They label added/removed root or service keys as inventory drift;
+a digest-only change with those sets unchanged is content-only drift requiring nested, prose, or
+other non-inventory review. This bounded phase deliberately leaves all nested-schema drift outside
+the inventory; nested coverage remains tracked below.
 
 ## Exact top-level gaps
 
@@ -364,8 +374,9 @@ deterministic rendering, and parse-back tests are defined.
 - [ ] Expand generated documents in the same order as project-typed consumer demand.
 - [ ] Add Docker Compose and Podman Compose provider/version evidence for promoted keys.
 - [ ] Promote real-world corpus gaps into minimal licensed fixtures.
-- [ ] Add a maintained schema-audit manifest and a policy test that fails when official closed-key
-      inventories change without a roadmap classification.
+- [x] Maintain the commit-pinned root/service schema snapshot and a classified inventory with
+      offline digest, closed-shape, extension-allowance, and exact-key-set policy tests. Scheduled
+      upstream drift reporting is manual/scheduled only; nested-schema drift remains explicitly open.
 
 ## Completion rule
 

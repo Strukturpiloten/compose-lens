@@ -15,6 +15,14 @@ protect a supported contract. See the [quality plan](quality-plan.md) for the pr
 
 ## Test layers
 
+### Repository policy tests
+
+Repository policy tests are offline. They verify the committed Compose schema snapshot digest, its
+closed root and immediate-service shapes, the exclusive `^x-` extension allowance, and the exact
+classified 9-root/93-service inventory. Positive and negative cases cover allowed classifications,
+required rationales for non-typed entries, unknown classes, and key-set drift. Upstream comparison
+is deliberately confined to the scheduled/manual `specification-drift` workflow.
+
 ### Syntax tests
 
 Cover scalars, mappings, sequences, anchors, aliases, comments where supported, duplicate keys, malformed YAML, Unicode, line endings, spans, and error recovery.
