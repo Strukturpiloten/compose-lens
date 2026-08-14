@@ -2,8 +2,8 @@
 
 use compose_lens::loader::{
     DocumentInput, DocumentOrigin, INCLUDE_CYCLE, INCLUDE_DUPLICATE_SOURCE_ID, INCLUDE_EMPTY_RESULT,
-    INCLUDE_LOADER_DENIED, INCLUDE_LOADER_FAILED, INCLUDE_UNMODELED, IncludeIdentity, IncludeLoadError, IncludeLoader,
-    IncludeRequest, IncludeResolution, IncludedProjectInput,
+    INCLUDE_LOADER_DENIED, INCLUDE_LOADER_FAILED, INCLUDE_UNMODELED, IncludeComposition, IncludeIdentity,
+    IncludeLoadError, IncludeLoader, IncludeRequest, IncludeResolution, IncludedProjectInput,
 };
 use compose_lens::source::SourceId;
 use std::cell::RefCell;
@@ -54,6 +54,29 @@ fn codes(resolution: &IncludeResolution) -> Vec<&'static str> {
         .iter()
         .map(|diagnostic| diagnostic.code().as_str())
         .collect()
+}
+
+fn assert_root_cross_references(root: &IncludeComposition) {
+    assert!(
+        root.service("root")
+            .is_some_and(|definition| definition.definition().networks().is_some())
+    );
+    assert!(
+        root.service("root")
+            .is_some_and(|definition| definition.definition().volumes().is_some())
+    );
+    assert!(
+        root.service("root")
+            .is_some_and(|definition| definition.definition().configs().is_some())
+    );
+    assert!(
+        root.service("root")
+            .is_some_and(|definition| definition.definition().secrets().is_some())
+    );
+    assert!(
+        root.service("root")
+            .is_some_and(|definition| definition.definition().models().is_some())
+    );
 }
 
 #[test]
@@ -298,4 +321,252 @@ fn does_not_cache_diamonds_and_rejects_source_ids_across_the_whole_graph() {
     assert_eq!(duplicate_loader.calls.into_inner(), ["x.yaml", "y.yaml"]);
     assert_eq!(duplicate.nodes().len(), 3);
     assert!(codes(&duplicate).contains(&INCLUDE_DUPLICATE_SOURCE_ID.as_str()));
+}
+
+#[test]
+fn composes_nested_definitions_after_each_nodes_multifile_merge() {
+    let root = input(
+        "root",
+        100,
+        "root.yaml",
+        "root-directory",
+        concat!(
+            "services:\n",
+            "  root:\n",
+            "    image: root\n",
+            "    networks: [child-network]\n",
+            "    volumes: [child-volume:/data]\n",
+            "    configs: [child-config]\n",
+            "    secrets: [child-secret]\n",
+            "    models: [child-model]\n",
+            "networks: {root-network: {}}\n",
+            "volumes: {root-volume: {}}\n",
+            "configs: {root-config: {}}\n",
+            "secrets: {root-secret: {}}\n",
+            "models: {root-model: {model: example/root}}\n",
+            "include: [child.yaml]\n",
+        ),
+    );
+    let child = IncludedProjectInput::new(
+        IncludeIdentity::new("child"),
+        [
+            DocumentInput::new(
+                SourceId::new(101),
+                DocumentOrigin::new("child-base.yaml", "child-directory"),
+                concat!(
+                    "services: {child: {image: before-merge}}\n",
+                    "networks: {child-network: {}}\n",
+                    "volumes: {child-volume: {}}\n",
+                    "configs: {child-config: {}}\n",
+                    "secrets: {child-secret: {}}\n",
+                    "models: {child-model: {model: example/child}}\n",
+                    "include: [grandchild.yaml]\n",
+                ),
+            ),
+            DocumentInput::new(
+                SourceId::new(102),
+                DocumentOrigin::new("child-override.yaml", "child-directory"),
+                "services: {child: {image: after-merge}}\n",
+            ),
+        ],
+    );
+    let grandchild = input(
+        "grandchild",
+        103,
+        "grandchild.yaml",
+        "grandchild-directory",
+        concat!(
+            "services: {grandchild: {image: grandchild}}\n",
+            "networks: {grandchild-network: {}}\n",
+            "volumes: {grandchild-volume: {}}\n",
+            "configs: {grandchild-config: {}}\n",
+            "secrets: {grandchild-secret: {}}\n",
+            "models: {grandchild-model: {model: example/grandchild}}\n",
+        ),
+    );
+    let loader = FixtureLoader::default()
+        .with_result("child.yaml", Ok(child))
+        .with_result("grandchild.yaml", Ok(grandchild));
+
+    let composed = IncludeResolution::load(root, &loader).compose();
+    assert!(!composed.compositions().is_empty());
+    let root = &composed.compositions()[0];
+
+    assert!(composed.is_complete());
+    assert_eq!(root.services().len(), 3);
+    assert_eq!(root.networks().len(), 3);
+    assert_eq!(root.volumes().len(), 3);
+    assert_eq!(root.configs().len(), 3);
+    assert_eq!(root.secrets().len(), 3);
+    assert_eq!(root.models().len(), 3);
+    assert_eq!(
+        root.service("child")
+            .and_then(|definition| definition.definition().image())
+            .map(|image| image.value().raw().to_owned()),
+        Some("after-merge".to_owned())
+    );
+    assert_eq!(
+        root.service("child")
+            .map(|definition| definition.evidence().identity().as_str()),
+        Some("child")
+    );
+    assert!(root.network("child-network").is_some());
+    assert!(root.volume("child-volume").is_some());
+    assert!(root.config("child-config").is_some());
+    assert!(root.secret("child-secret").is_some());
+    assert!(root.model("child-model").is_some());
+    assert_root_cross_references(root);
+}
+
+#[test]
+fn keeps_parent_and_first_sibling_definitions_on_every_namespace_conflict() {
+    let definitions = concat!(
+        "services: {shared: {image: child}}\n",
+        "networks: {shared: {}}\n",
+        "volumes: {shared: {}}\n",
+        "configs: {shared: {}}\n",
+        "secrets: {shared: {}}\n",
+        "models: {shared: {model: example/child}}\n",
+    );
+    let root = input(
+        "root",
+        110,
+        "root.yaml",
+        "root-directory",
+        &format!("{}include: [a.yaml, b.yaml]\n", definitions.replace("child", "root")),
+    );
+    let loader = FixtureLoader::default()
+        .with_result("a.yaml", Ok(input("a", 111, "a.yaml", "a-directory", definitions)))
+        .with_result("b.yaml", Ok(input("b", 112, "b.yaml", "b-directory", definitions)));
+
+    let composed = IncludeResolution::load(root, &loader).compose();
+    assert!(!composed.compositions().is_empty());
+    let root = &composed.compositions()[0];
+
+    assert!(!composed.is_complete());
+    assert!(composed.is_valid());
+    assert_eq!(composed.conflicts().len(), 12);
+    for conflict in composed.conflicts() {
+        assert_eq!(conflict.name(), "shared");
+        assert_eq!(conflict.incumbent().identity().as_str(), "root");
+        assert!(matches!(conflict.incoming().identity().as_str(), "a" | "b"));
+        assert!(conflict.incoming().source_label().is_some());
+        assert!(conflict.incumbent().source_label().is_some());
+    }
+    assert_eq!(root.services().len(), 1);
+    assert_eq!(root.networks().len(), 1);
+    assert_eq!(root.volumes().len(), 1);
+    assert_eq!(root.configs().len(), 1);
+    assert_eq!(root.secrets().len(), 1);
+    assert_eq!(root.models().len(), 1);
+    assert_eq!(
+        root.service("shared")
+            .and_then(|definition| definition.definition().image())
+            .map(|image| image.value().raw().to_owned()),
+        Some("root".to_owned())
+    );
+    let warnings = composed
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.code() == compose_lens::loader::INCLUDE_RESOURCE_CONFLICT)
+        .collect::<Vec<_>>();
+    assert_eq!(warnings.len(), 12);
+    assert!(warnings.iter().all(|warning| warning.labels().len() == 2));
+}
+
+#[test]
+fn keeps_the_first_child_definition_when_later_siblings_collide() {
+    let definitions = concat!(
+        "services: {shared: {image: child}}\n",
+        "networks: {shared: {}}\n",
+        "volumes: {shared: {}}\n",
+        "configs: {shared: {}}\n",
+        "secrets: {shared: {}}\n",
+        "models: {shared: {model: example/child}}\n",
+    );
+    let root = input(
+        "root",
+        115,
+        "root.yaml",
+        "root-directory",
+        "include: [a.yaml, b.yaml]\n",
+    );
+    let loader = FixtureLoader::default()
+        .with_result("a.yaml", Ok(input("a", 116, "a.yaml", "a-directory", definitions)))
+        .with_result("b.yaml", Ok(input("b", 117, "b.yaml", "b-directory", definitions)));
+
+    let composed = IncludeResolution::load(root, &loader).compose();
+    assert!(!composed.compositions().is_empty());
+    let root = &composed.compositions()[0];
+
+    assert_eq!(composed.conflicts().len(), 6);
+    for conflict in composed.conflicts() {
+        assert_eq!(conflict.incumbent().identity().as_str(), "a");
+        assert_eq!(conflict.incoming().identity().as_str(), "b");
+        assert_ne!(
+            conflict.incumbent().occurrence_index(),
+            conflict.incoming().occurrence_index()
+        );
+    }
+    assert_eq!(
+        root.service("shared")
+            .map(|definition| definition.evidence().identity().as_str()),
+        Some("a")
+    );
+}
+
+#[test]
+fn recovers_other_imports_when_an_include_is_malformed_empty_or_cyclic() {
+    let root = input(
+        "root",
+        120,
+        "root.yaml",
+        "root-directory",
+        "include: [good.yaml, empty.yaml, cycle.yaml, 42]\n",
+    );
+    let cycle = input(
+        "cycle",
+        121,
+        "cycle.yaml",
+        "cycle-directory",
+        "services: {cycle: {image: cycle}}\ninclude: [root.yaml]\n",
+    );
+    let loader = FixtureLoader::default()
+        .with_result(
+            "good.yaml",
+            Ok(input(
+                "good",
+                122,
+                "good.yaml",
+                "good-directory",
+                "services: {good: {image: good}}\n",
+            )),
+        )
+        .with_result(
+            "empty.yaml",
+            Ok(IncludedProjectInput::new(IncludeIdentity::new("empty"), [])),
+        )
+        .with_result("cycle.yaml", Ok(cycle))
+        .with_result(
+            "root.yaml",
+            Ok(input(
+                "root",
+                123,
+                "shadow-root.yaml",
+                "shadow-directory",
+                "services: {shadow: {image: shadow}}\n",
+            )),
+        );
+
+    let resolution = IncludeResolution::load(root, &loader);
+    assert!(resolution.edges()[3].is_cycle());
+    assert_eq!(resolution.edges()[3].child_node_index(), 0);
+    let composed = resolution.compose();
+    assert!(!composed.compositions().is_empty());
+    let root = &composed.compositions()[0];
+
+    assert!(!composed.is_complete());
+    assert!(root.service("good").is_some());
+    assert!(root.service("cycle").is_some());
+    assert!(root.service("shadow").is_none());
 }

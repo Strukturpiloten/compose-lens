@@ -1,7 +1,10 @@
 //! Consumer-facing contract for the supported 0.2.x processing path.
 
 use compose_lens::interpolation::MapEnvironment;
-use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
+use compose_lens::loader::{
+    DocumentInput, DocumentOrigin, IncludeIdentity, IncludeLoadError, IncludeLoader, IncludeRequest, IncludeResolution,
+    IncludedProjectInput, LoadedProject,
+};
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
     BooleanValue, Build, BuildAdditionalContexts, BuildArgs, BuildExtraHostAddresses, BuildExtraHosts, BuildFieldKind,
@@ -30,6 +33,24 @@ use compose_lens::render::{
     GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption,
     GeneratedVolumeDriverOptionValue, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
+
+struct SyntheticIncludeLoader;
+
+impl IncludeLoader for SyntheticIncludeLoader {
+    fn load_include(&self, request: &IncludeRequest) -> Result<IncludedProjectInput, IncludeLoadError> {
+        match request.paths().first().map(compose_lens::model::Located::value) {
+            Some(path) if path == "child.yaml" => Ok(IncludedProjectInput::new(
+                IncludeIdentity::new("synthetic-child"),
+                [DocumentInput::new(
+                    SourceId::new(15_001),
+                    DocumentOrigin::new("synthetic-child.yaml", "synthetic"),
+                    "services: {child: {image: example/child}}\nnetworks: {child-network: {}}\n",
+                )],
+            )),
+            _ => Err(IncludeLoadError::denied("synthetic loader only authorizes child.yaml")),
+        }
+    }
+}
 
 #[test]
 fn preserves_build_field_kind_discriminants() {
@@ -3981,5 +4002,28 @@ fn exposes_final_compose_key_boundary_without_implicit_io() -> Result<(), Box<dy
     let service = view.service("app").ok_or("project service expected")?;
     let _: Option<&compose_lens::project::ProjectValue<String>> = service.domainname();
     let _: Option<&compose_lens::project::ProjectValue<compose_lens::model::Develop>> = service.develop();
+    Ok(())
+}
+
+#[test]
+fn composes_synthetic_document_inputs_without_filesystem_or_environment_access()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = IncludedProjectInput::new(
+        IncludeIdentity::new("synthetic-root"),
+        [DocumentInput::new(
+            SourceId::new(15_000),
+            DocumentOrigin::new("synthetic-root.yaml", "synthetic"),
+            "services: {root: {image: example/root}}\ninclude: [child.yaml]\n",
+        )],
+    );
+    let resolution = IncludeResolution::load(root, &SyntheticIncludeLoader);
+    let composition = resolution.compose();
+    let root = composition.root().ok_or("root composition expected")?;
+
+    let _: &compose_lens::loader::IncludeComposition = root;
+    let _: &compose_lens::loader::IncludeDefinition<compose_lens::project::ProjectService> =
+        root.service("child").ok_or("child service expected")?;
+    assert!(root.network("child-network").is_some());
+    assert!(composition.is_complete());
     Ok(())
 }

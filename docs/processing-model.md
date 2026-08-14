@@ -41,7 +41,7 @@ environment access. Recoverable syntax and typed-model diagnostics stay attached
 and are aggregated without preventing analysis. File discovery and I/O belong in application
 adapters; paths retain the origin needed for later resolution.
 
-### Traverse includes
+### Traverse and compose includes
 
 `IncludeResolution::load` accepts a caller-created root and an `IncludeLoader`. For each reached
 project it performs the existing ordered load, authored no-interpolation merge, and native project
@@ -49,10 +49,16 @@ view before visiting effective includes depth-first. The loader receives raw pat
 `project_directory` declarations plus their spans, origin, and parent context; it is the only I/O
 and authorization boundary. Cycles use caller-defined identities on the active stack, source IDs
 are unique across the whole traversal, and failures retain a partial graph with stable
-`compose.include.*` diagnostics. This slice does not canonicalize or join paths, interpolate
-values, read environment or `.env` files, infer project names, cache diamonds, or merge child
-resources. Composition, path policy, environment precedence, and provider evidence remain later
-operations.
+`compose.include.*` diagnostics.
+
+`IncludeResolution::compose` is an independent, I/O-free operation over those retained views. It
+composes children before importing them into their already merged parent. It imports only absent
+names in each of the services, networks, volumes, configs, secrets, and models namespaces. A local
+or earlier child selection wins; a same-name incoming candidate is retained as an explicit conflict
+with two source labels and never runs the ordinary merge rules. Its result retains the traversal
+diagnostics plus warnings and reports incomplete traversal or conflicts explicitly. It still does
+not canonicalize or join paths, interpolate values, read environment or `.env` files, infer project
+names, cache diamonds, render a composed document, or select provider behavior.
 
 ### Interpolate
 

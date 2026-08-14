@@ -5,8 +5,11 @@ use crate::interpolation::{
     DocumentInterpolation, EnvironmentProvider, InterpolationOptions, interpolate_document_with_options,
 };
 use crate::merge::{MergedProject, merge_project};
-use crate::model::{ComposeDocument, IncludeItem, Located, ModelParse};
-use crate::project::{ProjectView, build_project_view};
+use crate::model::{
+    ComposeDocument, ConfigDefinition, IncludeItem, Located, ModelDefinition, ModelParse, NetworkDefinition,
+    SecretDefinition, VolumeDefinition,
+};
+use crate::project::{ProjectResource, ProjectService, ProjectView, build_project_view};
 use crate::source::{SourceId, SourceSpan};
 use crate::syntax::{SyntaxDocument, SyntaxParseError};
 use std::collections::BTreeMap;
@@ -31,6 +34,8 @@ pub const INCLUDE_DUPLICATE_SOURCE_ID: DiagnosticCode = DiagnosticCode::new("com
 pub const INCLUDE_PROJECT_LOAD_FAILED: DiagnosticCode = DiagnosticCode::new("compose.include.project-load-failed");
 /// The root input contains no documents.
 pub const INCLUDE_EMPTY_ROOT: DiagnosticCode = DiagnosticCode::new("compose.include.empty-root");
+/// An included definition collides with an already selected parent definition.
+pub const INCLUDE_RESOURCE_CONFLICT: DiagnosticCode = DiagnosticCode::new("compose.include.resource-conflict");
 
 /// The caller-defined location of one Compose document.
 ///
@@ -494,6 +499,7 @@ impl LoadedProject {
 /// non-cyclic edges. Traversal intentionally does not cache those diamonds.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncludeNode {
+    index: usize,
     identity: IncludeIdentity,
     inputs: IncludedProjectInput,
     origins: Vec<DocumentOrigin>,
@@ -503,6 +509,12 @@ pub struct IncludeNode {
 }
 
 impl IncludeNode {
+    /// Returns this occurrence's stable index within [`IncludeResolution::nodes`].
+    #[must_use]
+    pub const fn index(&self) -> usize {
+        self.index
+    }
+
     /// Returns this occurrence's caller-defined identity.
     #[must_use]
     pub const fn identity(&self) -> &IncludeIdentity {
@@ -545,7 +557,10 @@ impl IncludeNode {
 pub struct IncludeEdge {
     parent: IncludeIdentity,
     child: IncludeIdentity,
+    parent_node_index: usize,
+    child_node_index: usize,
     request_index: usize,
+    cycle: bool,
 }
 
 impl IncludeEdge {
@@ -561,10 +576,313 @@ impl IncludeEdge {
         &self.child
     }
 
+    /// Returns the occurrence index that declared this edge.
+    #[must_use]
+    pub const fn parent_node_index(&self) -> usize {
+        self.parent_node_index
+    }
+
+    /// Returns the retained target occurrence index.
+    ///
+    /// A cycle targets its existing active occurrence; every other successful edge targets the
+    /// retained occurrence loaded for that request.
+    #[must_use]
+    pub const fn child_node_index(&self) -> usize {
+        self.child_node_index
+    }
+
     /// Returns the matching [`IncludeResolution::requests`] index.
     #[must_use]
     pub const fn request_index(&self) -> usize {
         self.request_index
+    }
+
+    /// Reports whether this edge targets an already active occurrence.
+    #[must_use]
+    pub const fn is_cycle(&self) -> bool {
+        self.cycle
+    }
+}
+
+/// One of the six top-level definition namespaces composed from includes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum IncludeResourceNamespace {
+    /// Compose services.
+    Services,
+    /// Compose networks.
+    Networks,
+    /// Compose volumes.
+    Volumes,
+    /// Compose configs.
+    Configs,
+    /// Compose secrets.
+    Secrets,
+    /// Individual Compose model definitions.
+    Models,
+}
+
+impl IncludeResourceNamespace {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Services => "service",
+            Self::Networks => "network",
+            Self::Volumes => "volume",
+            Self::Configs => "config",
+            Self::Secrets => "secret",
+            Self::Models => "model",
+        }
+    }
+}
+
+/// Source and occurrence evidence for one selected or conflicting definition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncludeDefinitionEvidence {
+    occurrence_index: usize,
+    identity: IncludeIdentity,
+    source: Option<SourceSpan>,
+    source_label: Option<String>,
+}
+
+impl IncludeDefinitionEvidence {
+    /// Returns the retained project occurrence index.
+    #[must_use]
+    pub const fn occurrence_index(&self) -> usize {
+        self.occurrence_index
+    }
+
+    /// Returns the caller-defined identity of the retained project occurrence.
+    #[must_use]
+    pub const fn identity(&self) -> &IncludeIdentity {
+        &self.identity
+    }
+
+    /// Returns the effective definition source, when the definition had one.
+    #[must_use]
+    pub const fn source(&self) -> Option<SourceSpan> {
+        self.source
+    }
+
+    /// Returns the caller-defined label for [`Self::source`], when available.
+    #[must_use]
+    pub fn source_label(&self) -> Option<&str> {
+        self.source_label.as_deref()
+    }
+}
+
+/// One typed definition selected during include composition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncludeDefinition<T> {
+    name: String,
+    definition: T,
+    evidence: IncludeDefinitionEvidence,
+}
+
+impl<T> IncludeDefinition<T> {
+    /// Returns the Compose definition name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the typed effective definition.
+    #[must_use]
+    pub const fn definition(&self) -> &T {
+        &self.definition
+    }
+
+    /// Returns occurrence and source evidence for this selected definition.
+    #[must_use]
+    pub const fn evidence(&self) -> &IncludeDefinitionEvidence {
+        &self.evidence
+    }
+}
+
+/// A same-name conflict that prevented an included definition from being imported.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncludeResourceConflict {
+    namespace: IncludeResourceNamespace,
+    name: String,
+    edge_index: usize,
+    incoming: IncludeDefinitionEvidence,
+    incumbent: IncludeDefinitionEvidence,
+}
+
+impl IncludeResourceConflict {
+    /// Returns the colliding Compose namespace.
+    #[must_use]
+    pub const fn namespace(&self) -> IncludeResourceNamespace {
+        self.namespace
+    }
+
+    /// Returns the shared definition name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the include-edge index through which the incoming candidate was considered.
+    #[must_use]
+    pub const fn edge_index(&self) -> usize {
+        self.edge_index
+    }
+
+    /// Returns the child-side candidate that was not imported.
+    #[must_use]
+    pub const fn incoming(&self) -> &IncludeDefinitionEvidence {
+        &self.incoming
+    }
+
+    /// Returns the already selected parent-side candidate.
+    #[must_use]
+    pub const fn incumbent(&self) -> &IncludeDefinitionEvidence {
+        &self.incumbent
+    }
+}
+
+/// The typed definitions selected for one retained include occurrence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncludeComposition {
+    node_index: usize,
+    services: Vec<IncludeDefinition<ProjectService>>,
+    networks: Vec<IncludeDefinition<NetworkDefinition>>,
+    volumes: Vec<IncludeDefinition<VolumeDefinition>>,
+    configs: Vec<IncludeDefinition<ConfigDefinition>>,
+    secrets: Vec<IncludeDefinition<SecretDefinition>>,
+    models: Vec<IncludeDefinition<ModelDefinition>>,
+}
+
+impl IncludeComposition {
+    /// Returns the retained occurrence represented by this composition.
+    #[must_use]
+    pub const fn node_index(&self) -> usize {
+        self.node_index
+    }
+
+    /// Returns selected services in local-then-depth-first import order.
+    #[must_use]
+    pub fn services(&self) -> &[IncludeDefinition<ProjectService>] {
+        &self.services
+    }
+
+    /// Finds a selected service by name.
+    #[must_use]
+    pub fn service(&self, name: &str) -> Option<&IncludeDefinition<ProjectService>> {
+        self.services.iter().find(|definition| definition.name == name)
+    }
+
+    /// Returns selected networks in local-then-depth-first import order.
+    #[must_use]
+    pub fn networks(&self) -> &[IncludeDefinition<NetworkDefinition>] {
+        &self.networks
+    }
+
+    /// Finds a selected network by name.
+    #[must_use]
+    pub fn network(&self, name: &str) -> Option<&IncludeDefinition<NetworkDefinition>> {
+        self.networks.iter().find(|definition| definition.name == name)
+    }
+
+    /// Returns selected volumes in local-then-depth-first import order.
+    #[must_use]
+    pub fn volumes(&self) -> &[IncludeDefinition<VolumeDefinition>] {
+        &self.volumes
+    }
+
+    /// Finds a selected volume by name.
+    #[must_use]
+    pub fn volume(&self, name: &str) -> Option<&IncludeDefinition<VolumeDefinition>> {
+        self.volumes.iter().find(|definition| definition.name == name)
+    }
+
+    /// Returns selected configs in local-then-depth-first import order.
+    #[must_use]
+    pub fn configs(&self) -> &[IncludeDefinition<ConfigDefinition>] {
+        &self.configs
+    }
+
+    /// Finds a selected config by name.
+    #[must_use]
+    pub fn config(&self, name: &str) -> Option<&IncludeDefinition<ConfigDefinition>> {
+        self.configs.iter().find(|definition| definition.name == name)
+    }
+
+    /// Returns selected secrets in local-then-depth-first import order.
+    #[must_use]
+    pub fn secrets(&self) -> &[IncludeDefinition<SecretDefinition>] {
+        &self.secrets
+    }
+
+    /// Finds a selected secret by name.
+    #[must_use]
+    pub fn secret(&self, name: &str) -> Option<&IncludeDefinition<SecretDefinition>> {
+        self.secrets.iter().find(|definition| definition.name == name)
+    }
+
+    /// Returns selected individual model definitions in local-then-depth-first import order.
+    #[must_use]
+    pub fn models(&self) -> &[IncludeDefinition<ModelDefinition>] {
+        &self.models
+    }
+
+    /// Finds a selected model definition by name.
+    #[must_use]
+    pub fn model(&self, name: &str) -> Option<&IncludeDefinition<ModelDefinition>> {
+        self.models.iter().find(|definition| definition.name == name)
+    }
+}
+
+/// The I/O-free outcome of composing an [`IncludeResolution`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncludeCompositionResult {
+    compositions: Vec<IncludeComposition>,
+    diagnostics: Vec<Diagnostic>,
+    conflicts: Vec<IncludeResourceConflict>,
+}
+
+impl IncludeCompositionResult {
+    /// Returns the root composition, when the root occurrence was retained.
+    #[must_use]
+    pub fn root(&self) -> Option<&IncludeComposition> {
+        self.compositions.first()
+    }
+
+    /// Returns compositions indexed by [`IncludeNode::index`].
+    #[must_use]
+    pub fn compositions(&self) -> &[IncludeComposition] {
+        &self.compositions
+    }
+
+    /// Finds one retained occurrence's composition by node index.
+    #[must_use]
+    pub fn composition(&self, node_index: usize) -> Option<&IncludeComposition> {
+        self.compositions.get(node_index)
+    }
+
+    /// Returns traversal diagnostics followed by composition conflict warnings.
+    #[must_use]
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
+    /// Returns every non-imported same-name candidate in deterministic import order.
+    #[must_use]
+    pub fn conflicts(&self) -> &[IncludeResourceConflict] {
+        &self.conflicts
+    }
+
+    /// Reports whether traversal and composition emitted no error diagnostic.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity() != Severity::Error)
+    }
+
+    /// Reports whether traversal completed without errors and no include resource conflicted.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.is_valid() && self.conflicts.is_empty()
     }
 }
 
@@ -632,6 +950,26 @@ impl IncludeResolution {
         &self.diagnostics
     }
 
+    /// Composes already loaded child occurrences without authorizing further loading or performing I/O.
+    ///
+    /// The pass first composes every non-cycle child recursively, then imports absent definitions
+    /// into each parent after that parent's ordinary multi-file merge. Same-namespace same-name
+    /// candidates remain separate conflict records and never enter ordinary Compose merge rules.
+    #[must_use]
+    pub fn compose(&self) -> IncludeCompositionResult {
+        let mut diagnostics = self.diagnostics.clone();
+        let mut conflicts = Vec::new();
+        let mut compositions = vec![None; self.nodes.len()];
+        for node_index in 0..self.nodes.len() {
+            let _ = compose_node(node_index, self, &mut compositions, &mut diagnostics, &mut conflicts);
+        }
+        IncludeCompositionResult {
+            compositions: compositions.into_iter().flatten().collect(),
+            diagnostics,
+            conflicts,
+        }
+    }
+
     /// Reports whether traversal reached no error diagnostic.
     #[must_use]
     pub fn is_valid(&self) -> bool {
@@ -644,11 +982,11 @@ impl IncludeResolution {
 fn visit_project(
     input: IncludedProjectInput,
     include_loader: &dyn IncludeLoader,
-    active: &mut Vec<IncludeIdentity>,
+    active: &mut Vec<(IncludeIdentity, usize)>,
     source_origins: &mut BTreeMap<SourceId, DocumentOrigin>,
     resolution: &mut IncludeResolution,
     request_span: Option<SourceSpan>,
-) {
+) -> usize {
     if input.documents().is_empty() {
         resolution.diagnostics.push(include_diagnostic(
             if request_span.is_some() {
@@ -660,16 +998,16 @@ fn visit_project(
             request_span,
         ));
         retain_unloaded_node(input, resolution);
-        return;
+        return resolution.nodes.len() - 1;
     }
 
     if !register_source_ids(input.documents(), source_origins, resolution, request_span) {
         retain_unloaded_node(input, resolution);
-        return;
+        return resolution.nodes.len() - 1;
     }
 
     let Some(prepared) = load_include_node(input, resolution, request_span) else {
-        return;
+        return resolution.nodes.len() - 1;
     };
     let PreparedIncludeNode {
         identity,
@@ -677,8 +1015,35 @@ fn visit_project(
         items,
         node_index,
     } = prepared;
-    active.push(identity.clone());
+    active.push((identity.clone(), node_index));
 
+    visit_includes(
+        items,
+        &identity,
+        &base_directory,
+        node_index,
+        include_loader,
+        (active, source_origins, resolution),
+    );
+
+    let popped = active.pop();
+    debug_assert_eq!(popped.as_ref().map(|(identity, _)| identity), Some(&identity));
+    node_index
+}
+
+fn visit_includes(
+    items: Vec<IncludeItem>,
+    identity: &IncludeIdentity,
+    base_directory: &Path,
+    node_index: usize,
+    include_loader: &dyn IncludeLoader,
+    state: (
+        &mut Vec<(IncludeIdentity, usize)>,
+        &mut BTreeMap<SourceId, DocumentOrigin>,
+        &mut IncludeResolution,
+    ),
+) {
+    let (active, source_origins, resolution) = state;
     for item in items {
         let declaration_span = include_item_span(&item);
         let declaration_origin = declaration_span.and_then(|span| {
@@ -690,7 +1055,7 @@ fn visit_project(
                 .map(|document| document.origin().clone())
         });
         let Some(request) =
-            IncludeRequest::from_item(identity.clone(), base_directory.clone(), declaration_origin, item)
+            IncludeRequest::from_item(identity.clone(), base_directory.to_path_buf(), declaration_origin, item)
         else {
             resolution.diagnostics.push(include_diagnostic(
                 INCLUDE_UNMODELED,
@@ -724,12 +1089,19 @@ fn visit_project(
         };
         let child_identity = child.identity().clone();
         resolution.requests.push(request);
-        resolution.edges.push(IncludeEdge {
-            parent: identity.clone(),
-            child: child_identity.clone(),
-            request_index,
-        });
-        if active.contains(&child_identity) {
+        let edge_index = resolution.edges.len();
+        if let Some((_, active_node_index)) = active
+            .iter()
+            .find(|(active_identity, _)| active_identity == &child_identity)
+        {
+            resolution.edges.push(IncludeEdge {
+                parent: identity.clone(),
+                child: child_identity,
+                parent_node_index: node_index,
+                child_node_index: *active_node_index,
+                request_index,
+                cycle: true,
+            });
             resolution.diagnostics.push(
                 include_diagnostic(
                     INCLUDE_CYCLE,
@@ -740,7 +1112,7 @@ fn visit_project(
             );
             continue;
         }
-        visit_project(
+        let child_node_index = visit_project(
             child,
             include_loader,
             active,
@@ -748,10 +1120,18 @@ fn visit_project(
             resolution,
             Some(request_span),
         );
+        resolution.edges.insert(
+            edge_index,
+            IncludeEdge {
+                parent: identity.clone(),
+                child: child_identity,
+                parent_node_index: node_index,
+                child_node_index,
+                request_index,
+                cycle: false,
+            },
+        );
     }
-
-    let popped = active.pop();
-    debug_assert_eq!(popped.as_ref(), Some(&identity));
 }
 
 struct PreparedIncludeNode {
@@ -779,6 +1159,7 @@ fn load_include_node(
             request_span,
         ));
         resolution.nodes.push(IncludeNode {
+            index: resolution.nodes.len(),
             identity,
             inputs: input,
             origins,
@@ -805,6 +1186,7 @@ fn load_include_node(
         .unwrap_or_default();
     let node_index = resolution.nodes.len();
     resolution.nodes.push(IncludeNode {
+        index: node_index,
         identity: identity.clone(),
         inputs: input,
         origins,
@@ -827,6 +1209,7 @@ fn retain_unloaded_node(input: IncludedProjectInput, resolution: &mut IncludeRes
         .map(|document| document.origin().clone())
         .collect();
     resolution.nodes.push(IncludeNode {
+        index: resolution.nodes.len(),
         identity: input.identity().clone(),
         inputs: input,
         origins,
@@ -875,6 +1258,239 @@ fn include_diagnostic(code: DiagnosticCode, message: &'static str, span: Option<
         Some(span) => diagnostic.with_label(DiagnosticLabel::primary(span, "include declaration")),
         None => diagnostic,
     }
+}
+
+fn compose_node(
+    node_index: usize,
+    resolution: &IncludeResolution,
+    compositions: &mut [Option<IncludeComposition>],
+    diagnostics: &mut Vec<Diagnostic>,
+    conflicts: &mut Vec<IncludeResourceConflict>,
+) -> IncludeComposition {
+    if let Some(composition) = &compositions[node_index] {
+        return composition.clone();
+    }
+
+    let mut composition = local_composition(node_index, resolution);
+    for (edge_index, edge) in resolution.edges.iter().enumerate() {
+        if edge.parent_node_index != node_index || edge.cycle {
+            continue;
+        }
+        let child = compose_node(edge.child_node_index, resolution, compositions, diagnostics, conflicts);
+        import_definitions(
+            IncludeResourceNamespace::Services,
+            edge_index,
+            &mut composition.services,
+            &child.services,
+            edge,
+            diagnostics,
+            conflicts,
+        );
+        import_definitions(
+            IncludeResourceNamespace::Networks,
+            edge_index,
+            &mut composition.networks,
+            &child.networks,
+            edge,
+            diagnostics,
+            conflicts,
+        );
+        import_definitions(
+            IncludeResourceNamespace::Volumes,
+            edge_index,
+            &mut composition.volumes,
+            &child.volumes,
+            edge,
+            diagnostics,
+            conflicts,
+        );
+        import_definitions(
+            IncludeResourceNamespace::Configs,
+            edge_index,
+            &mut composition.configs,
+            &child.configs,
+            edge,
+            diagnostics,
+            conflicts,
+        );
+        import_definitions(
+            IncludeResourceNamespace::Secrets,
+            edge_index,
+            &mut composition.secrets,
+            &child.secrets,
+            edge,
+            diagnostics,
+            conflicts,
+        );
+        import_definitions(
+            IncludeResourceNamespace::Models,
+            edge_index,
+            &mut composition.models,
+            &child.models,
+            edge,
+            diagnostics,
+            conflicts,
+        );
+    }
+    compositions[node_index] = Some(composition.clone());
+    composition
+}
+
+fn local_composition(node_index: usize, resolution: &IncludeResolution) -> IncludeComposition {
+    let node = &resolution.nodes[node_index];
+    let Some(view) = node.project_view() else {
+        return IncludeComposition {
+            node_index,
+            services: Vec::new(),
+            networks: Vec::new(),
+            volumes: Vec::new(),
+            configs: Vec::new(),
+            secrets: Vec::new(),
+            models: Vec::new(),
+        };
+    };
+
+    IncludeComposition {
+        node_index,
+        services: view
+            .services()
+            .iter()
+            .map(|service| {
+                local_definition(
+                    service.name().value(),
+                    service.clone(),
+                    node_index,
+                    node,
+                    service
+                        .provenance()
+                        .effective_source()
+                        .or_else(|| service.name().effective_source()),
+                )
+            })
+            .collect(),
+        networks: local_resources(view.networks(), node_index, node),
+        volumes: local_resources(view.volumes(), node_index, node),
+        configs: local_resources(view.configs(), node_index, node),
+        secrets: local_resources(view.secrets(), node_index, node),
+        models: view
+            .models()
+            .into_iter()
+            .flat_map(|models| models.value().definitions())
+            .map(|model| local_definition(model.key().value(), model.clone(), node_index, node, Some(model.span())))
+            .collect(),
+    }
+}
+
+fn local_resources<T: Clone>(
+    resources: &[ProjectResource<T>],
+    node_index: usize,
+    node: &IncludeNode,
+) -> Vec<IncludeDefinition<T>> {
+    resources
+        .iter()
+        .map(|resource| {
+            local_definition(
+                resource.name().value(),
+                resource.definition().value().clone(),
+                node_index,
+                node,
+                resource
+                    .definition()
+                    .effective_source()
+                    .or_else(|| resource.name().effective_source()),
+            )
+        })
+        .collect()
+}
+
+fn local_definition<T>(
+    name: &str,
+    definition: T,
+    node_index: usize,
+    node: &IncludeNode,
+    source: Option<SourceSpan>,
+) -> IncludeDefinition<T> {
+    let source_label = source.and_then(|source| {
+        node.origins()
+            .iter()
+            .zip(node.inputs().documents())
+            .find(|(_, input)| input.source_id() == source.source_id())
+            .map(|(origin, _)| origin.label().to_owned())
+    });
+    IncludeDefinition {
+        name: name.to_owned(),
+        definition,
+        evidence: IncludeDefinitionEvidence {
+            occurrence_index: node_index,
+            identity: node.identity().clone(),
+            source,
+            source_label,
+        },
+    }
+}
+
+fn import_definitions<T: Clone>(
+    namespace: IncludeResourceNamespace,
+    edge_index: usize,
+    parent: &mut Vec<IncludeDefinition<T>>,
+    child: &[IncludeDefinition<T>],
+    edge: &IncludeEdge,
+    diagnostics: &mut Vec<Diagnostic>,
+    conflicts: &mut Vec<IncludeResourceConflict>,
+) {
+    for incoming in child {
+        if let Some(incumbent) = parent.iter().find(|candidate| candidate.name == incoming.name) {
+            let conflict = IncludeResourceConflict {
+                namespace,
+                name: incoming.name.clone(),
+                edge_index,
+                incoming: incoming.evidence.clone(),
+                incumbent: incumbent.evidence.clone(),
+            };
+            diagnostics.push(include_resource_conflict_diagnostic(&conflict, edge));
+            conflicts.push(conflict);
+        } else {
+            parent.push(incoming.clone());
+        }
+    }
+}
+
+fn include_resource_conflict_diagnostic(conflict: &IncludeResourceConflict, edge: &IncludeEdge) -> Diagnostic {
+    let mut diagnostic = Diagnostic::new(
+        INCLUDE_RESOURCE_CONFLICT,
+        Severity::Warning,
+        format!(
+            "included {} `{}` conflicts with an already selected definition",
+            conflict.namespace.as_str(),
+            conflict.name
+        ),
+    );
+    if let Some(source) = conflict.incoming.source {
+        diagnostic = diagnostic.with_label(DiagnosticLabel::primary(
+            source,
+            format!(
+                "incoming {} `{}` from {}",
+                conflict.namespace.as_str(),
+                conflict.name,
+                conflict.incoming.source_label().unwrap_or("included occurrence")
+            ),
+        ));
+    }
+    if let Some(source) = conflict.incumbent.source {
+        diagnostic = diagnostic.with_label(DiagnosticLabel::secondary(
+            source,
+            format!(
+                "incumbent {} `{}` from {}",
+                conflict.namespace.as_str(),
+                conflict.name,
+                conflict.incumbent.source_label().unwrap_or("parent occurrence")
+            ),
+        ));
+    }
+    diagnostic.with_note(format!(
+        "declaring include edge #{}, occurrence #{} ({}) -> #{} ({})",
+        conflict.edge_index, edge.parent_node_index, edge.parent, edge.child_node_index, edge.child
+    ))
 }
 
 /// Per-file interpolation overlays for one loaded project.

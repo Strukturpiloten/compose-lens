@@ -57,9 +57,12 @@ Application adapters own discovery and I/O. ADR 0005 defines this [loading bound
 `IncludeResolution` is an additive traversal layer above ordered loading. It merges each reached
 node without interpolation, derives its effective typed declarations, and asks an
 `IncludeLoader` to authorize and supply every child. It preserves the partial depth-first graph,
-origins, requests, cycles, duplicate source IDs, and diagnostics, but never joins paths, reads
-environment files, imports child resources, or composes projects. [ADR 0020](decisions/0020-caller-authorized-include-traversal.md)
-defines that boundary.
+origins, requests, cycles, duplicate source IDs, and diagnostics, but never joins paths or reads
+environment files. Its separate, opt-in `compose` pass recursively imports absent child services,
+networks, volumes, configs, secrets, and model definitions after each parent merge. Same-name
+collisions remain source-aware warnings and explicit records rather than invoking multi-file merge
+rules. [ADR 0020](decisions/0020-caller-authorized-include-traversal.md) and
+[ADR 0021](decisions/0021-include-composition-with-explicit-conflicts.md) define these boundaries.
 
 ### Processing pipeline
 

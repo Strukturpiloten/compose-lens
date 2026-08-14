@@ -57,9 +57,12 @@ There are no remaining closed-schema top-level gaps. `version` is retained with 
 warning and never selects a provider or schema. `include` retains short paths and long
 `path`/`env_file`/`project_directory` forms. Its completed traversal slice accepts
 caller-authorized loading, uses effective no-interpolation declarations in depth-first order, and
-retains origins, partial graphs, cycles, and global source-ID diagnostics. It does not
-canonicalize/join paths, read environment files or `.env`, infer names, cache diamonds, or compose
-child resources. `models` retains `name`, required `model`, `context_size`, and `runtime_flags`.
+retains origins, partial graphs, cycles, and global source-ID diagnostics. Its opt-in composition
+slice recursively imports absent child services, networks, volumes, configs, secrets, and
+individual models after each parent merge; local/earlier selections win exact-name collisions with
+explicit source-aware warnings and no cross-project merge. It does not canonicalize/join paths,
+read environment files or `.env`, infer names, cache diamonds, render a composed document, or
+select provider behavior. `models` retains `name`, required `model`, `context_size`, and `runtime_flags`.
 Neither operation performs implicit file, environment, or provider access.
 Malformed or unknown nested include/model members remain reachable through the effective view's
 root or service `unmodeled_fields` references rather than being normalized away.
@@ -370,8 +373,10 @@ deterministic rendering, and parse-back tests are defined.
 - [x] Implement the bounded top-level `include` traversal: caller-authorized recursive loading,
       effective no-interpolation ordering, origins, partial graph diagnostics, cycles, and global
       source-ID rejection.
-- [ ] Compose included resources; define path joining/canonicalization policy, environment-file
-      and `.env` precedence, project-name rules, and provider-specific evidence.
+- [x] Compose included resources without I/O: recursive local-wins imports for all six top-level
+      namespaces, explicit conflicts, and retained occurrence/source evidence.
+- [ ] Define path joining/canonicalization policy, environment-file and `.env` precedence,
+      project-name rules, composed rendering, and provider-specific evidence.
 - [x] Type `develop`, service/top-level `models`, and `use_api_socket` without implying that every
       provider executes them.
 - [ ] Keep file reads, environment access, and provider invocation outside parsing APIs.

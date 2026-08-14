@@ -42,12 +42,14 @@ not add a convenience function that hides file access, interpolation, merging, p
 validation, or rendering.
 
 The additive `loader::{IncludeIdentity, IncludeLoader, IncludeRequest, IncludedProjectInput,
-IncludeResolution}` contract is stable within 0.2.x. Identity canonicalization and all I/O remain
+IncludeResolution, IncludeCompositionResult, IncludeComposition, IncludeDefinition,
+IncludeResourceConflict}` contract is stable within 0.2.x. Identity canonicalization and all I/O remain
 caller-owned; raw include path, `env_file`, and `project_directory` values are not interpolated or
 normalized. Stable `compose.include.*` diagnostics report traversal failures while retaining
-partial nodes, edges, requests, and origins. This API deliberately excludes child-resource
-composition, path joining, environment/.env precedence, project-name inference, caching, and
-provider behavior.
+partial nodes, edges, requests, and origins. The opt-in composition result exposes typed selected
+definitions and explicit local-wins resource conflicts without re-entering the loader. It excludes
+path joining, environment/.env precedence, project-name inference, caching, composed rendering,
+and provider behavior.
 
 The additive generated-document path accepts only explicit Compose-owned values and performs no
 processing or I/O. Successful output is parse-back validated through the syntax and native model.
