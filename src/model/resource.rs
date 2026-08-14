@@ -3,6 +3,97 @@
 use super::{BooleanValue, FieldReference, KeyValueEntry, Labels, Located};
 use crate::source::SourceSpan;
 
+/// The authored lifecycle form for a top-level resource.
+///
+/// Compose historically allowed `external: { name: ... }`.  It is deliberately
+/// distinct from the modern sibling `name` field so callers can diagnose an
+/// ambiguous document instead of silently selecting one spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ResourceExternal {
+    /// Modern boolean or deferred-expression syntax.
+    Boolean(Located<BooleanValue>),
+    /// Deprecated mapping syntax retaining its independently authored name.
+    Legacy(Box<LegacyExternalName>),
+}
+
+impl ResourceExternal {
+    /// Returns the boolean/expression form when it was authored.
+    #[must_use]
+    pub const fn boolean(&self) -> Option<&Located<BooleanValue>> {
+        let Self::Boolean(value) = self else {
+            return None;
+        };
+        Some(value)
+    }
+
+    /// Returns the deprecated external-name mapping when it was authored.
+    #[must_use]
+    pub const fn legacy(&self) -> Option<&LegacyExternalName> {
+        let Self::Legacy(value) = self else {
+            return None;
+        };
+        Some(value)
+    }
+
+    /// Whether this form explicitly selects external lifecycle.
+    #[must_use]
+    pub fn is_explicitly_external(&self) -> bool {
+        matches!(self, Self::Legacy(_))
+            || matches!(self, Self::Boolean(value) if matches!(value.value(), BooleanValue::Literal(true)))
+    }
+}
+
+/// The legacy `external: { name: ... }` mapping.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegacyExternalName {
+    span: SourceSpan,
+    name: Option<Located<String>>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl LegacyExternalName {
+    pub(crate) fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            name: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(crate) fn set_name(&mut self, value: Located<String>) {
+        self.name = Some(value);
+    }
+    pub(crate) fn push_extension(&mut self, value: FieldReference) {
+        self.extension_fields.push(value);
+    }
+    pub(crate) fn push_unknown(&mut self, value: FieldReference) {
+        self.unknown_fields.push(value);
+    }
+
+    /// Returns the complete legacy mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns the deprecated external resource name when it is a YAML string.
+    #[must_use]
+    pub const fn name(&self) -> Option<&Located<String>> {
+        self.name.as_ref()
+    }
+    /// Returns retained `x-` fields in the legacy mapping.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+    /// Returns unrecognized or malformed fields in the legacy mapping.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
 /// A typed top-level volume definition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VolumeDefinition {
@@ -10,7 +101,7 @@ pub struct VolumeDefinition {
     span: SourceSpan,
     driver: Option<Located<String>>,
     driver_opts: Vec<KeyValueEntry>,
-    external: Option<Located<BooleanValue>>,
+    external: Option<ResourceExternal>,
     labels: Option<Labels>,
     custom_name: Option<Located<String>>,
     extension_fields: Vec<FieldReference>,
@@ -37,7 +128,7 @@ impl VolumeDefinition {
     pub(crate) fn set_driver_opts(&mut self, value: Vec<KeyValueEntry>) {
         self.driver_opts = value;
     }
-    pub(crate) fn set_external(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_external(&mut self, value: ResourceExternal) {
         self.external = Some(value);
     }
     pub(crate) fn set_labels(&mut self, value: Labels) {
@@ -73,9 +164,16 @@ impl VolumeDefinition {
     pub fn driver_opts(&self) -> &[KeyValueEntry] {
         &self.driver_opts
     }
-    /// Returns the external-lifecycle setting.
+    /// Returns the modern boolean/expression external-lifecycle setting.
+    ///
+    /// Legacy `external: { name: ... }` uses [`Self::external_syntax`] instead.
     #[must_use]
-    pub const fn external(&self) -> Option<&Located<BooleanValue>> {
+    pub fn external(&self) -> Option<&Located<BooleanValue>> {
+        self.external.as_ref().and_then(ResourceExternal::boolean)
+    }
+    /// Returns the external-lifecycle syntax without normalizing legacy names.
+    #[must_use]
+    pub const fn external_syntax(&self) -> Option<&ResourceExternal> {
         self.external.as_ref()
     }
     /// Returns labels with their syntax form retained.
@@ -108,7 +206,9 @@ pub struct ConfigDefinition {
     file: Option<Located<String>>,
     environment: Option<Located<String>>,
     content: Option<Located<String>>,
-    external: Option<Located<BooleanValue>>,
+    external: Option<ResourceExternal>,
+    labels: Option<Labels>,
+    template_driver: Option<Located<String>>,
     custom_name: Option<Located<String>>,
     extension_fields: Vec<FieldReference>,
     unknown_fields: Vec<FieldReference>,
@@ -123,6 +223,8 @@ impl ConfigDefinition {
             environment: None,
             content: None,
             external: None,
+            labels: None,
+            template_driver: None,
             custom_name: None,
             extension_fields: Vec::new(),
             unknown_fields: Vec::new(),
@@ -137,11 +239,17 @@ impl ConfigDefinition {
     pub(crate) fn set_content(&mut self, value: Located<String>) {
         self.content = Some(value);
     }
-    pub(crate) fn set_external(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_external(&mut self, value: ResourceExternal) {
         self.external = Some(value);
     }
     pub(crate) fn set_custom_name(&mut self, value: Located<String>) {
         self.custom_name = Some(value);
+    }
+    pub(crate) fn set_labels(&mut self, value: Labels) {
+        self.labels = Some(value);
+    }
+    pub(crate) fn set_template_driver(&mut self, value: Located<String>) {
+        self.template_driver = Some(value);
     }
     pub(crate) fn push_extension(&mut self, value: FieldReference) {
         self.extension_fields.push(value);
@@ -175,15 +283,32 @@ impl ConfigDefinition {
     pub const fn content(&self) -> Option<&Located<String>> {
         self.content.as_ref()
     }
-    /// Returns the external-lifecycle setting.
+    /// Returns the modern boolean/expression external-lifecycle setting.
+    ///
+    /// Legacy `external: { name: ... }` uses [`Self::external_syntax`] instead.
     #[must_use]
-    pub const fn external(&self) -> Option<&Located<BooleanValue>> {
+    pub fn external(&self) -> Option<&Located<BooleanValue>> {
+        self.external.as_ref().and_then(ResourceExternal::boolean)
+    }
+    /// Returns the external-lifecycle syntax without normalizing legacy names.
+    #[must_use]
+    pub const fn external_syntax(&self) -> Option<&ResourceExternal> {
         self.external.as_ref()
     }
     /// Returns the platform-level custom name.
     #[must_use]
     pub const fn custom_name(&self) -> Option<&Located<String>> {
         self.custom_name.as_ref()
+    }
+    /// Returns labels with their syntax form retained.
+    #[must_use]
+    pub const fn labels(&self) -> Option<&Labels> {
+        self.labels.as_ref()
+    }
+    /// Returns the opaque config template driver without invoking it.
+    #[must_use]
+    pub const fn template_driver(&self) -> Option<&Located<String>> {
+        self.template_driver.as_ref()
     }
     /// Returns retained `x-` fields.
     #[must_use]
@@ -204,7 +329,11 @@ pub struct SecretDefinition {
     span: SourceSpan,
     file: Option<Located<String>>,
     environment: Option<Located<String>>,
-    external: Option<Located<BooleanValue>>,
+    driver: Option<Located<String>>,
+    driver_opts: Vec<KeyValueEntry>,
+    labels: Option<Labels>,
+    template_driver: Option<Located<String>>,
+    external: Option<ResourceExternal>,
     custom_name: Option<Located<String>>,
     extension_fields: Vec<FieldReference>,
     unknown_fields: Vec<FieldReference>,
@@ -217,6 +346,10 @@ impl SecretDefinition {
             span,
             file: None,
             environment: None,
+            driver: None,
+            driver_opts: Vec::new(),
+            labels: None,
+            template_driver: None,
             external: None,
             custom_name: None,
             extension_fields: Vec::new(),
@@ -229,7 +362,19 @@ impl SecretDefinition {
     pub(crate) fn set_environment(&mut self, value: Located<String>) {
         self.environment = Some(value);
     }
-    pub(crate) fn set_external(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_driver(&mut self, value: Located<String>) {
+        self.driver = Some(value);
+    }
+    pub(crate) fn set_driver_opts(&mut self, value: Vec<KeyValueEntry>) {
+        self.driver_opts = value;
+    }
+    pub(crate) fn set_labels(&mut self, value: Labels) {
+        self.labels = Some(value);
+    }
+    pub(crate) fn set_template_driver(&mut self, value: Located<String>) {
+        self.template_driver = Some(value);
+    }
+    pub(crate) fn set_external(&mut self, value: ResourceExternal) {
         self.external = Some(value);
     }
     pub(crate) fn set_custom_name(&mut self, value: Located<String>) {
@@ -263,8 +408,36 @@ impl SecretDefinition {
         self.environment.as_ref()
     }
     /// Returns the external-lifecycle setting.
+    /// Returns the opaque secret driver without looking it up.
     #[must_use]
-    pub const fn external(&self) -> Option<&Located<BooleanValue>> {
+    pub const fn driver(&self) -> Option<&Located<String>> {
+        self.driver.as_ref()
+    }
+    /// Returns ordered driver options with string/number scalar fidelity.
+    #[must_use]
+    pub fn driver_opts(&self) -> &[KeyValueEntry] {
+        &self.driver_opts
+    }
+    /// Returns labels with their syntax form retained.
+    #[must_use]
+    pub const fn labels(&self) -> Option<&Labels> {
+        self.labels.as_ref()
+    }
+    /// Returns the opaque secret template driver without invoking it.
+    #[must_use]
+    pub const fn template_driver(&self) -> Option<&Located<String>> {
+        self.template_driver.as_ref()
+    }
+    /// Returns the modern boolean/expression external-lifecycle setting.
+    ///
+    /// Legacy `external: { name: ... }` uses [`Self::external_syntax`] instead.
+    #[must_use]
+    pub fn external(&self) -> Option<&Located<BooleanValue>> {
+        self.external.as_ref().and_then(ResourceExternal::boolean)
+    }
+    /// Returns the external-lifecycle syntax without normalizing legacy names.
+    #[must_use]
+    pub const fn external_syntax(&self) -> Option<&ResourceExternal> {
         self.external.as_ref()
     }
     /// Returns the platform-level custom name.

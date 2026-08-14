@@ -32,19 +32,20 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 
 | Surface   | Project typed | Document typed only | Syntax-preserved only |
 | --------- | ------------: | ------------------: | --------------------: |
-| Top level |             6 |                   0 |                     3 |
-| Service   |            81 |                   0 |                    12 |
+| Top level |             9 |                   0 |                     0 |
+| Service   |            93 |                   0 |                     0 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
 
 ## Exact top-level gaps
 
-The following current top-level keys are syntax-preserved but have no native project type:
-
-- `version` — obsolete but retained for backward compatibility;
-- `include` — including long-form `path`, `env_file`, and `project_directory`; and
-- `models` — including definition keys `name`, `model`, `context_size`, and `runtime_flags`.
+There are no remaining closed-schema top-level gaps. `version` is retained with an obsolete-field
+warning and never selects a provider or schema. `include` retains short paths and long
+`path`/`env_file`/`project_directory` forms; `models` retains `name`, required `model`,
+`context_size`, and `runtime_flags`. Neither operation reads a file, environment, or provider.
+Malformed or unknown nested include/model members remain reachable through the effective view's
+root or service `unmodeled_fields` references rather than being normalized away.
 
 `name`, `services`, `networks`, `volumes`, `configs`, and `secrets` are document- and
 project-typed.
@@ -92,6 +93,13 @@ integer/positive/zero rule, mode coupling, container-label, platform, discovery,
 scale, allocation, scheduling, placement, job, deployment, runtime, or conversion interpretation is
 applied.
 
+The effective project view also exposes `develop`, `domainname`, `external_links`, `gpus`,
+`isolation`, `label_file`, `links`, `mac_address`, `models`, `storage_opt`, `use_api_socket`, and
+`uts`. Model references are validated locally; GPU selectors, label files, links, sockets, and
+watch actions remain inert data with no runtime, host, file, or provider access.
+Malformed or future nested GPU and develop members are retained through the containing service's
+`unmodeled_fields` references.
+
 ### Document-only service keys
 
 All current service and immediate deploy keys have an effective-project path. Nested resource
@@ -100,7 +108,7 @@ deploy child evidence remains source-addressable.
 
 The effective build view promotes raw list/scalar-map `additional_contexts`, scalar/long `context`, ordered raw `cache_from`/`cache_to`/`entitlements`, non-empty `dockerfile`, exact-string `dockerfile_inline`, Build-specific list/map `extra_hosts` with scalar or nested-list raw addresses, opaque `target`/`network`/`isolation`, ordered raw `platforms`/`tags`, map/list `args`/`labels`, boolean/string `no_cache`/`sbom`, boolean/expression `privileged`/`pull`, raw-preserving `shm_size`, service-equivalent ordered `ulimits`, short/long `secrets`, and sensitive list/scalar-map `ssh` with form, sensitivity, provenance, duplicates, empties, reset/override, and partial recovery.
 Cache descriptors and platforms remain raw, `no_cache` and `sbom` strings remain uncoerced, and `pull` remains unresolved: none receives reference, path, credential, default, or build-execution inference. `sbom` does not parse generators or expose generated data.
-`build.ssh` does not parse identifiers, paths, PEM, sockets, agents, mounts, or builder behavior; all grant values remain redacted by default. `build.entitlements` has no allowlist, privilege, BuildKit/platform, execution, or runtime claim; Docker Compose v2.27.0 is a badge with earlier/removal boundaries unknown. `build.dockerfile_inline` retains exact strings and conflict evidence with `dockerfile` but performs no Containerfile parsing, path/context access, secret scanning, build, Docker, BuildKit, or runtime inference; Docker Compose v2.17.0 is a badge with earlier/removal boundaries unknown. `build.shm_size` does not infer builder defaults, host state, allocation, or runtime behavior. Every other build subkey remains an unmodeled source reference.
+`build.ssh` does not parse identifiers, paths, PEM, sockets, agents, mounts, or builder behavior; all grant values remain redacted by default. `build.entitlements` has no allowlist, privilege, BuildKit/platform, execution, or runtime claim; Docker Compose v2.27.0 is a badge with earlier/removal boundaries unknown. `build.dockerfile_inline` retains exact strings and conflict evidence with `dockerfile` but performs no Containerfile parsing, path/context access, secret scanning, build, Docker, BuildKit, or runtime inference; Docker Compose v2.17.0 is a badge with earlier/removal boundaries unknown. `build.shm_size` does not infer builder defaults, host state, allocation, or runtime behavior. All closed immediate Build keys are typed; malformed input, extensions, future unknown members, and deliberately bounded nested semantics remain source-addressable unmodeled evidence without I/O, builder execution, or runtime inference.
 `build.privileged` retains literal booleans or deferred dollar expressions. Ordinary quoted
 non-expression strings remain diagnosed source evidence rather than coerced booleans. Docker
 Compose v2.15.0 is a badge with earlier/removal boundaries unknown; no privilege, platform,
@@ -109,42 +117,36 @@ runtime, or build behavior is inferred.
 
 ### Syntax-preserved-only service keys
 
-The following 12 current service keys do not yet have a dedicated typed model:
+There are no remaining closed-schema service-key gaps. `develop.watch` retains its documented
+members and local shape diagnostics without watching paths or executing actions. `gpus` retains
+the exact `all` scalar or list selectors without allocating devices. `label_file`,
+`external_links`, and `links` preserve authored order without reading or resolving their targets.
 
-`develop`, `domainname`, `external_links`, `gpus`, `isolation`, `label_file`, `links`,
-`mac_address`, `models`, `storage_opt`, `use_api_socket`, and `uts`.
+## Nested resource coverage
 
-## Nested resource gaps
-
-Current top-level network and volume definition keys are typed, including network IPAM fields.
-The remaining current resource-definition gaps are:
-
-- config definitions: `labels` and `template_driver`;
-- secret definitions: `driver`, `driver_opts`, `labels`, and `template_driver`; and
-- every top-level model definition key, because top-level `models` is not typed yet.
-
-The schema's legacy object form `external: { name: ... }` is also not typed for network, volume,
-config, or secret definitions. The ordinary sibling `name` field is typed for all four resource
-definitions.
+All currently audited top-level resource-definition members are typed. Configs retain labels and
+opaque strict-string template drivers. Secrets retain opaque strict-string drivers/template drivers,
+ordered string-or-number driver options, and labels. Networks, volumes, configs, and secrets retain
+the modern boolean/expression `external` form separately from legacy `external: { name: ... }`.
+Legacy objects receive a migration warning and a two-span conflict diagnostic when they coexist with
+modern `name`; they are not normalized. The Compose schema deprecates this object for networks,
+volumes, and configs, while Docker Compose 5.4.0 warned for all four: ComposeLens documents that
+divergence rather than claiming universal provider behavior.
 
 The existing service `ports`, `volumes`, `networks`, `configs`, and `secrets` types retain their
 documented short/long forms. Future schema additions must first enter this ledger before support is
 claimed.
 
-## Exact nested semantic gaps
+## Exact nested semantic coverage
 
 The 93-key service ledger above classifies immediate service keys. The following closed nested
-keys also remain without dedicated semantic value types. Open-ended user maps such as labels,
-environment variables, driver options, and extension fields are intentionally not enumerated.
-Service logging's `driver` and ordered scalar `options` are typed.
+keys have dedicated typed forms with intentionally bounded semantics. Open-ended user maps such
+as labels, environment variables, driver options, and extension fields are intentionally not
+enumerated. Service logging's `driver` and ordered scalar `options` are typed.
 
-- service `models` entries: `endpoint_var` and `model_var`;
-- long volume mounts: `consistency`, `image`, `tmpfs`, and `volume`; additionally
-  `bind.recursive`, `image.subpath`, `tmpfs.mode`, `tmpfs.size`, `volume.labels`,
-  `volume.nocopy`, and `volume.subpath` are not typed. The other current long-mount and bind
-  fields are typed;
-- `develop.watch[]`: `action`, `exec`, `ignore`, `include`, `initial_sync`, `path`, and `target`;
-  the nested `exec` hook has `command`, `environment`, `privileged`, `user`, and `working_dir`;
+`develop.watch[].exec` retains null/scalar/list `command`, strict-string `user` and `working_dir`,
+literal/deferred `privileged`, and list/map `environment` without watching, executing, resolving a
+user/path, or reading environment files. `sync+exec` still requires a non-empty command.
 
 `deploy.endpoint_mode`, `deploy.labels`, `deploy.mode`, `deploy.placement`, `deploy.replicas`,
 `deploy.resources.limits.cpus`, `deploy.resources.limits.memory`, `deploy.resources.limits.pids`,
@@ -184,7 +186,9 @@ services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `
 `stop_grace_period`, `extra_hosts`, `ports`, `cpu_rt_runtime`, `cpu_shares`, `cpus`, `cpuset`,
 `device_cgroup_rules`, `ipc`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
 `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `scale`, `volumes_from`,
-`volumes`, and `networks`.
+`volumes`, `networks`, raw resolved `domainname`/`isolation`/`mac_address`/`uts`, literal
+`use_api_socket`, and scalar `gpus: all`. Generated GPU lists, driver metadata, resource metadata,
+and develop watches remain intentionally outside this boundary.
 Generated long-form service-network attachments retain aliases plus optional raw `ipv4_address`
 and `ipv6_address` values with omission, sensitivity, and named-network scope intact.
 Generated top-level network definitions add optional opaque `driver` and ordered unique
@@ -258,7 +262,7 @@ deterministic rendering, and parse-back tests are defined.
 - [x] Promote `ulimits` through recursive mapping merge, the effective project view, and safe
       generated output while retaining ordered names, single/range form, nested provenance,
       sensitivity, empty/reset/override state, and planned-only provider evidence.
-- [x] Promote the Build value family—`additional_contexts`, context, args, labels, Build-specific `extra_hosts`, raw `cache_from`/`cache_to`/`entitlements`, Dockerfile/inline Dockerfile/target/network/isolation/platforms/no_cache/privileged/sbom/pull/shm_size/tags, `ulimits`, and short/long `build.secrets`—with source form, sensitivity, provenance, recovery, and retained conflict evidence; remaining siblings stay unmodeled.
+- [x] Promote the complete closed immediate Build-key family—`additional_contexts`, context, args, labels, Build-specific `extra_hosts`, raw `cache_from`/`cache_to`/`entitlements`, Dockerfile/inline Dockerfile/target/network/isolation/platforms/no_cache/privileged/sbom/pull/shm_size/tags, `ulimits`, and short/long `build.secrets`—with source form, sensitivity, provenance, recovery, and retained conflict evidence. Only malformed input, extensions, future unknown members, and deliberately bounded nested semantics remain unmodeled.
 - [x] Promote `deploy.endpoint_mode`, map/list `deploy.labels`, `deploy.mode`, and raw-preserving `deploy.replicas`
       into the effective project view with provenance and nested unmodeled siblings; no container-label, integer/default,
       mode-coupling, scheduling, runtime, or conversion semantics are inferred before deepening further deploy types.
@@ -298,7 +302,11 @@ deterministic rendering, and parse-back tests are defined.
       effective-project, and generated boundaries while preserving mixed raw short/long forms,
       CDI/deferred/opaque evidence, duplicates, nested provenance, reset/override, and planned-only
       provider evidence without device, permissions, CDI, GPU, or runtime validation.
-- [ ] Type GPU reservations, `gpus`, `storage_opt`, and UTS namespace choices.
+- [x] Type immediate service `gpus`, `storage_opt`, and UTS namespace choices through authored
+      and effective-project views without device allocation, label-file I/O, or runtime inference.
+- [ ] Expand the still-bounded nested deploy reservation-device semantics only with reviewed
+      provider evidence; current capabilities, driver, count, IDs, and options remain structured
+      source data rather than allocation requests.
 - [x] Type service-level `tmpfs` through authored, ordinary-append merge, effective-project, and
       generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,
       provenance, sensitivity, reset/override, and planned-only provider evidence.
@@ -307,6 +315,13 @@ deterministic rendering, and parse-back tests are defined.
       sensitivity, reset/override, and planned-only provider evidence without runtime interpretation.
 - [x] Type `volumes_from` through authored, effective-project, reference-validation, and generated
       boundaries while preserving order, duplicates, reset/override provenance, and raw access modes.
+- [x] Type the remaining long service-volume members through authored and effective views:
+      `consistency`, `bind.recursive`, and the `image`, `tmpfs`, and `volume` blocks including
+      `image.subpath`, `tmpfs.size`, `tmpfs.mode`, `volume.labels`, `volume.nocopy`, and
+      `volume.subpath`. Generation remains intentionally out of scope. `tmpfs.mode` carries a
+      Compose v2.14 badge and `image.subpath` a Compose v2.35 badge; all other availability
+      boundaries remain unknown. No path, image, volume, permission, provider, runtime, default,
+      or filesystem behavior is inferred.
 
 ### Phase 3: networking, identity, and metadata
 
@@ -322,12 +337,14 @@ deterministic rendering, and parse-back tests are defined.
 - [x] Preserve and generate raw service security options with non-selecting diagnostic candidates.
 - [x] Type network modes through authored, effective-project, reference-validation, and generated
       boundaries without inferring runtime namespaces or provider behavior.
-- [ ] Type domain name, MAC addresses, external links, and links.
+- [x] Type domain name, MAC addresses, external links, and links through authored and effective
+      project views without network or runtime resolution.
 - [x] Type service annotations through authored mapping/list syntax, keyed effective merge,
       provenance-preserving diagnostics, and safe generated mapping output.
 - [x] Type service `logging` through authored, recursively merged, effective-project, and generated
       boundaries with uninterpreted drivers, ordered string/number/null options, and no provider policy.
-- [ ] Type `label_file` and remaining config/secret metadata fields.
+- [x] Type `label_file` scalar/list syntax with source and merge provenance; label files remain
+      unread. Config/secret metadata stays in the nested-resource ledger.
 - [ ] Preserve provider/runtime-specific value spellings and attach compatibility evidence instead
       of enforcing one implementation's grammar globally.
 
@@ -335,7 +352,7 @@ deterministic rendering, and parse-back tests are defined.
 
 - [ ] Implement top-level `include` as explicit caller-authorized project loading with cycle,
       provenance, project-directory, and environment-file rules.
-- [ ] Type `develop`, service/top-level `models`, and `use_api_socket` without implying that every
+- [x] Type `develop`, service/top-level `models`, and `use_api_socket` without implying that every
       provider executes them.
 - [ ] Keep file reads, environment access, and provider invocation outside parsing APIs.
 

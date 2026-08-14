@@ -3368,6 +3368,12 @@ fn generates_literal_privileged_choices_and_rejects_replacement() -> Result<(), 
 fn generates_all_raw_service_runtime_fields_and_parses_them_back() -> Result<(), Box<dyn std::error::Error>> {
     let mut service = GeneratedService::new("app")?;
     for field in [
+        GeneratedServiceRuntimeField::Domainname(plain("example.test")?),
+        GeneratedServiceRuntimeField::Isolation(plain("process")?),
+        GeneratedServiceRuntimeField::MacAddress(plain("02:42:ac:11:00:02")?),
+        GeneratedServiceRuntimeField::Uts(plain("host")?),
+        GeneratedServiceRuntimeField::UseApiSocket(true),
+        GeneratedServiceRuntimeField::GpusAll(plain("all")?),
         GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(plain("500us")?)),
         GeneratedServiceRuntimeField::CpuShares(plain("1024")?),
         GeneratedServiceRuntimeField::Cpus(plain("0.000")?),
@@ -3415,6 +3421,16 @@ fn generates_all_raw_service_runtime_fields_and_parses_them_back() -> Result<(),
         Some(compose_lens::model::CpuRtRuntime::Duration(value)) if value == "500us"
     ));
     assert!(app.cpu_shares().is_some() && app.cpus().is_some());
+    assert_eq!(
+        app.domainname().map(compose_lens::model::Located::value),
+        Some(&"example.test".to_owned())
+    );
+    assert_eq!(
+        app.isolation().map(compose_lens::model::Located::value),
+        Some(&"process".to_owned())
+    );
+    assert!(app.mac_address().is_some() && app.uts().is_some() && app.use_api_socket().is_some());
+    assert!(matches!(app.gpus(), Some(compose_lens::model::Gpus::All(value)) if value.value() == "all"));
     assert_eq!(app.device_cgroup_rules().len(), 2);
     assert_eq!(app.volumes_from().len(), 3);
     assert!(app.mem_reservation().is_some() && app.memswap_limit().is_some());
@@ -3448,12 +3464,18 @@ fn generates_all_raw_service_runtime_fields_and_parses_them_back() -> Result<(),
     ));
     assert!(generated.text().contains("cpu_rt_runtime: 500\n"));
     assert!(generated.text().contains("cpu_rt_runtime: \"500us\"\n"));
+    assert!(generated.text().contains("gpus: \"all\"\n"));
     Ok(())
 }
 
 #[test]
 fn rejects_deferred_empty_and_out_of_range_generated_runtime_fields() -> Result<(), Box<dyn std::error::Error>> {
     let invalid = [
+        GeneratedServiceRuntimeField::Domainname(plain("${DOMAIN}")?),
+        GeneratedServiceRuntimeField::Isolation(plain("line\nbreak")?),
+        GeneratedServiceRuntimeField::MacAddress(plain("")?),
+        GeneratedServiceRuntimeField::Uts(plain("${UTS}")?),
+        GeneratedServiceRuntimeField::GpusAll(plain("one")?),
         GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(plain("${CPU}")?)),
         GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(plain("500")?)),
         GeneratedServiceRuntimeField::CpuShares(plain("-1")?),
@@ -3478,6 +3500,11 @@ fn rejects_deferred_empty_and_out_of_range_generated_runtime_fields() -> Result<
     ];
     for field in invalid {
         let name = match &field {
+            GeneratedServiceRuntimeField::Domainname(_) => "domainname",
+            GeneratedServiceRuntimeField::Isolation(_) => "isolation",
+            GeneratedServiceRuntimeField::MacAddress(_) => "mac_address",
+            GeneratedServiceRuntimeField::Uts(_) => "uts",
+            GeneratedServiceRuntimeField::GpusAll(_) => "gpus",
             GeneratedServiceRuntimeField::CpuRtRuntime(_) => "cpu_rt_runtime",
             GeneratedServiceRuntimeField::CpuShares(_) => "cpu_shares",
             GeneratedServiceRuntimeField::Cpus(_) => "cpus",

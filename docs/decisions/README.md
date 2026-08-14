@@ -28,5 +28,6 @@
 | [0015](0015-byte-preserving-yaml-backend-compatibility.md) | accepted | Same-length private parser compatibility with original-source scalar recovery             |
 | [0016](0016-native-merged-project-view.md)                 | accepted | Native profile-selected project values with complete merge provenance                     |
 | [0017](0017-parse-back-validated-compose-generation.md)    | accepted | Typed new-document generation with deterministic bytes and parse-back validation          |
+| [0018](0018-structured-final-compose-schema-keys.md)       | accepted | Structured authored/effective boundary for the final closed-schema keys                   |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

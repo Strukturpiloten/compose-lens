@@ -266,6 +266,11 @@ Additive DNS types and getters cover `dns`, `dns_opt`, and `dns_search`, retaini
 authored form, ordering, duplicates, provenance, reset/override state, and sensitivity. Their
 generated APIs accept only resolved physical-line-safe values and parse back the emitted document.
 
+Resource-definition `external()` remains the stable modern boolean/expression getter for networks,
+volumes, configs, and secrets. The additive `external_syntax()` getter exposes the complete
+source-aware form, including deprecated `external: { name: ... }`, without changing the established
+API or silently normalizing the legacy name.
+
 Additive `Expose` and `Annotations` types retain scalar or syntax identity and their documented
 field-specific merge evidence. Generated construction requires safe, unambiguous values.
 

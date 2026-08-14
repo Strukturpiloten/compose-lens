@@ -12,6 +12,10 @@ All notable changes to ComposeLens will be documented in this file. The project 
   device-cgroup, and `volumes_from` keys, retaining merge provenance, interpolation sensitivity,
   malformed evidence, local service-reference validation, and deterministic parse-back-generated
   raw syntax without runtime inference.
+- Completes structured authored/effective coverage for the current closed-schema Compose keys,
+  including includes, models, GPU selectors, development watches, and local model references.
+- Adds authored and effective long-volume mount options for consistency, recursive binds, image,
+  tmpfs, and named-volume subsettings; generation and runtime interpretation remain excluded.
 
 ## [0.1.17] - 2026-08-13
 

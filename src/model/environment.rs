@@ -12,7 +12,7 @@ pub struct EnvironmentListEntry {
 }
 
 impl EnvironmentListEntry {
-    pub(super) fn parse(raw: Located<String>) -> Self {
+    pub(crate) fn parse(raw: Located<String>) -> Self {
         let (name, value) = raw.value().split_once('=').map_or_else(
             || (raw.value().clone(), None),
             |(name, value)| (name.to_owned(), Some(value.to_owned())),
@@ -50,7 +50,7 @@ pub struct EnvironmentMapEntry {
 }
 
 impl EnvironmentMapEntry {
-    pub(super) const fn new(name: Located<String>, value: Located<ComposeScalar>, span: SourceSpan) -> Self {
+    pub(crate) const fn new(name: Located<String>, value: Located<ComposeScalar>, span: SourceSpan) -> Self {
         Self { name, value, span }
     }
 

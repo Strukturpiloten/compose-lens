@@ -18,6 +18,9 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 
 - an optional resolved service `hostname`, independently validated with conservative ASCII
   RFC-1123 rules and never derived from another name;
+- resolved raw service `domainname`, `isolation`, `mac_address`, and `uts` spellings;
+- an explicit literal/deferred-safe `use_api_socket` choice; and
+- the scalar `gpus: all` selector, without device allocation or list-selector generation;
 - an optional explicit runtime `container_name` validated against Compose's portable grammar;
 - image references, including `name:tag@digest` spellings;
 - independent string/list entrypoints and exec/shell commands, including explicitly empty forms;
@@ -63,6 +66,12 @@ and the native annotation model must parse it back successfully.
 
 Strings are always double-quoted by the private renderer, so YAML scalar inference cannot change
 their type.
+
+The generated raw service-runtime fields (`domainname`, `isolation`, `mac_address`, and `uts`) are
+single-line resolved strings only. They do not validate DNS, MAC, namespace, platform, provider,
+runtime, or cross-format behavior. `use_api_socket` is an explicit literal boolean, while generated
+`gpus` intentionally supports only the portable scalar `all`; detailed GPU devices remain
+authored/effective data because generation would imply an unsupported allocation policy.
 
 `GeneratedService::set_cap_add` and `GeneratedService::set_cap_drop` configure their complete
 vectors independently and exactly once. Not calling a setter omits its field; an empty vector emits

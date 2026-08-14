@@ -1799,6 +1799,18 @@ impl GeneratedCpuRtRuntime {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedServiceRuntimeField {
+    /// Raw resolved service domain name.
+    Domainname(GeneratedString),
+    /// Raw resolved service isolation spelling.
+    Isolation(GeneratedString),
+    /// Raw resolved service MAC-address spelling.
+    MacAddress(GeneratedString),
+    /// Raw resolved service UTS spelling.
+    Uts(GeneratedString),
+    /// Literal API-socket mount choice.
+    UseApiSocket(bool),
+    /// Safe scalar GPU selector.
+    GpusAll(GeneratedString),
     /// `cpu_rt_runtime` with an explicit integer or duration scalar category.
     CpuRtRuntime(GeneratedCpuRtRuntime),
     /// `cpu_shares` raw integer spelling.
@@ -1834,6 +1846,12 @@ pub enum GeneratedServiceRuntimeField {
 impl GeneratedServiceRuntimeField {
     fn field_name(&self) -> &'static str {
         match self {
+            Self::Domainname(_) => "domainname",
+            Self::Isolation(_) => "isolation",
+            Self::MacAddress(_) => "mac_address",
+            Self::Uts(_) => "uts",
+            Self::UseApiSocket(_) => "use_api_socket",
+            Self::GpusAll(_) => "gpus",
             Self::CpuRtRuntime(_) => "cpu_rt_runtime",
             Self::CpuShares(_) => "cpu_shares",
             Self::Cpus(_) => "cpus",
@@ -1854,12 +1872,12 @@ impl GeneratedServiceRuntimeField {
 
     fn is_sensitive(&self) -> bool {
         match self {
-            Self::DeviceCgroupRules(values) | Self::VolumesFrom(values) => {
-                values.iter().any(GeneratedString::is_sensitive)
-            }
-            Self::OomKillDisable(_) => false,
-            Self::CpuRtRuntime(value) => value.is_sensitive(),
-            Self::CpuShares(value)
+            Self::Domainname(value)
+            | Self::Isolation(value)
+            | Self::MacAddress(value)
+            | Self::Uts(value)
+            | Self::GpusAll(value)
+            | Self::CpuShares(value)
             | Self::Cpus(value)
             | Self::Cpuset(value)
             | Self::Ipc(value)
@@ -1870,6 +1888,11 @@ impl GeneratedServiceRuntimeField {
             | Self::OomScoreAdj(value)
             | Self::Pid(value)
             | Self::Scale(value) => value.is_sensitive(),
+            Self::DeviceCgroupRules(values) | Self::VolumesFrom(values) => {
+                values.iter().any(GeneratedString::is_sensitive)
+            }
+            Self::UseApiSocket(_) | Self::OomKillDisable(_) => false,
+            Self::CpuRtRuntime(value) => value.is_sensitive(),
         }
     }
 }
@@ -3162,6 +3185,25 @@ fn render_service(output: &mut String, service: &GeneratedService) {
 fn render_runtime_fields(output: &mut String, fields: &[GeneratedServiceRuntimeField]) {
     for field in fields {
         match field {
+            GeneratedServiceRuntimeField::Domainname(value) => {
+                render_optional_string(output, "domainname", Some(value));
+            }
+            GeneratedServiceRuntimeField::Isolation(value) => {
+                render_optional_string(output, "isolation", Some(value));
+            }
+            GeneratedServiceRuntimeField::MacAddress(value) => {
+                render_optional_string(output, "mac_address", Some(value));
+            }
+            GeneratedServiceRuntimeField::Uts(value) => {
+                render_optional_string(output, "uts", Some(value));
+            }
+            GeneratedServiceRuntimeField::UseApiSocket(value) => {
+                write_field(output, 2, "use_api_socket");
+                output.push_str(if *value { "true\n" } else { "false\n" });
+            }
+            GeneratedServiceRuntimeField::GpusAll(value) => {
+                render_optional_string(output, "gpus", Some(value));
+            }
             GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(value)) => {
                 write_field(output, 2, "cpu_rt_runtime");
                 output.push_str(value.expose());
@@ -3238,6 +3280,13 @@ fn generated_runtime_field_safe(field: &GeneratedServiceRuntimeField) -> bool {
                     .is_some_and(|(_, target)| !target.is_empty()))
     };
     match field {
+        GeneratedServiceRuntimeField::Domainname(value)
+        | GeneratedServiceRuntimeField::Isolation(value)
+        | GeneratedServiceRuntimeField::MacAddress(value)
+        | GeneratedServiceRuntimeField::Uts(value)
+        | GeneratedServiceRuntimeField::Cpuset(value) => safe(value),
+        GeneratedServiceRuntimeField::UseApiSocket(_) | GeneratedServiceRuntimeField::OomKillDisable(_) => true,
+        GeneratedServiceRuntimeField::GpusAll(value) => safe(value) && value.expose() == "all",
         GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(value)) => unsigned(value),
         GeneratedServiceRuntimeField::CpuShares(value) | GeneratedServiceRuntimeField::Scale(value) => {
             bounded_unsigned(value)
@@ -3250,7 +3299,6 @@ fn generated_runtime_field_safe(field: &GeneratedServiceRuntimeField) -> bool {
                 )
         }
         GeneratedServiceRuntimeField::Cpus(value) => decimal(value),
-        GeneratedServiceRuntimeField::Cpuset(value) => safe(value),
         GeneratedServiceRuntimeField::DeviceCgroupRules(values) => values.iter().all(safe),
         GeneratedServiceRuntimeField::Ipc(value)
         | GeneratedServiceRuntimeField::NetworkMode(value)
@@ -3262,7 +3310,6 @@ fn generated_runtime_field_safe(field: &GeneratedServiceRuntimeField) -> bool {
             safe(value) && valid_generated_runtime_memory(value.expose(), true)
         }
         GeneratedServiceRuntimeField::MemSwappiness(value) => signed_range(value, 0, 100),
-        GeneratedServiceRuntimeField::OomKillDisable(_) => true,
         GeneratedServiceRuntimeField::OomScoreAdj(value) => signed_range(value, -1000, 1000),
         GeneratedServiceRuntimeField::VolumesFrom(values) => values.iter().all(reference),
     }

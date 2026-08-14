@@ -1,6 +1,6 @@
 //! Service-network attachments and top-level network definitions.
 
-use super::{BooleanValue, FieldReference, KeyValueEntry, Labels, Located};
+use super::{BooleanValue, FieldReference, KeyValueEntry, Labels, Located, ResourceExternal};
 use crate::source::SourceSpan;
 
 /// Options for one service attachment to a network.
@@ -330,7 +330,7 @@ pub struct NetworkDefinition {
     attachable: Option<Located<BooleanValue>>,
     enable_ipv4: Option<Located<BooleanValue>>,
     enable_ipv6: Option<Located<BooleanValue>>,
-    external: Option<Located<BooleanValue>>,
+    external: Option<ResourceExternal>,
     internal: Option<Located<BooleanValue>>,
     ipam: Option<Ipam>,
     labels: Option<Labels>,
@@ -373,7 +373,7 @@ impl NetworkDefinition {
     pub(crate) fn set_enable_ipv6(&mut self, value: Located<BooleanValue>) {
         self.enable_ipv6 = Some(value);
     }
-    pub(crate) fn set_external(&mut self, value: Located<BooleanValue>) {
+    pub(crate) fn set_external(&mut self, value: ResourceExternal) {
         self.external = Some(value);
     }
     pub(crate) fn set_internal(&mut self, value: Located<BooleanValue>) {
@@ -430,9 +430,16 @@ impl NetworkDefinition {
     pub const fn enable_ipv6(&self) -> Option<&Located<BooleanValue>> {
         self.enable_ipv6.as_ref()
     }
-    /// Returns the external-lifecycle setting.
+    /// Returns the modern boolean/expression external-lifecycle setting.
+    ///
+    /// Legacy `external: { name: ... }` uses [`Self::external_syntax`] instead.
     #[must_use]
-    pub const fn external(&self) -> Option<&Located<BooleanValue>> {
+    pub fn external(&self) -> Option<&Located<BooleanValue>> {
+        self.external.as_ref().and_then(ResourceExternal::boolean)
+    }
+    /// Returns the external-lifecycle syntax without normalizing legacy names.
+    #[must_use]
+    pub const fn external_syntax(&self) -> Option<&ResourceExternal> {
         self.external.as_ref()
     }
     /// Returns the internal-network setting.

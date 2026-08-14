@@ -40,6 +40,10 @@ Provider tests cover strict-string type recovery, empty types, ordered scalar/se
 categories, duplicate/empty/malformed evidence, spans, interpolation redaction, generic merge,
 reset/override provenance, public APIs, and the no-execution/discovery boundary.
 
+Long-volume option tests cover every currently typed option block, valid and invalid scalar
+categories, list/map labels, duplicates, extensions, unknown nested fields, interpolation,
+reset/override, and the public authored/effective API without generation or runtime access.
+
 ### Processing tests
 
 Cover file ordering, merge rules, reset/override behavior, interpolation operators, `.env` handling, profile selection, include behavior, path origins, defaults, and reference resolution.

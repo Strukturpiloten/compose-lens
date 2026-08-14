@@ -3934,3 +3934,53 @@ fn exposes_authored_and_effective_build_extra_hosts_contract() -> Result<(), Box
     );
     Ok(())
 }
+
+#[test]
+fn exposes_final_compose_key_boundary_without_implicit_io() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "version: '3.9'\ninclude: [base.yaml]\nmodels: {embedder: {model: local}}\nservices:\n",
+        "  app:\n    domainname: example.test\n    gpus: all\n    use_api_socket: true\n",
+        "    label_file: [labels.txt]\n    external_links: [external]\n    links: [db]\n",
+        "    storage_opt: {size: 1G}\n    models: {embedder: MODEL_URL}\n",
+        "    isolation: process\n    mac_address: 02:42:ac:11:00:02\n    uts: host\n",
+        "    develop: {watch: [{action: sync, path: ., target: /src}]}\n",
+        "networks:\n  app: {external: true}\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(1999), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("document expected")?;
+    let _: Option<&compose_lens::model::Located<String>> = document.version();
+    let _: Option<&compose_lens::model::Includes> = document.include();
+    let _: Option<&compose_lens::model::ModelDefinitions> = document.models();
+    let service = document.service("app").ok_or("service expected")?;
+    let _: Option<&compose_lens::model::Located<String>> = service.domainname();
+    let _: Option<&compose_lens::model::Located<String>> = service.isolation();
+    let _: Option<&compose_lens::model::Located<String>> = service.mac_address();
+    let _: Option<&compose_lens::model::Located<String>> = service.uts();
+    let _: Option<&compose_lens::model::Located<BooleanValue>> = service.use_api_socket();
+    let _: Option<&compose_lens::model::LabelFiles> = service.label_files();
+    let _: &[compose_lens::model::Located<String>] = service.external_links();
+    let _: &[compose_lens::model::Located<String>] = service.links();
+    let _: Option<&compose_lens::model::Labels> = service.storage_opt();
+    let _: Option<&compose_lens::model::ServiceModels> = service.models();
+    let _: Option<&compose_lens::model::Gpus> = service.gpus();
+    let _: Option<&compose_lens::model::Develop> = service.develop();
+    let network = document.networks().first().ok_or("network expected")?;
+    let _: Option<&compose_lens::model::Located<BooleanValue>> = network.external();
+    let _: Option<&compose_lens::model::ResourceExternal> = network.external_syntax();
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2000),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let view = result.view().ok_or("view expected")?;
+    let _: Option<&compose_lens::project::ProjectValue<String>> = view.version();
+    let _: Option<&compose_lens::project::ProjectValue<compose_lens::model::Includes>> = view.include();
+    let service = view.service("app").ok_or("project service expected")?;
+    let _: Option<&compose_lens::project::ProjectValue<String>> = service.domainname();
+    let _: Option<&compose_lens::project::ProjectValue<compose_lens::model::Develop>> = service.develop();
+    Ok(())
+}

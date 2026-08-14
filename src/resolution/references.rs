@@ -173,6 +173,7 @@ pub fn validate_references(project: &MergedProject, selection: Option<&ProfileSe
     let volumes = resource_names(project, "volumes");
     let configs = resource_names(project, "configs");
     let secrets = resource_names(project, "secrets");
+    let models = resource_names(project, "models");
     let mut references = Vec::new();
 
     for service in services {
@@ -198,6 +199,7 @@ pub fn validate_references(project: &MergedProject, selection: Option<&ProfileSe
             &mut diagnostics,
         );
         collect_service_references(service, &service_names, selection, &mut references, &mut diagnostics);
+        validate_service_models(service, &models, &mut diagnostics);
         validate_dependency_healthchecks(service, services, selection, &mut diagnostics);
     }
 
@@ -205,6 +207,53 @@ pub fn validate_references(project: &MergedProject, selection: Option<&ProfileSe
         references,
         diagnostics,
     }
+}
+
+fn validate_service_models(service: &MergedEntry, models: &BTreeSet<&str>, diagnostics: &mut Vec<Diagnostic>) {
+    let Some(value) = service.value().get("models") else {
+        return;
+    };
+    match value.kind() {
+        crate::merge::MergedValueKind::Sequence(items) => {
+            for item in items {
+                if let Some(scalar) = item.as_scalar() {
+                    diagnose_missing_model(
+                        service.key(),
+                        scalar.value(),
+                        super::effective_span(item),
+                        models,
+                        diagnostics,
+                    );
+                }
+            }
+        }
+        crate::merge::MergedValueKind::Mapping(entries) => {
+            for entry in entries {
+                diagnose_missing_model(service.key(), entry.key(), entry_span(entry), models, diagnostics);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn diagnose_missing_model(
+    _service: &str,
+    model: &str,
+    source: SourceSpan,
+    models: &BTreeSet<&str>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if models.contains(model) {
+        return;
+    }
+    diagnostics.push(
+        Diagnostic::new(
+            MISSING_REFERENCE,
+            Severity::Error,
+            "selected service model binding references an undefined model",
+        )
+        .with_label(DiagnosticLabel::primary(source, "model is not declared")),
+    );
 }
 
 fn resource_names<'a>(project: &'a MergedProject, field: &str) -> BTreeSet<&'a str> {

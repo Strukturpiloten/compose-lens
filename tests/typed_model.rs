@@ -5364,8 +5364,12 @@ fn retains_short_and_long_volume_forms_as_distinct_variants() -> Result<(), Box<
     assert_eq!(long.source().map(|value| value.value().as_str()), Some("./strict"));
     assert_eq!(long.target().map(|value| value.value().as_str()), Some("/srv/strict"));
     assert_eq!(long.read_only().map(Located::value), Some(&BooleanValue::Literal(true)));
+    assert_eq!(
+        long.consistency().map(Located::value).map(String::as_str),
+        Some("delegated")
+    );
     assert_eq!(long.extension_fields().len(), 1);
-    assert_eq!(long.unknown_fields().len(), 1);
+    assert_eq!(long.unknown_fields().len(), 0);
 
     let bind = long.bind().ok_or("long mount bind options are missing")?;
     assert_eq!(
@@ -5694,7 +5698,7 @@ fn retains_volume_driver_option_scalar_kinds_and_external_driver_conflicts() -> 
         parsed
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code() == EXPECTED_BOOLEAN)
+            .any(|diagnostic| diagnostic.code() == EXPECTED_FIELD_FORM)
     );
     Ok(())
 }
