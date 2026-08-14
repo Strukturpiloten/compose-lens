@@ -41,6 +41,19 @@ environment access. Recoverable syntax and typed-model diagnostics stay attached
 and are aggregated without preventing analysis. File discovery and I/O belong in application
 adapters; paths retain the origin needed for later resolution.
 
+### Traverse includes
+
+`IncludeResolution::load` accepts a caller-created root and an `IncludeLoader`. For each reached
+project it performs the existing ordered load, authored no-interpolation merge, and native project
+view before visiting effective includes depth-first. The loader receives raw path, `env_file`, and
+`project_directory` declarations plus their spans, origin, and parent context; it is the only I/O
+and authorization boundary. Cycles use caller-defined identities on the active stack, source IDs
+are unique across the whole traversal, and failures retain a partial graph with stable
+`compose.include.*` diagnostics. This slice does not canonicalize or join paths, interpolate
+values, read environment or `.env` files, infer project names, cache diamonds, or merge child
+resources. Composition, path policy, environment precedence, and provider evidence remain later
+operations.
+
 ### Interpolate
 
 Evaluates supported variable expressions using an explicit provider. The provider may expose process environment variables, a supplied map, an `.env` document, or a test fixture. No provider is consulted during parsing.

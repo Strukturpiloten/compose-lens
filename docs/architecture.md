@@ -52,8 +52,14 @@ in the [typed model](typed-model.md) and
 The implemented core loader receives ordered source text and explicit origins from the caller. It
 retains every origin, establishes the first document's directory as the multi-file project base,
 and aggregates recoverable parse diagnostics. It never reads files or environment variables.
-Application adapters own discovery and I/O; include handling and multi-file composition remain
-separate processing behavior. ADR 0005 defines this [loading boundary](decisions/0005-explicit-ordered-project-loading.md).
+Application adapters own discovery and I/O. ADR 0005 defines this [loading boundary](decisions/0005-explicit-ordered-project-loading.md).
+
+`IncludeResolution` is an additive traversal layer above ordered loading. It merges each reached
+node without interpolation, derives its effective typed declarations, and asks an
+`IncludeLoader` to authorize and supply every child. It preserves the partial depth-first graph,
+origins, requests, cycles, duplicate source IDs, and diagnostics, but never joins paths, reads
+environment files, imports child resources, or composes projects. [ADR 0020](decisions/0020-caller-authorized-include-traversal.md)
+defines that boundary.
 
 ### Processing pipeline
 

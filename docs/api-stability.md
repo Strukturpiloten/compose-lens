@@ -41,6 +41,14 @@ interpolation, merging, or profile selection. The modules remain separate delibe
 not add a convenience function that hides file access, interpolation, merging, profile selection,
 validation, or rendering.
 
+The additive `loader::{IncludeIdentity, IncludeLoader, IncludeRequest, IncludedProjectInput,
+IncludeResolution}` contract is stable within 0.2.x. Identity canonicalization and all I/O remain
+caller-owned; raw include path, `env_file`, and `project_directory` values are not interpolated or
+normalized. Stable `compose.include.*` diagnostics report traversal failures while retaining
+partial nodes, edges, requests, and origins. This API deliberately excludes child-resource
+composition, path joining, environment/.env precedence, project-name inference, caching, and
+provider behavior.
+
 The additive generated-document path accepts only explicit Compose-owned values and performs no
 processing or I/O. Successful output is parse-back validated through the syntax and native model.
 Additive `init`, `stdin_open`, `tty`, and `privileged` getters retain omitted, literal, and deferred states at the

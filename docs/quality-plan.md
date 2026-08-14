@@ -55,7 +55,9 @@ To update the snapshot deliberately:
 
 Prioritize behavior that affects real consumers:
 
-- explicit, caller-authorized `include` loading with cycle and origin handling;
+- complete the implemented caller-authorized `include` traversal slice with composition, explicit
+  path policy, environment-file/.env precedence, project-name rules, and provider evidence kept as
+  separate future work;
 - the remaining bounded deploy reservation-device semantics when evidence justifies them;
 - provider-specific spelling differences without enforcing one provider globally; and
 - stable source-aware diagnostics for invalid, deferred, deprecated, or unsupported values.

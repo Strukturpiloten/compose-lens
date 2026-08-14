@@ -30,5 +30,6 @@
 | [0017](0017-parse-back-validated-compose-generation.md)    | accepted   | Typed new-document generation with deterministic bytes and parse-back validation          |
 | [0018](0018-structured-final-compose-schema-keys.md)       | accepted   | Structured authored/effective boundary for the final closed-schema keys                   |
 | [0019](0019-consolidated-0.2-public-api.md)                | accepted   | Consolidated 0.2.x public API without compatibility-only aliases                          |
+| [0020](0020-caller-authorized-include-traversal.md)        | accepted   | Caller-authorized recursive include traversal without composition                         |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

@@ -55,8 +55,12 @@ the inventory; nested coverage remains tracked below.
 
 There are no remaining closed-schema top-level gaps. `version` is retained with an obsolete-field
 warning and never selects a provider or schema. `include` retains short paths and long
-`path`/`env_file`/`project_directory` forms; `models` retains `name`, required `model`,
-`context_size`, and `runtime_flags`. Neither operation reads a file, environment, or provider.
+`path`/`env_file`/`project_directory` forms. Its completed traversal slice accepts
+caller-authorized loading, uses effective no-interpolation declarations in depth-first order, and
+retains origins, partial graphs, cycles, and global source-ID diagnostics. It does not
+canonicalize/join paths, read environment files or `.env`, infer names, cache diamonds, or compose
+child resources. `models` retains `name`, required `model`, `context_size`, and `runtime_flags`.
+Neither operation performs implicit file, environment, or provider access.
 Malformed or unknown nested include/model members remain reachable through the effective view's
 root or service `unmodeled_fields` references rather than being normalized away.
 
@@ -363,8 +367,11 @@ deterministic rendering, and parse-back tests are defined.
 
 ### Phase 4: orchestration and processing-only features
 
-- [ ] Implement top-level `include` as explicit caller-authorized project loading with cycle,
-      provenance, project-directory, and environment-file rules.
+- [x] Implement the bounded top-level `include` traversal: caller-authorized recursive loading,
+      effective no-interpolation ordering, origins, partial graph diagnostics, cycles, and global
+      source-ID rejection.
+- [ ] Compose included resources; define path joining/canonicalization policy, environment-file
+      and `.env` precedence, project-name rules, and provider-specific evidence.
 - [x] Type `develop`, service/top-level `models`, and `use_api_socket` without implying that every
       provider executes them.
 - [ ] Keep file reads, environment access, and provider invocation outside parsing APIs.
