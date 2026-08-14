@@ -64,6 +64,13 @@ collisions remain source-aware warnings and explicit records rather than invokin
 rules. [ADR 0020](decisions/0020-caller-authorized-include-traversal.md) and
 [ADR 0021](decisions/0021-include-composition-with-explicit-conflicts.md) define these boundaries.
 
+The independent `plan_project_directories` pass supplies caller-owned effective directory planning
+without changing loading or composition. It defaults root and undeclared children from their
+retained first-document directories, while explicit declarations reach a resolver with source and
+occurrence context. The resolver alone decides path/URI/opaque semantics; deferred and unresolved
+results remain inspectable without exposing paths in diagnostics or debug output. [ADR 0022](decisions/0022-caller-owned-include-project-directory-plans.md)
+defines that boundary.
+
 ### Processing pipeline
 
 Merging, profile selection, interpolation, default application, and normalization are separate operations. Each operation consumes an explicit context and returns diagnostics plus a new view or transformation result.

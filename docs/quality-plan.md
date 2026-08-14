@@ -56,8 +56,9 @@ To update the snapshot deliberately:
 Prioritize behavior that affects real consumers:
 
 - keep the implemented caller-authorized `include` traversal and opt-in local-wins composition
-  slice covered while leaving explicit path policy, environment-file/.env precedence, project-name
-  rules, composed rendering, and provider evidence as separate future work;
+  and caller-owned project-directory planning slices covered while leaving field-specific resource
+  path resolution/rebasing, non-local context policy, environment-file/.env precedence,
+  project-name rules, composed rendering, and provider evidence as separate future work;
 - the remaining bounded deploy reservation-device semantics when evidence justifies them;
 - provider-specific spelling differences without enforcing one provider globally; and
 - stable source-aware diagnostics for invalid, deferred, deprecated, or unsupported values.

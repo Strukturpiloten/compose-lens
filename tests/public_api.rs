@@ -2,8 +2,9 @@
 
 use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{
-    DocumentInput, DocumentOrigin, IncludeIdentity, IncludeLoadError, IncludeLoader, IncludeRequest, IncludeResolution,
-    IncludedProjectInput, LoadedProject,
+    DocumentInput, DocumentOrigin, IncludeIdentity, IncludeLoadError, IncludeLoader, IncludeProjectDirectoryRequest,
+    IncludeProjectDirectoryResolution, IncludeProjectDirectoryResolveError, IncludeProjectDirectoryResolver,
+    IncludeProjectDirectoryStatus, IncludeRequest, IncludeResolution, IncludedProjectInput, LoadedProject,
 };
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
@@ -33,6 +34,7 @@ use compose_lens::render::{
     GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption,
     GeneratedVolumeDriverOptionValue, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
 };
+use std::path::PathBuf;
 
 struct SyntheticIncludeLoader;
 
@@ -49,6 +51,25 @@ impl IncludeLoader for SyntheticIncludeLoader {
             )),
             _ => Err(IncludeLoadError::denied("synthetic loader only authorizes child.yaml")),
         }
+    }
+}
+
+struct SyntheticDirectoryResolver;
+
+impl IncludeProjectDirectoryResolver for SyntheticDirectoryResolver {
+    fn resolve_project_directory(
+        &self,
+        request: &IncludeProjectDirectoryRequest<'_>,
+    ) -> Result<IncludeProjectDirectoryResolution, IncludeProjectDirectoryResolveError> {
+        if request.parent_node_index() != 0
+            || request.child_node_index() != 1
+            || request.declaration().value() != "synthetic-directory"
+        {
+            return Err(IncludeProjectDirectoryResolveError::Unresolved);
+        }
+        Ok(IncludeProjectDirectoryResolution::Resolved(PathBuf::from(
+            "authorized/synthetic-directory",
+        )))
     }
 }
 
@@ -4025,5 +4046,31 @@ fn composes_synthetic_document_inputs_without_filesystem_or_environment_access()
         root.service("child").ok_or("child service expected")?;
     assert!(root.network("child-network").is_some());
     assert!(composition.is_complete());
+    Ok(())
+}
+
+#[test]
+fn plans_synthetic_project_directories_through_the_public_resolver_contract() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = IncludedProjectInput::new(
+        IncludeIdentity::new("synthetic-root"),
+        [DocumentInput::new(
+            SourceId::new(15_010),
+            DocumentOrigin::new("synthetic-root.yaml", "synthetic-root"),
+            "include: [{path: child.yaml, project_directory: synthetic-directory}]\n",
+        )],
+    );
+    let resolution = IncludeResolution::load(root, &SyntheticIncludeLoader);
+    let plan = resolution.plan_project_directories(&SyntheticDirectoryResolver);
+    let child = plan.entry(1).ok_or("child plan expected")?;
+
+    let _: &compose_lens::loader::IncludeProjectDirectoryPlan = &plan;
+    let _: &compose_lens::loader::IncludeProjectDirectoryEntry = child;
+    assert_eq!(child.status(), IncludeProjectDirectoryStatus::Resolved);
+    assert_eq!(
+        child.effective_directory().map(|directory| directory.to_string_lossy()),
+        Some("authorized/synthetic-directory".into())
+    );
+    assert!(plan.is_valid() && plan.is_complete());
     Ok(())
 }

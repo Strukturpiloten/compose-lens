@@ -51,6 +51,11 @@ definitions and explicit local-wins resource conflicts without re-entering the l
 path joining, environment/.env precedence, project-name inference, caching, composed rendering,
 and provider behavior.
 
+The additive `IncludeProjectDirectoryResolver`, request, outcome, entry, and plan types are stable
+within 0.2.x. They are a separate opt-in planning API: only explicit declarations invoke the
+resolver, returned paths are authorized caller data, and typed unresolved status contains no
+arbitrary message text. No path policy, I/O, interpolation, or resource-path resolution is implied.
+
 The additive generated-document path accepts only explicit Compose-owned values and performs no
 processing or I/O. Successful output is parse-back validated through the syntax and native model.
 Additive `init`, `stdin_open`, `tty`, and `privileged` getters retain omitted, literal, and deferred states at the

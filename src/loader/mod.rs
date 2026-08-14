@@ -1,5 +1,7 @@
 //! Ordered, caller-supplied Compose project loading.
 
+mod include_paths;
+
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::interpolation::{
     DocumentInterpolation, EnvironmentProvider, InterpolationOptions, interpolate_document_with_options,
@@ -17,6 +19,12 @@ use std::error::Error;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+pub use include_paths::{
+    INCLUDE_PROJECT_DIRECTORY_UNRESOLVED, IncludeProjectDirectoryEntry, IncludeProjectDirectoryPlan,
+    IncludeProjectDirectoryRequest, IncludeProjectDirectoryResolution, IncludeProjectDirectoryResolveError,
+    IncludeProjectDirectoryResolver, IncludeProjectDirectoryStatus,
+};
 
 /// An effective include declaration could not be modeled safely enough to authorize loading.
 pub const INCLUDE_UNMODELED: DiagnosticCode = DiagnosticCode::new("compose.include.unmodeled");
@@ -968,6 +976,18 @@ impl IncludeResolution {
             diagnostics,
             conflicts,
         }
+    }
+
+    /// Plans effective include project directories through an explicit caller-owned resolver.
+    ///
+    /// Only explicit `project_directory` declarations invoke the resolver. Root and child defaults
+    /// reuse the caller-supplied first-document directories already retained by the traversal.
+    #[must_use]
+    pub fn plan_project_directories(
+        &self,
+        resolver: &dyn IncludeProjectDirectoryResolver,
+    ) -> IncludeProjectDirectoryPlan {
+        include_paths::plan_project_directories(self, resolver)
     }
 
     /// Reports whether traversal reached no error diagnostic.

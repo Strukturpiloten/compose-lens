@@ -60,6 +60,16 @@ diagnostics plus warnings and reports incomplete traversal or conflicts explicit
 not canonicalize or join paths, interpolate values, read environment or `.env` files, infer project
 names, cache diamonds, render a composed document, or select provider behavior.
 
+### Plan include project directories
+
+`IncludeResolution::plan_project_directories` is an independent I/O-free planning operation. Root
+and undeclared child occurrences use their retained first-document directories. For an explicit raw
+`project_directory`, a caller-owned resolver receives the include edge, request, occurrence
+identities/indices, declaration span, effective parent directory when available, and child first
+document directory. It can return an authorized directory, defer non-fatally, or report typed
+unresolved status. The plan preserves traversal diagnostics, emits no path text, and does not join,
+canonicalize, open, interpolate, expand, or otherwise interpret paths. Cycle edges are skipped.
+
 ### Interpolate
 
 Evaluates supported variable expressions using an explicit provider. The provider may expose process environment variables, a supplied map, an `.env` document, or a test fixture. No provider is consulted during parsing.

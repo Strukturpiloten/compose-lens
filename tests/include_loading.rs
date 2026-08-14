@@ -2,12 +2,16 @@
 
 use compose_lens::loader::{
     DocumentInput, DocumentOrigin, INCLUDE_CYCLE, INCLUDE_DUPLICATE_SOURCE_ID, INCLUDE_EMPTY_RESULT,
-    INCLUDE_LOADER_DENIED, INCLUDE_LOADER_FAILED, INCLUDE_UNMODELED, IncludeComposition, IncludeIdentity,
-    IncludeLoadError, IncludeLoader, IncludeRequest, IncludeResolution, IncludedProjectInput,
+    INCLUDE_LOADER_DENIED, INCLUDE_LOADER_FAILED, INCLUDE_PROJECT_DIRECTORY_UNRESOLVED, INCLUDE_UNMODELED,
+    IncludeComposition, IncludeIdentity, IncludeLoadError, IncludeLoader, IncludeProjectDirectoryEntry,
+    IncludeProjectDirectoryPlan, IncludeProjectDirectoryRequest, IncludeProjectDirectoryResolution,
+    IncludeProjectDirectoryResolveError, IncludeProjectDirectoryResolver, IncludeProjectDirectoryStatus,
+    IncludeRequest, IncludeResolution, IncludedProjectInput,
 };
 use compose_lens::source::SourceId;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 #[derive(Default)]
 struct FixtureLoader {
@@ -34,6 +38,72 @@ impl IncludeLoader for FixtureLoader {
             .get(&path)
             .cloned()
             .unwrap_or_else(|| Err(IncludeLoadError::failed("fixture path is not authorized")))
+    }
+}
+
+#[derive(Clone)]
+enum DirectoryOutcome {
+    Relative,
+    Preserve,
+    Deferred,
+    Unresolved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DirectoryCall {
+    edge_index: usize,
+    request_index: usize,
+    parent_node_index: usize,
+    child_node_index: usize,
+    parent_identity: String,
+    child_identity: String,
+    parent_directory: Option<PathBuf>,
+    declaration: String,
+    child_first_directory: Option<PathBuf>,
+}
+
+#[derive(Default)]
+struct FixtureDirectoryResolver {
+    outcomes: BTreeMap<String, DirectoryOutcome>,
+    calls: RefCell<Vec<DirectoryCall>>,
+}
+
+impl FixtureDirectoryResolver {
+    fn with_outcome(mut self, declaration: &str, outcome: DirectoryOutcome) -> Self {
+        self.outcomes.insert(declaration.to_owned(), outcome);
+        self
+    }
+}
+
+impl IncludeProjectDirectoryResolver for FixtureDirectoryResolver {
+    fn resolve_project_directory(
+        &self,
+        request: &IncludeProjectDirectoryRequest<'_>,
+    ) -> Result<IncludeProjectDirectoryResolution, IncludeProjectDirectoryResolveError> {
+        let declaration = request.declaration().value().clone();
+        self.calls.borrow_mut().push(DirectoryCall {
+            edge_index: request.edge_index(),
+            request_index: request.request_index(),
+            parent_node_index: request.parent_node_index(),
+            child_node_index: request.child_node_index(),
+            parent_identity: request.parent_identity().as_str().to_owned(),
+            child_identity: request.child_identity().as_str().to_owned(),
+            parent_directory: request.parent_effective_directory().map(PathBuf::from),
+            declaration: declaration.clone(),
+            child_first_directory: request.child_first_document_directory().map(PathBuf::from),
+        });
+        match self.outcomes.get(&declaration) {
+            Some(DirectoryOutcome::Relative) => Ok(request
+                .parent_effective_directory()
+                .map_or(IncludeProjectDirectoryResolution::Deferred, |parent| {
+                    IncludeProjectDirectoryResolution::Resolved(parent.join(declaration))
+                })),
+            Some(DirectoryOutcome::Preserve) => {
+                Ok(IncludeProjectDirectoryResolution::Resolved(PathBuf::from(declaration)))
+            }
+            Some(DirectoryOutcome::Deferred) => Ok(IncludeProjectDirectoryResolution::Deferred),
+            Some(DirectoryOutcome::Unresolved) | None => Err(IncludeProjectDirectoryResolveError::Unresolved),
+        }
     }
 }
 
@@ -76,6 +146,63 @@ fn assert_root_cross_references(root: &IncludeComposition) {
     assert!(
         root.service("root")
             .is_some_and(|definition| definition.definition().models().is_some())
+    );
+}
+
+fn assert_repeated_identity_plan(
+    resolution: &IncludeResolution,
+    plan: &IncludeProjectDirectoryPlan,
+    resolver: &FixtureDirectoryResolver,
+) {
+    assert!(plan.is_valid() && plan.is_complete());
+    assert_eq!(
+        resolution
+            .nodes()
+            .iter()
+            .map(|node| node.identity().as_str())
+            .collect::<Vec<_>>(),
+        ["root", "a", "common", "b", "common"]
+    );
+    assert_eq!(
+        resolution
+            .edges()
+            .iter()
+            .map(|edge| (edge.parent_node_index(), edge.child_node_index(), edge.request_index()))
+            .collect::<Vec<_>>(),
+        [(0, 1, 0), (1, 2, 1), (0, 3, 2), (3, 4, 3)]
+    );
+    for (node_index, edge_index, request_index, declaration) in [
+        (1, 0, 0, "a-directory"),
+        (2, 1, 1, "common-a-directory"),
+        (3, 2, 2, "b-directory"),
+        (4, 3, 3, "common-b-directory"),
+    ] {
+        let entry = &plan.entries()[node_index];
+        assert_eq!(entry.edge_index(), Some(edge_index));
+        assert_eq!(entry.request_index(), Some(request_index));
+        assert_eq!(
+            entry.declaration().map(|declaration| declaration.value().as_str()),
+            Some(declaration)
+        );
+    }
+    assert_eq!(
+        resolver
+            .calls
+            .borrow()
+            .iter()
+            .map(|call| (
+                call.edge_index,
+                call.request_index,
+                call.child_node_index,
+                call.declaration.as_str()
+            ))
+            .collect::<Vec<_>>(),
+        [
+            (0, 0, 1, "a-directory"),
+            (1, 1, 2, "common-a-directory"),
+            (2, 2, 3, "b-directory"),
+            (3, 3, 4, "common-b-directory"),
+        ]
     );
 }
 
@@ -569,4 +696,452 @@ fn recovers_other_imports_when_an_include_is_malformed_empty_or_cyclic() {
     assert!(root.service("good").is_some());
     assert!(root.service("cycle").is_some());
     assert!(root.service("shadow").is_none());
+}
+
+#[test]
+fn plans_root_and_default_child_directories_without_invoking_policy() {
+    let root = input("root", 130, "root.yaml", "root-directory", "include: [child.yaml]\n");
+    let loader = FixtureLoader::default().with_result(
+        "child.yaml",
+        Ok(input("child", 131, "child.yaml", "child-directory", "services: {}\n")),
+    );
+    let resolver = FixtureDirectoryResolver::default();
+
+    let plan = IncludeResolution::load(root, &loader).plan_project_directories(&resolver);
+
+    assert!(plan.is_valid() && plan.is_complete());
+    assert_eq!(plan.entries().len(), 2);
+    assert_eq!(
+        plan.entry(0).map(IncludeProjectDirectoryEntry::status),
+        Some(IncludeProjectDirectoryStatus::Root)
+    );
+    assert_eq!(
+        plan.entry(0)
+            .and_then(|entry| entry.effective_directory())
+            .map(|directory| directory.to_string_lossy()),
+        Some("root-directory".into())
+    );
+    assert_eq!(
+        plan.entry(1).map(IncludeProjectDirectoryEntry::status),
+        Some(IncludeProjectDirectoryStatus::Defaulted)
+    );
+    assert_eq!(
+        plan.entry(1)
+            .and_then(|entry| entry.effective_directory())
+            .map(|directory| directory.to_string_lossy()),
+        Some("child-directory".into())
+    );
+    assert!(resolver.calls.into_inner().is_empty());
+}
+
+#[test]
+fn propagates_resolved_parent_directories_and_preserves_absolute_policy_results() {
+    let root = input(
+        "root",
+        140,
+        "root.yaml",
+        "/workspace/root",
+        "include: [{path: child.yaml, project_directory: child-effective}, {path: absolute.yaml, project_directory: /opaque/location}]\n",
+    );
+    let child = input(
+        "child",
+        141,
+        "child.yaml",
+        "/loaded/child",
+        "include: [{path: grandchild.yaml, project_directory: grandchild-effective}]\n",
+    );
+    let loader = FixtureLoader::default()
+        .with_result("child.yaml", Ok(child))
+        .with_result(
+            "absolute.yaml",
+            Ok(input(
+                "absolute",
+                142,
+                "absolute.yaml",
+                "/loaded/absolute",
+                "services: {}\n",
+            )),
+        )
+        .with_result(
+            "grandchild.yaml",
+            Ok(input(
+                "grandchild",
+                143,
+                "grandchild.yaml",
+                "/loaded/grandchild",
+                "services: {}\n",
+            )),
+        );
+    let resolver = FixtureDirectoryResolver::default()
+        .with_outcome("child-effective", DirectoryOutcome::Relative)
+        .with_outcome("grandchild-effective", DirectoryOutcome::Relative)
+        .with_outcome("/opaque/location", DirectoryOutcome::Preserve);
+
+    let plan = IncludeResolution::load(root, &loader).plan_project_directories(&resolver);
+
+    assert!(plan.is_valid() && plan.is_complete());
+    assert_eq!(
+        plan.entry(1)
+            .and_then(|entry| entry.effective_directory())
+            .map(|directory| directory.to_string_lossy()),
+        Some("/workspace/root/child-effective".into())
+    );
+    assert_eq!(
+        plan.entry(2)
+            .and_then(|entry| entry.effective_directory())
+            .map(|directory| directory.to_string_lossy()),
+        Some("/workspace/root/child-effective/grandchild-effective".into())
+    );
+    assert_eq!(
+        plan.entry(3)
+            .and_then(|entry| entry.effective_directory())
+            .map(|directory| directory.to_string_lossy()),
+        Some("/opaque/location".into())
+    );
+    let calls = resolver.calls.into_inner();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(
+        calls[1].parent_directory,
+        Some(PathBuf::from("/workspace/root/child-effective"))
+    );
+    assert_eq!(
+        calls[1].child_first_directory,
+        Some(PathBuf::from("/loaded/grandchild"))
+    );
+    assert_eq!(calls[2].parent_identity, "root");
+    assert_eq!(calls[2].child_identity, "absolute");
+}
+
+#[test]
+fn defaults_to_the_first_child_document_directory_and_leaves_resources_unmodified() {
+    let root = input("root", 150, "root.yaml", "root-directory", "include: [child.yaml]\n");
+    let child = IncludedProjectInput::new(
+        IncludeIdentity::new("child"),
+        [
+            DocumentInput::new(
+                SourceId::new(151),
+                DocumentOrigin::new("child-first.yaml", "first-directory"),
+                "services: {app: {image: example/app, volumes: [named:/data]}}\nvolumes: {named: {}}\n",
+            ),
+            DocumentInput::new(
+                SourceId::new(152),
+                DocumentOrigin::new("child-second.yaml", "second-directory"),
+                "services: {app: {environment: {UNCHANGED: value}}}\n",
+            ),
+        ],
+    );
+    let loader = FixtureLoader::default().with_result("child.yaml", Ok(child));
+    let resolver = FixtureDirectoryResolver::default();
+
+    let resolution = IncludeResolution::load(root, &loader);
+    let plan = resolution.plan_project_directories(&resolver);
+
+    assert_eq!(
+        plan.entry(1)
+            .and_then(|entry| entry.effective_directory())
+            .map(|directory| directory.to_string_lossy()),
+        Some("first-directory".into())
+    );
+    assert!(resolver.calls.into_inner().is_empty());
+    assert!(
+        resolution.nodes()[1]
+            .project_view()
+            .and_then(|view| view.service("app"))
+            .is_some_and(|service| service.volumes().is_some() && service.environment().is_some())
+    );
+    assert!(
+        resolution.nodes()[1].inputs().documents()[0]
+            .source_text()
+            .contains("named:/data")
+    );
+}
+
+#[test]
+fn lets_descendants_resolve_opaque_directories_after_a_deferred_parent() {
+    let root = input(
+        "root",
+        155,
+        "root.yaml",
+        "/workspace/root",
+        "include: [{path: parent.yaml, project_directory: deferred-parent}]\n",
+    );
+    let parent = input(
+        "parent",
+        156,
+        "parent.yaml",
+        "/loaded/parent",
+        "include: [{path: child.yaml, project_directory: opaque://child}]\n",
+    );
+    let loader = FixtureLoader::default()
+        .with_result("parent.yaml", Ok(parent))
+        .with_result(
+            "child.yaml",
+            Ok(input("child", 157, "child.yaml", "/loaded/child", "services: {}\n")),
+        );
+    let resolver = FixtureDirectoryResolver::default()
+        .with_outcome("deferred-parent", DirectoryOutcome::Deferred)
+        .with_outcome("opaque://child", DirectoryOutcome::Preserve);
+
+    let plan = IncludeResolution::load(root, &loader).plan_project_directories(&resolver);
+
+    assert!(plan.is_valid() && !plan.is_complete());
+    assert_eq!(
+        plan.entry(1).map(IncludeProjectDirectoryEntry::status),
+        Some(IncludeProjectDirectoryStatus::Deferred)
+    );
+    assert_eq!(
+        plan.entry(2)
+            .and_then(|entry| entry.effective_directory())
+            .map(|directory| directory.to_string_lossy()),
+        Some("opaque://child".into())
+    );
+    assert_eq!(resolver.calls.into_inner()[1].parent_directory, None);
+}
+
+#[test]
+fn defers_or_reports_explicit_project_directories_without_exposing_paths() {
+    let root = input(
+        "root",
+        160,
+        "root.yaml",
+        "root-directory",
+        "include: [{path: deferred.yaml, project_directory: private/deferred}, {path: unresolved.yaml, project_directory: private/unresolved}]\n",
+    );
+    let loader = FixtureLoader::default()
+        .with_result(
+            "deferred.yaml",
+            Ok(input(
+                "deferred",
+                161,
+                "deferred.yaml",
+                "deferred-directory",
+                "services: {}\n",
+            )),
+        )
+        .with_result(
+            "unresolved.yaml",
+            Ok(input(
+                "unresolved",
+                162,
+                "unresolved.yaml",
+                "unresolved-directory",
+                "services: {}\n",
+            )),
+        );
+    let resolver = FixtureDirectoryResolver::default()
+        .with_outcome("private/deferred", DirectoryOutcome::Deferred)
+        .with_outcome("private/unresolved", DirectoryOutcome::Unresolved);
+
+    let plan = IncludeResolution::load(root, &loader).plan_project_directories(&resolver);
+
+    assert!(!plan.is_valid() && !plan.is_complete());
+    assert_eq!(
+        plan.entry(1).map(IncludeProjectDirectoryEntry::status),
+        Some(IncludeProjectDirectoryStatus::Deferred)
+    );
+    assert_eq!(
+        plan.entry(2).map(IncludeProjectDirectoryEntry::status),
+        Some(IncludeProjectDirectoryStatus::Unresolved)
+    );
+    let unresolved_diagnostics = plan
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code() == INCLUDE_PROJECT_DIRECTORY_UNRESOLVED)
+        .into_iter()
+        .collect::<Vec<_>>();
+    assert_eq!(unresolved_diagnostics.len(), 1);
+    let diagnostic = unresolved_diagnostics[0];
+    assert_eq!(diagnostic.labels().len(), 1);
+    let debug = format!("{plan:?}");
+    assert!(!debug.contains("private/deferred") && !debug.contains("private/unresolved"));
+    assert!(!diagnostic.message().contains("private") && !format!("{diagnostic:?}").contains("private"));
+
+    let deferred_root = input(
+        "deferred-root",
+        163,
+        "root.yaml",
+        "root-directory",
+        "include: [{path: deferred.yaml, project_directory: private/deferred}]\n",
+    );
+    let deferred_loader = FixtureLoader::default().with_result(
+        "deferred.yaml",
+        Ok(input(
+            "deferred",
+            164,
+            "deferred.yaml",
+            "deferred-directory",
+            "services: {}\n",
+        )),
+    );
+    let deferred_plan = IncludeResolution::load(deferred_root, &deferred_loader).plan_project_directories(&resolver);
+    assert!(deferred_plan.is_valid() && !deferred_plan.is_complete());
+}
+
+#[test]
+fn skips_cycle_edges_while_preserving_the_existing_traversal_failure() {
+    let root = input(
+        "root",
+        170,
+        "root.yaml",
+        "root-directory",
+        "include: [{path: child.yaml, project_directory: child-effective}]\n",
+    );
+    let child = input(
+        "child",
+        171,
+        "child.yaml",
+        "child-directory",
+        "include: [{path: root.yaml, project_directory: cycle-effective}]\n",
+    );
+    let loader = FixtureLoader::default()
+        .with_result("child.yaml", Ok(child))
+        .with_result(
+            "root.yaml",
+            Ok(input(
+                "root",
+                172,
+                "shadow-root.yaml",
+                "shadow-directory",
+                "services: {}\n",
+            )),
+        );
+    let resolver = FixtureDirectoryResolver::default().with_outcome("child-effective", DirectoryOutcome::Relative);
+
+    let resolution = IncludeResolution::load(root, &loader);
+    let plan = resolution.plan_project_directories(&resolver);
+
+    assert_eq!(plan.entries().len(), 2);
+    assert!(!plan.is_valid() && !plan.is_complete());
+    assert!(
+        plan.diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == INCLUDE_CYCLE)
+    );
+    assert_eq!(
+        resolver
+            .calls
+            .into_inner()
+            .iter()
+            .map(|call| call.declaration.as_str())
+            .collect::<Vec<_>>(),
+        ["child-effective"]
+    );
+}
+
+#[test]
+fn plans_each_repeated_identity_occurrence_with_its_own_edge_request_and_declaration() {
+    let root = input(
+        "root",
+        180,
+        "root.yaml",
+        "/workspace/root",
+        concat!(
+            "include:\n",
+            "  - path: a.yaml\n",
+            "    project_directory: a-directory\n",
+            "  - path: b.yaml\n",
+            "    project_directory: b-directory\n",
+        ),
+    );
+    let a = input(
+        "a",
+        181,
+        "a.yaml",
+        "/loaded/a",
+        "include: [{path: common-a.yaml, project_directory: common-a-directory}]\n",
+    );
+    let b = input(
+        "b",
+        182,
+        "b.yaml",
+        "/loaded/b",
+        "include: [{path: common-b.yaml, project_directory: common-b-directory}]\n",
+    );
+    let loader = FixtureLoader::default()
+        .with_result("a.yaml", Ok(a))
+        .with_result("b.yaml", Ok(b))
+        .with_result(
+            "common-a.yaml",
+            Ok(input(
+                "common",
+                183,
+                "common-a.yaml",
+                "/loaded/common-a",
+                "services: {}\n",
+            )),
+        )
+        .with_result(
+            "common-b.yaml",
+            Ok(input(
+                "common",
+                184,
+                "common-b.yaml",
+                "/loaded/common-b",
+                "services: {}\n",
+            )),
+        );
+    let resolver = FixtureDirectoryResolver::default()
+        .with_outcome("a-directory", DirectoryOutcome::Relative)
+        .with_outcome("common-a-directory", DirectoryOutcome::Relative)
+        .with_outcome("b-directory", DirectoryOutcome::Relative)
+        .with_outcome("common-b-directory", DirectoryOutcome::Relative);
+
+    let resolution = IncludeResolution::load(root, &loader);
+    let plan = resolution.plan_project_directories(&resolver);
+
+    assert_repeated_identity_plan(&resolution, &plan, &resolver);
+}
+
+#[test]
+fn plans_only_accepted_occurrences_after_denied_failed_and_empty_include_results() {
+    let root = input(
+        "root",
+        190,
+        "root.yaml",
+        "root-directory",
+        "include: [denied.yaml, failed.yaml, empty.yaml]\n",
+    );
+    let loader = FixtureLoader::default()
+        .with_result("denied.yaml", Err(IncludeLoadError::denied("fixture policy")))
+        .with_result("failed.yaml", Err(IncludeLoadError::failed("fixture unavailable")))
+        .with_result(
+            "empty.yaml",
+            Ok(IncludedProjectInput::new(IncludeIdentity::new("empty"), [])),
+        );
+    let resolver = FixtureDirectoryResolver::default();
+
+    let resolution = IncludeResolution::load(root, &loader);
+    let plan = resolution.plan_project_directories(&resolver);
+
+    assert_eq!(resolution.requests().len(), 3);
+    assert_eq!(resolution.edges().len(), 1);
+    assert_eq!(resolution.nodes().len(), 2);
+    assert_eq!(plan.entries().len(), 2);
+    assert!(plan.entry(2).is_none());
+    assert_eq!(
+        plan.entry(1).map(IncludeProjectDirectoryEntry::status),
+        Some(IncludeProjectDirectoryStatus::Defaulted)
+    );
+    assert!(
+        plan.entry(1)
+            .and_then(IncludeProjectDirectoryEntry::effective_directory)
+            .is_none()
+    );
+    assert!(!plan.is_valid() && !plan.is_complete());
+    assert!(
+        plan.diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == INCLUDE_LOADER_DENIED)
+    );
+    assert!(
+        plan.diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == INCLUDE_LOADER_FAILED)
+    );
+    assert!(
+        plan.diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code() == INCLUDE_EMPTY_RESULT)
+    );
+    assert!(resolver.calls.into_inner().is_empty());
 }
