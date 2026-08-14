@@ -3,6 +3,9 @@
 This roadmap orders ComposeLens work by consumer value and records the exact current specification
 surface that is not yet available through a native typed API. It is not a delivery schedule.
 
+The [quality plan](quality-plan.md) groups the remaining work into maintainable priorities and
+defines what “good enough” means for testing and conformance.
+
 ## Coverage language
 
 ComposeLens has several independent coverage layers:

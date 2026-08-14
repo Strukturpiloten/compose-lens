@@ -2,6 +2,17 @@
 
 ComposeLens must be built around tests because YAML syntax, Compose processing, and implementation behavior contain many interacting edge cases.
 
+## Investment boundary
+
+Pull-request checks must remain deterministic and reasonably fast. New behavior should normally
+have focused positive and negative coverage, including malformed input, merge/reset behavior,
+public API use, or representative end-to-end behavior when relevant.
+
+The project does not require fuzzing or 100% code coverage. Coverage floors detect broad
+regressions; they do not replace meaningful assertions. Networked provider runs and other
+environment-dependent checks remain opt-in or scheduled unless they are the only practical way to
+protect a supported contract. See the [quality plan](quality-plan.md) for the prioritized work.
+
 ## Test layers
 
 ### Syntax tests
