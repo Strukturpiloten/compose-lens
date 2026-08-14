@@ -430,16 +430,9 @@ impl NetworkDefinition {
     pub const fn enable_ipv6(&self) -> Option<&Located<BooleanValue>> {
         self.enable_ipv6.as_ref()
     }
-    /// Returns the modern boolean/expression external-lifecycle setting.
-    ///
-    /// Legacy `external: { name: ... }` uses [`Self::external_syntax`] instead.
+    /// Returns the complete authored external-lifecycle setting.
     #[must_use]
-    pub fn external(&self) -> Option<&Located<BooleanValue>> {
-        self.external.as_ref().and_then(ResourceExternal::boolean)
-    }
-    /// Returns the external-lifecycle syntax without normalizing legacy names.
-    #[must_use]
-    pub const fn external_syntax(&self) -> Option<&ResourceExternal> {
+    pub const fn external(&self) -> Option<&ResourceExternal> {
         self.external.as_ref()
     }
     /// Returns the internal-network setting.

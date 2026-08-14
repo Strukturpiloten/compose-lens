@@ -14,7 +14,7 @@ pub enum ResourceExternal {
     /// Modern boolean or deferred-expression syntax.
     Boolean(Located<BooleanValue>),
     /// Deprecated mapping syntax retaining its independently authored name.
-    Legacy(Box<LegacyExternalName>),
+    NameMapping(Box<ExternalNameMapping>),
 }
 
 impl ResourceExternal {
@@ -29,8 +29,8 @@ impl ResourceExternal {
 
     /// Returns the deprecated external-name mapping when it was authored.
     #[must_use]
-    pub const fn legacy(&self) -> Option<&LegacyExternalName> {
-        let Self::Legacy(value) = self else {
+    pub const fn name_mapping(&self) -> Option<&ExternalNameMapping> {
+        let Self::NameMapping(value) = self else {
             return None;
         };
         Some(value)
@@ -39,21 +39,21 @@ impl ResourceExternal {
     /// Whether this form explicitly selects external lifecycle.
     #[must_use]
     pub fn is_explicitly_external(&self) -> bool {
-        matches!(self, Self::Legacy(_))
+        matches!(self, Self::NameMapping(_))
             || matches!(self, Self::Boolean(value) if matches!(value.value(), BooleanValue::Literal(true)))
     }
 }
 
-/// The legacy `external: { name: ... }` mapping.
+/// The deprecated Compose `external: { name: ... }` mapping.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LegacyExternalName {
+pub struct ExternalNameMapping {
     span: SourceSpan,
     name: Option<Located<String>>,
     extension_fields: Vec<FieldReference>,
     unknown_fields: Vec<FieldReference>,
 }
 
-impl LegacyExternalName {
+impl ExternalNameMapping {
     pub(crate) fn new(span: SourceSpan) -> Self {
         Self {
             span,
@@ -72,7 +72,7 @@ impl LegacyExternalName {
         self.unknown_fields.push(value);
     }
 
-    /// Returns the complete legacy mapping span.
+    /// Returns the complete deprecated mapping span.
     #[must_use]
     pub const fn span(&self) -> SourceSpan {
         self.span
@@ -82,12 +82,12 @@ impl LegacyExternalName {
     pub const fn name(&self) -> Option<&Located<String>> {
         self.name.as_ref()
     }
-    /// Returns retained `x-` fields in the legacy mapping.
+    /// Returns retained `x-` fields in the deprecated mapping.
     #[must_use]
     pub fn extension_fields(&self) -> &[FieldReference] {
         &self.extension_fields
     }
-    /// Returns unrecognized or malformed fields in the legacy mapping.
+    /// Returns unrecognized or malformed fields in the deprecated mapping.
     #[must_use]
     pub fn unknown_fields(&self) -> &[FieldReference] {
         &self.unknown_fields
@@ -164,16 +164,9 @@ impl VolumeDefinition {
     pub fn driver_opts(&self) -> &[KeyValueEntry] {
         &self.driver_opts
     }
-    /// Returns the modern boolean/expression external-lifecycle setting.
-    ///
-    /// Legacy `external: { name: ... }` uses [`Self::external_syntax`] instead.
+    /// Returns the complete authored external-lifecycle setting.
     #[must_use]
-    pub fn external(&self) -> Option<&Located<BooleanValue>> {
-        self.external.as_ref().and_then(ResourceExternal::boolean)
-    }
-    /// Returns the external-lifecycle syntax without normalizing legacy names.
-    #[must_use]
-    pub const fn external_syntax(&self) -> Option<&ResourceExternal> {
+    pub const fn external(&self) -> Option<&ResourceExternal> {
         self.external.as_ref()
     }
     /// Returns labels with their syntax form retained.
@@ -283,16 +276,9 @@ impl ConfigDefinition {
     pub const fn content(&self) -> Option<&Located<String>> {
         self.content.as_ref()
     }
-    /// Returns the modern boolean/expression external-lifecycle setting.
-    ///
-    /// Legacy `external: { name: ... }` uses [`Self::external_syntax`] instead.
+    /// Returns the complete authored external-lifecycle setting.
     #[must_use]
-    pub fn external(&self) -> Option<&Located<BooleanValue>> {
-        self.external.as_ref().and_then(ResourceExternal::boolean)
-    }
-    /// Returns the external-lifecycle syntax without normalizing legacy names.
-    #[must_use]
-    pub const fn external_syntax(&self) -> Option<&ResourceExternal> {
+    pub const fn external(&self) -> Option<&ResourceExternal> {
         self.external.as_ref()
     }
     /// Returns the platform-level custom name.
@@ -428,16 +414,9 @@ impl SecretDefinition {
     pub const fn template_driver(&self) -> Option<&Located<String>> {
         self.template_driver.as_ref()
     }
-    /// Returns the modern boolean/expression external-lifecycle setting.
-    ///
-    /// Legacy `external: { name: ... }` uses [`Self::external_syntax`] instead.
+    /// Returns the complete authored external-lifecycle setting.
     #[must_use]
-    pub fn external(&self) -> Option<&Located<BooleanValue>> {
-        self.external.as_ref().and_then(ResourceExternal::boolean)
-    }
-    /// Returns the external-lifecycle syntax without normalizing legacy names.
-    #[must_use]
-    pub const fn external_syntax(&self) -> Option<&ResourceExternal> {
+    pub const fn external(&self) -> Option<&ResourceExternal> {
         self.external.as_ref()
     }
     /// Returns the platform-level custom name.

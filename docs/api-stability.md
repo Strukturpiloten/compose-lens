@@ -1,12 +1,13 @@
 # API stability policy
 
-ComposeLens is pre-1.0, but its API is not an unbounded experiment. Version 0.1 establishes one
-documented public release line for early BoxFerry integration and independent consumers. This
-policy is recorded by [ADR 0013](decisions/0013-versioned-public-api-and-release-contract.md).
+ComposeLens is pre-1.0, but its API is not an unbounded experiment. Version 0.2 establishes the
+current public release line for BoxFerry integration and independent consumers after consolidating
+the first source-aware APIs. This policy is recorded by
+[ADR 0019](decisions/0019-consolidated-0.2-public-api.md).
 
-## The 0.1.x contract
+## The 0.2.x contract
 
-Within the 0.1.x line:
+Within the 0.2.x line:
 
 - patch releases preserve source compatibility for supported public entry points;
 - public APIs use ComposeLens-owned types, while `yaml-edit` remains private;
@@ -23,7 +24,7 @@ rename a diagnostic code.
 
 ## Supported entry points
 
-The 0.1 consumer contract covers these explicit stages:
+The 0.2 consumer contract covers these explicit stages:
 
 | Stage                                                    | Public modules                               |
 | -------------------------------------------------------- | -------------------------------------------- |
@@ -266,10 +267,10 @@ Additive DNS types and getters cover `dns`, `dns_opt`, and `dns_search`, retaini
 authored form, ordering, duplicates, provenance, reset/override state, and sensitivity. Their
 generated APIs accept only resolved physical-line-safe values and parse back the emitted document.
 
-Resource-definition `external()` remains the stable modern boolean/expression getter for networks,
-volumes, configs, and secrets. The additive `external_syntax()` getter exposes the complete
-source-aware form, including deprecated `external: { name: ... }`, without changing the established
-API or silently normalizing the legacy name.
+Resource-definition `external()` returns the complete `ResourceExternal` authored form for
+networks, volumes, configs, and secrets. Callers inspect `Boolean` for current Compose syntax or
+`NameMapping` for deprecated `external: { name: ... }` input. There is no compatibility alias or
+second syntax getter, and the deprecated input spelling is never silently normalized.
 
 Additive `Expose` and `Annotations` types retain scalar or syntax identity and their documented
 field-specific merge evidence. Generated construction requires safe, unambiguous values.
@@ -325,11 +326,11 @@ Adding a variant to one of the public compatibility-context enums marked `#[non_
 a breaking change. Other public enums may become non-exhaustive only in a breaking release because
 adding that attribute itself affects downstream exhaustive matches.
 
-## Not promised by 0.1
+## Not promised by 0.2
 
-The 0.1 contract does not claim:
+The 0.2 contract does not claim:
 
-- complete coverage of every Compose field;
+- complete provider/runtime semantics for every Compose value;
 - structural source editing beyond the documented scalar boundary;
 - behavior parity among the Compose Specification, Docker Compose, and `podman-compose`;
 - runtime effects from provider-only `config` observations; or

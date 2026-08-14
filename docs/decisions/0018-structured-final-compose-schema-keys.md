@@ -30,9 +30,9 @@ cases.
    This reports absence but never resolves a model or contacts a provider.
 5. Generated Compose output is limited to values whose YAML-safe representation is explicit and
    parse-back validated. It does not imply support for every authored nested form.
-6. Treat modern boolean/expression `external` and legacy `external: { name: ... }` as distinct
+6. Treat current boolean/expression `external` and deprecated `external: { name: ... }` as distinct
    source-aware forms. Warn on legacy objects, label both sources when their name conflicts with
-   modern `name`, and retain malformed/unknown nested evidence. Resource and develop-exec metadata
+   current `name`, and retain malformed/unknown nested evidence. Resource and develop-exec metadata
    is parsing-only: no driver, template, file, environment, user, path, watcher, or command is
    invoked. Config and secret metadata receives no generated API.
 
@@ -44,7 +44,7 @@ cases.
   normalization.
 - Loading included projects, files, environments, model providers, device selection, and develop
   watch execution remain application responsibilities.
-- The current schema deprecates legacy external-name objects for networks, volumes, and configs;
+- The current schema deprecates external-name mapping objects for networks, volumes, and configs;
   a reviewed Docker Compose 5.4.0 observation warns for secrets too. The model is consistent for
   all four resources but records the divergence instead of asserting provider equivalence.
 

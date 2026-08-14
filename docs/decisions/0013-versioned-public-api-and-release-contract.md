@@ -1,6 +1,6 @@
 # ADR 0013: Versioned public API and release contract
 
-- Status: accepted
+- Status: superseded by [ADR 0019](0019-consolidated-0.2-public-api.md)
 - Date: 2026-07-31
 
 ## Context

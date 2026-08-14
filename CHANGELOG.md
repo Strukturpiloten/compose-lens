@@ -17,6 +17,14 @@ All notable changes to ComposeLens will be documented in this file. The project 
 - Adds authored and effective long-volume mount options for consistency, recursive binds, image,
   tmpfs, and named-volume subsettings; generation and runtime interpretation remain excluded.
 
+### Changed
+
+- Starts the 0.2.x API line with one complete resource `external()` getter; removes the
+  compatibility-only `external_syntax()` path and renames the deprecated Compose name-mapping
+  model.
+- SemVer validation derives the release type from Cargo package versions instead of forcing every
+  candidate to be a patch.
+
 ## [0.1.17] - 2026-08-13
 
 ### Added

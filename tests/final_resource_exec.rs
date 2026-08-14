@@ -4,19 +4,20 @@ use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
     BooleanValue, Command, ComposeDocument, Environment, GPU_MISSING_CAPABILITIES, Labels, Located,
-    RESOURCE_EXTERNAL_CREATION_CONFIGURATION, RESOURCE_EXTERNAL_LEGACY_DEPRECATED, RESOURCE_EXTERNAL_NAME_CONFLICT,
-    ResourceExternal,
+    RESOURCE_EXTERNAL_CREATION_CONFIGURATION, RESOURCE_EXTERNAL_NAME_CONFLICT,
+    RESOURCE_EXTERNAL_NAME_MAPPING_DEPRECATED, ResourceExternal,
 };
 use compose_lens::project::build_project_view;
 use compose_lens::source::SourceId;
 use compose_lens::syntax::SyntaxDocument;
 
 #[test]
-fn retains_resource_metadata_legacy_external_names_and_typed_develop_exec() -> Result<(), Box<dyn std::error::Error>> {
+fn retains_resource_metadata_deprecated_external_names_and_typed_develop_exec() -> Result<(), Box<dyn std::error::Error>>
+{
     let source = concat!(
         "configs:\n",
         "  app:\n",
-        "    external: {name: legacy-config, x-note: retained}\n",
+        "    external: {name: deprecated-config, x-note: retained}\n",
         "    name: modern-config\n",
         "    labels: [team=platform]\n",
         "    template_driver: golang\n",
@@ -51,7 +52,7 @@ fn retains_resource_metadata_legacy_external_names_and_typed_develop_exec() -> R
         config.template_driver().map(|value| value.value().as_str()),
         Some("golang")
     );
-    assert!(matches!(config.external_syntax(), Some(ResourceExternal::Legacy(legacy)) if legacy.name().is_some()));
+    assert!(matches!(config.external(), Some(ResourceExternal::NameMapping(mapping)) if mapping.name().is_some()));
     let secret = document.secrets().first().ok_or("secret expected")?;
     assert_eq!(secret.driver().map(|value| value.value().as_str()), Some("vault"));
     assert!(!secret.driver_opts().is_empty());
@@ -61,8 +62,9 @@ fn retains_resource_metadata_legacy_external_names_and_typed_develop_exec() -> R
         Some("json")
     );
     assert!(matches!(
-        secret.external().map(Located::value),
-        Some(BooleanValue::Literal(true))
+        secret.external(),
+        Some(ResourceExternal::Boolean(value))
+            if matches!(value.value(), BooleanValue::Literal(true))
     ));
 
     let exec = document
@@ -81,7 +83,7 @@ fn retains_resource_metadata_legacy_external_names_and_typed_develop_exec() -> R
     assert!(matches!(exec.environment(), Some(Environment::Map { entries, .. }) if entries.len() == 2));
 
     for code in [
-        RESOURCE_EXTERNAL_LEGACY_DEPRECATED,
+        RESOURCE_EXTERNAL_NAME_MAPPING_DEPRECATED,
         RESOURCE_EXTERNAL_NAME_CONFLICT,
         RESOURCE_EXTERNAL_CREATION_CONFIGURATION,
     ] {
@@ -92,7 +94,7 @@ fn retains_resource_metadata_legacy_external_names_and_typed_develop_exec() -> R
 }
 
 #[test]
-fn retains_invalid_legacy_and_exec_members_as_source_evidence() -> Result<(), Box<dyn std::error::Error>> {
+fn retains_invalid_deprecated_mapping_and_exec_members_as_source_evidence() -> Result<(), Box<dyn std::error::Error>> {
     let source = concat!(
         "networks:\n  n:\n    external:\n      name: 4\n      future: true\n",
         "services:\n  app:\n    develop:\n      watch:\n        - action: sync+exec\n          path: .\n          target: /src\n          exec:\n            command: []\n            user: 4\n            environment: false\n            x-note: kept\n",
@@ -101,7 +103,7 @@ fn retains_invalid_legacy_and_exec_members_as_source_evidence() -> Result<(), Bo
     let parsed = ComposeDocument::parse(syntax.document());
     let document = parsed.document().ok_or("document expected")?;
     let network = document.networks().first().ok_or("network expected")?;
-    assert!(matches!(network.external_syntax(), Some(ResourceExternal::Legacy(legacy)) if legacy.name().is_none()));
+    assert!(matches!(network.external(), Some(ResourceExternal::NameMapping(mapping)) if mapping.name().is_none()));
     let exec = document
         .service("app")
         .and_then(|service| service.develop())
@@ -200,7 +202,8 @@ fn requires_non_empty_gpu_capabilities_at_authored_and_effective_boundaries() ->
 }
 
 #[test]
-fn keeps_invalid_legacy_external_name_evidence_in_the_effective_resource() -> Result<(), Box<dyn std::error::Error>> {
+fn keeps_invalid_deprecated_external_name_evidence_in_the_effective_resource() -> Result<(), Box<dyn std::error::Error>>
+{
     let loaded = LoadedProject::load([
         DocumentInput::new(
             SourceId::new(9906),
@@ -223,24 +226,24 @@ fn keeps_invalid_legacy_external_name_evidence_in_the_effective_resource() -> Re
         .ok_or("network expected")?
         .definition()
         .value();
-    let ResourceExternal::Legacy(legacy) = network.external_syntax().ok_or("legacy syntax expected")? else {
-        return Err("legacy syntax expected".into());
+    let ResourceExternal::NameMapping(mapping) = network.external().ok_or("name mapping expected")? else {
+        return Err("name mapping expected".into());
     };
-    assert!(legacy.name().is_none());
+    assert!(mapping.name().is_none());
     assert!(
-        legacy
+        mapping
             .unknown_fields()
             .iter()
             .any(|field| field.name().value() == "name")
     );
     assert!(
-        legacy
+        mapping
             .unknown_fields()
             .iter()
             .any(|field| field.name().value() == "future")
     );
     assert!(
-        legacy
+        mapping
             .extension_fields()
             .iter()
             .any(|field| field.name().value() == "x-base")

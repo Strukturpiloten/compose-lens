@@ -134,6 +134,6 @@ run_step "Check local documentation links" lychee --config lychee.toml --root-di
   "${markdown_files[@]}"
 run_step "Check published API compatibility" env CARGO_HOME="${semver_cargo_home}" \
   cargo semver-checks check-release \
-  --package compose-lens --release-type patch
+  --package compose-lens
 
 printf '\nComposeLens local validation passed all %d steps.\n' "${total_steps}"

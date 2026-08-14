@@ -127,9 +127,9 @@ the exact `all` scalar or list selectors without allocating devices. `label_file
 All currently audited top-level resource-definition members are typed. Configs retain labels and
 opaque strict-string template drivers. Secrets retain opaque strict-string drivers/template drivers,
 ordered string-or-number driver options, and labels. Networks, volumes, configs, and secrets retain
-the modern boolean/expression `external` form separately from legacy `external: { name: ... }`.
+the current boolean/expression `external` form separately from deprecated `external: { name: ... }`.
 Legacy objects receive a migration warning and a two-span conflict diagnostic when they coexist with
-modern `name`; they are not normalized. The Compose schema deprecates this object for networks,
+current `name`; they are not normalized. The Compose schema deprecates this object for networks,
 volumes, and configs, while Docker Compose 5.4.0 warned for all four: ComposeLens documents that
 divergence rather than claiming universal provider behavior.
 

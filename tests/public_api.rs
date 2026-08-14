@@ -1,4 +1,4 @@
-//! Consumer-facing contract for the supported 0.1.x processing path.
+//! Consumer-facing contract for the supported 0.2.x processing path.
 
 use compose_lens::interpolation::MapEnvironment;
 use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
@@ -3966,8 +3966,7 @@ fn exposes_final_compose_key_boundary_without_implicit_io() -> Result<(), Box<dy
     let _: Option<&compose_lens::model::Gpus> = service.gpus();
     let _: Option<&compose_lens::model::Develop> = service.develop();
     let network = document.networks().first().ok_or("network expected")?;
-    let _: Option<&compose_lens::model::Located<BooleanValue>> = network.external();
-    let _: Option<&compose_lens::model::ResourceExternal> = network.external_syntax();
+    let _: Option<&compose_lens::model::ResourceExternal> = network.external();
 
     let loaded = LoadedProject::load([DocumentInput::new(
         SourceId::new(2000),

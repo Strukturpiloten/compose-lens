@@ -54,7 +54,7 @@ compose-lens/
 │   ├── conformance.rs      # provider matrix policy and ignored capture runner
 │   ├── runtime_conformance.rs # fail-closed planned runtime matrix policy
 │   ├── real_world.rs       # licensed project regressions
-│   ├── public_api.rs       # supported 0.1.x consumer contract
+│   ├── public_api.rs       # supported 0.2.x consumer contract
 │   └── support/            # private repository-test helpers
 ├── fixtures/
 │   ├── README.md           # fixture location and safety rules

@@ -105,7 +105,7 @@ pub use remaining::{
     LabelFiles, LabelFilesForm, ModelDefinition, ModelDefinitions, ServiceModelBinding, ServiceModels,
 };
 pub use resource::{
-    ConfigDefinition, ConfigGrant, LegacyExternalName, LongGrant, ResourceExternal, SecretDefinition, SecretGrant,
+    ConfigDefinition, ConfigGrant, ExternalNameMapping, LongGrant, ResourceExternal, SecretDefinition, SecretGrant,
     VolumeDefinition,
 };
 pub use restart::{RestartPolicy, RestartPolicyKind};
@@ -296,10 +296,10 @@ pub const VOLUME_EXTERNAL_DRIVER_CONFIGURATION: DiagnosticCode =
 pub const VOLUME_EXTERNAL_LABELS_CONFIGURATION: DiagnosticCode =
     DiagnosticCode::new("compose.volume.external-labels-configuration");
 
-/// A legacy `external: { name: ... }` resource declaration is retained for migration.
-pub const RESOURCE_EXTERNAL_LEGACY_DEPRECATED: DiagnosticCode =
-    DiagnosticCode::new("compose.resource.external-legacy-deprecated");
-/// A resource uses both the modern `name` field and the legacy external name.
+/// A deprecated `external: { name: ... }` resource declaration is retained for migration.
+pub const RESOURCE_EXTERNAL_NAME_MAPPING_DEPRECATED: DiagnosticCode =
+    DiagnosticCode::new("compose.resource.external-name-mapping-deprecated");
+/// A resource uses both the modern `name` field and the deprecated external name mapping.
 pub const RESOURCE_EXTERNAL_NAME_CONFLICT: DiagnosticCode =
     DiagnosticCode::new("compose.resource.external-name-conflict");
 /// An explicitly external resource also declares creation-time metadata.
@@ -8476,7 +8476,7 @@ impl Parser {
                 _ => network.push_unknown(option.reference()),
             }
         }
-        self.validate_resource_external_name(network.external_syntax(), network.custom_name(), network.span());
+        self.validate_resource_external_name(network.external(), network.custom_name(), network.span());
         network
     }
 
@@ -8611,16 +8611,14 @@ impl Parser {
             }
             self.validate_external_volume_driver_configuration(&volume);
             self.validate_external_volume_labels_configuration(&volume);
-            self.validate_resource_external_name(volume.external_syntax(), volume.custom_name(), volume.span());
+            self.validate_resource_external_name(volume.external(), volume.custom_name(), volume.span());
             definitions.push(volume);
         }
         definitions
     }
 
     fn validate_external_volume_driver_configuration(&mut self, volume: &VolumeDefinition) {
-        if !volume
-            .external_syntax()
-            .is_some_and(ResourceExternal::is_explicitly_external)
+        if !volume.external().is_some_and(ResourceExternal::is_explicitly_external)
             || (volume.driver().is_none() && volume.driver_opts().is_empty())
         {
             return;
@@ -8644,11 +8642,7 @@ impl Parser {
     }
 
     fn validate_external_volume_labels_configuration(&mut self, volume: &VolumeDefinition) {
-        if !volume
-            .external_syntax()
-            .is_some_and(ResourceExternal::is_explicitly_external)
-            || volume.labels().is_none()
-        {
+        if !volume.external().is_some_and(ResourceExternal::is_explicitly_external) || volume.labels().is_none() {
             return;
         }
         let span = volume.labels().map_or_else(|| volume.span(), Labels::span);
@@ -8722,9 +8716,9 @@ impl Parser {
                     _ => config.push_unknown(option.reference()),
                 }
             }
-            self.validate_resource_external_name(config.external_syntax(), config.custom_name(), config.span());
+            self.validate_resource_external_name(config.external(), config.custom_name(), config.span());
             self.validate_external_creation_configuration(
-                config.external_syntax(),
+                config.external(),
                 &[
                     config.file().map(Located::span),
                     config.environment().map(Located::span),
@@ -8802,9 +8796,9 @@ impl Parser {
                     _ => secret.push_unknown(option.reference()),
                 }
             }
-            self.validate_resource_external_name(secret.external_syntax(), secret.custom_name(), secret.span());
+            self.validate_resource_external_name(secret.external(), secret.custom_name(), secret.span());
             self.validate_external_creation_configuration(
-                secret.external_syntax(),
+                secret.external(),
                 &[
                     secret.file().map(Located::span),
                     secret.environment().map(Located::span),
@@ -8834,51 +8828,52 @@ impl Parser {
                 .parse_boolean(field, &format!("{kind} external"))
                 .map(ResourceExternal::Boolean);
         };
-        let mut legacy = LegacyExternalName::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut name_mapping = ExternalNameMapping::new(span_from_position(self.source_id, mapping.byte_range()));
         let mut seen = BTreeMap::new();
         for member in self.fields(mapping) {
             if self.record_duplicate(&mut seen, &member) {
-                legacy.push_unknown(member.reference());
+                name_mapping.push_unknown(member.reference());
                 continue;
             }
             match member.name.value().as_str() {
-                "name" => match self.parse_extends_string(&member, "legacy external name must be a YAML string scalar")
-                {
-                    Some(value) if !value.value().is_empty() => legacy.set_name(value),
-                    Some(value) => {
-                        self.expected(
-                            EXPECTED_SCALAR,
-                            &member,
-                            "legacy external name must be a non-empty YAML string scalar",
-                        );
-                        let _ = value;
-                        legacy.push_unknown(member.reference());
+                "name" => {
+                    match self.parse_extends_string(&member, "deprecated external name must be a YAML string scalar") {
+                        Some(value) if !value.value().is_empty() => name_mapping.set_name(value),
+                        Some(value) => {
+                            self.expected(
+                                EXPECTED_SCALAR,
+                                &member,
+                                "deprecated external name must be a non-empty YAML string scalar",
+                            );
+                            let _ = value;
+                            name_mapping.push_unknown(member.reference());
+                        }
+                        None => name_mapping.push_unknown(member.reference()),
                     }
-                    None => legacy.push_unknown(member.reference()),
-                },
-                name if name.starts_with("x-") => legacy.push_extension(member.reference()),
-                _ => legacy.push_unknown(member.reference()),
+                }
+                name if name.starts_with("x-") => name_mapping.push_extension(member.reference()),
+                _ => name_mapping.push_unknown(member.reference()),
             }
         }
-        if legacy.name().is_none() {
+        if name_mapping.name().is_none() {
             self.missing(
                 EXPECTED_SCALAR,
-                legacy.span(),
-                "legacy external mapping requires a non-empty `name` string",
+                name_mapping.span(),
+                "deprecated external mapping requires a non-empty `name` string",
             );
         }
         self.diagnostics.push(
             Diagnostic::new(
-                RESOURCE_EXTERNAL_LEGACY_DEPRECATED,
+                RESOURCE_EXTERNAL_NAME_MAPPING_DEPRECATED,
                 Severity::Warning,
-                format!("legacy {kind} `external.name` is deprecated"),
+                format!("{kind} `external.name` mapping syntax is deprecated"),
             )
             .with_label(DiagnosticLabel::primary(
-                legacy.span(),
+                name_mapping.span(),
                 "use `name: VALUE` with `external: true` instead",
             )),
         );
-        Some(ResourceExternal::Legacy(Box::new(legacy)))
+        Some(ResourceExternal::NameMapping(Box::new(name_mapping)))
     }
 
     fn validate_resource_external_name(
@@ -8887,18 +8882,18 @@ impl Parser {
         custom_name: Option<&Located<String>>,
         fallback: SourceSpan,
     ) {
-        let (Some(ResourceExternal::Legacy(legacy)), Some(modern)) = (external, custom_name) else {
+        let (Some(ResourceExternal::NameMapping(name_mapping)), Some(modern)) = (external, custom_name) else {
             return;
         };
-        let legacy_span = legacy.name().map_or_else(|| legacy.span(), Located::span);
+        let mapping_span = name_mapping.name().map_or_else(|| name_mapping.span(), Located::span);
         self.diagnostics.push(
             Diagnostic::new(
                 RESOURCE_EXTERNAL_NAME_CONFLICT,
                 Severity::Error,
-                "resource cannot use both modern `name` and legacy `external.name`",
+                "resource cannot use both `name` and deprecated `external.name` mapping syntax",
             )
-            .with_label(DiagnosticLabel::primary(modern.span(), "modern resource name"))
-            .with_label(DiagnosticLabel::secondary(legacy_span, "legacy external name"))
+            .with_label(DiagnosticLabel::primary(modern.span(), "resource name"))
+            .with_label(DiagnosticLabel::secondary(mapping_span, "deprecated external name"))
             .with_label(DiagnosticLabel::secondary(fallback, "both values remain retained")),
         );
     }

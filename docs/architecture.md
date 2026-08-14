@@ -311,8 +311,8 @@ environment variables, and writes an unreviewed result to a caller-selected new 
 
 ## Public release boundary
 
-ComposeLens publishes one library crate. The supported 0.1.x surface follows the layer boundaries
+ComposeLens publishes one library crate. The supported 0.2.x surface follows the layer boundaries
 above and exposes only ComposeLens-owned types; parser dependencies remain private. Patch releases
 preserve the documented consumer path, diagnostic code strings, side-effect boundaries, and
-canonical-v1 defaults. ADR 0013 defines the
-[versioned public API and release contract](decisions/0013-versioned-public-api-and-release-contract.md).
+canonical-v1 defaults. ADR 0019 defines the
+[versioned public API and release contract](decisions/0019-consolidated-0.2-public-api.md).
