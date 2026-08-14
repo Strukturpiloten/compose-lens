@@ -15,6 +15,9 @@ unknown fields, extensions, image references, ports, volumes, host/container pat
 environment values, environment-file short/long forms and options, service-label forms,
 entrypoints, commands, service `attach` booleans/expressions and malformed recovery, raw
 `cpu_count`/`cpu_percent`/`cpu_period`/`cpu_quota`/`cpu_rt_period` scalar categories and malformed recovery,
+the related CPU/memory/namespace/OOM/scale and `volumes_from` service keys with interpolation,
+merge provenance, boundaries, malformed recovery, local-reference validation, and retained
+cross-field conflict diagnostics,
 extra hosts, service hostnames, service annotations, service logging drivers and options, ordered service capability additions and drops, ordered mixed service devices, raw service DNS scalar/list forms, raw service security options, raw identities, service-level PID limits, service and Build shared-memory sizes, service memory limits, service-level temporary filesystems, service sysctls, restart and image pull policies, raw `pull_refresh_after` and `platform` strings, independent stop signals and raw
 lifecycle grace periods, ulimits, health checks, dependency conditions, short/long build contexts,
 non-empty Dockerfile, map/list build arguments, opaque target/network scalars, ordered raw platforms/tags, and

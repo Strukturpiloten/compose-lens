@@ -4,20 +4,20 @@ use compose_lens::{
     model::{
         AnnotationsForm, BooleanValue, Command, ComposeScalar, DnsForm, DnsSearchForm, Entrypoint, Environment,
         EnvironmentFile, EnvironmentFileFormatKind, ExtraHosts, HostnameKind, Labels, MemLimitKind, MemLimitScalarKind,
-        MemLimitUnit, Port, ServiceNetworks, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit, StopGracePeriod, SysctlsForm,
-        UlimitValue, VolumeMount,
+        MemLimitUnit, MemswapLimitKind, Port, ServiceNetworks, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit,
+        StopGracePeriod, SysctlsForm, UlimitValue, VolumeMount,
     },
     render::{
-        ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument, GeneratedDevice,
-        GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile,
-        GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLogging,
-        GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount,
-        GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
-        GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPort, GeneratedProtocol, GeneratedPullPolicy,
-        GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedShmSize,
-        GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue,
-        GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue,
-        GenerationError,
+        ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument, GeneratedCpuRtRuntime,
+        GeneratedDevice, GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment,
+        GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname,
+        GeneratedLabel, GeneratedLogging, GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice,
+        GeneratedMemLimit, GeneratedMount, GeneratedNetworkAttachment, GeneratedNetworkDefinition,
+        GeneratedNetworkDriverOption, GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPort,
+        GeneratedProtocol, GeneratedPullPolicy, GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux,
+        GeneratedService, GeneratedServiceRuntimeField, GeneratedShmSize, GeneratedString, GeneratedSysctl,
+        GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits,
+        GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, GenerationError,
     },
     source::SourceId,
 };
@@ -3359,6 +3359,165 @@ fn generates_literal_privileged_choices_and_rejects_replacement() -> Result<(), 
                 .and_then(compose_lens::model::Service::privileged)
                 .map(compose_lens::model::Located::value),
             Some(&BooleanValue::Literal(expected))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn generates_all_raw_service_runtime_fields_and_parses_them_back() -> Result<(), Box<dyn std::error::Error>> {
+    let mut service = GeneratedService::new("app")?;
+    for field in [
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(plain("500us")?)),
+        GeneratedServiceRuntimeField::CpuShares(plain("1024")?),
+        GeneratedServiceRuntimeField::Cpus(plain("0.000")?),
+        GeneratedServiceRuntimeField::Cpuset(plain("0-3")?),
+        GeneratedServiceRuntimeField::DeviceCgroupRules(vec![plain("c 1:3 mr")?, plain("c 1:3 mr")?]),
+        GeneratedServiceRuntimeField::Ipc(plain("service:db")?),
+        GeneratedServiceRuntimeField::MemReservation(plain("64m")?),
+        GeneratedServiceRuntimeField::MemSwappiness(plain("100")?),
+        GeneratedServiceRuntimeField::MemswapLimit(plain("-1")?),
+        GeneratedServiceRuntimeField::NetworkMode(plain("service:db")?),
+        GeneratedServiceRuntimeField::OomKillDisable(false),
+        GeneratedServiceRuntimeField::OomScoreAdj(plain("-1000")?),
+        GeneratedServiceRuntimeField::Pid(plain("container:external")?),
+        GeneratedServiceRuntimeField::Scale(plain("2")?),
+        GeneratedServiceRuntimeField::VolumesFrom(vec![plain("db:ro")?, plain("cache")?, plain("cache")?]),
+    ] {
+        service.add_runtime_field(field)?;
+    }
+    assert_eq!(
+        service.add_runtime_field(GeneratedServiceRuntimeField::Cpus(plain("1")?)),
+        Err(GenerationError::DuplicateField("cpus"))
+    );
+    let mut invalid = GeneratedService::new("invalid")?;
+    assert_eq!(
+        invalid.add_runtime_field(GeneratedServiceRuntimeField::Cpuset(plain("0\n1")?)),
+        Err(GenerationError::InvalidServiceRuntimeField("cpuset"))
+    );
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let mut microseconds = GeneratedService::new("microseconds")?;
+    microseconds.add_runtime_field(GeneratedServiceRuntimeField::CpuRtRuntime(
+        GeneratedCpuRtRuntime::Microseconds(plain("500")?),
+    ))?;
+    builder.add_service(microseconds)?;
+    let mut zero_swap = GeneratedService::new("zero-swap")?;
+    zero_swap.add_runtime_field(GeneratedServiceRuntimeField::MemswapLimit(plain("0")?))?;
+    builder.add_service(zero_swap)?;
+    let mut positive_swap = GeneratedService::new("positive-swap")?;
+    positive_swap.add_runtime_field(GeneratedServiceRuntimeField::MemswapLimit(plain("64m")?))?;
+    builder.add_service(positive_swap)?;
+    let generated = builder.build(SourceId::new(9104))?;
+    let app = generated.document().service("app").ok_or("app expected")?;
+    assert!(matches!(
+        app.cpu_rt_runtime().map(compose_lens::model::Located::value),
+        Some(compose_lens::model::CpuRtRuntime::Duration(value)) if value == "500us"
+    ));
+    assert!(app.cpu_shares().is_some() && app.cpus().is_some());
+    assert_eq!(app.device_cgroup_rules().len(), 2);
+    assert_eq!(app.volumes_from().len(), 3);
+    assert!(app.mem_reservation().is_some() && app.memswap_limit().is_some());
+    assert!(matches!(
+        app.memswap_limit().map(compose_lens::model::MemswapLimit::kind),
+        Some(MemswapLimitKind::Unlimited)
+    ));
+    assert!(matches!(
+        generated
+            .document()
+            .service("microseconds")
+            .and_then(compose_lens::model::Service::cpu_rt_runtime)
+            .map(compose_lens::model::Located::value),
+        Some(compose_lens::model::CpuRtRuntime::Microseconds(value)) if value == "500"
+    ));
+    assert!(matches!(
+        generated
+            .document()
+            .service("zero-swap")
+            .and_then(compose_lens::model::Service::memswap_limit)
+            .map(compose_lens::model::MemswapLimit::kind),
+        Some(MemswapLimitKind::Zero { .. })
+    ));
+    assert!(matches!(
+        generated
+            .document()
+            .service("positive-swap")
+            .and_then(compose_lens::model::Service::memswap_limit)
+            .map(compose_lens::model::MemswapLimit::kind),
+        Some(MemswapLimitKind::Positive { .. })
+    ));
+    assert!(generated.text().contains("cpu_rt_runtime: 500\n"));
+    assert!(generated.text().contains("cpu_rt_runtime: \"500us\"\n"));
+    Ok(())
+}
+
+#[test]
+fn rejects_deferred_empty_and_out_of_range_generated_runtime_fields() -> Result<(), Box<dyn std::error::Error>> {
+    let invalid = [
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(plain("${CPU}")?)),
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(plain("500")?)),
+        GeneratedServiceRuntimeField::CpuShares(plain("-1")?),
+        GeneratedServiceRuntimeField::Cpus(plain("1e3")?),
+        GeneratedServiceRuntimeField::Cpus(plain(".5")?),
+        GeneratedServiceRuntimeField::Cpus(plain("1.")?),
+        GeneratedServiceRuntimeField::Cpuset(plain("")?),
+        GeneratedServiceRuntimeField::DeviceCgroupRules(vec![plain("${RULE}")?]),
+        GeneratedServiceRuntimeField::Ipc(plain("service:")?),
+        GeneratedServiceRuntimeField::MemReservation(plain("${MEM}")?),
+        GeneratedServiceRuntimeField::MemReservation(plain("nonsense")?),
+        GeneratedServiceRuntimeField::MemReservation(plain("64")?),
+        GeneratedServiceRuntimeField::MemSwappiness(plain("101")?),
+        GeneratedServiceRuntimeField::MemswapLimit(plain("")?),
+        GeneratedServiceRuntimeField::MemswapLimit(plain("-2")?),
+        GeneratedServiceRuntimeField::MemswapLimit(plain("64")?),
+        GeneratedServiceRuntimeField::NetworkMode(plain("container:")?),
+        GeneratedServiceRuntimeField::OomScoreAdj(plain("1001")?),
+        GeneratedServiceRuntimeField::Pid(plain("service:")?),
+        GeneratedServiceRuntimeField::Scale(plain("-1")?),
+        GeneratedServiceRuntimeField::VolumesFrom(vec![plain("")?]),
+    ];
+    for field in invalid {
+        let name = match &field {
+            GeneratedServiceRuntimeField::CpuRtRuntime(_) => "cpu_rt_runtime",
+            GeneratedServiceRuntimeField::CpuShares(_) => "cpu_shares",
+            GeneratedServiceRuntimeField::Cpus(_) => "cpus",
+            GeneratedServiceRuntimeField::Cpuset(_) => "cpuset",
+            GeneratedServiceRuntimeField::DeviceCgroupRules(_) => "device_cgroup_rules",
+            GeneratedServiceRuntimeField::Ipc(_) => "ipc",
+            GeneratedServiceRuntimeField::MemReservation(_) => "mem_reservation",
+            GeneratedServiceRuntimeField::MemSwappiness(_) => "mem_swappiness",
+            GeneratedServiceRuntimeField::MemswapLimit(_) => "memswap_limit",
+            GeneratedServiceRuntimeField::NetworkMode(_) => "network_mode",
+            GeneratedServiceRuntimeField::OomScoreAdj(_) => "oom_score_adj",
+            GeneratedServiceRuntimeField::Pid(_) => "pid",
+            GeneratedServiceRuntimeField::Scale(_) => "scale",
+            GeneratedServiceRuntimeField::VolumesFrom(_) => "volumes_from",
+            _ => unreachable!(),
+        };
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.add_runtime_field(field),
+            Err(GenerationError::InvalidServiceRuntimeField(name))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn rejects_generated_cpu_share_and_scale_values_outside_i128_range() -> Result<(), Box<dyn std::error::Error>> {
+    for field in [
+        GeneratedServiceRuntimeField::CpuShares(plain("170141183460469231731687303715884105728")?),
+        GeneratedServiceRuntimeField::Scale(plain("170141183460469231731687303715884105728")?),
+    ] {
+        let name = match &field {
+            GeneratedServiceRuntimeField::CpuShares(_) => "cpu_shares",
+            GeneratedServiceRuntimeField::Scale(_) => "scale",
+            _ => unreachable!(),
+        };
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.add_runtime_field(field),
+            Err(GenerationError::InvalidServiceRuntimeField(name))
         );
     }
     Ok(())

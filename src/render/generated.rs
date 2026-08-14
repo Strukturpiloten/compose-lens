@@ -4,7 +4,7 @@ use std::{collections::BTreeSet, error::Error, fmt};
 
 use crate::{
     model::{
-        ComposeDocument, MemLimitUnit, ShmSizeUnit, StopGracePeriod, valid_generated_device_string,
+        ComposeDocument, CpuRtRuntime, MemLimitUnit, ShmSizeUnit, StopGracePeriod, valid_generated_device_string,
         valid_generated_expose_item, valid_generated_mem_amount, valid_generated_shm_amount,
         valid_generated_tmpfs_item, valid_hostname, valid_positive_pids_decimal, valid_pull_policy_duration,
         valid_ulimit_name,
@@ -80,6 +80,8 @@ pub enum GenerationError {
     InvalidShortComponent(&'static str),
     /// A short bind spelling needed for `SELinux` cannot be encoded unambiguously.
     InvalidSelinuxBind,
+    /// A raw generated service-runtime field is empty, deferred, multiline, or outside its safe syntax subset.
+    InvalidServiceRuntimeField(&'static str),
     /// A singleton field was configured more than once.
     DuplicateField(&'static str),
     /// A named generated collection contains the same name more than once.
@@ -184,6 +186,7 @@ impl fmt::Display for GenerationError {
             }
             Self::InvalidSelinuxBind => formatter
                 .write_str("generated SELinux bind source and target must not contain the short-syntax `:` separator"),
+            Self::InvalidServiceRuntimeField(field) => write!(formatter, "generated {field} must use a resolved, non-empty field-valid spelling"),
             Self::DuplicateField(field) => write!(formatter, "generated field `{field}` was configured more than once"),
             Self::DuplicateName { kind, name } => {
                 write!(formatter, "generated {kind} `{name}` was added more than once")
@@ -1772,6 +1775,105 @@ impl GeneratedResource {
     }
 }
 
+/// A generated `cpu_rt_runtime` spelling with an explicit YAML scalar category.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedCpuRtRuntime {
+    /// An unquoted integer microsecond scalar.
+    Microseconds(GeneratedString),
+    /// A quoted Compose duration string.
+    Duration(GeneratedString),
+}
+
+impl GeneratedCpuRtRuntime {
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::Microseconds(value) | Self::Duration(value) => value.is_sensitive(),
+        }
+    }
+}
+
+/// Raw service resource and namespace fields selected for deterministic generated output.
+/// String-bearing variants are emitted quoted so caller-selected spelling remains a YAML string;
+/// `cpu_rt_runtime` explicitly selects either an integer microsecond scalar or a duration string.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedServiceRuntimeField {
+    /// `cpu_rt_runtime` with an explicit integer or duration scalar category.
+    CpuRtRuntime(GeneratedCpuRtRuntime),
+    /// `cpu_shares` raw integer spelling.
+    CpuShares(GeneratedString),
+    /// `cpus` raw decimal spelling.
+    Cpus(GeneratedString),
+    /// `cpuset` raw string spelling.
+    Cpuset(GeneratedString),
+    /// Ordered raw `device_cgroup_rules` strings.
+    DeviceCgroupRules(Vec<GeneratedString>),
+    /// `ipc` raw mode spelling.
+    Ipc(GeneratedString),
+    /// `mem_reservation` raw byte-value spelling.
+    MemReservation(GeneratedString),
+    /// `mem_swappiness` raw integer spelling.
+    MemSwappiness(GeneratedString),
+    /// `memswap_limit` raw unlimited, zero, or positive byte-quantity spelling.
+    MemswapLimit(GeneratedString),
+    /// `network_mode` raw mode spelling.
+    NetworkMode(GeneratedString),
+    /// Literal `oom_kill_disable` choice.
+    OomKillDisable(bool),
+    /// `oom_score_adj` raw integer spelling.
+    OomScoreAdj(GeneratedString),
+    /// `pid` raw mode spelling.
+    Pid(GeneratedString),
+    /// `scale` raw integer spelling.
+    Scale(GeneratedString),
+    /// Ordered raw `volumes_from` strings.
+    VolumesFrom(Vec<GeneratedString>),
+}
+
+impl GeneratedServiceRuntimeField {
+    fn field_name(&self) -> &'static str {
+        match self {
+            Self::CpuRtRuntime(_) => "cpu_rt_runtime",
+            Self::CpuShares(_) => "cpu_shares",
+            Self::Cpus(_) => "cpus",
+            Self::Cpuset(_) => "cpuset",
+            Self::DeviceCgroupRules(_) => "device_cgroup_rules",
+            Self::Ipc(_) => "ipc",
+            Self::MemReservation(_) => "mem_reservation",
+            Self::MemSwappiness(_) => "mem_swappiness",
+            Self::MemswapLimit(_) => "memswap_limit",
+            Self::NetworkMode(_) => "network_mode",
+            Self::OomKillDisable(_) => "oom_kill_disable",
+            Self::OomScoreAdj(_) => "oom_score_adj",
+            Self::Pid(_) => "pid",
+            Self::Scale(_) => "scale",
+            Self::VolumesFrom(_) => "volumes_from",
+        }
+    }
+
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::DeviceCgroupRules(values) | Self::VolumesFrom(values) => {
+                values.iter().any(GeneratedString::is_sensitive)
+            }
+            Self::OomKillDisable(_) => false,
+            Self::CpuRtRuntime(value) => value.is_sensitive(),
+            Self::CpuShares(value)
+            | Self::Cpus(value)
+            | Self::Cpuset(value)
+            | Self::Ipc(value)
+            | Self::MemReservation(value)
+            | Self::MemSwappiness(value)
+            | Self::MemswapLimit(value)
+            | Self::NetworkMode(value)
+            | Self::OomScoreAdj(value)
+            | Self::Pid(value)
+            | Self::Scale(value) => value.is_sensitive(),
+        }
+    }
+}
+
 /// A typed generated Compose service definition.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedService {
@@ -1817,6 +1919,7 @@ pub struct GeneratedService {
     ports: Vec<GeneratedPort>,
     mounts: Vec<GeneratedMount>,
     networks: Vec<GeneratedNetworkAttachment>,
+    runtime_fields: Vec<GeneratedServiceRuntimeField>,
 }
 
 impl GeneratedService {
@@ -1869,6 +1972,7 @@ impl GeneratedService {
             ports: Vec::new(),
             mounts: Vec::new(),
             networks: Vec::new(),
+            runtime_fields: Vec::new(),
         })
     }
 
@@ -1876,6 +1980,38 @@ impl GeneratedService {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Adds one generated raw-preserving resource or namespace field exactly once.
+    ///
+    /// All string values must be resolved single-line strings. The generated YAML is parse-back
+    /// validated with the rest of the document; this method deliberately makes no provider or
+    /// runtime support claim.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when the same runtime field was already
+    /// selected, or [`GenerationError::InvalidServiceRuntimeField`] when its value is not safe
+    /// for generated Compose YAML.
+    pub fn add_runtime_field(&mut self, field: GeneratedServiceRuntimeField) -> Result<(), GenerationError> {
+        if self
+            .runtime_fields
+            .iter()
+            .any(|existing| existing.field_name() == field.field_name())
+        {
+            return Err(GenerationError::DuplicateField(field.field_name()));
+        }
+        if !generated_runtime_field_safe(&field) {
+            return Err(GenerationError::InvalidServiceRuntimeField(field.field_name()));
+        }
+        self.runtime_fields.push(field);
+        Ok(())
+    }
+
+    /// Returns the selected raw-preserving generated runtime fields in insertion order.
+    #[must_use]
+    pub fn runtime_fields(&self) -> &[GeneratedServiceRuntimeField] {
+        &self.runtime_fields
     }
 
     /// Sets one resolved RFC-1123 service hostname exactly once.
@@ -2625,6 +2761,10 @@ impl GeneratedService {
                 .dns_options
                 .as_ref()
                 .is_some_and(|items| items.iter().any(GeneratedString::is_sensitive))
+            || self
+                .runtime_fields
+                .iter()
+                .any(GeneratedServiceRuntimeField::is_sensitive)
             || match self.dns_search.as_ref() {
                 Some(GeneratedDnsSearch::Scalar(value)) => value.is_sensitive(),
                 Some(GeneratedDnsSearch::List(values)) => values.iter().any(GeneratedString::is_sensitive),
@@ -2974,6 +3114,7 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     if let Some(mem_limit) = &service.mem_limit {
         render_mem_limit(output, mem_limit);
     }
+    render_runtime_fields(output, &service.runtime_fields);
     if let Some(devices) = &service.devices {
         render_devices(output, devices);
     }
@@ -3016,6 +3157,150 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     render_ports(output, &service.ports);
     render_mounts(output, &service.mounts);
     render_networks(output, &service.networks);
+}
+
+fn render_runtime_fields(output: &mut String, fields: &[GeneratedServiceRuntimeField]) {
+    for field in fields {
+        match field {
+            GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(value)) => {
+                write_field(output, 2, "cpu_rt_runtime");
+                output.push_str(value.expose());
+                output.push('\n');
+            }
+            GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(value)) => {
+                render_optional_string(output, "cpu_rt_runtime", Some(value));
+            }
+            GeneratedServiceRuntimeField::CpuShares(value) => {
+                render_optional_string(output, "cpu_shares", Some(value));
+            }
+            GeneratedServiceRuntimeField::Cpus(value) => {
+                render_optional_string(output, "cpus", Some(value));
+            }
+            GeneratedServiceRuntimeField::Cpuset(value) => {
+                render_optional_string(output, "cpuset", Some(value));
+            }
+            GeneratedServiceRuntimeField::DeviceCgroupRules(values) => {
+                render_configured_string_sequence(output, "device_cgroup_rules", values);
+            }
+            GeneratedServiceRuntimeField::Ipc(value) => {
+                render_optional_string(output, "ipc", Some(value));
+            }
+            GeneratedServiceRuntimeField::MemReservation(value) => {
+                render_optional_string(output, "mem_reservation", Some(value));
+            }
+            GeneratedServiceRuntimeField::MemSwappiness(value) => {
+                render_optional_string(output, "mem_swappiness", Some(value));
+            }
+            GeneratedServiceRuntimeField::MemswapLimit(value) => {
+                render_optional_string(output, "memswap_limit", Some(value));
+            }
+            GeneratedServiceRuntimeField::NetworkMode(value) => {
+                render_optional_string(output, "network_mode", Some(value));
+            }
+            GeneratedServiceRuntimeField::OomKillDisable(value) => {
+                write_field(output, 2, "oom_kill_disable");
+                output.push_str(if *value { "true\n" } else { "false\n" });
+            }
+            GeneratedServiceRuntimeField::OomScoreAdj(value) => {
+                render_optional_string(output, "oom_score_adj", Some(value));
+            }
+            GeneratedServiceRuntimeField::Pid(value) => {
+                render_optional_string(output, "pid", Some(value));
+            }
+            GeneratedServiceRuntimeField::Scale(value) => {
+                render_optional_string(output, "scale", Some(value));
+            }
+            GeneratedServiceRuntimeField::VolumesFrom(values) => {
+                render_configured_string_sequence(output, "volumes_from", values);
+            }
+        }
+    }
+}
+
+fn generated_runtime_field_safe(field: &GeneratedServiceRuntimeField) -> bool {
+    let safe = |value: &GeneratedString| !value.expose().is_empty() && !value.expose().contains(['\n', '\r', '$']);
+    let unsigned = |value: &GeneratedString| safe(value) && value.expose().bytes().all(|byte| byte.is_ascii_digit());
+    let bounded_unsigned = |value: &GeneratedString| unsigned(value) && value.expose().parse::<i128>().is_ok();
+    let signed_range = |value: &GeneratedString, min: i32, max: i32| {
+        safe(value)
+            && value
+                .expose()
+                .parse::<i32>()
+                .is_ok_and(|number| (min..=max).contains(&number))
+    };
+    let decimal = |value: &GeneratedString| safe(value) && normalize_generated_decimal(value.expose()).is_some();
+    let reference = |value: &GeneratedString| {
+        safe(value)
+            && (!value.expose().contains(':')
+                || value
+                    .expose()
+                    .split_once(':')
+                    .is_some_and(|(_, target)| !target.is_empty()))
+    };
+    match field {
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(value)) => unsigned(value),
+        GeneratedServiceRuntimeField::CpuShares(value) | GeneratedServiceRuntimeField::Scale(value) => {
+            bounded_unsigned(value)
+        }
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(value)) => {
+            safe(value)
+                && matches!(
+                    CpuRtRuntime::parse_string(value.expose().to_owned()),
+                    CpuRtRuntime::Duration(_)
+                )
+        }
+        GeneratedServiceRuntimeField::Cpus(value) => decimal(value),
+        GeneratedServiceRuntimeField::Cpuset(value) => safe(value),
+        GeneratedServiceRuntimeField::DeviceCgroupRules(values) => values.iter().all(safe),
+        GeneratedServiceRuntimeField::Ipc(value)
+        | GeneratedServiceRuntimeField::NetworkMode(value)
+        | GeneratedServiceRuntimeField::Pid(value) => reference(value),
+        GeneratedServiceRuntimeField::MemReservation(value) => {
+            safe(value) && valid_generated_runtime_memory(value.expose(), false)
+        }
+        GeneratedServiceRuntimeField::MemswapLimit(value) => {
+            safe(value) && valid_generated_runtime_memory(value.expose(), true)
+        }
+        GeneratedServiceRuntimeField::MemSwappiness(value) => signed_range(value, 0, 100),
+        GeneratedServiceRuntimeField::OomKillDisable(_) => true,
+        GeneratedServiceRuntimeField::OomScoreAdj(value) => signed_range(value, -1000, 1000),
+        GeneratedServiceRuntimeField::VolumesFrom(values) => values.iter().all(reference),
+    }
+}
+
+fn normalize_generated_decimal(value: &str) -> Option<()> {
+    let (whole, fraction) = value.split_once('.').map_or((value, ""), |parts| parts);
+    let valid_shape = if value.contains('.') {
+        !whole.is_empty() && !fraction.is_empty()
+    } else {
+        !whole.is_empty()
+    };
+    (valid_shape
+        && whole.bytes().all(|byte| byte.is_ascii_digit())
+        && fraction.bytes().all(|byte| byte.is_ascii_digit())
+        && value.bytes().filter(|byte| *byte == b'.').count() <= 1)
+        .then_some(())
+}
+
+/// Validates resolved byte-value spellings without applying a host-size conversion.
+///
+/// `memswap_limit` additionally permits Compose's explicit `-1` unlimited branch. The
+/// relationship between a positive swap value and `mem_limit` remains a project diagnostic,
+/// because it cannot be decided while fields are added independently.
+fn valid_generated_runtime_memory(value: &str, allow_unlimited: bool) -> bool {
+    if allow_unlimited && value == "-1" {
+        return true;
+    }
+    if !value.is_empty() && value.bytes().all(|byte| byte == b'0') {
+        return true;
+    }
+    let Some(amount) = ["kb", "mb", "gb", "b", "k", "m", "g"]
+        .into_iter()
+        .find_map(|unit| value.strip_suffix(unit))
+    else {
+        return false;
+    };
+    !amount.is_empty() && amount.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn render_pids_limit(output: &mut String, limit: &GeneratedPidsLimit) {

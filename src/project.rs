@@ -8,9 +8,9 @@ use crate::model::{
     ANNOTATIONS_DUPLICATE_NAME, ANNOTATIONS_EMPTY_NAME, ANNOTATIONS_EXPECTED_STRING, ANNOTATIONS_KEY_ONLY,
     BUILD_DOCKERFILE_INLINE_CONFLICT, BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM, BindOptions, BlkioScalar, BooleanValue,
     BuildNoCache, BuildProvenance, BuildSbom, CAP_ADD_DUPLICATE_ITEM, CAP_DROP_DUPLICATE_ITEM, CPU_COUNT_NEGATIVE,
-    CPU_PERCENT_OUT_OF_RANGE, CapabilityAddItem, CapabilityDropItem, CgroupNamespace, Command, ComposeScalar,
-    ConfigDefinition, CpuCount, CpuPercent, CpuPeriod, CpuQuota, CpuRtPeriod, DEPLOY_ENDPOINT_MODE_PORTABILITY,
-    DEPLOY_MODE_PORTABILITY, DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT,
+    CPU_PERCENT_OUT_OF_RANGE, CPU_RT_RUNTIME_INVALID, CapabilityAddItem, CapabilityDropItem, CgroupNamespace, Command,
+    ComposeScalar, ConfigDefinition, CpuCount, CpuPercent, CpuPeriod, CpuQuota, CpuRtPeriod, CpuRtRuntime, Cpus,
+    DEPLOY_ENDPOINT_MODE_PORTABILITY, DEPLOY_MODE_PORTABILITY, DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT,
     DEPLOY_RESERVATION_DEVICE_CAPABILITY_DUPLICATE_ITEM, DEPLOY_RESERVATION_DEVICE_OPTIONS_DUPLICATE_ITEM,
     DEPLOY_RESERVATION_DEVICE_OPTIONS_INVALID_KEY, DEPLOY_ROLLBACK_CONFIG_ORDER_PORTABILITY,
     DEPLOY_UPDATE_CONFIG_ORDER_PORTABILITY, DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING, DNS_EXPECTED_FORM,
@@ -23,28 +23,30 @@ use crate::model::{
     EXPOSE_DUPLICATE_ITEM, EXPOSE_EXPECTED_SCALAR, EXPOSE_EXPECTED_SEQUENCE, EXPOSE_INVALID_ITEM,
     EXPOSE_PROVIDER_DEPENDENT, EXTENDS_MISSING_SERVICE, Entrypoint, EnvironmentFileFormat, EnvironmentFileFormatKind,
     ExposeItemKind, ExposeScalarKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
-    HostAddress, Hostname, HostnameKind, ImageReference, Ipam, IpamConfig, KeyValueEntry,
+    HostAddress, Hostname, HostnameKind, ImageReference, Ipam, IpamConfig, IpcMode, KeyValueEntry,
     LOGGING_DRIVER_EXPECTED_STRING, LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY, LOGGING_OPTION_EXPECTED_SCALAR,
     LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue, Located, LongPort, LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO,
-    MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind,
-    MemLimitScalarKind, MountType, NetworkDefinition, PIDS_LIMIT_AMBIGUOUS_ZERO, POST_START_MISSING_COMMAND,
-    PRE_STOP_MISSING_COMMAND, PROVIDER_MISSING_TYPE, PidsLimit, PidsLimitKind, Port, PullPolicy, RestartPolicy,
-    SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS, SECURITY_OPT_EMPTY_ITEM,
-    SECURITY_OPT_EXPECTED_SEQUENCE, SECURITY_OPT_EXPECTED_STRING, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
-    SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS, SECURITY_OPT_SECCOMP_CONFLICT, SECURITY_OPT_SECCOMP_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT, SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT, SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS,
-    SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS, SHM_SIZE_AMBIGUOUS_ZERO,
-    SHM_SIZE_EXPECTED_VALUE, SHM_SIZE_PROVIDER_DEPENDENT_NUMBER, SHM_SIZE_PROVIDER_DEPENDENT_STRING,
-    SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING,
-    SecretDefinition, SecurityOptionCandidateCounts, SecurityOptionKind, SelinuxRelabel, ServiceNetwork,
-    ServiceNetworks, ShmSize, ShmSizeKind, ShmSizeScalarKind, ShortDevice, ShortExtraHost, ShortPort, ShortVolumeMount,
-    StopGracePeriod, TMPFS_EXPECTED_FORM, TMPFS_EXPECTED_STRING, TMPFS_PROVIDER_DEPENDENT, TmpfsItem, TmpfsItemKind,
+    MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER,
+    MEMSWAP_LIMIT_EXPECTED_VALUE, MEMSWAP_LIMIT_INVALID, MemLimit, MemLimitKind, MemLimitScalarKind, MemswapLimit,
+    MemswapLimitKind, MemswapLimitScalarKind, MountType, NetworkDefinition, NetworkMode, PIDS_LIMIT_AMBIGUOUS_ZERO,
+    POST_START_MISSING_COMMAND, PRE_STOP_MISSING_COMMAND, PROVIDER_MISSING_TYPE, PidMode, PidsLimit, PidsLimitKind,
+    Port, PullPolicy, RestartPolicy, SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS,
+    SECURITY_OPT_EMPTY_ITEM, SECURITY_OPT_EXPECTED_SEQUENCE, SECURITY_OPT_EXPECTED_STRING,
+    SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT, SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS, SECURITY_OPT_SECCOMP_CONFLICT,
+    SECURITY_OPT_SECCOMP_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_DISABLE_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_DISABLE_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_FILETYPE_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_FILETYPE_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_LEVEL_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_LEVEL_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_NESTED_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_NESTED_NEAR_MISS, SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT,
+    SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS, SHM_SIZE_AMBIGUOUS_ZERO, SHM_SIZE_EXPECTED_VALUE,
+    SHM_SIZE_PROVIDER_DEPENDENT_NUMBER, SHM_SIZE_PROVIDER_DEPENDENT_STRING, SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY,
+    SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING, SecretDefinition,
+    SecurityOptionCandidateCounts, SecurityOptionKind, SelinuxRelabel, ServiceInteger, ServiceNetwork, ServiceNetworks,
+    ShmSize, ShmSizeKind, ShmSizeScalarKind, ShortDevice, ShortExtraHost, ShortPort, ShortVolumeMount, StopGracePeriod,
+    TMPFS_EXPECTED_FORM, TMPFS_EXPECTED_STRING, TMPFS_PROVIDER_DEPENDENT, TmpfsItem, TmpfsItemKind,
     ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceMode, UserSpec,
     VOLUME_EXTERNAL_DRIVER_CONFIGURATION, VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeDefinition, VolumeMount,
-    classify_expose_item, classify_security_option, security_path_option_diagnostic, valid_ulimit_name,
+    VolumesFrom, classify_expose_item, classify_security_option, security_path_option_diagnostic, valid_ulimit_name,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -62,6 +64,40 @@ pub const PROJECT_MISSING_FIELD: DiagnosticCode = DiagnosticCode::new("compose.p
 
 /// A scalar cannot be represented by the requested native value type.
 pub const PROJECT_INVALID_VALUE: DiagnosticCode = DiagnosticCode::new("compose.project.invalid-value");
+/// A malformed effective item from a sequence requiring YAML string scalars.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectInvalidServiceStringItem {
+    span: SourceSpan,
+}
+
+type ProjectStringCollection = Option<ProjectValue<Vec<ProjectValue<String>>>>;
+type ProjectVolumesFromCollection = Option<ProjectValue<Vec<ProjectValue<VolumesFrom>>>>;
+type ProjectInvalidServiceStringItems = Vec<ProjectInvalidServiceStringItem>;
+impl ProjectInvalidServiceStringItem {
+    /// Returns the malformed item's effective source span.
+    #[must_use]
+    pub const fn span(self) -> SourceSpan {
+        self.span
+    }
+}
+/// Service CPU allocation conflicts with its deploy CPU limit spelling.
+pub const SERVICE_CPUS_DEPLOY_LIMIT_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.cpus.deploy-limit-conflict");
+/// Service memory reservation coexists with a deploy reservation.
+pub const SERVICE_MEMORY_RESERVATION_DEPLOY_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.mem-reservation.deploy-reservation-conflict");
+/// A memory-plus-swap limit requires an explicit service memory limit.
+pub const SERVICE_MEMSWAP_REQUIRES_MEMORY_LIMIT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.memswap-limit.requires-mem-limit");
+/// A positive memory-plus-swap limit is below a comparable service memory limit.
+pub const SERVICE_MEMSWAP_BELOW_MEMORY_LIMIT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.memswap-limit.below-mem-limit");
+/// Service network mode and explicit networks are mutually exclusive.
+pub const SERVICE_NETWORK_MODE_NETWORKS_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.network-mode.networks-conflict");
+/// Service scale conflicts with the deploy replica spelling.
+pub const SERVICE_SCALE_DEPLOY_REPLICAS_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.scale.deploy-replicas-conflict");
 
 /// A typed value together with every source span that contributed to it during merging.
 #[derive(Clone, PartialEq, Eq)]
@@ -2758,6 +2794,23 @@ pub struct ProjectService {
     cpu_period: Option<ProjectValue<CpuPeriod>>,
     cpu_quota: Option<ProjectValue<CpuQuota>>,
     cpu_rt_period: Option<ProjectValue<CpuRtPeriod>>,
+    cpu_rt_runtime: Option<ProjectValue<CpuRtRuntime>>,
+    cpu_shares: Option<ProjectValue<ServiceInteger>>,
+    cpus: Option<ProjectValue<Cpus>>,
+    cpuset: Option<ProjectValue<String>>,
+    device_cgroup_rules: Option<ProjectValue<Vec<ProjectValue<String>>>>,
+    invalid_device_cgroup_rules: Vec<ProjectInvalidServiceStringItem>,
+    ipc: Option<ProjectValue<IpcMode>>,
+    mem_reservation: Option<ProjectValue<MemLimit>>,
+    mem_swappiness: Option<ProjectValue<ServiceInteger>>,
+    memswap_limit: Option<ProjectValue<MemswapLimit>>,
+    network_mode: Option<ProjectValue<NetworkMode>>,
+    oom_kill_disable: Option<ProjectValue<BooleanValue>>,
+    oom_score_adj: Option<ProjectValue<ServiceInteger>>,
+    pid: Option<ProjectValue<PidMode>>,
+    scale: Option<ProjectValue<ServiceInteger>>,
+    volumes_from: Option<ProjectValue<Vec<ProjectValue<VolumesFrom>>>>,
+    invalid_volumes_from: Vec<ProjectInvalidServiceStringItem>,
     shm_size: Option<ProjectValue<ShmSize>>,
     mem_limit: Option<ProjectValue<MemLimit>>,
     tmpfs: Option<ProjectValue<ProjectTmpfs>>,
@@ -2832,6 +2885,23 @@ impl ProjectService {
             cpu_period: None,
             cpu_quota: None,
             cpu_rt_period: None,
+            cpu_rt_runtime: None,
+            cpu_shares: None,
+            cpus: None,
+            cpuset: None,
+            device_cgroup_rules: None,
+            invalid_device_cgroup_rules: Vec::new(),
+            ipc: None,
+            mem_reservation: None,
+            mem_swappiness: None,
+            memswap_limit: None,
+            network_mode: None,
+            oom_kill_disable: None,
+            oom_score_adj: None,
+            pid: None,
+            scale: None,
+            volumes_from: None,
+            invalid_volumes_from: Vec::new(),
             shm_size: None,
             mem_limit: None,
             tmpfs: None,
@@ -3161,6 +3231,91 @@ impl ProjectService {
     #[must_use]
     pub const fn cpu_rt_period(&self) -> Option<&ProjectValue<CpuRtPeriod>> {
         self.cpu_rt_period.as_ref()
+    }
+    /// Returns the effective real-time CPU-runtime spelling.
+    #[must_use]
+    pub const fn cpu_rt_runtime(&self) -> Option<&ProjectValue<CpuRtRuntime>> {
+        self.cpu_rt_runtime.as_ref()
+    }
+    /// Returns effective relative CPU shares.
+    #[must_use]
+    pub const fn cpu_shares(&self) -> Option<&ProjectValue<ServiceInteger>> {
+        self.cpu_shares.as_ref()
+    }
+    /// Returns effective raw decimal CPU allocation.
+    #[must_use]
+    pub const fn cpus(&self) -> Option<&ProjectValue<Cpus>> {
+        self.cpus.as_ref()
+    }
+    /// Returns effective raw CPU-set spelling.
+    #[must_use]
+    pub const fn cpuset(&self) -> Option<&ProjectValue<String>> {
+        self.cpuset.as_ref()
+    }
+    /// Returns ordered effective device-cgroup rules, including duplicates.
+    #[must_use]
+    pub const fn device_cgroup_rules(&self) -> Option<&ProjectValue<Vec<ProjectValue<String>>>> {
+        self.device_cgroup_rules.as_ref()
+    }
+    /// Returns malformed device-cgroup rule items retained with effective spans.
+    #[must_use]
+    pub fn invalid_device_cgroup_rules(&self) -> &[ProjectInvalidServiceStringItem] {
+        &self.invalid_device_cgroup_rules
+    }
+    /// Returns the effective IPC mode.
+    #[must_use]
+    pub const fn ipc(&self) -> Option<&ProjectValue<IpcMode>> {
+        self.ipc.as_ref()
+    }
+    /// Returns the effective raw memory reservation.
+    #[must_use]
+    pub const fn mem_reservation(&self) -> Option<&ProjectValue<MemLimit>> {
+        self.mem_reservation.as_ref()
+    }
+    /// Returns effective memory swappiness.
+    #[must_use]
+    pub const fn mem_swappiness(&self) -> Option<&ProjectValue<ServiceInteger>> {
+        self.mem_swappiness.as_ref()
+    }
+    /// Returns effective raw memory-plus-swap limit.
+    #[must_use]
+    pub const fn memswap_limit(&self) -> Option<&ProjectValue<MemswapLimit>> {
+        self.memswap_limit.as_ref()
+    }
+    /// Returns the effective network mode.
+    #[must_use]
+    pub const fn network_mode(&self) -> Option<&ProjectValue<NetworkMode>> {
+        self.network_mode.as_ref()
+    }
+    /// Returns the effective OOM-kill setting.
+    #[must_use]
+    pub const fn oom_kill_disable(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.oom_kill_disable.as_ref()
+    }
+    /// Returns effective OOM-score adjustment.
+    #[must_use]
+    pub const fn oom_score_adj(&self) -> Option<&ProjectValue<ServiceInteger>> {
+        self.oom_score_adj.as_ref()
+    }
+    /// Returns the effective PID mode.
+    #[must_use]
+    pub const fn pid(&self) -> Option<&ProjectValue<PidMode>> {
+        self.pid.as_ref()
+    }
+    /// Returns effective scale spelling.
+    #[must_use]
+    pub const fn scale(&self) -> Option<&ProjectValue<ServiceInteger>> {
+        self.scale.as_ref()
+    }
+    /// Returns ordered effective `volumes_from` references.
+    #[must_use]
+    pub const fn volumes_from(&self) -> Option<&ProjectValue<Vec<ProjectValue<VolumesFrom>>>> {
+        self.volumes_from.as_ref()
+    }
+    /// Returns malformed `volumes_from` items retained with effective spans.
+    #[must_use]
+    pub fn invalid_volumes_from(&self) -> &[ProjectInvalidServiceStringItem] {
+        &self.invalid_volumes_from
     }
 
     /// Returns the effective raw-preserving service shared-memory size.
@@ -3667,6 +3822,9 @@ impl<'a> Builder<'a> {
         let mut service = ProjectService::from_entry(entry);
         let path = ["services".to_owned(), entry.key().to_owned()];
         for field in fields {
+            if self.set_service_runtime_field(&mut service, field, &path) {
+                continue;
+            }
             match field.key() {
                 "hostname" => service.hostname = self.hostname(field.value()),
                 "container_name" => {
@@ -3715,9 +3873,6 @@ impl<'a> Builder<'a> {
                 "security_opt" => service.security_options = self.security_options(field.value()),
                 "working_dir" => service.working_dir = self.project_string(field.value(), "service working directory"),
                 "read_only" => service.read_only = self.read_only(field.value()),
-                "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "pids_limit" => {
-                    self.set_service_count(&mut service, field, &path);
-                }
                 "shm_size" => service.shm_size = self.shm_size(field.value()),
                 "mem_limit" => service.mem_limit = self.mem_limit(field.value()),
                 "tmpfs" => service.tmpfs = self.tmpfs(field.value()),
@@ -3760,7 +3915,255 @@ impl<'a> Builder<'a> {
         service
             .unmodeled_fields
             .extend(self.pending_unmodeled.drain(pending_start..));
+        self.validate_service_cross_fields(&service);
         Some(service)
+    }
+
+    fn set_service_runtime_field(
+        &mut self,
+        service: &mut ProjectService,
+        field: &MergedEntry,
+        path: &[String],
+    ) -> bool {
+        match field.key() {
+            "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "cpu_rt_runtime"
+            | "cpu_shares" | "cpus" | "mem_swappiness" | "oom_score_adj" | "scale" | "pids_limit" => {
+                self.set_service_count(service, field, path);
+            }
+            "cpuset" => {
+                service.cpuset = self.project_string(field.value(), "service cpuset must be a YAML string scalar");
+                if service.cpuset.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "device_cgroup_rules" => {
+                if field.value().as_sequence().is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+                let (items, invalid) = self.strict_string_collection(field.value(), "device_cgroup_rules");
+                service.device_cgroup_rules = items;
+                service.invalid_device_cgroup_rules = invalid;
+            }
+            "ipc" => {
+                service.ipc = self
+                    .project_string(field.value(), "service ipc must be a YAML string scalar")
+                    .map(|raw| ProjectValue {
+                        value: IpcMode::parse(raw.value),
+                        provenance: raw.provenance,
+                        sensitive: raw.sensitive,
+                    });
+                if service.ipc.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "mem_reservation" => {
+                service.mem_reservation = self.mem_limit(field.value());
+                if service.mem_reservation.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "memswap_limit" => {
+                service.memswap_limit = self.memswap_limit(field.value());
+                if service.memswap_limit.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "network_mode" => {
+                service.network_mode = self
+                    .project_string(field.value(), "service network_mode must be a YAML string scalar")
+                    .map(|raw| ProjectValue {
+                        value: NetworkMode::parse(raw.value),
+                        provenance: raw.provenance,
+                        sensitive: raw.sensitive,
+                    });
+                if service.network_mode.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "oom_kill_disable" => {
+                service.oom_kill_disable = self.boolean(field.value(), "service oom_kill_disable must be a boolean");
+                if service.oom_kill_disable.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "pid" => {
+                service.pid = self
+                    .project_string(field.value(), "service pid must be a YAML string scalar")
+                    .map(|raw| ProjectValue {
+                        value: PidMode::parse(raw.value),
+                        provenance: raw.provenance,
+                        sensitive: raw.sensitive,
+                    });
+                if service.pid.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "volumes_from" => {
+                if field.value().as_sequence().is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+                let (items, invalid) = self.volumes_from(field.value());
+                service.volumes_from = items;
+                service.invalid_volumes_from = invalid;
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn validate_service_cross_fields(&mut self, service: &ProjectService) {
+        if let (Some(network_mode), Some(networks)) = (service.network_mode.as_ref(), service.networks.as_ref()) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    SERVICE_NETWORK_MODE_NETWORKS_CONFLICT,
+                    Severity::Error,
+                    "network_mode and networks are mutually exclusive service settings",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    project_value_span(network_mode),
+                    "network_mode retained",
+                ))
+                .with_label(DiagnosticLabel::secondary(
+                    project_value_span(networks),
+                    "networks retained",
+                )),
+            );
+        }
+        let deploy = service.deploy.as_ref().map(ProjectValue::value);
+        self.validate_service_memory_cross_fields(service, deploy);
+        self.validate_service_scale_cross_fields(service, deploy);
+        self.validate_service_cpu_cross_fields(service, deploy);
+    }
+
+    fn validate_service_memory_cross_fields(&mut self, service: &ProjectService, deploy: Option<&ProjectDeploy>) {
+        if let (Some(reservation), Some(deploy_reservation)) = (
+            service.mem_reservation.as_ref(),
+            deploy
+                .and_then(ProjectDeploy::resources)
+                .and_then(|value| value.value().reservations())
+                .and_then(|value| value.value().memory()),
+        ) {
+            if same_memory_value(reservation.value(), deploy_reservation.value()) == Some(false) {
+                self.diagnostics.push(
+                Diagnostic::new(
+                    SERVICE_MEMORY_RESERVATION_DEPLOY_CONFLICT,
+                    Severity::Warning,
+                    "service mem_reservation and deploy reservation memory are both retained for caller reconciliation",
+                )
+                .with_label(DiagnosticLabel::primary(project_value_span(reservation), "service mem_reservation retained"))
+                .with_label(DiagnosticLabel::secondary(project_value_span(deploy_reservation), "deploy reservation memory retained")),
+            );
+            }
+        }
+        if let Some(memswap) = service
+            .memswap_limit
+            .as_ref()
+            .filter(|value| service.mem_limit.is_none() && value.value().is_positive())
+        {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    SERVICE_MEMSWAP_REQUIRES_MEMORY_LIMIT,
+                    Severity::Error,
+                    "memswap_limit requires an explicit service mem_limit; no host default is inferred",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    project_value_span(memswap),
+                    "memory-plus-swap value retained without memory limit",
+                )),
+            );
+        }
+        if let (Some(memswap), Some(memory)) = (service.memswap_limit.as_ref(), service.mem_limit.as_ref()) {
+            if memswap.value().is_positive()
+                && memory_compare_same_unit(memswap.value().raw().value(), memory.value().raw().value())
+                    == Some(std::cmp::Ordering::Less)
+            {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SERVICE_MEMSWAP_BELOW_MEMORY_LIMIT,
+                        Severity::Error,
+                        "positive memswap_limit is below the comparable service mem_limit",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        project_value_span(memswap),
+                        "memory-plus-swap limit retained",
+                    ))
+                    .with_label(DiagnosticLabel::secondary(
+                        project_value_span(memory),
+                        "service memory limit retained",
+                    )),
+                );
+            }
+        }
+    }
+
+    fn validate_service_scale_cross_fields(&mut self, service: &ProjectService, deploy: Option<&ProjectDeploy>) {
+        if let (Some(scale), Some(replicas)) = (service.scale.as_ref(), deploy.and_then(ProjectDeploy::replicas)) {
+            let scale_raw = match scale.value() {
+                ServiceInteger::Valid(raw) | ServiceInteger::OutOfRange(raw) | ServiceInteger::Other(raw) => raw,
+            };
+            let replica_raw = match replicas.value() {
+                DeployReplicas::YamlNumber(raw) | DeployReplicas::String(raw) => raw,
+            };
+            if let (Some(scale_number), Some(replica_number)) =
+                (normalize_integer(scale_raw), normalize_integer(replica_raw))
+            {
+                if scale_number != replica_number {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            SERVICE_SCALE_DEPLOY_REPLICAS_CONFLICT,
+                            Severity::Warning,
+                            "scale and deploy.replicas have different proven integer values",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            project_value_span(scale),
+                            "service scale retained",
+                        ))
+                        .with_label(DiagnosticLabel::secondary(
+                            project_value_span(replicas),
+                            "deploy replicas retained",
+                        )),
+                    );
+                }
+            }
+        }
+    }
+
+    fn validate_service_cpu_cross_fields(&mut self, service: &ProjectService, deploy: Option<&ProjectDeploy>) {
+        if let (Some(cpus), Some(limit)) = (
+            service.cpus.as_ref(),
+            deploy
+                .and_then(ProjectDeploy::resources)
+                .and_then(|value| value.value().limits())
+                .and_then(|value| value.value().cpus()),
+        ) {
+            let service_raw = match cpus.value() {
+                Cpus::Decimal(raw) | Cpus::Expression(raw) | Cpus::Other(raw) => raw,
+            };
+            let limit_raw = match limit.value() {
+                DeployResourceCpus::YamlNumber(raw) | DeployResourceCpus::String(raw) => raw,
+            };
+            if let (Some(service_number), Some(limit_number)) =
+                (normalize_decimal(service_raw), normalize_decimal(limit_raw))
+            {
+                if service_number != limit_number {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            SERVICE_CPUS_DEPLOY_LIMIT_CONFLICT,
+                            Severity::Warning,
+                            "cpus and deploy.resources.limits.cpus have different proven decimal values",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            project_value_span(cpus),
+                            "service cpus retained",
+                        ))
+                        .with_label(DiagnosticLabel::secondary(
+                            project_value_span(limit),
+                            "deploy CPU limit retained",
+                        )),
+                    );
+                }
+            }
+        }
     }
 
     fn boolean(&mut self, field: &MergedValue, message: &str) -> Option<ProjectValue<BooleanValue>> {
@@ -3895,6 +4298,42 @@ impl<'a> Builder<'a> {
             "cpu_rt_period" => {
                 service.cpu_rt_period = self.cpu_rt_period(field.value());
                 if service.cpu_rt_period.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpu_rt_runtime" => {
+                service.cpu_rt_runtime = self.cpu_rt_runtime(field.value());
+                if service.cpu_rt_runtime.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpu_shares" => {
+                service.cpu_shares = self.service_integer(field.value(), 0, i128::MAX, "cpu_shares");
+                if service.cpu_shares.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpus" => {
+                service.cpus = self.cpus(field.value());
+                if service.cpus.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "mem_swappiness" => {
+                service.mem_swappiness = self.service_integer(field.value(), 0, 100, "mem_swappiness");
+                if service.mem_swappiness.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "oom_score_adj" => {
+                service.oom_score_adj = self.service_integer(field.value(), -1000, 1000, "oom_score_adj");
+                if service.oom_score_adj.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "scale" => {
+                service.scale = self.service_integer(field.value(), 0, i128::MAX, "scale");
+                if service.scale.is_none() {
                     service.unmodeled_fields.push(field_reference(path, field));
                 }
             }
@@ -6636,6 +7075,119 @@ impl<'a> Builder<'a> {
         Some(ProjectValue::new(period, value))
     }
 
+    fn cpu_rt_runtime(&mut self, value: &MergedValue) -> Option<ProjectValue<CpuRtRuntime>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "cpu_rt_runtime must be an integer microsecond or duration string scalar",
+            );
+            return None;
+        };
+        let runtime = match scalar.kind() {
+            MergedScalarKind::Number if scalar.raw().bytes().all(|byte| byte.is_ascii_digit()) => {
+                CpuRtRuntime::Microseconds(scalar.raw().to_owned())
+            }
+            MergedScalarKind::Number => CpuRtRuntime::Other(scalar.raw().to_owned()),
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                CpuRtRuntime::parse_string(scalar.value().to_owned())
+            }
+            MergedScalarKind::String | MergedScalarKind::Boolean => {
+                self.expected(
+                    value,
+                    "cpu_rt_runtime must be an integer microsecond or duration string scalar",
+                );
+                return None;
+            }
+        };
+        if !runtime.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    CPU_RT_RUNTIME_INVALID,
+                    Severity::Error,
+                    "cpu_rt_runtime must be an integer microsecond value, Compose duration, or interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "invalid service real-time CPU runtime",
+                )),
+            );
+        }
+        Some(ProjectValue::new(runtime, value))
+    }
+
+    fn service_integer(
+        &mut self,
+        value: &MergedValue,
+        min: i128,
+        max: i128,
+        description: &str,
+    ) -> Option<ProjectValue<ServiceInteger>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, &format!("{description} must be an integer scalar"));
+            return None;
+        };
+        if matches!(scalar.kind(), MergedScalarKind::Boolean) {
+            self.expected(value, &format!("{description} must be an integer scalar"));
+            return None;
+        }
+        let parsed = ServiceInteger::parse(scalar.value().to_owned(), min, max);
+        if !parsed.is_valid() {
+            let _ = description;
+            self.invalid(effective_span(value), "service integer must be in its documented range");
+        }
+        Some(ProjectValue::new(parsed, value))
+    }
+
+    fn cpus(&mut self, value: &MergedValue) -> Option<ProjectValue<Cpus>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, "cpus must be a decimal scalar");
+            return None;
+        };
+        if matches!(scalar.kind(), MergedScalarKind::Boolean) {
+            self.expected(value, "cpus must be a decimal scalar");
+            return None;
+        }
+        let parsed = Cpus::parse(scalar.value().to_owned());
+        if !parsed.is_valid() {
+            self.invalid(
+                effective_span(value),
+                "cpus must be a decimal allocation or interpolation expression",
+            );
+        }
+        Some(ProjectValue::new(parsed, value))
+    }
+
+    fn volumes_from(
+        &mut self,
+        value: &MergedValue,
+    ) -> (ProjectVolumesFromCollection, ProjectInvalidServiceStringItems) {
+        let MergedValueKind::Sequence(items) = value.kind() else {
+            self.expected(value, "volumes_from must be a sequence");
+            return (None, Vec::new());
+        };
+        let mut result = Vec::new();
+        let mut invalid = Vec::new();
+        for item in items {
+            let MergedValueKind::Scalar(scalar) = item.kind() else {
+                self.expected(item, "volumes_from entries must be string scalars");
+                invalid.push(ProjectInvalidServiceStringItem {
+                    span: effective_span(item),
+                });
+                continue;
+            };
+            if !matches!(scalar.kind(), MergedScalarKind::String) {
+                self.expected(item, "volumes_from entries must be string scalars");
+                invalid.push(ProjectInvalidServiceStringItem {
+                    span: effective_span(item),
+                });
+                continue;
+            }
+            let raw = Located::new(scalar.value().to_owned(), effective_span(item));
+            result.push(ProjectValue::new(VolumesFrom::parse(raw), item));
+        }
+        (Some(ProjectValue::new(result, value)), invalid)
+    }
+
     fn pids_limit(&mut self, value: &MergedValue) -> Option<ProjectValue<PidsLimit>> {
         let scalar = match value.kind() {
             MergedValueKind::Scalar(scalar) if scalar.kind() != MergedScalarKind::Boolean => scalar,
@@ -6779,6 +7331,49 @@ impl<'a> Builder<'a> {
                 .with_label(DiagnosticLabel::primary(effective_span(value), label))
                 .with_note(note),
         );
+        Some(ProjectValue::new(limit, value))
+    }
+
+    fn memswap_limit(&mut self, value: &MergedValue) -> Option<ProjectValue<MemswapLimit>> {
+        let scalar = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::Number => {
+                (scalar, MemswapLimitScalarKind::Number)
+            }
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                (scalar, MemswapLimitScalarKind::String)
+            }
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        MEMSWAP_LIMIT_EXPECTED_VALUE,
+                        Severity::Error,
+                        "memswap_limit must be a YAML number or string scalar",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected memory-plus-swap-limit form",
+                    )),
+                );
+                return None;
+            }
+        };
+        let limit = MemswapLimit::parse(
+            Located::new(scalar.0.value().to_owned(), effective_span(value)),
+            scalar.1,
+        );
+        if matches!(limit.kind(), MemswapLimitKind::Other(_)) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    MEMSWAP_LIMIT_INVALID,
+                    Severity::Error,
+                    "memswap_limit must be `-1`, a decimal byte quantity, or an interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "invalid memory-plus-swap limit retained",
+                )),
+            );
+        }
         Some(ProjectValue::new(limit, value))
     }
 
@@ -8875,6 +9470,33 @@ impl<'a> Builder<'a> {
         Some(ProjectValue::new(strings, value))
     }
 
+    fn strict_string_collection(
+        &mut self,
+        value: &MergedValue,
+        description: &str,
+    ) -> (ProjectStringCollection, ProjectInvalidServiceStringItems) {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, &format!("{description} must be a sequence"));
+            return (None, Vec::new());
+        };
+        let mut strings = Vec::new();
+        let mut invalid = Vec::new();
+        for item in values {
+            match item.kind() {
+                MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                    strings.push(ProjectValue::new(scalar.value().to_owned(), item));
+                }
+                _ => {
+                    self.expected(item, &format!("{description} entries must be YAML string scalars"));
+                    invalid.push(ProjectInvalidServiceStringItem {
+                        span: effective_span(item),
+                    });
+                }
+            }
+        }
+        (Some(ProjectValue::new(strings, value)), invalid)
+    }
+
     fn capability_drop(&mut self, value: &MergedValue) -> Option<ProjectValue<Vec<ProjectValue<CapabilityDropItem>>>> {
         let Some(values) = value.as_sequence() else {
             self.expected(value, "cap_drop must be a sequence of string scalars");
@@ -10087,6 +10709,92 @@ fn compose_scalar_from_merged(scalar: &crate::merge::MergedScalar) -> ComposeSca
         MergedScalarKind::Boolean => ComposeScalar::Boolean(scalar.value().eq_ignore_ascii_case("true")),
         MergedScalarKind::Number => ComposeScalar::Number(scalar.value().to_owned()),
     }
+}
+
+fn project_value_span<T>(value: &ProjectValue<T>) -> SourceSpan {
+    let Some(span) = value.provenance().effective_source() else {
+        unreachable!("merged project values retain source provenance");
+    };
+    span
+}
+
+/// Returns one canonical arbitrary-precision unsigned integer spelling.
+///
+/// Sign, exponent, whitespace, and expression spellings intentionally have no proven semantic
+/// comparison at this layer.
+fn normalize_integer(value: &str) -> Option<String> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    Some(value.trim_start_matches('0').to_owned().if_empty_then("0"))
+}
+
+trait EmptyStringExt {
+    fn if_empty_then(self, fallback: &str) -> Self;
+}
+impl EmptyStringExt for String {
+    fn if_empty_then(self, fallback: &str) -> Self {
+        if self.is_empty() { fallback.to_owned() } else { self }
+    }
+}
+
+/// Returns a canonical arbitrary-precision decimal without floating-point conversion.
+fn normalize_decimal(value: &str) -> Option<String> {
+    let (whole, fraction) = value.split_once('.').map_or((value, ""), |parts| parts);
+    if whole.is_empty()
+        || (value.contains('.') && fraction.is_empty())
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let whole = whole.trim_start_matches('0');
+    let fraction = fraction.trim_end_matches('0');
+    let whole = if whole.is_empty() { "0" } else { whole };
+    Some(if fraction.is_empty() {
+        whole.to_owned()
+    } else {
+        format!("{whole}.{fraction}")
+    })
+}
+
+/// Compares only documented byte spellings using the same explicit suffix and arbitrary-precision
+/// integral amount. Different units remain unresolved coexistence rather than an inferred ratio.
+fn same_memory_value(service: &MemLimit, deploy: &DeployResourceMemory) -> Option<bool> {
+    fn parts(value: &str) -> Option<(&str, &str)> {
+        ["kb", "mb", "gb", "b", "k", "m", "g"]
+            .into_iter()
+            .find_map(|suffix| value.strip_suffix(suffix).map(|amount| (amount, suffix)))
+    }
+    let (service_amount, service_unit) = parts(service.raw().value())?;
+    let (deploy_amount, deploy_unit) = parts(deploy.raw())?;
+    let (Some(service_amount), Some(deploy_amount)) =
+        (normalize_integer(service_amount), normalize_integer(deploy_amount))
+    else {
+        return None;
+    };
+    Some(service_unit == deploy_unit && service_amount == deploy_amount)
+}
+
+fn memory_compare_same_unit(left: &str, right: &str) -> Option<std::cmp::Ordering> {
+    fn parts(value: &str) -> Option<(&str, &str)> {
+        ["kb", "mb", "gb", "b", "k", "m", "g"]
+            .into_iter()
+            .find_map(|unit| value.strip_suffix(unit).map(|amount| (amount, unit)))
+    }
+    let (left_amount, left_unit) = parts(left)?;
+    let (right_amount, right_unit) = parts(right)?;
+    if left_unit != right_unit {
+        return None;
+    }
+    let left_amount = normalize_integer(left_amount)?;
+    let right_amount = normalize_integer(right_amount)?;
+    Some(
+        left_amount
+            .len()
+            .cmp(&right_amount.len())
+            .then_with(|| left_amount.cmp(&right_amount)),
+    )
 }
 
 fn field_reference(path: &[String], entry: &MergedEntry) -> ProjectFieldReference {

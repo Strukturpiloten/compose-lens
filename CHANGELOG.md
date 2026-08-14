@@ -6,6 +6,13 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Added
+
+- Native authored and effective-project coverage for service CPU, memory, namespace, OOM, scale,
+  device-cgroup, and `volumes_from` keys, retaining merge provenance, interpolation sensitivity,
+  malformed evidence, local service-reference validation, and deterministic parse-back-generated
+  raw syntax without runtime inference.
+
 ## [0.1.17] - 2026-08-13
 
 ### Added

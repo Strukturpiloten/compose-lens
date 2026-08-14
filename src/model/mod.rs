@@ -11,6 +11,7 @@ mod cpu_percent;
 mod cpu_period;
 mod cpu_quota;
 mod cpu_rt_period;
+mod cpu_rt_runtime;
 mod credential_spec;
 mod dependency;
 mod device;
@@ -38,6 +39,7 @@ mod resource;
 mod restart;
 mod sections;
 mod security_option;
+mod service_runtime;
 mod shm;
 mod sysctl;
 mod tmpfs;
@@ -58,6 +60,7 @@ pub use cpu_percent::CpuPercent;
 pub use cpu_period::CpuPeriod;
 pub use cpu_quota::CpuQuota;
 pub use cpu_rt_period::CpuRtPeriod;
+pub use cpu_rt_runtime::CpuRtRuntime;
 pub use credential_spec::CredentialSpec;
 pub use dependency::{
     DependencyCondition, DependsOn, Healthcheck, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
@@ -115,6 +118,10 @@ pub use sections::{
 };
 pub(crate) use security_option::{SecurityOptionCandidateCounts, classify_security_option};
 pub use security_option::{SecurityOptionItem, SecurityOptionKind, SecurityOptions};
+pub use service_runtime::{
+    Cpus, InvalidServiceStringItem, IpcMode, MemswapLimit, MemswapLimitKind, MemswapLimitScalarKind, NetworkMode,
+    PidMode, ServiceInteger, VolumesFrom,
+};
 pub(crate) use shm::valid_generated_shm_amount;
 pub use shm::{ShmSize, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit};
 pub use sysctl::{Sysctls, SysctlsForm};
@@ -339,6 +346,8 @@ pub const CPU_RT_PERIOD_EXPECTED_VALUE: DiagnosticCode =
 
 /// A service real-time CPU-period string is outside the raw Compose duration policy.
 pub const CPU_RT_PERIOD_INVALID: DiagnosticCode = DiagnosticCode::new("compose.cpu-rt-period.invalid-duration");
+/// A `cpu_rt_runtime` scalar is neither an integer microsecond value, duration, nor deferred expression.
+pub const CPU_RT_RUNTIME_INVALID: DiagnosticCode = DiagnosticCode::new("compose.cpu-rt-runtime.invalid-value");
 
 /// A service shared-memory size is not a number or string scalar.
 pub const SHM_SIZE_EXPECTED_VALUE: DiagnosticCode = DiagnosticCode::new("compose.shm-size.expected-number-or-string");
@@ -366,6 +375,13 @@ pub const MEM_LIMIT_SCHEMA_NUMBER: DiagnosticCode = DiagnosticCode::new("compose
 /// A schema-accepted string memory limit is outside the documented lowercase suffix family.
 pub const MEM_LIMIT_PROVIDER_DEPENDENT_STRING: DiagnosticCode =
     DiagnosticCode::new("compose.mem-limit.provider-dependent-string");
+
+/// A service memory-plus-swap limit is not a YAML number or string scalar.
+pub const MEMSWAP_LIMIT_EXPECTED_VALUE: DiagnosticCode =
+    DiagnosticCode::new("compose.memswap-limit.expected-number-or-string");
+
+/// A service memory-plus-swap limit is neither `-1`, a decimal quantity, nor an expression.
+pub const MEMSWAP_LIMIT_INVALID: DiagnosticCode = DiagnosticCode::new("compose.memswap-limit.invalid-value");
 
 /// A service image pull policy is not documented, schema-recognized, or deferred.
 pub const PULL_POLICY_INVALID: DiagnosticCode = DiagnosticCode::new("compose.pull-policy.invalid-policy");
@@ -873,6 +889,23 @@ pub struct Service {
     cpu_period: Option<Located<CpuPeriod>>,
     cpu_quota: Option<Located<CpuQuota>>,
     cpu_rt_period: Option<Located<CpuRtPeriod>>,
+    cpu_rt_runtime: Option<Located<CpuRtRuntime>>,
+    cpu_shares: Option<Located<ServiceInteger>>,
+    cpus: Option<Located<Cpus>>,
+    cpuset: Option<Located<String>>,
+    device_cgroup_rules: Vec<Located<String>>,
+    invalid_device_cgroup_rules: Vec<InvalidServiceStringItem>,
+    ipc: Option<Located<IpcMode>>,
+    mem_reservation: Option<MemLimit>,
+    mem_swappiness: Option<Located<ServiceInteger>>,
+    memswap_limit: Option<MemswapLimit>,
+    network_mode: Option<Located<NetworkMode>>,
+    oom_kill_disable: Option<Located<BooleanValue>>,
+    oom_score_adj: Option<Located<ServiceInteger>>,
+    pid: Option<Located<PidMode>>,
+    scale: Option<Located<ServiceInteger>>,
+    volumes_from: Vec<VolumesFrom>,
+    invalid_volumes_from: Vec<InvalidServiceStringItem>,
     shm_size: Option<ShmSize>,
     mem_limit: Option<MemLimit>,
     tmpfs: Option<Tmpfs>,
@@ -948,6 +981,23 @@ impl Service {
             cpu_period: None,
             cpu_quota: None,
             cpu_rt_period: None,
+            cpu_rt_runtime: None,
+            cpu_shares: None,
+            cpus: None,
+            cpuset: None,
+            device_cgroup_rules: Vec::new(),
+            invalid_device_cgroup_rules: Vec::new(),
+            ipc: None,
+            mem_reservation: None,
+            mem_swappiness: None,
+            memswap_limit: None,
+            network_mode: None,
+            oom_kill_disable: None,
+            oom_score_adj: None,
+            pid: None,
+            scale: None,
+            volumes_from: Vec::new(),
+            invalid_volumes_from: Vec::new(),
             shm_size: None,
             mem_limit: None,
             tmpfs: None,
@@ -1261,6 +1311,92 @@ impl Service {
     #[must_use]
     pub const fn cpu_rt_period(&self) -> Option<&Located<CpuRtPeriod>> {
         self.cpu_rt_period.as_ref()
+    }
+
+    /// Returns the authored real-time CPU-runtime scalar without scheduler interpretation.
+    #[must_use]
+    pub const fn cpu_rt_runtime(&self) -> Option<&Located<CpuRtRuntime>> {
+        self.cpu_rt_runtime.as_ref()
+    }
+    /// Returns the authored relative CPU-share scalar.
+    #[must_use]
+    pub const fn cpu_shares(&self) -> Option<&Located<ServiceInteger>> {
+        self.cpu_shares.as_ref()
+    }
+    /// Returns the authored decimal CPU allocation spelling.
+    #[must_use]
+    pub const fn cpus(&self) -> Option<&Located<Cpus>> {
+        self.cpus.as_ref()
+    }
+    /// Returns the raw CPU-set spelling without provider grammar inference.
+    #[must_use]
+    pub const fn cpuset(&self) -> Option<&Located<String>> {
+        self.cpuset.as_ref()
+    }
+    /// Returns ordered raw device cgroup rules, including duplicates.
+    #[must_use]
+    pub fn device_cgroup_rules(&self) -> &[Located<String>] {
+        &self.device_cgroup_rules
+    }
+    /// Returns malformed device-cgroup rule items retained with their source spans.
+    #[must_use]
+    pub fn invalid_device_cgroup_rules(&self) -> &[InvalidServiceStringItem] {
+        &self.invalid_device_cgroup_rules
+    }
+    /// Returns the authored IPC mode.
+    #[must_use]
+    pub const fn ipc(&self) -> Option<&Located<IpcMode>> {
+        self.ipc.as_ref()
+    }
+    /// Returns the authored memory reservation.
+    #[must_use]
+    pub const fn mem_reservation(&self) -> Option<&MemLimit> {
+        self.mem_reservation.as_ref()
+    }
+    /// Returns the authored memory-swappiness scalar.
+    #[must_use]
+    pub const fn mem_swappiness(&self) -> Option<&Located<ServiceInteger>> {
+        self.mem_swappiness.as_ref()
+    }
+    /// Returns the authored memory-plus-swap limit spelling.
+    #[must_use]
+    pub const fn memswap_limit(&self) -> Option<&MemswapLimit> {
+        self.memswap_limit.as_ref()
+    }
+    /// Returns the authored network mode.
+    #[must_use]
+    pub const fn network_mode(&self) -> Option<&Located<NetworkMode>> {
+        self.network_mode.as_ref()
+    }
+    /// Returns the authored OOM-kill choice or deferred expression.
+    #[must_use]
+    pub const fn oom_kill_disable(&self) -> Option<&Located<BooleanValue>> {
+        self.oom_kill_disable.as_ref()
+    }
+    /// Returns the authored OOM-score adjustment scalar.
+    #[must_use]
+    pub const fn oom_score_adj(&self) -> Option<&Located<ServiceInteger>> {
+        self.oom_score_adj.as_ref()
+    }
+    /// Returns the authored PID namespace mode.
+    #[must_use]
+    pub const fn pid(&self) -> Option<&Located<PidMode>> {
+        self.pid.as_ref()
+    }
+    /// Returns the authored scale scalar.
+    #[must_use]
+    pub const fn scale(&self) -> Option<&Located<ServiceInteger>> {
+        self.scale.as_ref()
+    }
+    /// Returns ordered `volumes_from` references with default access retained.
+    #[must_use]
+    pub fn volumes_from(&self) -> &[VolumesFrom] {
+        &self.volumes_from
+    }
+    /// Returns malformed `volumes_from` items retained with their source spans.
+    #[must_use]
+    pub fn invalid_volumes_from(&self) -> &[InvalidServiceStringItem] {
+        &self.invalid_volumes_from
     }
 
     /// Returns the raw-preserving service shared-memory size.
@@ -1770,6 +1906,9 @@ impl Parser {
         let (mut service, mut seen) = (Service::new(field.name.clone(), field.span), BTreeMap::new());
         for service_field in self.fields(mapping) {
             let duplicate = self.record_duplicate(&mut seen, &service_field);
+            if !duplicate && self.parse_service_runtime_field(&mut service, &service_field) {
+                continue;
+            }
             match service_field.name.value.as_str() {
                 "hostname" if !duplicate => service.hostname = self.parse_hostname(&service_field),
                 "container_name" if !duplicate => {
@@ -1812,11 +1951,6 @@ impl Parser {
                     service.working_dir = self.parse_string(&service_field, "service working directory");
                 }
                 "read_only" if !duplicate => service.read_only = self.parse_service_read_only(&service_field),
-                "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "pids_limit"
-                    if !duplicate =>
-                {
-                    self.set_service_count(&mut service, &service_field);
-                }
                 "shm_size" if !duplicate => service.shm_size = self.parse_shm_size(&service_field),
                 "mem_limit" if !duplicate => service.mem_limit = self.parse_mem_limit(&service_field),
                 "tmpfs" if !duplicate => service.tmpfs = self.parse_tmpfs(&service_field),
@@ -1869,6 +2003,81 @@ impl Parser {
         service
     }
 
+    fn parse_service_runtime_field(&mut self, service: &mut Service, field: &ParsedField) -> bool {
+        match field.name.value().as_str() {
+            "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "cpu_rt_runtime"
+            | "cpu_shares" | "cpus" | "mem_swappiness" | "oom_score_adj" | "scale" | "pids_limit" => {
+                self.set_service_count(service, field);
+            }
+            "cpuset" => {
+                service.cpuset = self.parse_string(field, "service cpuset");
+                if service.cpuset.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "device_cgroup_rules" => {
+                if field.value.as_ref().and_then(YamlNode::as_sequence).is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+                let (items, invalid) = self.parse_strict_string_sequence(field, "device_cgroup_rules");
+                service.device_cgroup_rules = items;
+                service.invalid_device_cgroup_rules = invalid;
+            }
+            "ipc" => {
+                service.ipc = self
+                    .parse_string(field, "service ipc mode")
+                    .map(|value| Located::new(IpcMode::parse(value.value), value.span));
+                if service.ipc.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "mem_reservation" => {
+                service.mem_reservation = self.parse_mem_limit(field);
+                if service.mem_reservation.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "memswap_limit" => {
+                service.memswap_limit = self.parse_memswap_limit(field);
+                if service.memswap_limit.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "network_mode" => {
+                service.network_mode = self
+                    .parse_string(field, "service network mode")
+                    .map(|value| Located::new(NetworkMode::parse(value.value), value.span));
+                if service.network_mode.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "oom_kill_disable" => {
+                service.oom_kill_disable = self.parse_boolean(field, "service oom_kill_disable");
+                if service.oom_kill_disable.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "pid" => {
+                service.pid = self
+                    .parse_string(field, "service pid mode")
+                    .map(|value| Located::new(PidMode::parse(value.value), value.span));
+                if service.pid.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "volumes_from" => {
+                if field.value.as_ref().and_then(YamlNode::as_sequence).is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+                let (items, invalid) = self.parse_strict_string_sequence(field, "volumes_from");
+                service.volumes_from = items.into_iter().map(VolumesFrom::parse).collect();
+                service.invalid_volumes_from = invalid;
+            }
+            _ => return false,
+        }
+        true
+    }
+
     fn hooks(&mut self, service: &mut Service, field: &ParsedField) {
         match field.name.value().as_str() {
             "post_start" => service.post_start = self.parse_post_start(field),
@@ -1915,6 +2124,42 @@ impl Parser {
             "cpu_rt_period" => {
                 service.cpu_rt_period = self.parse_cpu_rt_period(field);
                 if service.cpu_rt_period.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpu_rt_runtime" => {
+                service.cpu_rt_runtime = self.parse_cpu_rt_runtime(field);
+                if service.cpu_rt_runtime.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpu_shares" => {
+                service.cpu_shares = self.parse_service_integer(field, 0, i128::MAX, "cpu_shares");
+                if service.cpu_shares.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpus" => {
+                service.cpus = self.parse_cpus(field);
+                if service.cpus.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "mem_swappiness" => {
+                service.mem_swappiness = self.parse_service_integer(field, 0, 100, "mem_swappiness");
+                if service.mem_swappiness.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "oom_score_adj" => {
+                service.oom_score_adj = self.parse_service_integer(field, -1000, 1000, "oom_score_adj");
+                if service.oom_score_adj.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "scale" => {
+                service.scale = self.parse_service_integer(field, 0, i128::MAX, "scale");
+                if service.scale.is_none() {
                     service.unknown_fields.push(field.reference());
                 }
             }
@@ -3902,6 +4147,106 @@ impl Parser {
         Some(Located::new(period, span))
     }
 
+    fn parse_cpu_rt_runtime(&mut self, field: &ParsedField) -> Option<Located<CpuRtRuntime>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "cpu_rt_runtime must be an integer microsecond or duration string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let raw = scalar_string_from_source(&self.source, scalar);
+        let runtime = match scalar_value.scalar_type() {
+            ScalarType::Integer => CpuRtRuntime::parse_number(raw, true),
+            ScalarType::Float => CpuRtRuntime::parse_number(raw, false),
+            ScalarType::String => CpuRtRuntime::parse_string(raw),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "cpu_rt_runtime must be an integer microsecond or duration string scalar",
+                );
+                return None;
+            }
+        };
+        if !runtime.is_valid() {
+            self.diagnostics.push(Diagnostic::new(CPU_RT_RUNTIME_INVALID, Severity::Error,
+                "cpu_rt_runtime must be an integer microsecond value, a Compose duration, or an interpolation expression")
+                .with_label(DiagnosticLabel::primary(span, "invalid service real-time CPU runtime")));
+        }
+        Some(Located::new(runtime, span))
+    }
+
+    fn parse_service_integer(
+        &mut self,
+        field: &ParsedField,
+        min: i128,
+        max: i128,
+        description: &str,
+    ) -> Option<Located<ServiceInteger>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                format!("{description} must be an integer scalar"),
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let value = ScalarValue::from_scalar(scalar);
+        if matches!(
+            value.scalar_type(),
+            ScalarType::Boolean | ScalarType::Timestamp | ScalarType::Regex
+        ) {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                format!("{description} must be an integer scalar"),
+            );
+            return None;
+        }
+        let parsed = ServiceInteger::parse(scalar_string_from_source(&self.source, scalar), min, max);
+        if !parsed.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    EXPECTED_FIELD_FORM,
+                    Severity::Error,
+                    format!("{description} must be an integer in its documented range"),
+                )
+                .with_label(DiagnosticLabel::primary(span, "invalid integer spelling retained")),
+            );
+        }
+        Some(Located::new(parsed, span))
+    }
+
+    fn parse_cpus(&mut self, field: &ParsedField) -> Option<Located<Cpus>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_SCALAR, field, "cpus must be a decimal scalar");
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let kind = ScalarValue::from_scalar(scalar).scalar_type();
+        if matches!(kind, ScalarType::Boolean | ScalarType::Timestamp | ScalarType::Regex) {
+            self.expected(EXPECTED_SCALAR, field, "cpus must be a decimal scalar");
+            return None;
+        }
+        let value = Cpus::parse(scalar_string_from_source(&self.source, scalar));
+        if !value.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    EXPECTED_FIELD_FORM,
+                    Severity::Error,
+                    "cpus must be a decimal allocation or interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(span, "invalid CPU allocation retained")),
+            );
+        }
+        Some(Located::new(value, span))
+    }
+
     fn parse_shm_size(&mut self, field: &ParsedField) -> Option<ShmSize> {
         let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
             self.expected(
@@ -3988,6 +4333,48 @@ impl Parser {
             scalar_kind,
         );
         self.diagnose_mem_limit(&limit);
+        Some(limit)
+    }
+
+    fn parse_memswap_limit(&mut self, field: &ParsedField) -> Option<MemswapLimit> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                MEMSWAP_LIMIT_EXPECTED_VALUE,
+                field,
+                "memswap_limit must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let scalar_kind = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer | ScalarType::Float => MemswapLimitScalarKind::Number,
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => MemswapLimitScalarKind::String,
+            ScalarType::Boolean | ScalarType::Null => {
+                self.expected(
+                    MEMSWAP_LIMIT_EXPECTED_VALUE,
+                    field,
+                    "memswap_limit must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let limit = MemswapLimit::parse(
+            Located::new(scalar_string_from_source(&self.source, scalar), span),
+            scalar_kind,
+        );
+        if matches!(limit.kind(), MemswapLimitKind::Other(_)) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    MEMSWAP_LIMIT_INVALID,
+                    Severity::Error,
+                    "memswap_limit must be `-1`, a decimal byte quantity, or an interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "invalid memory-plus-swap limit retained",
+                )),
+            );
+        }
         Some(limit)
     }
 
@@ -7576,6 +7963,49 @@ impl Parser {
             field.span,
             format!("{description} entries must be scalars"),
         )
+    }
+
+    fn parse_strict_string_sequence(
+        &mut self,
+        field: &ParsedField,
+        description: &str,
+    ) -> (Vec<Located<String>>, Vec<InvalidServiceStringItem>) {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(EXPECTED_SEQUENCE, field, format!("{description} must be a sequence"));
+            return (Vec::new(), Vec::new());
+        };
+        let mut values = Vec::new();
+        let mut invalid = Vec::new();
+        for node in sequence.values() {
+            let span = match &node {
+                YamlNode::Scalar(value) => span_from_position(self.source_id, value.byte_range()),
+                YamlNode::Sequence(value) => span_from_position(self.source_id, value.byte_range()),
+                YamlNode::Mapping(value) => span_from_position(self.source_id, value.byte_range()),
+                _ => field.span,
+            };
+            let Some(scalar) = node.as_scalar() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &node,
+                    field.span,
+                    format!("{description} entries must be YAML string scalars"),
+                );
+                invalid.push(InvalidServiceStringItem::new(span));
+                continue;
+            };
+            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &node,
+                    field.span,
+                    format!("{description} entries must be YAML string scalars"),
+                );
+                invalid.push(InvalidServiceStringItem::new(span));
+                continue;
+            }
+            values.push(Located::new(scalar_string_from_source(&self.source, scalar), span));
+        }
+        (values, invalid)
     }
 
     fn parse_scalar_nodes(

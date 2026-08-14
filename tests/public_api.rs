@@ -117,6 +117,51 @@ fn exposes_authored_effective_and_generated_annotations_contracts() -> Result<()
 }
 
 #[test]
+fn exposes_service_runtime_key_contracts_at_authored_and_generated_boundaries() -> Result<(), Box<dyn std::error::Error>>
+{
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(9110),
+        "services:\n  app:\n    cpu_rt_runtime: 500us\n    device_cgroup_rules: [rule, true]\n    volumes_from: [db, false]\n    scale: 2\n",
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let service = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .ok_or("service expected")?;
+    assert!(service.cpu_rt_runtime().is_some());
+    assert_eq!(service.invalid_device_cgroup_rules().len(), 1);
+    assert_eq!(service.invalid_volumes_from().len(), 1);
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(9111),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        "services:\n  app:\n    cpu_rt_runtime: 500us\n    device_cgroup_rules: [rule, true]\n    volumes_from: [db, false]\n    scale: 2\n",
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = build_project_view(merged.project().ok_or("project expected")?, None);
+    let effective = project
+        .view()
+        .and_then(|view| view.service("app"))
+        .ok_or("effective service expected")?;
+    assert!(effective.cpu_rt_runtime().is_some() && effective.scale().is_some());
+    assert_eq!(effective.invalid_device_cgroup_rules().len(), 1);
+    assert_eq!(effective.invalid_volumes_from().len(), 1);
+    let mut generated = GeneratedService::new("generated")?;
+    generated.add_runtime_field(compose_lens::render::GeneratedServiceRuntimeField::Scale(
+        GeneratedString::plain("2")?,
+    ))?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(generated)?;
+    assert!(
+        builder
+            .build(SourceId::new(9112))?
+            .document()
+            .service("generated")
+            .is_some()
+    );
+    Ok(())
+}
+
+#[test]
 fn exposes_sensitive_build_ssh_contract() -> Result<(), Box<dyn std::error::Error>> {
     let source =
         "services:\n  app:\n    build:\n      ssh:\n        default: /private/agent.sock\n        retries: 2\n";

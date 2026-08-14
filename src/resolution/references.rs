@@ -388,18 +388,25 @@ fn collect_service_references(
             );
         }
     }
-    if let Some(links) = service.value().get("links").and_then(MergedValue::as_sequence) {
-        for link in links {
-            if let Some(scalar) = link.as_scalar() {
-                let target = scalar
-                    .value()
-                    .split_once(':')
-                    .map_or(scalar.value(), |(target, _)| target);
+    if let Some(values) = service.value().get("volumes_from").and_then(MergedValue::as_sequence) {
+        for value in values {
+            let Some(scalar) = value.as_scalar() else {
+                continue;
+            };
+            let source = scalar.value().rsplit_once(':').map_or(scalar.value(), |(name, mode)| {
+                if matches!(mode, "ro" | "rw") {
+                    name
+                } else {
+                    scalar.value()
+                }
+            });
+            let source = source.strip_prefix("service:").unwrap_or(source);
+            if !source.starts_with("container:") {
                 push_service(
                     service.key(),
-                    target,
-                    super::effective_span(link),
-                    ReferenceKind::Link,
+                    source,
+                    super::effective_span(value),
+                    ReferenceKind::ServiceNamespace,
                     scalar.is_sensitive(),
                     true,
                     service_names,
@@ -410,6 +417,7 @@ fn collect_service_references(
             }
         }
     }
+    collect_service_links(service, service_names, selection, references, diagnostics);
     if let Some(extends) = service.value().get("extends") {
         if extends.get("file").is_none() {
             if let Some(target) = extends.get("service") {
@@ -429,6 +437,39 @@ fn collect_service_references(
                 }
             }
         }
+    }
+}
+
+fn collect_service_links(
+    service: &MergedEntry,
+    service_names: &BTreeSet<&str>,
+    selection: Option<&ProfileSelection>,
+    references: &mut Vec<Reference>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(links) = service.value().get("links").and_then(MergedValue::as_sequence) else {
+        return;
+    };
+    for link in links {
+        let Some(scalar) = link.as_scalar() else {
+            continue;
+        };
+        let target = scalar
+            .value()
+            .split_once(':')
+            .map_or(scalar.value(), |(target, _)| target);
+        push_service(
+            service.key(),
+            target,
+            super::effective_span(link),
+            ReferenceKind::Link,
+            scalar.is_sensitive(),
+            true,
+            service_names,
+            selection,
+            references,
+            diagnostics,
+        );
     }
 }
 

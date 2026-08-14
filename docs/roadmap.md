@@ -33,7 +33,7 @@ The audited schema currently contains 9 top-level keys and 93 service keys.
 | Surface   | Project typed | Document typed only | Syntax-preserved only |
 | --------- | ------------: | ------------------: | --------------------: |
 | Top level |             6 |                   0 |                     3 |
-| Service   |            66 |                   0 |                    27 |
+| Service   |            81 |                   0 |                    12 |
 
 `x-*` extensions are intentionally open-ended and preserved. They are not counted as missing
 closed-schema keys.
@@ -55,7 +55,7 @@ project-typed.
 
 The effective project view currently exposes:
 
-`annotations`, `blkio_config`, `cgroup`, `cgroup_parent`, `command`, `configs`, `container_name`, `cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `credential_spec`, `depends_on`, `entrypoint`, `env_file`,
+`annotations`, `blkio_config`, `cgroup`, `cgroup_parent`, `command`, `configs`, `container_name`, `cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `cpu_rt_runtime`, `cpu_shares`, `cpus`, `cpuset`, `device_cgroup_rules`, `ipc`, `mem_reservation`, `mem_swappiness`, `memswap_limit`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `scale`, `volumes_from`, `credential_spec`, `depends_on`, `entrypoint`, `env_file`,
 `environment`, `extends`, `extra_hosts`, `provider`, `build.additional_contexts`, `build.context`, `build.args`, `build.cache_from`, `build.cache_to`, `build.dockerfile`, `build.dockerfile_inline`, `build.entitlements`, `build.extra_hosts`, `build.target`, `build.network`, `build.isolation`, `build.platforms`, `build.no_cache`, `build.privileged`, `build.sbom`, `build.pull`, `build.shm_size`, `build.tags`, `build.labels`, `build.secrets`, `build.ssh`, `build.ulimits`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`,
 `expose`, `group_add`, `healthcheck`, `hostname`, `image`, `init`, `platform`, `stdin_open`, `tty`, `privileged`, `attach`, `labels`, `logging`, `networks`, `ports`,
 `post_start`, `pre_stop`, `pre_start`, `profiles`, `read_only`, `pids_limit`, `pull_policy`, `pull_refresh_after`, `restart`, `runtime`, `secrets`, `security_opt`,
@@ -109,16 +109,10 @@ runtime, or build behavior is inferred.
 
 ### Syntax-preserved-only service keys
 
-The following 27 current service keys do not yet have a dedicated typed model:
+The following 12 current service keys do not yet have a dedicated typed model:
 
-`cpu_rt_runtime`, `cpu_shares`, `cpus`, `cpuset`, `develop`, `device_cgroup_rules`,
-`domainname`,
-`external_links`, `gpus`, `ipc`, `isolation`, `label_file`, `links`,
-`mac_address`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
-`models`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`,
-`scale`,
-`storage_opt`, `use_api_socket`,
-`uts`, and `volumes_from`.
+`develop`, `domainname`, `external_links`, `gpus`, `isolation`, `label_file`, `links`,
+`mac_address`, `models`, `storage_opt`, `use_api_socket`, and `uts`.
 
 ## Nested resource gaps
 
@@ -187,7 +181,9 @@ hiding a nested semantic gap.
 Generated documents currently cover project `name`, services, networks, and volumes. Generated
 services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `stdin_open`, `tty`, `privileged`, `env_file`, `environment`, `labels`, `annotations`, `logging`, `user`,
 `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`,
-`stop_grace_period`, `extra_hosts`, `ports`,
+`stop_grace_period`, `extra_hosts`, `ports`, `cpu_rt_runtime`, `cpu_shares`, `cpus`, `cpuset`,
+`device_cgroup_rules`, `ipc`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
+`network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `scale`, `volumes_from`,
 `volumes`, and `networks`.
 Generated long-form service-network attachments retain aliases plus optional raw `ipv4_address`
 and `ipv6_address` values with omission, sensitivity, and named-network scope intact.
@@ -213,9 +209,9 @@ driver/IPAM/provider/runtime validation. `enable_ipv4` remains deliberately abse
 generated API because it has no native Quadlet/Podman network-create counterpart; BoxFerry owns
 the non-representable diagnostic.
 
-All other typed or preserved service/resource keys remain open for generated construction. A key
-is generated only after syntax-form choice, validation, sensitivity, deterministic rendering, and
-parse-back tests are defined.
+All typed or preserved service/resource keys not explicitly listed above remain open for generated
+construction. A key is generated only after syntax-form choice, validation, sensitivity,
+deterministic rendering, and parse-back tests are defined.
 
 ## Implementation order
 
@@ -297,20 +293,20 @@ parse-back tests are defined.
       allocation, grammar, scheduling, CDI, host, runtime, cgroup, provider/version, or conversion
       semantics. Options retain map/list syntax, scalar fidelity, malformed evidence, duplicates, and
       generic provenance without provider interpretation.
-- [ ] Type all CPU, memory, PID, OOM, and block-I/O keys without applying host defaults.
+- [x] Type all CPU, memory, PID, OOM, and block-I/O keys without applying host defaults.
 - [x] Type service `devices` through authored, Compose-Go-compatible target merge,
       effective-project, and generated boundaries while preserving mixed raw short/long forms,
       CDI/deferred/opaque evidence, duplicates, nested provenance, reset/override, and planned-only
       provider evidence without device, permissions, CDI, GPU, or runtime validation.
-- [ ] Type GPU reservations, `gpus`, `storage_opt`,
-      cgroup, IPC, PID, and UTS namespace choices.
+- [ ] Type GPU reservations, `gpus`, `storage_opt`, and UTS namespace choices.
 - [x] Type service-level `tmpfs` through authored, ordinary-append merge, effective-project, and
       generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,
       provenance, sensitivity, reset/override, and planned-only provider evidence.
 - [x] Type service `sysctls` through authored, generic map/list merge, effective-project, and
       generated boundaries while preserving form, scalar spelling, duplicate evidence, provenance,
       sensitivity, reset/override, and planned-only provider evidence without runtime interpretation.
-- [ ] Type `volumes_from` and remaining mount-specific nested semantics.
+- [x] Type `volumes_from` through authored, effective-project, reference-validation, and generated
+      boundaries while preserving order, duplicates, reset/override provenance, and raw access modes.
 
 ### Phase 3: networking, identity, and metadata
 
@@ -324,8 +320,9 @@ parse-back tests are defined.
       changing the shared basic/external resource API, while keeping external networks on its
       name-only-compatible path and not validating plugins or provider semantics.
 - [x] Preserve and generate raw service security options with non-selecting diagnostic candidates.
-- [ ] Type domain name, MAC addresses, network modes,
-      external links, and links.
+- [x] Type network modes through authored, effective-project, reference-validation, and generated
+      boundaries without inferring runtime namespaces or provider behavior.
+- [ ] Type domain name, MAC addresses, external links, and links.
 - [x] Type service annotations through authored mapping/list syntax, keyed effective merge,
       provenance-preserving diagnostics, and safe generated mapping output.
 - [x] Type service `logging` through authored, recursively merged, effective-project, and generated
@@ -338,8 +335,8 @@ parse-back tests are defined.
 
 - [ ] Implement top-level `include` as explicit caller-authorized project loading with cycle,
       provenance, project-directory, and environment-file rules.
-- [ ] Type `develop`, service/top-level `models`, `scale`, and
-      `use_api_socket` without implying that every provider executes them.
+- [ ] Type `develop`, service/top-level `models`, and `use_api_socket` without implying that every
+      provider executes them.
 - [ ] Keep file reads, environment access, and provider invocation outside parsing APIs.
 
 ### Phase 5: generation, compatibility, and conformance
