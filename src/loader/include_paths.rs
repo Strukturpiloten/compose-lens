@@ -150,6 +150,7 @@ pub enum IncludeProjectDirectoryStatus {
 #[derive(Clone, PartialEq, Eq)]
 pub struct IncludeProjectDirectoryEntry {
     node_index: usize,
+    identity: IncludeIdentity,
     status: IncludeProjectDirectoryStatus,
     effective_directory: Option<PathBuf>,
     edge_index: Option<usize>,
@@ -162,6 +163,7 @@ impl fmt::Debug for IncludeProjectDirectoryEntry {
         formatter
             .debug_struct("IncludeProjectDirectoryEntry")
             .field("node_index", &self.node_index)
+            .field("identity", &"<redacted-identity>")
             .field("status", &self.status)
             .field(
                 "effective_directory",
@@ -182,6 +184,12 @@ impl IncludeProjectDirectoryEntry {
     #[must_use]
     pub const fn node_index(&self) -> usize {
         self.node_index
+    }
+
+    /// Returns the caller-defined identity of this retained occurrence.
+    #[must_use]
+    pub const fn identity(&self) -> &IncludeIdentity {
+        &self.identity
     }
 
     /// Returns how this occurrence received its planned directory.
@@ -276,6 +284,7 @@ pub(super) fn plan_project_directories(
         let root = &resolution.nodes[0];
         entries[0] = Some(IncludeProjectDirectoryEntry {
             node_index: 0,
+            identity: root.identity().clone(),
             status: IncludeProjectDirectoryStatus::Root,
             effective_directory: first_document_directory(root),
             edge_index: None,
@@ -313,6 +322,7 @@ fn plan_children(
         let entry = match declaration {
             None => IncludeProjectDirectoryEntry {
                 node_index: child_node_index,
+                identity: child.identity().clone(),
                 status: IncludeProjectDirectoryStatus::Defaulted,
                 effective_directory: child_first_document_directory,
                 edge_index: Some(edge_index),
@@ -334,6 +344,7 @@ fn plan_children(
                 match resolver.resolve_project_directory(&context) {
                     Ok(IncludeProjectDirectoryResolution::Resolved(directory)) => IncludeProjectDirectoryEntry {
                         node_index: child_node_index,
+                        identity: child.identity().clone(),
                         status: IncludeProjectDirectoryStatus::Resolved,
                         effective_directory: Some(directory),
                         edge_index: Some(edge_index),
@@ -342,6 +353,7 @@ fn plan_children(
                     },
                     Ok(IncludeProjectDirectoryResolution::Deferred) => IncludeProjectDirectoryEntry {
                         node_index: child_node_index,
+                        identity: child.identity().clone(),
                         status: IncludeProjectDirectoryStatus::Deferred,
                         effective_directory: None,
                         edge_index: Some(edge_index),
@@ -352,6 +364,7 @@ fn plan_children(
                         diagnostics.push(project_directory_unresolved_diagnostic(declaration.span()));
                         IncludeProjectDirectoryEntry {
                             node_index: child_node_index,
+                            identity: child.identity().clone(),
                             status: IncludeProjectDirectoryStatus::Unresolved,
                             effective_directory: None,
                             edge_index: Some(edge_index),

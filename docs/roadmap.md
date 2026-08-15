@@ -380,9 +380,11 @@ deterministic rendering, and parse-back tests are defined.
       namespaces, explicit conflicts, and retained occurrence/source evidence.
 - [x] Plan include project directories without I/O: first-document defaults, explicit caller-owned
       resolver outcomes, nested parent propagation, and redacted source-aware unresolved errors.
-- [ ] Resolve or rebase included resource paths with field-specific bases and explicit non-local
-      context policy; define environment-file and `.env` precedence, project-name rules, composed
-      rendering, and provider-specific evidence.
+- [x] Resolve selected included config and secret `file` paths lexically from authorized occurrence
+      bases, with explicit unavailable/mismatched-plan diagnostics and no root fallback.
+- [ ] Resolve or rebase the remaining included resource paths with field-specific bases and explicit
+      non-local context policy; define environment-file and `.env` precedence, project-name rules,
+      composed rendering, and provider-specific evidence.
 - [x] Type `develop`, service/top-level `models`, and `use_api_socket` without implying that every
       provider executes them.
 - [ ] Keep file reads, environment access, and provider invocation outside parsing APIs.

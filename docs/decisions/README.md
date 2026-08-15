@@ -33,5 +33,6 @@
 | [0020](0020-caller-authorized-include-traversal.md)          | accepted   | Caller-authorized recursive include traversal without composition                         |
 | [0021](0021-include-composition-with-explicit-conflicts.md)  | accepted   | Opt-in include composition with explicit local-wins conflicts                             |
 | [0022](0022-caller-owned-include-project-directory-plans.md) | accepted   | Opt-in caller-owned include project-directory plans                                       |
+| [0023](0023-include-config-secret-path-resolution.md)        | accepted   | Include-aware lexical config and secret file path resolution                              |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

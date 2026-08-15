@@ -54,7 +54,15 @@ and provider behavior.
 The additive `IncludeProjectDirectoryResolver`, request, outcome, entry, and plan types are stable
 within 0.2.x. They are a separate opt-in planning API: only explicit declarations invoke the
 resolver, returned paths are authorized caller data, and typed unresolved status contains no
-arbitrary message text. No path policy, I/O, interpolation, or resource-path resolution is implied.
+arbitrary message text. No path policy, I/O, or interpolation is implied.
+
+The additive `resolve_included_resource_paths`, `IncludedResourcePath`, and
+`IncludedResourcePathResolution` contract lexically resolves only the selected top-level config
+and secret `file` values in an `IncludeCompositionResult`. It requires the matching
+`IncludeProjectDirectoryPlan`, validates occurrence index and identity, and never falls back to a
+different occurrence base. Its values are authored and uninterpolated; debug output redacts all
+path and identity text. Service binds, build paths, environment files, and every other path family
+remain outside this API.
 
 The additive generated-document path accepts only explicit Compose-owned values and performs no
 processing or I/O. Successful output is parse-back validated through the syntax and native model.

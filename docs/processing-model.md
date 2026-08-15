@@ -70,6 +70,20 @@ document directory. It can return an authorized directory, defer non-fatally, or
 unresolved status. The plan preserves traversal diagnostics, emits no path text, and does not join,
 canonicalize, open, interpolate, expand, or otherwise interpret paths. Cycle edges are skipped.
 
+### Resolve selected included resource paths
+
+`resolve_included_resource_paths` combines an `IncludeCompositionResult`, its matching
+`IncludeProjectDirectoryPlan`, and caller-owned `PathContext`. It visits the selected top-level
+config and secret `file` values in deterministic namespace order and applies the existing lexical
+relative, Unix absolute, Windows drive, UNC, and home-relative classifications. Each result retains
+the exact supplying occurrence and its authorized base.
+
+Occurrence index and identity must agree with the directory plan. Missing, deferred, unresolved,
+or mismatched entries stay unresolved with stable diagnostics; no root or parent fallback is used.
+The operation is authored and uninterpolated and performs no file access, canonicalization,
+existence check, URI interpretation, or resolution of another path family. Path and identity text
+is always redacted from debug output.
+
 ### Interpolate
 
 Evaluates supported variable expressions using an explicit provider. The provider may expose process environment variables, a supplied map, an `.env` document, or a test fixture. No provider is consulted during parsing.

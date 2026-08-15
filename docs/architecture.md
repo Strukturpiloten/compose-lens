@@ -71,6 +71,13 @@ occurrence context. The resolver alone decides path/URI/opaque semantics; deferr
 results remain inspectable without exposing paths in diagnostics or debug output. [ADR 0022](decisions/0022-caller-owned-include-project-directory-plans.md)
 defines that boundary.
 
+The separate include-resource path pass combines a composed selection with its matching directory
+plan. It resolves only selected top-level config and secret `file` values against the directory of
+the exact occurrence that supplied them. A missing or mismatched occurrence base stays explicit;
+the pass never guesses a root fallback. Resolution is lexical, caller-contextual, I/O-free, and
+uninterpolated, and its debug representation redacts path and identity text. [ADR 0023](decisions/0023-include-config-secret-path-resolution.md)
+defines this narrower boundary.
+
 ### Processing pipeline
 
 Merging, profile selection, interpolation, default application, and normalization are separate operations. Each operation consumes an explicit context and returns diagnostics plus a new view or transformation result.

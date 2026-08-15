@@ -9,7 +9,9 @@ pub use defaults::{
     DefaultResolution, DefaultValue, NoDefaults, resolve_defaults,
 };
 pub use paths::{
-    HOME_DIRECTORY_REQUIRED, HostPathKind, PathContext, PathPurpose, PathResolution, ResolvedHostPath, resolve_paths,
+    HOME_DIRECTORY_REQUIRED, HostPathKind, INCLUDE_RESOURCE_PATH_BASE_UNAVAILABLE, INCLUDE_RESOURCE_PATH_PLAN_MISMATCH,
+    IncludedResourcePath, IncludedResourcePathResolution, PathContext, PathPurpose, PathResolution, ResolvedHostPath,
+    resolve_included_resource_paths, resolve_paths,
 };
 pub use references::{
     DISABLED_DEPENDENCY_HEALTHCHECK, INACTIVE_SERVICE_REFERENCE, MISSING_REFERENCE, Reference, ReferenceKind,
