@@ -5,7 +5,8 @@ Compose schema. That completes key recognition, but not every value semantic, ge
 provider-compatibility claim.
 
 This plan aims for dependable software that a small project can maintain. The detailed field
-ledger remains in the [roadmap](roadmap.md); this document sets priorities and the quality bar.
+ledger remains in the [roadmap](roadmap.md); this document sets ongoing priorities and the quality
+bar.
 
 ## Investment boundary
 
@@ -28,7 +29,7 @@ ComposeLens will not require:
 Coverage floors remain regression alarms, not a goal to execute every line. A useful negative test
 is more valuable than extra coverage without a behavioral assertion.
 
-## Planned work
+## Ongoing quality practices
 
 ### 1. Prevent specification drift
 
@@ -56,32 +57,36 @@ To update the snapshot deliberately:
 Prioritize behavior that affects real consumers:
 
 - keep the implemented caller-authorized `include` traversal and opt-in local-wins composition
-  and caller-owned project-directory planning plus selected config/secret file resolution covered
-  while leaving other field-specific path resolution/rebasing, non-local context policy,
-  environment-file/.env precedence, project-name rules, composed rendering, and provider evidence
-  as separate future work;
-- the remaining bounded deploy reservation-device semantics when evidence justifies them;
-- provider-specific spelling differences without enforcing one provider globally; and
+  and caller-owned project-directory planning plus selected service-bind/config/secret path
+  resolution covered while leaving other path families to field-specific consumer need and ADRs;
+- deploy reservation devices as complete bounded structured source data, while allocation,
+  selection, and provider/runtime behavior remain consumer-led;
+- provider-specific spelling differences as raw preservation plus a bounded current evidence audit,
+  without enforcing one provider globally or claiming blanket compatibility; and
 - stable source-aware diagnostics for invalid, deferred, deprecated, or unsupported values.
 
-Parsing must remain free of implicit file, environment, provider, and runtime access.
+Parser I/O purity is permanent: parsing remains free of implicit file, environment, provider, and
+runtime access.
 
 ### 3. Expand generated Compose output
 
-Add construction APIs in BoxFerry demand order. Each generated field needs deterministic output,
-invalid-value rejection, sensitivity handling, and parse-render-parse coverage. Do not add a field
-only to increase a generated-key count.
+Generated construction is demand-driven. Admit a field only after its syntax-form choice,
+invalid-value rejection, sensitivity handling, deterministic output, and parse-back coverage are
+reviewed. Do not add a field only to increase a generated-key count.
 
 ### 4. Add focused provider conformance
 
-Use Docker Compose and Podman Compose only for behavior where the specification and pure tests are
-insufficient. Pull requests should validate repository-owned deterministic fixtures. Networked or
-provider-executing evidence capture remains explicit, pinned, and opt-in or scheduled.
+The current Docker Compose and Podman Compose evidence audit is complete for supported claims; it
+does not assert blanket provider/version compatibility. Use providers only where the specification
+and pure tests are insufficient or a supported behavior changes, contradicts evidence, or regresses.
+Pull requests validate repository-owned deterministic fixtures. Networked or provider-executing
+evidence capture remains explicit, pinned, and opt-in or scheduled.
 
 ### 5. Grow the real-world corpus selectively
 
-Add a licensed, immutable fixture when it exposes a missing behavior or prevents a known
-regression. Do not collect projects merely to increase corpus size.
+Corpus intake is recurring and regression-driven: add a licensed, immutable fixture only when it
+exposes a concrete missing behavior or prevents a known regression. Do not collect projects merely
+to increase corpus size.
 
 ### 6. Exercise the public API through BoxFerry
 

@@ -57,6 +57,14 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
   scalar-kind-aware driver options; and
 - application-owned or external top-level volume definitions, with optional exact platform-level names.
 
+`GeneratedConfigFileDefinition` and `GeneratedSecretFileDefinition` add the intentionally small
+file-backed resource subset. Each accepts one unique, resolved single-line name and one required,
+resolved single-line `GeneratedString` file spelling. The builder renders deterministic quoted
+mapping syntax, rejects duplicates independently in the config and secret namespaces, and
+parse-back validates the result. A sensitive file value redacts generated debug output. These APIs
+do not read files or represent content, environment, external lifecycle, drivers, labels, template
+drivers, or provider/runtime behavior.
+
 Generated collections retain insertion order and reject duplicate names where Compose mapping
 syntax would otherwise overwrite intent. Singleton service fields reject a second assignment.
 

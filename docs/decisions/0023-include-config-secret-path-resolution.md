@@ -1,4 +1,4 @@
-# ADR 0023: include-aware config and secret file path resolution
+# ADR 0023: include-aware selected resource path resolution
 
 - Status: accepted
 - Date: 2026-08-14
@@ -6,10 +6,11 @@
 
 ## Context
 
-Include composition selects config and secret definitions from distinct project occurrences. Their
-relative `file` paths use that occurrence's project directory, not an including root fallback.
-Existing root-project path resolution has one mandatory base and therefore cannot represent a
-deferred or unresolved included-project directory honestly.
+Include composition selects service, config, and secret definitions from distinct project
+occurrences. Selected service bind sources and config/secret relative `file` paths use that
+occurrence's project directory, not an including root fallback. Existing root-project path
+resolution has one mandatory base and therefore cannot represent a deferred or unresolved
+included-project directory honestly.
 
 Include traversal and composition are authored and uninterpolated. Composition retains occurrence
 and source evidence but not the merged scalar sensitivity marker, so this slice cannot make an
@@ -19,8 +20,9 @@ interpolated-path or sensitivity-classification claim.
 
 1. `resolve_included_resource_paths` is a separate, I/O-free operation over an
    `IncludeCompositionResult`, an `IncludeProjectDirectoryPlan`, and explicit `PathContext`.
-2. It considers only selected top-level config and secret `file` values from the root composition.
-   Definitions rejected by include conflict handling are not resolved.
+2. It considers only selected service bind sources (path-like short syntax and `type: bind`
+   long syntax) plus selected top-level config and secret `file` values from the root
+   composition. Definitions rejected by include conflict handling are not resolved.
 3. Occurrence index and caller identity must match the directory-plan entry. A mismatch emits
    `compose.include.resource-path-plan-mismatch`; a matching entry without an effective base emits
    `compose.include.resource-path-base-unavailable`. Neither condition falls back to another base.
@@ -28,17 +30,21 @@ interpolated-path or sensitivity-classification claim.
    lexical categories. Resolution never canonicalizes, follows symlinks, checks existence, or reads
    a file.
 5. Results retain authorized getters for raw values, source spans, purpose, occurrence evidence,
-   optional base, and optional lexical result. Debug output always redacts identity and path text.
+   optional base, and optional lexical result. Long bind and config/secret `file` values retain
+   their exact authored value-scalar span. Short bind sources retain their containing authored
+   mount-scalar span because ComposeLens does not reconstruct a decoded component byte range through
+   plain, single-quoted, double-quoted, escaped, Windows-drive, or UNC YAML spelling. Debug output
+   always redacts identity and path text.
 
 ## Consequences
 
-Consumers can resolve selected included config and secret files with the correct authorized
-occurrence base while preserving incomplete/deferred outcomes. The API deliberately remains an
-authored, uninterpolated view and exposes no `is_sensitive` claim.
+Consumers can resolve selected included service bind sources and config/secret files with the
+correct authorized occurrence base while preserving incomplete/deferred outcomes. The API
+deliberately remains an authored, uninterpolated view and exposes no `is_sensitive` claim.
 
-Service binds, build contexts and Dockerfiles, `env_file`, `label_file`, `extends.file`, develop
-watch paths, include-declaration loading, URI/non-local policy, interpolation, composed rendering,
-provider behavior, and filesystem access remain separate work.
+Build contexts and Dockerfiles, `env_file`, `label_file`, `extends.file`, develop watch paths,
+include-declaration loading, URI/non-local policy, interpolation, composed rendering, provider
+behavior, and filesystem access remain separate work.
 
 ## Alternatives considered
 

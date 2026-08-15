@@ -54,6 +54,10 @@ pub enum GenerationError {
     InvalidAnnotationName,
     /// A generated annotation value is deferred, multiline, or NUL-bearing.
     InvalidAnnotationValue,
+    /// A generated top-level config or secret name is not a resolved single-line identifier.
+    InvalidFileResourceName,
+    /// A generated top-level config or secret `file` value is not a resolved single-line value.
+    InvalidFileResourcePath,
     /// A service-level temporary-filesystem item is deferred, malformed, or provider-dependent.
     InvalidTmpfsItem,
     /// A generated short device or long-device member is empty where required, multiline, or deferred.
@@ -149,6 +153,12 @@ impl fmt::Display for GenerationError {
                 .write_str("generated annotation name must be a non-empty resolved single-line string"),
             Self::InvalidAnnotationValue => formatter
                 .write_str("generated annotation value must be a resolved single-line string"),
+            Self::InvalidFileResourceName => formatter.write_str(
+                "generated top-level config or secret name must be a non-empty resolved single-line string",
+            ),
+            Self::InvalidFileResourcePath => formatter.write_str(
+                "generated top-level config or secret file must be a non-empty resolved single-line string",
+            ),
             Self::InvalidTmpfsItem => formatter.write_str(
                 "generated tmpfs item must be a non-empty path optionally followed by a colon and non-empty comma-separated raw options",
             ),
@@ -2882,6 +2892,106 @@ impl GeneratedNetwork {
     }
 }
 
+/// One generated top-level config definition backed by a caller-supplied file spelling.
+///
+/// The builder deliberately supports no inline content, environment, external lifecycle,
+/// labels, template driver, or file access through this type.
+#[derive(Clone, Eq, PartialEq)]
+pub struct GeneratedConfigFileDefinition {
+    name: String,
+    file: GeneratedString,
+}
+
+impl GeneratedConfigFileDefinition {
+    /// Creates a config definition with one required resolved single-line `file` value.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, deferred, multiline, or NUL-bearing names and file values.
+    pub fn new(name: impl Into<String>, file: GeneratedString) -> Result<Self, GenerationError> {
+        Ok(Self {
+            name: generated_file_resource_name(name.into())?,
+            file: generated_file_resource_path(file)?,
+        })
+    }
+
+    /// Returns the exact generated config name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the explicit generated file value through its sensitivity boundary.
+    #[must_use]
+    pub const fn file(&self) -> &GeneratedString {
+        &self.file
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.file.is_sensitive()
+    }
+}
+
+impl fmt::Debug for GeneratedConfigFileDefinition {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GeneratedConfigFileDefinition")
+            .field("name", &self.name)
+            .field("file", &self.file)
+            .finish()
+    }
+}
+
+/// One generated top-level secret definition backed by a caller-supplied file spelling.
+///
+/// The builder deliberately supports no environment, driver, labels, template driver, external
+/// lifecycle, or file access through this type.
+#[derive(Clone, Eq, PartialEq)]
+pub struct GeneratedSecretFileDefinition {
+    name: String,
+    file: GeneratedString,
+}
+
+impl GeneratedSecretFileDefinition {
+    /// Creates a secret definition with one required resolved single-line `file` value.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, deferred, multiline, or NUL-bearing names and file values.
+    pub fn new(name: impl Into<String>, file: GeneratedString) -> Result<Self, GenerationError> {
+        Ok(Self {
+            name: generated_file_resource_name(name.into())?,
+            file: generated_file_resource_path(file)?,
+        })
+    }
+
+    /// Returns the exact generated secret name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the explicit generated file value through its sensitivity boundary.
+    #[must_use]
+    pub const fn file(&self) -> &GeneratedString {
+        &self.file
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.file.is_sensitive()
+    }
+}
+
+impl fmt::Debug for GeneratedSecretFileDefinition {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GeneratedSecretFileDefinition")
+            .field("name", &self.name)
+            .field("file", &self.file)
+            .finish()
+    }
+}
+
 /// Builder for one new deterministic Compose document.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ComposeDocumentBuilder {
@@ -2889,6 +2999,8 @@ pub struct ComposeDocumentBuilder {
     services: Vec<GeneratedService>,
     networks: Vec<GeneratedNetwork>,
     volumes: Vec<GeneratedVolume>,
+    configs: Vec<GeneratedConfigFileDefinition>,
+    secrets: Vec<GeneratedSecretFileDefinition>,
 }
 
 impl ComposeDocumentBuilder {
@@ -2900,6 +3012,8 @@ impl ComposeDocumentBuilder {
             services: Vec::new(),
             networks: Vec::new(),
             volumes: Vec::new(),
+            configs: Vec::new(),
+            secrets: Vec::new(),
         }
     }
 
@@ -2987,6 +3101,24 @@ impl ComposeDocumentBuilder {
         )
     }
 
+    /// Adds one uniquely named top-level config file definition in output order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateName`] for a duplicate config name.
+    pub fn add_config_file(&mut self, config: GeneratedConfigFileDefinition) -> Result<(), GenerationError> {
+        insert_named(&mut self.configs, config, "config", GeneratedConfigFileDefinition::name)
+    }
+
+    /// Adds one uniquely named top-level secret file definition in output order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateName`] for a duplicate secret name.
+    pub fn add_secret_file(&mut self, secret: GeneratedSecretFileDefinition) -> Result<(), GenerationError> {
+        insert_named(&mut self.secrets, secret, "secret", GeneratedSecretFileDefinition::name)
+    }
+
     /// Generates YAML and parses it back through `ComposeLens`'s syntax and typed-model boundaries.
     ///
     /// # Errors
@@ -2999,7 +3131,9 @@ impl ComposeDocumentBuilder {
         }
         let sensitive = self.services.iter().any(GeneratedService::is_sensitive)
             || self.networks.iter().any(GeneratedNetwork::is_sensitive)
-            || self.volumes.iter().any(GeneratedVolume::is_sensitive);
+            || self.volumes.iter().any(GeneratedVolume::is_sensitive)
+            || self.configs.iter().any(GeneratedConfigFileDefinition::is_sensitive)
+            || self.secrets.iter().any(GeneratedSecretFileDefinition::is_sensitive);
         let text = render_document(&self);
         let syntax = SyntaxDocument::parse(source_id, text.clone())
             .map_err(|_| GenerationError::InternalInvariant("syntax-tree"))?;
@@ -3077,6 +3211,20 @@ fn render_document(project: &ComposeDocumentBuilder) -> String {
     }
     render_network_definitions(&mut output, &project.networks);
     render_volume_definitions(&mut output, &project.volumes);
+    render_file_definitions(
+        &mut output,
+        "configs",
+        &project.configs,
+        GeneratedConfigFileDefinition::name,
+        GeneratedConfigFileDefinition::file,
+    );
+    render_file_definitions(
+        &mut output,
+        "secrets",
+        &project.secrets,
+        GeneratedSecretFileDefinition::name,
+        GeneratedSecretFileDefinition::file,
+    );
     output
 }
 
@@ -3909,6 +4057,27 @@ fn render_volume_definitions(output: &mut String, volumes: &[GeneratedVolume]) {
     }
 }
 
+fn render_file_definitions<T>(
+    output: &mut String,
+    field: &str,
+    definitions: &[T],
+    name: impl Fn(&T) -> &str,
+    file: impl Fn(&T) -> &GeneratedString,
+) {
+    if definitions.is_empty() {
+        return;
+    }
+    output.push_str(field);
+    output.push_str(":\n");
+    for definition in definitions {
+        output.push_str("  ");
+        write_quoted(output, name(definition));
+        output.push_str(":\n    file: ");
+        write_quoted(output, file(definition).expose());
+        output.push('\n');
+    }
+}
+
 fn render_volume_definition(output: &mut String, volume: &GeneratedVolumeDefinition) {
     output.push_str("  ");
     write_quoted(output, &volume.name);
@@ -4009,6 +4178,22 @@ fn require_generated_string(kind: &'static str, value: &GeneratedString) -> Resu
         return Err(GenerationError::EmptyValue(kind));
     }
     Ok(())
+}
+
+fn generated_file_resource_name(value: String) -> Result<String, GenerationError> {
+    if value.is_empty() || value.contains(['\0', '\r', '\n', '$']) {
+        Err(GenerationError::InvalidFileResourceName)
+    } else {
+        Ok(value)
+    }
+}
+
+fn generated_file_resource_path(value: GeneratedString) -> Result<GeneratedString, GenerationError> {
+    if value.expose().is_empty() || value.expose().contains(['\0', '\r', '\n', '$']) {
+        Err(GenerationError::InvalidFileResourcePath)
+    } else {
+        Ok(value)
+    }
 }
 
 fn validate_generated_device_member(

@@ -25,14 +25,15 @@ use compose_lens::project::{
     ProjectUlimitScalar, ProjectUlimitValue, ProjectUlimits, build_project_view,
 };
 use compose_lens::render::{
-    ComposeDocumentBuilder, GeneratedAnnotation, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
-    GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel, GeneratedLogging,
-    GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit,
+    ComposeDocumentBuilder, GeneratedAnnotation, GeneratedConfigFileDefinition, GeneratedDevice, GeneratedDns,
+    GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel,
+    GeneratedLogging, GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit,
     GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
     GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPullPolicy, GeneratedRestartPolicy,
-    GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs,
-    GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption,
-    GeneratedVolumeDriverOptionValue, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
+    GeneratedSecretFileDefinition, GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl,
+    GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits,
+    GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, ReplacementScalar,
+    ScalarEdit, apply_preservation_edits, render_canonical,
 };
 use std::path::PathBuf;
 
@@ -4072,5 +4073,38 @@ fn plans_synthetic_project_directories_through_the_public_resolver_contract() ->
         Some("authorized/synthetic-directory".into())
     );
     assert!(plan.is_valid() && plan.is_complete());
+    Ok(())
+}
+
+#[test]
+fn exposes_generated_top_level_file_definition_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let config = GeneratedConfigFileDefinition::new("configuration", GeneratedString::plain("app.yaml")?)?;
+    let secret = GeneratedSecretFileDefinition::new("credential", GeneratedString::sensitive("secret.txt")?)?;
+    let _: &str = config.name();
+    let _: &GeneratedString = config.file();
+    let _: &str = secret.name();
+    let _: &GeneratedString = secret.file();
+
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(GeneratedString::plain("example/app")?)?;
+    builder.add_service(service)?;
+    builder.add_config_file(config)?;
+    builder.add_secret_file(secret)?;
+    let generated = builder.build(SourceId::new(15_020))?;
+    assert!(
+        generated
+            .document()
+            .configs()
+            .iter()
+            .any(|config| config.name().value() == "configuration")
+    );
+    assert!(
+        generated
+            .document()
+            .secrets()
+            .iter()
+            .any(|secret| secret.name().value() == "credential")
+    );
     Ok(())
 }

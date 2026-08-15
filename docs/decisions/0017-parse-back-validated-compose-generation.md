@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-04
-- Additive amendments: 2026-08-05, 2026-08-06, 2026-08-07
+- Additive amendments: 2026-08-05, 2026-08-06, 2026-08-07, 2026-08-15
 
 ## Context
 
@@ -83,6 +83,11 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
     and project-view boundaries, literal `external: true` plus any volume `labels` attribute emits
     a distinct diagnostic while retaining labels; a simultaneous driver configuration continues to
     emit its existing independent diagnostic.
+22. Generated top-level configs and secrets begin with one file-backed definition each. Names and
+    `file` values are required resolved single-line strings, names are unique within their native
+    namespaces, values are deterministically quoted and parse-back validated, and caller-marked
+    file sensitivity redacts debug output. Content, environment, external lifecycle, drivers,
+    labels, template drivers, file access, and provider/runtime semantics remain ungenerated.
 
 ## Consequences
 

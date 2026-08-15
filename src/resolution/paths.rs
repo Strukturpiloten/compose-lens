@@ -4,7 +4,7 @@ use crate::loader::{
     IncludeCompositionResult, IncludeDefinitionEvidence, IncludeIdentity, IncludeProjectDirectoryPlan,
 };
 use crate::merge::{MergedProject, MergedScalar, MergedValue};
-use crate::model::{Located, ShortVolumeMount};
+use crate::model::{Located, MountType, ShortVolumeMount, VolumeMount};
 use crate::profiles::ProfileSelection;
 use crate::source::SourceSpan;
 use std::fmt;
@@ -188,7 +188,8 @@ impl PathResolution {
     }
 }
 
-/// One selected included config or secret file path and its occurrence-specific lexical result.
+/// One selected included service bind, config, or secret file path and its occurrence-specific
+/// lexical result.
 #[derive(Clone, PartialEq, Eq)]
 pub struct IncludedResourcePath {
     raw: String,
@@ -220,7 +221,13 @@ impl IncludedResourcePath {
         &self.purpose
     }
 
-    /// Returns the exact authored `file` value span.
+    /// Returns the source span that anchors this path finding.
+    ///
+    /// Long-syntax bind sources and top-level config/secret `file` values retain the exact
+    /// authored value-scalar span. A short-syntax service bind is decoded from one colon-delimited
+    /// mount scalar, so its source component has no independently retained byte range; this getter
+    /// deliberately returns the containing authored mount-scalar span instead of guessing through
+    /// YAML quoting or escape spelling.
     #[must_use]
     pub const fn source(&self) -> SourceSpan {
         self.source
@@ -270,7 +277,8 @@ impl fmt::Debug for IncludedResourcePath {
     }
 }
 
-/// Recoverable lexical resolution for selected included config and secret file paths.
+/// Recoverable lexical resolution for selected included service binds, config, and secret file
+/// paths.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncludedResourcePathResolution {
     paths: Vec<IncludedResourcePath>,
@@ -279,7 +287,7 @@ pub struct IncludedResourcePathResolution {
 }
 
 impl IncludedResourcePathResolution {
-    /// Returns selected paths in config-then-secret composition order.
+    /// Returns selected paths in service-then-config-then-secret composition order.
     #[must_use]
     pub fn paths(&self) -> &[IncludedResourcePath] {
         &self.paths
@@ -306,10 +314,12 @@ impl IncludedResourcePathResolution {
     }
 }
 
-/// Lexically resolves selected included config and secret `file` paths.
+/// Lexically resolves selected included service bind sources and config and secret `file` paths.
 ///
 /// This consumes only typed, authored composition values and caller-authorized occurrence bases.
-/// It does not interpolate, canonicalize, access the file system, or resolve any other path family.
+/// It considers short-form bind sources only when their spelling is already path-like and
+/// long-form sources only when `type: bind` is selected. It does not interpolate, canonicalize,
+/// access the file system, or resolve any other path family.
 #[must_use]
 pub fn resolve_included_resource_paths(
     composition: &IncludeCompositionResult,
@@ -327,6 +337,29 @@ pub fn resolve_included_resource_paths(
     let mut paths = Vec::new();
 
     if let Some(root) = composition.root() {
+        for definition in root.services() {
+            let Some(volumes) = definition.definition().volumes() else {
+                continue;
+            };
+            for (index, mount) in volumes.value().iter().enumerate() {
+                let Some((raw, source)) = included_bind_source(mount.value()) else {
+                    continue;
+                };
+                push_included_resource_path(
+                    &mut paths,
+                    &mut diagnostics,
+                    directory_plan,
+                    context,
+                    definition.evidence(),
+                    raw,
+                    source,
+                    PathPurpose::ServiceBind {
+                        service: definition.name().to_owned(),
+                        index,
+                    },
+                );
+            }
+        }
         for definition in root.configs() {
             if let Some(file) = definition.definition().file() {
                 push_included_resource_path(
@@ -365,6 +398,19 @@ pub fn resolve_included_resource_paths(
         paths,
         diagnostics,
         upstream_complete: composition.is_complete() && directory_plan.is_complete(),
+    }
+}
+
+fn included_bind_source(mount: &VolumeMount) -> Option<(&str, SourceSpan)> {
+    match mount {
+        VolumeMount::Short(mount) => {
+            let source = mount.source()?;
+            is_path_source(source).then_some((source, mount.raw().span()))
+        }
+        VolumeMount::Long(mount) if mount.mount_type().is_some_and(|kind| *kind.value() == MountType::Bind) => {
+            mount.source().map(|source| (source.value().as_str(), source.span()))
+        }
+        VolumeMount::Long(_) => None,
     }
 }
 

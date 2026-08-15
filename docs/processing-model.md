@@ -73,16 +73,23 @@ canonicalize, open, interpolate, expand, or otherwise interpret paths. Cycle edg
 ### Resolve selected included resource paths
 
 `resolve_included_resource_paths` combines an `IncludeCompositionResult`, its matching
-`IncludeProjectDirectoryPlan`, and caller-owned `PathContext`. It visits the selected top-level
-config and secret `file` values in deterministic namespace order and applies the existing lexical
-relative, Unix absolute, Windows drive, UNC, and home-relative classifications. Each result retains
-the exact supplying occurrence and its authorized base.
+`IncludeProjectDirectoryPlan`, and caller-owned `PathContext`. It visits selected service bind
+sources (path-like short syntax and `type: bind` long syntax) followed by selected top-level config
+and secret `file` values in deterministic namespace order. It applies the existing lexical relative,
+Unix absolute, Windows drive, UNC, and home-relative classifications. Each result retains the exact
+supplying occurrence and its authorized base.
+
+Long bind sources and config/secret `file` values retain their exact authored value-scalar spans.
+Short bind sources are decoded from one colon-delimited mount scalar, so their component byte range
+is not reconstructed through YAML quoting or escape spelling; their result instead retains the
+containing authored mount-scalar span.
 
 Occurrence index and identity must agree with the directory plan. Missing, deferred, unresolved,
 or mismatched entries stay unresolved with stable diagnostics; no root or parent fallback is used.
 The operation is authored and uninterpolated and performs no file access, canonicalization,
 existence check, URI interpretation, or resolution of another path family. Path and identity text
-is always redacted from debug output.
+is always redacted from debug output. Named, anonymous, image, and tmpfs mount sources remain
+outside this operation.
 
 ### Interpolate
 

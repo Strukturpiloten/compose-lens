@@ -57,12 +57,14 @@ resolver, returned paths are authorized caller data, and typed unresolved status
 arbitrary message text. No path policy, I/O, or interpolation is implied.
 
 The additive `resolve_included_resource_paths`, `IncludedResourcePath`, and
-`IncludedResourcePathResolution` contract lexically resolves only the selected top-level config
-and secret `file` values in an `IncludeCompositionResult`. It requires the matching
+`IncludedResourcePathResolution` contract lexically resolves selected service bind sources plus
+selected top-level config and secret `file` values in an `IncludeCompositionResult`. It requires the matching
 `IncludeProjectDirectoryPlan`, validates occurrence index and identity, and never falls back to a
 different occurrence base. Its values are authored and uninterpolated; debug output redacts all
-path and identity text. Service binds, build paths, environment files, and every other path family
-remain outside this API.
+path and identity text. Build paths, environment files, and every other path family remain outside
+this API. Long bind and config/secret file results expose their exact value-scalar span; a short
+bind result exposes the containing authored mount-scalar span because ComposeLens does not guess a
+decoded component's byte range.
 
 The additive generated-document path accepts only explicit Compose-owned values and performs no
 processing or I/O. Successful output is parse-back validated through the syntax and native model.
@@ -337,6 +339,13 @@ constructor.
 The same additive `GeneratedNetworkDefinition` API supports set-once literal `enable_ipv6` and
 `internal` choices. Their `Option<bool>` accessors preserve omission versus explicit `false` and
 `true`; generation injects no default and exposes no generated `enable_ipv4` counterpart.
+
+Additive `GeneratedConfigFileDefinition` and `GeneratedSecretFileDefinition` provide deterministic
+file-backed top-level resource generation. Names and file values are required resolved single-line
+strings, names are unique within their native namespace, and caller-marked file sensitivity
+propagates through builder and final-document debug redaction. They intentionally exclude content,
+environment, external lifecycle, drivers, labels, template drivers, file access, and runtime
+claims.
 
 ## Changes before 1.0
 

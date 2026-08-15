@@ -72,11 +72,17 @@ results remain inspectable without exposing paths in diagnostics or debug output
 defines that boundary.
 
 The separate include-resource path pass combines a composed selection with its matching directory
-plan. It resolves only selected top-level config and secret `file` values against the directory of
-the exact occurrence that supplied them. A missing or mismatched occurrence base stays explicit;
-the pass never guesses a root fallback. Resolution is lexical, caller-contextual, I/O-free, and
-uninterpolated, and its debug representation redacts path and identity text. [ADR 0023](decisions/0023-include-config-secret-path-resolution.md)
-defines this narrower boundary.
+plan. It resolves selected service bind sources plus selected top-level config and secret `file`
+values against the directory of the exact occurrence that supplied them. A missing or mismatched
+occurrence base stays explicit; the pass never guesses a root fallback. Resolution is lexical,
+caller-contextual, I/O-free, and uninterpolated, and its debug representation redacts path and
+identity text. [ADR 0023](decisions/0023-include-config-secret-path-resolution.md) defines this
+narrower boundary.
+
+The result span is exact for long bind `source` values and config/secret `file` values. A
+short-syntax bind source is decoded from a complete colon-delimited mount scalar, so ComposeLens
+retains that containing scalar span rather than guessing a source-component range after YAML
+decoding.
 
 ### Processing pipeline
 
@@ -293,6 +299,11 @@ Generated top-level volume definitions likewise retain ordered unique `Generated
 including explicit empty maps, deterministic parse-back output, and sensitivity without changing
 the shared external-volume lifecycle API. Literal external volumes that also retain labels receive
 a distinct source-aware diagnostic; driver and label violations remain independent.
+Generated top-level config and secret file definitions accept one unique resolved single-line name
+and one required resolved single-line file value. They render deterministic quoted mappings and
+parse back through the native model; sensitivity is caller-marked and redacts debug output. Content,
+environment, external lifecycle, drivers, labels, template drivers, filesystem access, and runtime
+behavior remain outside this deliberately narrow generated subset.
 Generated hostnames use a separate non-exhaustive Compose-owned API and accept only resolved ASCII
 RFC-1123 values. They remain independent from explicit runtime container names; generation does
 not derive either value from the other or synthesize a hostname when omitted.

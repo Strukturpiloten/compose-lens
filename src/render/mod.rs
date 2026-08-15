@@ -4,16 +4,17 @@ mod generated;
 mod preserved;
 
 pub use generated::{
-    ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument, GeneratedCpuRtRuntime,
-    GeneratedDevice, GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment,
-    GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname, GeneratedLabel,
-    GeneratedLogging, GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit,
-    GeneratedMount, GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
-    GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPort, GeneratedProtocol, GeneratedPullPolicy,
-    GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedServiceRuntimeField,
-    GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit,
-    GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption,
-    GeneratedVolumeDriverOptionValue, GenerationError,
+    ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument,
+    GeneratedConfigFileDefinition, GeneratedCpuRtRuntime, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
+    GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat,
+    GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLogging, GeneratedLoggingOption,
+    GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount, GeneratedNetworkAttachment,
+    GeneratedNetworkDefinition, GeneratedNetworkDriverOption, GeneratedNetworkDriverOptionValue, GeneratedPidsLimit,
+    GeneratedPort, GeneratedProtocol, GeneratedPullPolicy, GeneratedResource, GeneratedRestartPolicy,
+    GeneratedSecretFileDefinition, GeneratedSelinux, GeneratedService, GeneratedServiceRuntimeField, GeneratedShmSize,
+    GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue,
+    GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue,
+    GenerationError,
 };
 
 pub use preserved::{

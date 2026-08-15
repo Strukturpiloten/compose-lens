@@ -141,7 +141,7 @@ fn resolves_selected_config_and_secret_files_from_their_occurrence_bases() {
 }
 
 fn assert_selected_resource_paths(paths: &IncludedResourcePathResolution) {
-    assert!(paths.is_valid());
+    assert!(paths.is_valid(), "{:#?}", paths.diagnostics());
     assert!(!paths.is_complete(), "the selected composition retains the conflict");
     assert_eq!(paths.paths().len(), 9);
     let find = |purpose: &PathPurpose| paths.paths().iter().find(|path| path.purpose() == purpose);
@@ -244,7 +244,10 @@ fn never_guesses_an_unavailable_or_mismatched_occurrence_base() {
         20_011,
         "child.yaml",
         "/private/child",
-        "configs: {application: {file: private/config.txt}}\n",
+        concat!(
+            "services: {app: {volumes: [\"./private:/data\"]}}\n",
+            "configs: {application: {file: private/config.txt}}\n",
+        ),
     );
     let resolution = IncludeResolution::load(root, &FixtureLoader::default().with("child.yaml", child));
     let composition = resolution.compose();
@@ -252,8 +255,8 @@ fn never_guesses_an_unavailable_or_mismatched_occurrence_base() {
     let unavailable = resolve_included_resource_paths(&composition, &directories, &PathContext::new());
     assert!(!unavailable.is_valid());
     assert!(!unavailable.is_complete());
-    assert_eq!(unavailable.paths()[0].base_directory(), None);
-    assert_eq!(unavailable.paths()[0].resolved(), None);
+    assert!(unavailable.paths().iter().all(|path| path.base_directory().is_none()));
+    assert!(unavailable.paths().iter().all(|path| path.resolved().is_none()));
     assert!(unavailable.diagnostics().iter().any(|diagnostic| {
         diagnostic.code() == INCLUDE_RESOURCE_PATH_BASE_UNAVAILABLE
             && !format!("{diagnostic:?}").contains("private/config.txt")
@@ -262,8 +265,8 @@ fn never_guesses_an_unavailable_or_mismatched_occurrence_base() {
     let unresolved_directories = resolution.plan_project_directories(&UnresolvedResolver);
     let unresolved = resolve_included_resource_paths(&composition, &unresolved_directories, &PathContext::new());
     assert!(!unresolved.is_valid());
-    assert_eq!(unresolved.paths()[0].base_directory(), None);
-    assert_eq!(unresolved.paths()[0].resolved(), None);
+    assert!(unresolved.paths().iter().all(|path| path.base_directory().is_none()));
+    assert!(unresolved.paths().iter().all(|path| path.resolved().is_none()));
     assert!(
         unresolved
             .diagnostics()
@@ -298,7 +301,7 @@ fn never_guesses_an_unavailable_or_mismatched_occurrence_base() {
             .iter()
             .any(|diagnostic| diagnostic.code() == INCLUDE_RESOURCE_PATH_PLAN_MISMATCH)
     );
-    assert_eq!(mismatched.paths()[0].resolved(), None);
+    assert!(mismatched.paths().iter().all(|path| path.resolved().is_none()));
 }
 
 #[test]
@@ -308,15 +311,18 @@ fn missing_home_context_is_warning_only_but_keeps_the_result_incomplete() {
         20_020,
         "root.yaml",
         "/workspace/root",
-        "configs: {home: {file: ~/application/config}}\n",
+        concat!(
+            "services: {app: {volumes: [\"~/application:/data\"]}}\n",
+            "configs: {home: {file: ~/application/config}}\n",
+        ),
     );
     let resolution = IncludeResolution::load(root, &FixtureLoader::default());
     let composition = resolution.compose();
     let directories = resolution.plan_project_directories(&DeferredResolver);
     let paths = resolve_included_resource_paths(&composition, &directories, &PathContext::new());
-    assert!(paths.is_valid());
+    assert!(paths.is_valid(), "{:#?}", paths.diagnostics());
     assert!(!paths.is_complete());
-    assert_eq!(paths.paths()[0].resolved(), None);
+    assert!(paths.paths().iter().all(|path| path.resolved().is_none()));
     assert!(
         paths
             .diagnostics()
@@ -371,4 +377,148 @@ fn repeated_identities_keep_distinct_occurrence_bases() {
         paths.paths()[1].resolved(),
         Some(Path::new("/workspace/second/second.txt"))
     );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // Each lexical category and conflict boundary is asserted together.
+fn resolves_selected_included_service_binds_without_importing_conflicts() {
+    let root = input(
+        "root",
+        20_040,
+        "root.yaml",
+        "/workspace/root",
+        concat!(
+            "services:\n",
+            "  shared:\n",
+            "    volumes: [\"./root:/data\"]\n",
+            "include: [first.yaml, second.yaml]\n",
+        ),
+    );
+    let first = input(
+        "repeated",
+        20_041,
+        "first.yaml",
+        "/workspace/first",
+        concat!(
+            "services:\n",
+            "  shared:\n",
+            "    volumes: [\"./discarded:/data\"]\n",
+            "  first:\n",
+            "    volumes:\n",
+            "      - 'C:\\\\application:/data'\n",
+            "      - type: bind\n",
+            "        source: ~/application\n",
+            "        target: /application\n",
+            "      - type: bind\n",
+            "        source: /opt/application\n",
+            "        target: /opt/application\n",
+            "      - named:/named\n",
+        ),
+    );
+    let second = input(
+        "repeated",
+        20_042,
+        "second.yaml",
+        "/workspace/second",
+        concat!(
+            "services:\n",
+            "  second:\n",
+            "    volumes:\n",
+            "      - '\\\\\\\\server\\\\share\\\\data:/data'\n",
+            "      - type: volume\n",
+            "        source: named\n",
+            "        target: /named\n",
+        ),
+    );
+    let resolution = IncludeResolution::load(
+        root,
+        &FixtureLoader::default()
+            .with("first.yaml", first)
+            .with("second.yaml", second),
+    );
+    let composition = resolution.compose();
+    let directories = resolution.plan_project_directories(&DeferredResolver);
+    let paths = resolve_included_resource_paths(
+        &composition,
+        &directories,
+        &PathContext::new().with_home_directory("/home/fixture"),
+    );
+
+    assert!(paths.is_valid(), "{:#?}", paths.diagnostics());
+    assert!(
+        !paths.is_complete(),
+        "the duplicate service remains a composition conflict"
+    );
+    assert_eq!(paths.paths().len(), 5);
+    let find = |service: &str| {
+        paths.paths().iter().find(|path| {
+            matches!(
+                path.purpose(),
+                PathPurpose::ServiceBind {
+                    service: candidate,
+                    ..
+                } if candidate == service
+            )
+        })
+    };
+    assert_eq!(
+        find("shared").and_then(IncludedResourcePath::resolved),
+        Some(Path::new("/workspace/root/./root"))
+    );
+    assert_short_bind_uses_containing_scalar_span(find("shared"));
+    assert_eq!(
+        find("first").map(IncludedResourcePath::kind),
+        Some(HostPathKind::WindowsDriveAbsolute)
+    );
+    assert_short_bind_uses_containing_scalar_span(find("first"));
+    let home_bind = paths.paths().iter().find(|path| {
+        matches!(
+            path.purpose(),
+            PathPurpose::ServiceBind {
+                service,
+                index: 1
+            } if service == "first"
+        )
+    });
+    assert_eq!(
+        home_bind.and_then(IncludedResourcePath::resolved),
+        Some(Path::new("/home/fixture/application"))
+    );
+    assert_eq!(
+        home_bind.map(|path| path.source().len()),
+        home_bind.map(|path| path.raw().len())
+    );
+    assert_eq!(
+        paths
+            .paths()
+            .iter()
+            .find(|path| {
+                matches!(
+                    path.purpose(),
+                    PathPurpose::ServiceBind {
+                        service,
+                        index: 2
+                    } if service == "first"
+                )
+            })
+            .map(IncludedResourcePath::kind),
+        Some(HostPathKind::UnixAbsolute)
+    );
+    assert_eq!(
+        find("second").map(IncludedResourcePath::kind),
+        Some(HostPathKind::WindowsUnc)
+    );
+    assert_short_bind_uses_containing_scalar_span(find("second"));
+    assert!(paths.paths().iter().all(|path| {
+        !format!("{path:?}").contains("discarded")
+            && !format!("{path:?}").contains("workspace")
+            && !format!("{path:?}").contains("application")
+    }));
+}
+
+fn assert_short_bind_uses_containing_scalar_span(path: Option<&IncludedResourcePath>) {
+    assert!(path.is_some(), "short bind expected");
+    if let Some(path) = path {
+        assert!(path.source().len() > path.raw().len());
+    }
 }

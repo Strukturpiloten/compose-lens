@@ -8,16 +8,17 @@ use compose_lens::{
         StopGracePeriod, SysctlsForm, UlimitValue, VolumeMount,
     },
     render::{
-        ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument, GeneratedCpuRtRuntime,
-        GeneratedDevice, GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment,
-        GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname,
-        GeneratedLabel, GeneratedLogging, GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice,
-        GeneratedMemLimit, GeneratedMount, GeneratedNetworkAttachment, GeneratedNetworkDefinition,
-        GeneratedNetworkDriverOption, GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPort,
-        GeneratedProtocol, GeneratedPullPolicy, GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux,
-        GeneratedService, GeneratedServiceRuntimeField, GeneratedShmSize, GeneratedString, GeneratedSysctl,
-        GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits,
-        GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, GenerationError,
+        ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument,
+        GeneratedConfigFileDefinition, GeneratedCpuRtRuntime, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
+        GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat,
+        GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLogging, GeneratedLoggingOption,
+        GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount,
+        GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
+        GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPort, GeneratedProtocol, GeneratedPullPolicy,
+        GeneratedResource, GeneratedRestartPolicy, GeneratedSecretFileDefinition, GeneratedSelinux, GeneratedService,
+        GeneratedServiceRuntimeField, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls,
+        GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition,
+        GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, GenerationError,
     },
     source::SourceId,
 };
@@ -3547,5 +3548,103 @@ fn rejects_generated_cpu_share_and_scale_values_outside_i128_range() -> Result<(
             Err(GenerationError::InvalidServiceRuntimeField(name))
         );
     }
+    Ok(())
+}
+
+#[test]
+fn generates_top_level_config_and_secret_file_definitions_with_parse_back() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  \"app\":\n",
+        "    image: \"example/app\"\n",
+        "configs:\n",
+        "  \"application-config\":\n",
+        "    file: \"config/application.yaml\"\n",
+        "secrets:\n",
+        "  \"database-password\":\n",
+        "    file: \"secrets/db.txt\"\n",
+    );
+    let syntax = compose_lens::syntax::SyntaxDocument::parse(SourceId::new(20_049), source)?;
+    let parsed = compose_lens::model::ComposeDocument::parse(syntax.document());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    let config = GeneratedConfigFileDefinition::new("application-config", plain("config/application.yaml")?)?;
+    let secret =
+        GeneratedSecretFileDefinition::new("database-password", GeneratedString::sensitive("secrets/db.txt")?)?;
+    assert_eq!(config.name(), "application-config");
+    assert_eq!(config.file().expose(), "config/application.yaml");
+    assert_eq!(secret.name(), "database-password");
+    assert_eq!(secret.file().expose(), "secrets/db.txt");
+    assert!(!format!("{secret:?}").contains("secrets/db.txt"));
+
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(plain("example/app")?)?;
+    builder.add_service(service)?;
+    builder.add_config_file(config)?;
+    builder.add_secret_file(secret)?;
+    assert!(!format!("{builder:?}").contains("secrets/db.txt"));
+    let generated = builder.build(SourceId::new(20_050))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("secrets/db.txt"));
+    assert_eq!(generated.text(), source);
+    assert_eq!(
+        generated
+            .document()
+            .configs()
+            .iter()
+            .find(|config| config.name().value() == "application-config")
+            .and_then(compose_lens::model::ConfigDefinition::file)
+            .map(compose_lens::model::Located::value),
+        Some(&"config/application.yaml".to_owned())
+    );
+    assert_eq!(
+        generated
+            .document()
+            .secrets()
+            .iter()
+            .find(|secret| secret.name().value() == "database-password")
+            .and_then(compose_lens::model::SecretDefinition::file)
+            .map(compose_lens::model::Located::value),
+        Some(&"secrets/db.txt".to_owned())
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_invalid_or_duplicate_generated_top_level_file_definitions() -> Result<(), Box<dyn std::error::Error>> {
+    for name in ["", "${CONFIG}", "contains\0nul", "line\nbreak", "line\rbreak"] {
+        assert_eq!(
+            GeneratedConfigFileDefinition::new(name, plain("config.yaml")?),
+            Err(GenerationError::InvalidFileResourceName)
+        );
+    }
+    for file in ["", "${CONFIG_PATH}", "line\nbreak", "line\rbreak"] {
+        assert_eq!(
+            GeneratedSecretFileDefinition::new("secret", plain(file)?),
+            Err(GenerationError::InvalidFileResourcePath)
+        );
+    }
+    assert_eq!(
+        GeneratedString::plain("contains\0nul"),
+        Err(GenerationError::ContainsNul("string"))
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_config_file(GeneratedConfigFileDefinition::new("config", plain("first.yaml")?)?)?;
+    assert_eq!(
+        builder.add_config_file(GeneratedConfigFileDefinition::new("config", plain("second.yaml")?)?),
+        Err(GenerationError::DuplicateName {
+            kind: "config",
+            name: "config".to_owned(),
+        })
+    );
+    builder.add_secret_file(GeneratedSecretFileDefinition::new("config", plain("first.txt")?)?)?;
+    assert_eq!(
+        builder.add_secret_file(GeneratedSecretFileDefinition::new("config", plain("second.txt")?)?),
+        Err(GenerationError::DuplicateName {
+            kind: "secret",
+            name: "config".to_owned(),
+        })
+    );
     Ok(())
 }

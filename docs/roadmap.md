@@ -203,7 +203,8 @@ hiding a nested semantic gap.
 
 ## Generated-document boundary
 
-Generated documents currently cover project `name`, services, networks, and volumes. Generated
+Generated documents currently cover project `name`, services, networks, volumes, file-backed
+configs, and file-backed secrets. Generated
 services cover `hostname`, `container_name`, `image`, `entrypoint`, `command`, `init`, `stdin_open`, `tty`, `privileged`, `env_file`, `environment`, `labels`, `annotations`, `logging`, `user`,
 `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `restart`, `stop_signal`,
 `stop_grace_period`, `extra_hosts`, `ports`, `cpu_rt_runtime`, `cpu_shares`, `cpus`, `cpuset`,
@@ -236,9 +237,18 @@ driver/IPAM/provider/runtime validation. `enable_ipv4` remains deliberately abse
 generated API because it has no native Quadlet/Podman network-create counterpart; BoxFerry owns
 the non-representable diagnostic.
 
-All typed or preserved service/resource keys not explicitly listed above remain open for generated
-construction. A key is generated only after syntax-form choice, validation, sensitivity,
-deterministic rendering, and parse-back tests are defined.
+Generated config and secret definitions accept one unique resolved single-line name plus one
+required resolved single-line `file` value. Their deterministic quoted mappings parse back through
+the native model and propagate caller-marked file sensitivity. Content, environment, external
+lifecycle, drivers, labels, template drivers, and file access remain deliberately outside this
+minimal generated subset.
+
+### Recurring generation-admission rule
+
+Generated construction is demand-driven, not a remaining-key count. A maintainer may admit a
+field only after its syntax-form choice, invalid-value rejection, sensitivity behavior,
+deterministic rendering, and parse-back tests are defined. All other typed or preserved fields stay
+intentionally ungenerated until a concrete consumer need justifies that review.
 
 ## Implementation order
 
@@ -266,7 +276,9 @@ deterministic rendering, and parse-back tests are defined.
       compatibility inference.
 - [x] Type `platform` as a strict raw YAML string with deferred-value retention and no OCI, host,
       image, build, provider, or compatibility inference.
-- [ ] Add generated construction only after each field's null/empty/short/long behavior is fixed.
+- Generation admission is a recurring maintainer rule: add a field only after its complete
+  null/empty/short/long contract, validation, sensitivity, deterministic rendering, and
+  parse-back tests are reviewed.
 
 ### Phase 2: limits, security, devices, and storage
 
@@ -327,9 +339,10 @@ deterministic rendering, and parse-back tests are defined.
       provider evidence without device, permissions, CDI, GPU, or runtime validation.
 - [x] Type immediate service `gpus`, `storage_opt`, and UTS namespace choices through authored
       and effective-project views without device allocation, label-file I/O, or runtime inference.
-- [ ] Expand the still-bounded nested deploy reservation-device semantics only with reviewed
-      provider evidence; current capabilities, driver, count, IDs, and options remain structured
-      source data rather than allocation requests.
+- Deploy reservation devices are complete as bounded structured source data: capabilities, driver,
+  count, IDs, and options remain source evidence rather than allocation requests. Allocation,
+  selection, and provider/runtime behavior stay consumer-led unless a separately reviewed ADR
+  establishes a narrower native contract.
 - [x] Type service-level `tmpfs` through authored, ordinary-append merge, effective-project, and
       generated boundaries while preserving scalar/list form, duplicates, colon-delimited raw options,
       provenance, sensitivity, reset/override, and planned-only provider evidence.
@@ -368,8 +381,9 @@ deterministic rendering, and parse-back tests are defined.
       boundaries with uninterpreted drivers, ordered string/number/null options, and no provider policy.
 - [x] Type `label_file` scalar/list syntax with source and merge provenance; label files remain
       unread. Config/secret metadata stays in the nested-resource ledger.
-- [ ] Preserve provider/runtime-specific value spellings and attach compatibility evidence instead
-      of enforcing one implementation's grammar globally.
+- Provider spellings are complete as raw preservation with a bounded current evidence audit; this
+  is not a blanket compatibility claim. Future provider/version observations are added only
+  when they affect a supported contract or explain a concrete regression.
 
 ### Phase 4: orchestration and processing-only features
 
@@ -380,23 +394,32 @@ deterministic rendering, and parse-back tests are defined.
       namespaces, explicit conflicts, and retained occurrence/source evidence.
 - [x] Plan include project directories without I/O: first-document defaults, explicit caller-owned
       resolver outcomes, nested parent propagation, and redacted source-aware unresolved errors.
-- [x] Resolve selected included config and secret `file` paths lexically from authorized occurrence
-      bases, with explicit unavailable/mismatched-plan diagnostics and no root fallback.
-- [ ] Resolve or rebase the remaining included resource paths with field-specific bases and explicit
-      non-local context policy; define environment-file and `.env` precedence, project-name rules,
-      composed rendering, and provider-specific evidence.
+- [x] Resolve selected included service bind sources plus config and secret `file` paths lexically
+      from authorized occurrence bases, with explicit unavailable/mismatched-plan diagnostics and
+      no root fallback.
+- Other path families—including build, `env_file`, `label_file`, `extends.file`, develop-watch,
+  include loading, URI/non-local policy, and composed rendering—are explicitly deferred to a
+  field-specific consumer need and ADR. Environment-file/`.env` precedence, project-name rules,
+  and provider-specific behavior remain separate application or evidence decisions.
 - [x] Type `develop`, service/top-level `models`, and `use_api_socket` without implying that every
       provider executes them.
-- [ ] Keep file reads, environment access, and provider invocation outside parsing APIs.
+- Parser I/O purity is a permanent invariant: file reads, environment access, and provider/runtime
+  invocation remain outside parsing APIs and are protected by focused regression and policy
+  tests.
 
 ### Phase 5: generation, compatibility, and conformance
 
-- [ ] Expand generated documents in the same order as project-typed consumer demand.
-- [ ] Add Docker Compose and Podman Compose provider/version evidence for promoted keys.
-- [ ] Promote real-world corpus gaps into minimal licensed fixtures.
+- Generated expansion is recurring and demand-driven: admit only consumer-needed fields under the
+  generation-admission rule above.
+- The current Docker Compose and Podman Compose evidence audit is complete for supported claims;
+  it makes no blanket provider/version compatibility claim. New evidence is collected only for
+  a supported behavior change, contradiction, or regression.
+- Real-world corpus intake is recurring and regression-driven: add a minimal licensed immutable
+  fixture only when it captures a concrete missing behavior or prevents a regression.
 - [x] Maintain the commit-pinned root/service schema snapshot and a classified inventory with
       offline digest, closed-shape, extension-allowance, and exact-key-set policy tests. Scheduled
-      upstream drift reporting is manual/scheduled only; nested-schema drift remains explicitly open.
+      upstream drift reporting is manual/scheduled only. Nested-schema drift is a recurring intake
+      boundary and expands only when a concrete changed field enters the supported contract.
 
 ## Completion rule
 
