@@ -1,7 +1,10 @@
 use super::{selection_matches, service_entries, service_in_scope};
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
+use crate::loader::{
+    IncludeCompositionResult, IncludeDefinitionEvidence, IncludeIdentity, IncludeProjectDirectoryPlan,
+};
 use crate::merge::{MergedProject, MergedScalar, MergedValue};
-use crate::model::{Located, ShortVolumeMount};
+use crate::model::{Located, MountType, ShortVolumeMount, VolumeMount};
 use crate::profiles::ProfileSelection;
 use crate::source::SourceSpan;
 use std::fmt;
@@ -9,6 +12,12 @@ use std::path::{Path, PathBuf};
 
 /// A home-relative path cannot be expanded without explicit caller context.
 pub const HOME_DIRECTORY_REQUIRED: DiagnosticCode = DiagnosticCode::new("compose.paths.home-directory-required");
+/// A selected included resource has no authorized occurrence base directory.
+pub const INCLUDE_RESOURCE_PATH_BASE_UNAVAILABLE: DiagnosticCode =
+    DiagnosticCode::new("compose.include.resource-path-base-unavailable");
+/// Included composition evidence and the supplied directory plan do not describe the same occurrence.
+pub const INCLUDE_RESOURCE_PATH_PLAN_MISMATCH: DiagnosticCode =
+    DiagnosticCode::new("compose.include.resource-path-plan-mismatch");
 
 /// The lexical category of one authored host path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -179,6 +188,301 @@ impl PathResolution {
     }
 }
 
+/// One selected included service bind, config, or secret file path and its occurrence-specific
+/// lexical result.
+#[derive(Clone, PartialEq, Eq)]
+pub struct IncludedResourcePath {
+    raw: String,
+    kind: HostPathKind,
+    purpose: PathPurpose,
+    source: SourceSpan,
+    occurrence_index: usize,
+    identity: IncludeIdentity,
+    base_directory: Option<PathBuf>,
+    resolved: Option<PathBuf>,
+}
+
+impl IncludedResourcePath {
+    /// Returns the authored, uninterpolated path value.
+    #[must_use]
+    pub fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    /// Returns the lexical path category.
+    #[must_use]
+    pub const fn kind(&self) -> HostPathKind {
+        self.kind
+    }
+
+    /// Returns the selected resource and namespace that supplied this path.
+    #[must_use]
+    pub const fn purpose(&self) -> &PathPurpose {
+        &self.purpose
+    }
+
+    /// Returns the source span that anchors this path finding.
+    ///
+    /// Long-syntax bind sources and top-level config/secret `file` values retain the exact
+    /// authored value-scalar span. A short-syntax service bind is decoded from one colon-delimited
+    /// mount scalar, so its source component has no independently retained byte range; this getter
+    /// deliberately returns the containing authored mount-scalar span instead of guessing through
+    /// YAML quoting or escape spelling.
+    #[must_use]
+    pub const fn source(&self) -> SourceSpan {
+        self.source
+    }
+
+    /// Returns the retained include occurrence index.
+    #[must_use]
+    pub const fn occurrence_index(&self) -> usize {
+        self.occurrence_index
+    }
+
+    /// Returns the caller-defined identity of the retained occurrence.
+    #[must_use]
+    pub const fn identity(&self) -> &IncludeIdentity {
+        &self.identity
+    }
+
+    /// Returns the authorized occurrence base, when planning supplied one.
+    #[must_use]
+    pub fn base_directory(&self) -> Option<&Path> {
+        self.base_directory.as_deref()
+    }
+
+    /// Returns the lexical result, when its base and any required home directory were available.
+    #[must_use]
+    pub fn resolved(&self) -> Option<&Path> {
+        self.resolved.as_deref()
+    }
+}
+
+impl fmt::Debug for IncludedResourcePath {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("IncludedResourcePath")
+            .field("raw", &"<redacted-path>")
+            .field("kind", &self.kind)
+            .field("purpose", &self.purpose)
+            .field("source", &self.source)
+            .field("occurrence_index", &self.occurrence_index)
+            .field("identity", &"<redacted-identity>")
+            .field(
+                "base_directory",
+                &self.base_directory.as_ref().map(|_| "<authorized-directory>"),
+            )
+            .field("resolved", &self.resolved.as_ref().map(|_| "<resolved-path>"))
+            .finish()
+    }
+}
+
+/// Recoverable lexical resolution for selected included service binds, config, and secret file
+/// paths.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncludedResourcePathResolution {
+    paths: Vec<IncludedResourcePath>,
+    diagnostics: Vec<Diagnostic>,
+    upstream_complete: bool,
+}
+
+impl IncludedResourcePathResolution {
+    /// Returns selected paths in service-then-config-then-secret composition order.
+    #[must_use]
+    pub fn paths(&self) -> &[IncludedResourcePath] {
+        &self.paths
+    }
+
+    /// Returns composition, directory-plan, and lexical path diagnostics.
+    #[must_use]
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
+    /// Reports whether no error diagnostic was retained or emitted.
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity() != Severity::Error)
+    }
+
+    /// Reports whether every selected file path resolved and no error occurred.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.upstream_complete && self.is_valid() && self.paths.iter().all(|path| path.resolved.is_some())
+    }
+}
+
+/// Lexically resolves selected included service bind sources and config and secret `file` paths.
+///
+/// This consumes only typed, authored composition values and caller-authorized occurrence bases.
+/// It considers short-form bind sources only when their spelling is already path-like and
+/// long-form sources only when `type: bind` is selected. It does not interpolate, canonicalize,
+/// access the file system, or resolve any other path family.
+#[must_use]
+pub fn resolve_included_resource_paths(
+    composition: &IncludeCompositionResult,
+    directory_plan: &IncludeProjectDirectoryPlan,
+    context: &PathContext,
+) -> IncludedResourcePathResolution {
+    let common_prefix = composition
+        .diagnostics()
+        .iter()
+        .zip(directory_plan.diagnostics())
+        .take_while(|(left, right)| left == right)
+        .count();
+    let mut diagnostics = composition.diagnostics().to_vec();
+    diagnostics.extend_from_slice(&directory_plan.diagnostics()[common_prefix..]);
+    let mut paths = Vec::new();
+
+    if let Some(root) = composition.root() {
+        for definition in root.services() {
+            let Some(volumes) = definition.definition().volumes() else {
+                continue;
+            };
+            for (index, mount) in volumes.value().iter().enumerate() {
+                let Some((raw, source)) = included_bind_source(mount.value()) else {
+                    continue;
+                };
+                push_included_resource_path(
+                    &mut paths,
+                    &mut diagnostics,
+                    directory_plan,
+                    context,
+                    definition.evidence(),
+                    raw,
+                    source,
+                    PathPurpose::ServiceBind {
+                        service: definition.name().to_owned(),
+                        index,
+                    },
+                );
+            }
+        }
+        for definition in root.configs() {
+            if let Some(file) = definition.definition().file() {
+                push_included_resource_path(
+                    &mut paths,
+                    &mut diagnostics,
+                    directory_plan,
+                    context,
+                    definition.evidence(),
+                    file.value(),
+                    file.span(),
+                    PathPurpose::ConfigFile {
+                        config: definition.name().to_owned(),
+                    },
+                );
+            }
+        }
+        for definition in root.secrets() {
+            if let Some(file) = definition.definition().file() {
+                push_included_resource_path(
+                    &mut paths,
+                    &mut diagnostics,
+                    directory_plan,
+                    context,
+                    definition.evidence(),
+                    file.value(),
+                    file.span(),
+                    PathPurpose::SecretFile {
+                        secret: definition.name().to_owned(),
+                    },
+                );
+            }
+        }
+    }
+
+    IncludedResourcePathResolution {
+        paths,
+        diagnostics,
+        upstream_complete: composition.is_complete() && directory_plan.is_complete(),
+    }
+}
+
+fn included_bind_source(mount: &VolumeMount) -> Option<(&str, SourceSpan)> {
+    match mount {
+        VolumeMount::Short(mount) => {
+            let source = mount.source()?;
+            is_path_source(source).then_some((source, mount.raw().span()))
+        }
+        VolumeMount::Long(mount) if mount.mount_type().is_some_and(|kind| *kind.value() == MountType::Bind) => {
+            mount.source().map(|source| (source.value().as_str(), source.span()))
+        }
+        VolumeMount::Long(_) => None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_included_resource_path(
+    paths: &mut Vec<IncludedResourcePath>,
+    diagnostics: &mut Vec<Diagnostic>,
+    directory_plan: &IncludeProjectDirectoryPlan,
+    context: &PathContext,
+    evidence: &IncludeDefinitionEvidence,
+    raw: &str,
+    source: SourceSpan,
+    purpose: PathPurpose,
+) {
+    let occurrence_index = evidence.occurrence_index();
+    let plan_entry = directory_plan.entry(occurrence_index);
+    let aligned_entry =
+        plan_entry.filter(|entry| entry.node_index() == occurrence_index && entry.identity() == evidence.identity());
+    let base_directory = match (plan_entry, aligned_entry) {
+        (Some(_), None) | (None, _) => {
+            diagnostics.push(
+                Diagnostic::new(
+                    INCLUDE_RESOURCE_PATH_PLAN_MISMATCH,
+                    Severity::Error,
+                    "included resource path and directory plan describe different occurrences",
+                )
+                .with_label(DiagnosticLabel::primary(source, "directory plan occurrence mismatch")),
+            );
+            None
+        }
+        (_, Some(entry)) => {
+            if let Some(directory) = entry.effective_directory() {
+                Some(directory.to_path_buf())
+            } else {
+                diagnostics.push(
+                    Diagnostic::new(
+                        INCLUDE_RESOURCE_PATH_BASE_UNAVAILABLE,
+                        Severity::Error,
+                        "included resource path has no authorized project directory",
+                    )
+                    .with_label(DiagnosticLabel::primary(source, "project directory unavailable")),
+                );
+                None
+            }
+        }
+    };
+    let kind = classify(raw);
+    let resolved = base_directory
+        .as_deref()
+        .and_then(|base| resolve_lexically(base, context, raw, kind));
+    if base_directory.is_some() && kind == HostPathKind::HomeRelative && resolved.is_none() {
+        diagnostics.push(
+            Diagnostic::new(
+                HOME_DIRECTORY_REQUIRED,
+                Severity::Warning,
+                "home-relative path requires an explicit home directory",
+            )
+            .with_label(DiagnosticLabel::primary(source, "home directory not supplied")),
+        );
+    }
+    paths.push(IncludedResourcePath {
+        raw: raw.to_owned(),
+        kind,
+        purpose,
+        source,
+        occurrence_index,
+        identity: evidence.identity().clone(),
+        base_directory,
+        resolved,
+    });
+}
+
 /// Finds and lexically resolves paths covered by the initial conversion boundary.
 #[must_use]
 pub fn resolve_paths(
@@ -303,16 +607,7 @@ fn push_path(
     purpose: PathPurpose,
 ) {
     let kind = classify(raw);
-    let resolved = match kind {
-        HostPathKind::Relative => Some(base.join(raw)),
-        HostPathKind::UnixAbsolute | HostPathKind::WindowsDriveAbsolute | HostPathKind::WindowsUnc => {
-            Some(PathBuf::from(raw))
-        }
-        HostPathKind::HomeRelative => context.home_directory.as_ref().map(|home| {
-            raw.strip_prefix("~/")
-                .map_or_else(|| home.clone(), |suffix| home.join(suffix))
-        }),
-    };
+    let resolved = resolve_lexically(base, context, raw, kind);
     if kind == HostPathKind::HomeRelative && resolved.is_none() {
         diagnostics.push(
             Diagnostic::new(
@@ -332,6 +627,19 @@ fn push_path(
         resolved,
         sensitive,
     });
+}
+
+fn resolve_lexically(base: &Path, context: &PathContext, raw: &str, kind: HostPathKind) -> Option<PathBuf> {
+    match kind {
+        HostPathKind::Relative => Some(base.join(raw)),
+        HostPathKind::UnixAbsolute | HostPathKind::WindowsDriveAbsolute | HostPathKind::WindowsUnc => {
+            Some(PathBuf::from(raw))
+        }
+        HostPathKind::HomeRelative => context.home_directory.as_ref().map(|home| {
+            raw.strip_prefix("~/")
+                .map_or_else(|| home.clone(), |suffix| home.join(suffix))
+        }),
+    }
 }
 
 fn classify(value: &str) -> HostPathKind {

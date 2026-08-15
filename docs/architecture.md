@@ -52,8 +52,37 @@ in the [typed model](typed-model.md) and
 The implemented core loader receives ordered source text and explicit origins from the caller. It
 retains every origin, establishes the first document's directory as the multi-file project base,
 and aggregates recoverable parse diagnostics. It never reads files or environment variables.
-Application adapters own discovery and I/O; include handling and multi-file composition remain
-separate processing behavior. ADR 0005 defines this [loading boundary](decisions/0005-explicit-ordered-project-loading.md).
+Application adapters own discovery and I/O. ADR 0005 defines this [loading boundary](decisions/0005-explicit-ordered-project-loading.md).
+
+`IncludeResolution` is an additive traversal layer above ordered loading. It merges each reached
+node without interpolation, derives its effective typed declarations, and asks an
+`IncludeLoader` to authorize and supply every child. It preserves the partial depth-first graph,
+origins, requests, cycles, duplicate source IDs, and diagnostics, but never joins paths or reads
+environment files. Its separate, opt-in `compose` pass recursively imports absent child services,
+networks, volumes, configs, secrets, and model definitions after each parent merge. Same-name
+collisions remain source-aware warnings and explicit records rather than invoking multi-file merge
+rules. [ADR 0020](decisions/0020-caller-authorized-include-traversal.md) and
+[ADR 0021](decisions/0021-include-composition-with-explicit-conflicts.md) define these boundaries.
+
+The independent `plan_project_directories` pass supplies caller-owned effective directory planning
+without changing loading or composition. It defaults root and undeclared children from their
+retained first-document directories, while explicit declarations reach a resolver with source and
+occurrence context. The resolver alone decides path/URI/opaque semantics; deferred and unresolved
+results remain inspectable without exposing paths in diagnostics or debug output. [ADR 0022](decisions/0022-caller-owned-include-project-directory-plans.md)
+defines that boundary.
+
+The separate include-resource path pass combines a composed selection with its matching directory
+plan. It resolves selected service bind sources plus selected top-level config and secret `file`
+values against the directory of the exact occurrence that supplied them. A missing or mismatched
+occurrence base stays explicit; the pass never guesses a root fallback. Resolution is lexical,
+caller-contextual, I/O-free, and uninterpolated, and its debug representation redacts path and
+identity text. [ADR 0023](decisions/0023-include-config-secret-path-resolution.md) defines this
+narrower boundary.
+
+The result span is exact for long bind `source` values and config/secret `file` values. A
+short-syntax bind source is decoded from a complete colon-delimited mount scalar, so ComposeLens
+retains that containing scalar span rather than guessing a source-component range after YAML
+decoding.
 
 ### Processing pipeline
 
@@ -270,6 +299,11 @@ Generated top-level volume definitions likewise retain ordered unique `Generated
 including explicit empty maps, deterministic parse-back output, and sensitivity without changing
 the shared external-volume lifecycle API. Literal external volumes that also retain labels receive
 a distinct source-aware diagnostic; driver and label violations remain independent.
+Generated top-level config and secret file definitions accept one unique resolved single-line name
+and one required resolved single-line file value. They render deterministic quoted mappings and
+parse back through the native model; sensitivity is caller-marked and redacts debug output. Content,
+environment, external lifecycle, drivers, labels, template drivers, filesystem access, and runtime
+behavior remain outside this deliberately narrow generated subset.
 Generated hostnames use a separate non-exhaustive Compose-owned API and accept only resolved ASCII
 RFC-1123 values. They remain independent from explicit runtime container names; generation does
 not derive either value from the other or synthesize a hostname when omitted.
@@ -311,8 +345,8 @@ environment variables, and writes an unreviewed result to a caller-selected new 
 
 ## Public release boundary
 
-ComposeLens publishes one library crate. The supported 0.1.x surface follows the layer boundaries
+ComposeLens publishes one library crate. The supported 0.2.x surface follows the layer boundaries
 above and exposes only ComposeLens-owned types; parser dependencies remain private. Patch releases
 preserve the documented consumer path, diagnostic code strings, side-effect boundaries, and
-canonical-v1 defaults. ADR 0013 defines the
-[versioned public API and release contract](decisions/0013-versioned-public-api-and-release-contract.md).
+canonical-v1 defaults. ADR 0019 defines the
+[versioned public API and release contract](decisions/0019-consolidated-0.2-public-api.md).

@@ -1,7 +1,11 @@
-//! Consumer-facing contract for the supported 0.1.x processing path.
+//! Consumer-facing contract for the supported 0.2.x processing path.
 
 use compose_lens::interpolation::MapEnvironment;
-use compose_lens::loader::{DocumentInput, DocumentOrigin, LoadedProject};
+use compose_lens::loader::{
+    DocumentInput, DocumentOrigin, IncludeIdentity, IncludeLoadError, IncludeLoader, IncludeProjectDirectoryRequest,
+    IncludeProjectDirectoryResolution, IncludeProjectDirectoryResolveError, IncludeProjectDirectoryResolver,
+    IncludeProjectDirectoryStatus, IncludeRequest, IncludeResolution, IncludedProjectInput, LoadedProject,
+};
 use compose_lens::merge::merge_project;
 use compose_lens::model::{
     BooleanValue, Build, BuildAdditionalContexts, BuildArgs, BuildExtraHostAddresses, BuildExtraHosts, BuildFieldKind,
@@ -21,15 +25,54 @@ use compose_lens::project::{
     ProjectUlimitScalar, ProjectUlimitValue, ProjectUlimits, build_project_view,
 };
 use compose_lens::render::{
-    ComposeDocumentBuilder, GeneratedAnnotation, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
-    GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel, GeneratedLogging,
-    GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit,
+    ComposeDocumentBuilder, GeneratedAnnotation, GeneratedConfigFileDefinition, GeneratedDevice, GeneratedDns,
+    GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironmentFile, GeneratedHostname, GeneratedLabel,
+    GeneratedLogging, GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit,
     GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
     GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPullPolicy, GeneratedRestartPolicy,
-    GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs,
-    GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption,
-    GeneratedVolumeDriverOptionValue, ReplacementScalar, ScalarEdit, apply_preservation_edits, render_canonical,
+    GeneratedSecretFileDefinition, GeneratedService, GeneratedShmSize, GeneratedString, GeneratedSysctl,
+    GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits,
+    GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, ReplacementScalar,
+    ScalarEdit, apply_preservation_edits, render_canonical,
 };
+use std::path::PathBuf;
+
+struct SyntheticIncludeLoader;
+
+impl IncludeLoader for SyntheticIncludeLoader {
+    fn load_include(&self, request: &IncludeRequest) -> Result<IncludedProjectInput, IncludeLoadError> {
+        match request.paths().first().map(compose_lens::model::Located::value) {
+            Some(path) if path == "child.yaml" => Ok(IncludedProjectInput::new(
+                IncludeIdentity::new("synthetic-child"),
+                [DocumentInput::new(
+                    SourceId::new(15_001),
+                    DocumentOrigin::new("synthetic-child.yaml", "synthetic"),
+                    "services: {child: {image: example/child}}\nnetworks: {child-network: {}}\n",
+                )],
+            )),
+            _ => Err(IncludeLoadError::denied("synthetic loader only authorizes child.yaml")),
+        }
+    }
+}
+
+struct SyntheticDirectoryResolver;
+
+impl IncludeProjectDirectoryResolver for SyntheticDirectoryResolver {
+    fn resolve_project_directory(
+        &self,
+        request: &IncludeProjectDirectoryRequest<'_>,
+    ) -> Result<IncludeProjectDirectoryResolution, IncludeProjectDirectoryResolveError> {
+        if request.parent_node_index() != 0
+            || request.child_node_index() != 1
+            || request.declaration().value() != "synthetic-directory"
+        {
+            return Err(IncludeProjectDirectoryResolveError::Unresolved);
+        }
+        Ok(IncludeProjectDirectoryResolution::Resolved(PathBuf::from(
+            "authorized/synthetic-directory",
+        )))
+    }
+}
 
 #[test]
 fn preserves_build_field_kind_discriminants() {
@@ -113,6 +156,51 @@ fn exposes_authored_effective_and_generated_annotations_contracts() -> Result<()
         GeneratedString::plain("platform")?,
     )?])?;
     assert_eq!(service.annotations().map(<[GeneratedAnnotation]>::len), Some(1));
+    Ok(())
+}
+
+#[test]
+fn exposes_service_runtime_key_contracts_at_authored_and_generated_boundaries() -> Result<(), Box<dyn std::error::Error>>
+{
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(9110),
+        "services:\n  app:\n    cpu_rt_runtime: 500us\n    device_cgroup_rules: [rule, true]\n    volumes_from: [db, false]\n    scale: 2\n",
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let service = parsed
+        .document()
+        .and_then(|document| document.service("app"))
+        .ok_or("service expected")?;
+    assert!(service.cpu_rt_runtime().is_some());
+    assert_eq!(service.invalid_device_cgroup_rules().len(), 1);
+    assert_eq!(service.invalid_volumes_from().len(), 1);
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(9111),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        "services:\n  app:\n    cpu_rt_runtime: 500us\n    device_cgroup_rules: [rule, true]\n    volumes_from: [db, false]\n    scale: 2\n",
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let project = build_project_view(merged.project().ok_or("project expected")?, None);
+    let effective = project
+        .view()
+        .and_then(|view| view.service("app"))
+        .ok_or("effective service expected")?;
+    assert!(effective.cpu_rt_runtime().is_some() && effective.scale().is_some());
+    assert_eq!(effective.invalid_device_cgroup_rules().len(), 1);
+    assert_eq!(effective.invalid_volumes_from().len(), 1);
+    let mut generated = GeneratedService::new("generated")?;
+    generated.add_runtime_field(compose_lens::render::GeneratedServiceRuntimeField::Scale(
+        GeneratedString::plain("2")?,
+    ))?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(generated)?;
+    assert!(
+        builder
+            .build(SourceId::new(9112))?
+            .document()
+            .service("generated")
+            .is_some()
+    );
     Ok(())
 }
 
@@ -3886,6 +3974,137 @@ fn exposes_authored_and_effective_build_extra_hosts_contract() -> Result<(), Box
             .addresses()
             .as_list()
             .is_some_and(|values| values[1].is_sensitive())
+    );
+    Ok(())
+}
+
+#[test]
+fn exposes_final_compose_key_boundary_without_implicit_io() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "version: '3.9'\ninclude: [base.yaml]\nmodels: {embedder: {model: local}}\nservices:\n",
+        "  app:\n    domainname: example.test\n    gpus: all\n    use_api_socket: true\n",
+        "    label_file: [labels.txt]\n    external_links: [external]\n    links: [db]\n",
+        "    storage_opt: {size: 1G}\n    models: {embedder: MODEL_URL}\n",
+        "    isolation: process\n    mac_address: 02:42:ac:11:00:02\n    uts: host\n",
+        "    develop: {watch: [{action: sync, path: ., target: /src}]}\n",
+        "networks:\n  app: {external: true}\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(1999), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("document expected")?;
+    let _: Option<&compose_lens::model::Located<String>> = document.version();
+    let _: Option<&compose_lens::model::Includes> = document.include();
+    let _: Option<&compose_lens::model::ModelDefinitions> = document.models();
+    let service = document.service("app").ok_or("service expected")?;
+    let _: Option<&compose_lens::model::Located<String>> = service.domainname();
+    let _: Option<&compose_lens::model::Located<String>> = service.isolation();
+    let _: Option<&compose_lens::model::Located<String>> = service.mac_address();
+    let _: Option<&compose_lens::model::Located<String>> = service.uts();
+    let _: Option<&compose_lens::model::Located<BooleanValue>> = service.use_api_socket();
+    let _: Option<&compose_lens::model::LabelFiles> = service.label_files();
+    let _: &[compose_lens::model::Located<String>] = service.external_links();
+    let _: &[compose_lens::model::Located<String>] = service.links();
+    let _: Option<&compose_lens::model::Labels> = service.storage_opt();
+    let _: Option<&compose_lens::model::ServiceModels> = service.models();
+    let _: Option<&compose_lens::model::Gpus> = service.gpus();
+    let _: Option<&compose_lens::model::Develop> = service.develop();
+    let network = document.networks().first().ok_or("network expected")?;
+    let _: Option<&compose_lens::model::ResourceExternal> = network.external();
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(2000),
+        DocumentOrigin::new("compose.yaml", "workspace"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("project expected")?, None);
+    let view = result.view().ok_or("view expected")?;
+    let _: Option<&compose_lens::project::ProjectValue<String>> = view.version();
+    let _: Option<&compose_lens::project::ProjectValue<compose_lens::model::Includes>> = view.include();
+    let service = view.service("app").ok_or("project service expected")?;
+    let _: Option<&compose_lens::project::ProjectValue<String>> = service.domainname();
+    let _: Option<&compose_lens::project::ProjectValue<compose_lens::model::Develop>> = service.develop();
+    Ok(())
+}
+
+#[test]
+fn composes_synthetic_document_inputs_without_filesystem_or_environment_access()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = IncludedProjectInput::new(
+        IncludeIdentity::new("synthetic-root"),
+        [DocumentInput::new(
+            SourceId::new(15_000),
+            DocumentOrigin::new("synthetic-root.yaml", "synthetic"),
+            "services: {root: {image: example/root}}\ninclude: [child.yaml]\n",
+        )],
+    );
+    let resolution = IncludeResolution::load(root, &SyntheticIncludeLoader);
+    let composition = resolution.compose();
+    let root = composition.root().ok_or("root composition expected")?;
+
+    let _: &compose_lens::loader::IncludeComposition = root;
+    let _: &compose_lens::loader::IncludeDefinition<compose_lens::project::ProjectService> =
+        root.service("child").ok_or("child service expected")?;
+    assert!(root.network("child-network").is_some());
+    assert!(composition.is_complete());
+    Ok(())
+}
+
+#[test]
+fn plans_synthetic_project_directories_through_the_public_resolver_contract() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = IncludedProjectInput::new(
+        IncludeIdentity::new("synthetic-root"),
+        [DocumentInput::new(
+            SourceId::new(15_010),
+            DocumentOrigin::new("synthetic-root.yaml", "synthetic-root"),
+            "include: [{path: child.yaml, project_directory: synthetic-directory}]\n",
+        )],
+    );
+    let resolution = IncludeResolution::load(root, &SyntheticIncludeLoader);
+    let plan = resolution.plan_project_directories(&SyntheticDirectoryResolver);
+    let child = plan.entry(1).ok_or("child plan expected")?;
+
+    let _: &compose_lens::loader::IncludeProjectDirectoryPlan = &plan;
+    let _: &compose_lens::loader::IncludeProjectDirectoryEntry = child;
+    assert_eq!(child.status(), IncludeProjectDirectoryStatus::Resolved);
+    assert_eq!(
+        child.effective_directory().map(|directory| directory.to_string_lossy()),
+        Some("authorized/synthetic-directory".into())
+    );
+    assert!(plan.is_valid() && plan.is_complete());
+    Ok(())
+}
+
+#[test]
+fn exposes_generated_top_level_file_definition_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    let config = GeneratedConfigFileDefinition::new("configuration", GeneratedString::plain("app.yaml")?)?;
+    let secret = GeneratedSecretFileDefinition::new("credential", GeneratedString::sensitive("secret.txt")?)?;
+    let _: &str = config.name();
+    let _: &GeneratedString = config.file();
+    let _: &str = secret.name();
+    let _: &GeneratedString = secret.file();
+
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(GeneratedString::plain("example/app")?)?;
+    builder.add_service(service)?;
+    builder.add_config_file(config)?;
+    builder.add_secret_file(secret)?;
+    let generated = builder.build(SourceId::new(15_020))?;
+    assert!(
+        generated
+            .document()
+            .configs()
+            .iter()
+            .any(|config| config.name().value() == "configuration")
+    );
+    assert!(
+        generated
+            .document()
+            .secrets()
+            .iter()
+            .any(|secret| secret.name().value() == "credential")
     );
     Ok(())
 }

@@ -13,6 +13,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Phase 2 typed model](typed-model.md) — implemented field boundary, fidelity rules, and diagnostics
 - [Native coverage](coverage.md) — syntax, document-model, and merged-project field coverage
 - [Roadmap and exact specification gaps](roadmap.md) — all current untyped keys and promotion order
+- [Quality plan](quality-plan.md) — pragmatic priorities, test expectations, and investment limits
 - [Testing strategy](testing.md) — parser, resolver, conformance, and round-trip tests
 - [Development environment](development-environment.md) — reproducible VS Code tooling and update policy
 - [Compose implementation conformance](conformance.md) — exact matrices, evidence lifecycle, and open runtime work
@@ -29,6 +30,7 @@ This directory defines ComposeLens's public intent and internal architecture.
 - [Canonical-rendering evidence](research/compose-canonical-rendering.md) — fixed output, explicit processing boundary, recovery, and redaction
 - [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
 - [API stability policy](api-stability.md) — pre-1.0 compatibility and public dependency boundaries
+- [0.2.0 release notes](releases/0.2.0.md) — complete closed-schema coverage and consolidated source-aware APIs
 - [0.1.17 release notes](releases/0.1.17.md) — version-boundary tests and coverage regression guards
 - [0.1.16 release notes](releases/0.1.16.md) — native service terminal/security choices, logging, and generated network and volume configuration
 - [0.1.15 release notes](releases/0.1.15.md) — DNS, expose, annotations, and security options

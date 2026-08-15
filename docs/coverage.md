@@ -1,10 +1,12 @@
 # Native Compose coverage
 
 This document distinguishes source preservation from typed consumer coverage. It was audited
-against the current official
+against the commit-pinned official
 [Compose service reference](https://docs.docker.com/reference/compose-file/services/) on
-2026-08-06. The exact current untyped-key inventory and promotion order live in the
-[roadmap](roadmap.md).
+2026-08-14. The exact root/service-key inventory is committed in
+[`schema/compose-key-inventory.json`](../schema/compose-key-inventory.json); it covers only the
+current closed root and immediate service properties. Nested-schema drift remains intentionally
+outside this bounded inventory and the promotion order lives in the [roadmap](roadmap.md).
 
 ## Coverage layers
 
@@ -18,13 +20,19 @@ A field is not ready for a converter merely because the document model types it.
 consumers need the project-view layer so they do not render and reparse a merged document or lose
 provenance.
 
+The closed-schema audit is now complete: resource metadata and `develop.watch.exec` children are
+native at document and effective-project layers. They retain malformed evidence and sensitivity,
+but deliberately have no generated, file, provider, driver, watcher, command, or runtime behavior.
+Repository policy tests bind the claim to the official snapshot digest, exact 9 root/93 service key
+sets, closed object shapes, and `x-*` extension allowance.
+
 ## Current service boundary
 
-| Coverage                        | Service fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document model and project view | `hostname`, `container_name`, `image`, `platform`, `credential_spec`, `extends`, `provider`, `post_start`, `pre_stop`, `pre_start`, `blkio_config`, `cgroup`, `cgroup_parent`, `cpu_count`, `cpu_percent`, `cpu_period`, `cpu_quota`, `cpu_rt_period`, `build.additional_contexts`, `build.context`, `build.args`, `build.cache_from`, `build.cache_to`, `build.dockerfile`, `build.entitlements`, `build.extra_hosts`, `build.target`, `build.network`, `build.isolation`, `build.platforms`, `build.no_cache`, `build.privileged`, `build.sbom`, `build.pull`, `build.shm_size`, `build.tags`, `build.labels`, `build.secrets`, `build.ssh`, `build.ulimits`, `deploy.endpoint_mode`, `deploy.labels`, `deploy.mode`, `deploy.placement`, `deploy.replicas`, `deploy.resources.limits.cpus`, `deploy.resources.limits.memory`, `deploy.resources.limits.pids`, `deploy.resources.reservations.cpus`, `deploy.resources.reservations.devices[].capabilities`, `deploy.resources.reservations.devices[].driver`, `deploy.resources.reservations.devices[].count`, `deploy.resources.reservations.devices[].device_ids`, `deploy.resources.reservations.devices[].options`, `deploy.resources.reservations.generic_resources`, `deploy.resources.reservations.memory`, `deploy.restart_policy`, `deploy.rollback_config`, `deploy.update_config`, `entrypoint`, `command`, `attach`, `init`, `stdin_open`, `tty`, `privileged`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `ulimits`, `pull_policy`, `pull_refresh_after`, `restart`, `runtime`, `stop_signal`, `stop_grace_period`, `healthcheck`, `depends_on`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
-| Document model only             | Explicitly bounded nested deploy-resource forms and malformed, extension, or future-unknown field evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Preserved, not typed            | 27 exact current service keys; see [Exact service gaps](roadmap.md#exact-service-gaps).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Coverage                                                 | Service fields                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Document model, project view, and generated construction | Existing typed service boundary plus `cpu_rt_runtime`, `cpu_shares`, `cpus`, `cpuset`, `device_cgroup_rules`, `ipc`, `mem_reservation`, `mem_swappiness`, `memswap_limit`, `network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `scale`, and `volumes_from`. Safe generated construction also covers selected raw identity and GPU `all` values with deterministic parse-back validation. |
+| Document model only                                      | Explicitly bounded nested deploy-resource forms and malformed, extension, or future-unknown field evidence                                                                                                                                                                                                                                                                                       |
+| Preserved, not typed                                     | No current closed-schema top-level or service keys; malformed or future nested include/model/GPU/develop members remain source-addressable through root or service `unmodeled_fields`, while bounded nested forms remain documented in the [roadmap](roadmap.md#exact-nested-semantic-gaps).                                                                                                     |
 
 `blkio_config` retains raw integer-or-strict-string weights/rates and ordered device entries with
 source and merge provenance. It applies no unit/range/default, path, device, cgroup/controller,
@@ -64,6 +72,14 @@ scheduler, OS, host, default, provider, version, runtime, generation, or convers
 The preserved row follows the current Docker documentation grouping. Provider-specific additions
 remain preserved even when they are not part of the compose-spec repository.
 
+Long service-volume mounts additionally retain `consistency`, `bind.recursive`, and the `image`,
+`tmpfs`, and `volume` option mappings through both authored and effective views. `image.subpath`,
+`tmpfs.size`, `tmpfs.mode`, `volume.labels`, `volume.nocopy`, and `volume.subpath` retain source
+spans, scalar categories where relevant, extensions, unknown/malformed evidence, interpolation,
+and merge/reset/override provenance. ComposeLens neither resolves an image, volume, or path nor
+interprets permissions, mount behavior, provider defaults, or runtime compatibility. Generation
+does not yet write these new members.
+
 `credential_spec` retains an explicit empty map and strict YAML-string config, file, and registry
 members with nested merge provenance and recovery evidence. It does not resolve top-level configs,
 paths, registries, accounts, Windows/gMSA, platform, provider, or runtime semantics.
@@ -72,7 +88,7 @@ paths, registries, accounts, Windows/gMSA, platform, provider, or runtime semant
 `service` and `file` members, including explicit empties, extensions, unknown/malformed evidence,
 and nested merge provenance. It preserves the schema-supported short form even though the
 [Compose service reference](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#extends)
-focuses on mappings; the [schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+focuses on mappings; the [schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json)
 and [merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md) apply only
 generic scalar replacement or recursive mapping merge here. These raw views do not expand or merge
 a referenced service, look up files, normalize paths, traverse cycles, or import resources. The
@@ -111,12 +127,12 @@ non-expression strings are rejected rather than coerced and remain source-addres
 evidence with diagnostics. Docker Compose v2.15.0 is a documented implementation badge; earlier
 and removal boundaries remain unknown. No privilege, platform, runtime, or build behavior is
 inferred.
-Cache descriptors, platforms, tags, isolation, and `shm_size` receive no reference, path, credential, OCI, availability, service-platform, default, privilege, host, allocation, or build-execution inference; `no_cache` and `sbom` strings receive no boolean coercion, and `sbom` receives no generator parsing or generated-data exposure; `pull` receives no environment resolution, default policy, or runtime inference. `build.shm_size` retains service-equivalent number/string spelling, lowercase-unit, zero, expression, and provider-dependent classification.
+Cache descriptors, platforms, tags, isolation, and `shm_size` are typed source values, but their feasibility, provider support, service-platform coupling, and other runtime semantics are not modeled. `no_cache` and `sbom` strings receive no boolean coercion, `sbom` receives no generator parsing or generated-data exposure, and `pull` receives no environment resolution, default policy, or runtime inference. `build.shm_size` retains service-equivalent number/string spelling, lowercase-unit, zero, expression, and provider-dependent classification.
 `build.ssh` retains sensitive ordered strings or scalar mapping entries under generic merge rules; it parses no SSH identifier, path, PEM, socket, agent, mount, or builder semantics and redacts all grants by default.
 `build.ulimits` reuses the service Ulimits models: ordered names, scalar/range syntax, spelling,
 per-file interpolation sensitivity, nested recursive merge, reset/override, malformed evidence,
 and explicit empties remain visible without defaults, normalization, host-limit, builder, or runtime claims.
-`dockerfile`/`dockerfile_inline` retain source-spanned conflict evidence; other build fields remain unmodeled and ComposeLens does not generate builds.
+`dockerfile`/`dockerfile_inline` retain source-spanned conflict evidence. All closed immediate Build keys are typed, while malformed input, extensions, future unknown members, and deliberately bounded nested semantics remain source-addressable evidence. ComposeLens does not generate builds.
 
 `deploy.endpoint_mode` and `deploy.mode` retain exact `vip`/`dnsrr` and `global`/`replicated`
 values plus raw `Other` strings with a portability diagnostic. `deploy.replicas` retains exact
@@ -173,11 +189,10 @@ evidence, exact duplicate list strings, and generic provenance without provider 
 
 ## Current top-level boundary
 
-`name`, `services`, `networks`, `volumes`, `configs`, and `secrets` have both document-model and
-project-view support. `version`, `include`, and `models` remain syntax-preserved only. Their exact
-nested gaps and implemented definition fields are listed in the [roadmap](roadmap.md) and
-[Typed Compose model](typed-model.md). Other nested values remain source-addressable and appear as
-typed field references where the current boundary supports them.
+All current closed-schema top-level keys have document-model and project-view support. `version`
+is retained with an obsolete-field diagnostic; `include` and `models` retain their bounded native
+forms without loading files, environments, or providers. Malformed and future nested values remain
+source-addressable evidence as documented in the [roadmap](roadmap.md).
 
 ## Next promotion
 

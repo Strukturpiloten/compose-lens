@@ -1,6 +1,6 @@
 //! Typed service-volume mounts that preserve their authored syntax form.
 
-use super::{BooleanValue, FieldReference, Located};
+use super::{BooleanValue, ComposeScalar, FieldReference, Labels, Located};
 use crate::source::SourceSpan;
 
 /// The authored Compose syntax form of a service-volume mount.
@@ -182,6 +182,7 @@ pub struct BindOptions {
     propagation: Option<Located<String>>,
     create_host_path: Option<Located<BooleanValue>>,
     selinux: Option<Located<SelinuxRelabel>>,
+    recursive: Option<Located<String>>,
     extension_fields: Vec<FieldReference>,
     unknown_fields: Vec<FieldReference>,
 }
@@ -193,6 +194,7 @@ impl BindOptions {
             propagation: None,
             create_host_path: None,
             selinux: None,
+            recursive: None,
             extension_fields: Vec::new(),
             unknown_fields: Vec::new(),
         }
@@ -210,11 +212,15 @@ impl BindOptions {
         self.selinux = Some(value);
     }
 
-    pub(super) fn push_extension(&mut self, field: FieldReference) {
+    pub(crate) fn set_recursive(&mut self, value: Located<String>) {
+        self.recursive = Some(value);
+    }
+
+    pub(crate) fn push_extension(&mut self, field: FieldReference) {
         self.extension_fields.push(field);
     }
 
-    pub(super) fn push_unknown(&mut self, field: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, field: FieldReference) {
         self.unknown_fields.push(field);
     }
 
@@ -245,6 +251,12 @@ impl BindOptions {
         self.selinux.as_ref()
     }
 
+    /// Returns the authored recursive bind mode without interpreting host mount behavior.
+    #[must_use]
+    pub const fn recursive(&self) -> Option<&Located<String>> {
+        self.recursive.as_ref()
+    }
+
     /// Returns `x-` extension fields retained from the bind mapping.
     #[must_use]
     pub fn extension_fields(&self) -> &[FieldReference] {
@@ -252,6 +264,183 @@ impl BindOptions {
     }
 
     /// Returns unrecognized bind fields retained from the source.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Image-specific options in a long-syntax service-volume mount.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageMountOptions {
+    span: SourceSpan,
+    subpath: Option<Located<String>>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl ImageMountOptions {
+    pub(crate) fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            subpath: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(crate) fn set_subpath(&mut self, value: Located<String>) {
+        self.subpath = Some(value);
+    }
+    pub(crate) fn push_extension(&mut self, field: FieldReference) {
+        self.extension_fields.push(field);
+    }
+    pub(crate) fn push_unknown(&mut self, field: FieldReference) {
+        self.unknown_fields.push(field);
+    }
+    /// Returns the complete `image` mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns the authored image subpath without resolving an image or filesystem.
+    #[must_use]
+    pub const fn subpath(&self) -> Option<&Located<String>> {
+        self.subpath.as_ref()
+    }
+    /// Returns retained `x-` image fields.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+    /// Returns unrecognized or malformed image fields retained from source.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Tmpfs-specific options in a long-syntax service-volume mount.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TmpfsMountOptions {
+    span: SourceSpan,
+    size: Option<Located<ComposeScalar>>,
+    mode: Option<Located<ComposeScalar>>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl TmpfsMountOptions {
+    pub(crate) fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            size: None,
+            mode: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(crate) fn set_size(&mut self, value: Located<ComposeScalar>) {
+        self.size = Some(value);
+    }
+    pub(crate) fn set_mode(&mut self, value: Located<ComposeScalar>) {
+        self.mode = Some(value);
+    }
+    pub(crate) fn push_extension(&mut self, field: FieldReference) {
+        self.extension_fields.push(field);
+    }
+    pub(crate) fn push_unknown(&mut self, field: FieldReference) {
+        self.unknown_fields.push(field);
+    }
+    /// Returns the complete `tmpfs` mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns the raw size scalar without parsing units or consulting runtime defaults.
+    #[must_use]
+    pub const fn size(&self) -> Option<&Located<ComposeScalar>> {
+        self.size.as_ref()
+    }
+    /// Returns the raw mode scalar without interpreting permission bits.
+    #[must_use]
+    pub const fn mode(&self) -> Option<&Located<ComposeScalar>> {
+        self.mode.as_ref()
+    }
+    /// Returns retained `x-` tmpfs fields.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+    /// Returns unrecognized or malformed tmpfs fields retained from source.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[FieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Volume-specific options in a long-syntax service-volume mount.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VolumeMountOptions {
+    span: SourceSpan,
+    nocopy: Option<Located<BooleanValue>>,
+    subpath: Option<Located<String>>,
+    labels: Option<Labels>,
+    extension_fields: Vec<FieldReference>,
+    unknown_fields: Vec<FieldReference>,
+}
+
+impl VolumeMountOptions {
+    pub(crate) fn new(span: SourceSpan) -> Self {
+        Self {
+            span,
+            nocopy: None,
+            subpath: None,
+            labels: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        }
+    }
+    pub(crate) fn set_nocopy(&mut self, value: Located<BooleanValue>) {
+        self.nocopy = Some(value);
+    }
+    pub(crate) fn set_subpath(&mut self, value: Located<String>) {
+        self.subpath = Some(value);
+    }
+    pub(crate) fn set_labels(&mut self, value: Labels) {
+        self.labels = Some(value);
+    }
+    pub(crate) fn push_extension(&mut self, field: FieldReference) {
+        self.extension_fields.push(field);
+    }
+    pub(crate) fn push_unknown(&mut self, field: FieldReference) {
+        self.unknown_fields.push(field);
+    }
+    /// Returns the complete `volume` mapping span.
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        self.span
+    }
+    /// Returns the explicit copy-prevention setting without inferring a runtime default.
+    #[must_use]
+    pub const fn nocopy(&self) -> Option<&Located<BooleanValue>> {
+        self.nocopy.as_ref()
+    }
+    /// Returns the authored named-volume subpath without resolving a volume or filesystem.
+    #[must_use]
+    pub const fn subpath(&self) -> Option<&Located<String>> {
+        self.subpath.as_ref()
+    }
+    /// Returns named-volume labels in their authored list or mapping form.
+    #[must_use]
+    pub const fn labels(&self) -> Option<&Labels> {
+        self.labels.as_ref()
+    }
+    /// Returns retained `x-` volume-option fields.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[FieldReference] {
+        &self.extension_fields
+    }
+    /// Returns unrecognized or malformed volume-option fields retained from source.
     #[must_use]
     pub fn unknown_fields(&self) -> &[FieldReference] {
         &self.unknown_fields
@@ -267,7 +456,11 @@ pub struct LongVolumeMount {
     target: Option<Located<String>>,
     target_path: Option<Located<ContainerPath>>,
     read_only: Option<Located<BooleanValue>>,
+    consistency: Option<Located<String>>,
     bind: Option<BindOptions>,
+    image: Option<ImageMountOptions>,
+    tmpfs: Option<TmpfsMountOptions>,
+    volume: Option<VolumeMountOptions>,
     extension_fields: Vec<FieldReference>,
     unknown_fields: Vec<FieldReference>,
 }
@@ -281,7 +474,11 @@ impl LongVolumeMount {
             target: None,
             target_path: None,
             read_only: None,
+            consistency: None,
             bind: None,
+            image: None,
+            tmpfs: None,
+            volume: None,
             extension_fields: Vec::new(),
             unknown_fields: Vec::new(),
         }
@@ -304,15 +501,28 @@ impl LongVolumeMount {
         self.read_only = Some(value);
     }
 
+    pub(crate) fn set_consistency(&mut self, value: Located<String>) {
+        self.consistency = Some(value);
+    }
+
     pub(crate) fn set_bind(&mut self, value: BindOptions) {
         self.bind = Some(value);
     }
+    pub(crate) fn set_image(&mut self, value: ImageMountOptions) {
+        self.image = Some(value);
+    }
+    pub(crate) fn set_tmpfs(&mut self, value: TmpfsMountOptions) {
+        self.tmpfs = Some(value);
+    }
+    pub(crate) fn set_volume(&mut self, value: VolumeMountOptions) {
+        self.volume = Some(value);
+    }
 
-    pub(super) fn push_extension(&mut self, field: FieldReference) {
+    pub(crate) fn push_extension(&mut self, field: FieldReference) {
         self.extension_fields.push(field);
     }
 
-    pub(super) fn push_unknown(&mut self, field: FieldReference) {
+    pub(crate) fn push_unknown(&mut self, field: FieldReference) {
         self.unknown_fields.push(field);
     }
 
@@ -352,10 +562,32 @@ impl LongVolumeMount {
         self.read_only.as_ref()
     }
 
+    /// Returns the authored consistency token without provider/default interpretation.
+    #[must_use]
+    pub const fn consistency(&self) -> Option<&Located<String>> {
+        self.consistency.as_ref()
+    }
+
     /// Returns long-syntax bind options.
     #[must_use]
     pub const fn bind(&self) -> Option<&BindOptions> {
         self.bind.as_ref()
+    }
+
+    /// Returns long-syntax image-mount options.
+    #[must_use]
+    pub const fn image(&self) -> Option<&ImageMountOptions> {
+        self.image.as_ref()
+    }
+    /// Returns long-syntax tmpfs-mount options.
+    #[must_use]
+    pub const fn tmpfs(&self) -> Option<&TmpfsMountOptions> {
+        self.tmpfs.as_ref()
+    }
+    /// Returns long-syntax named-volume options.
+    #[must_use]
+    pub const fn volume(&self) -> Option<&VolumeMountOptions> {
+        self.volume.as_ref()
     }
 
     /// Returns `x-` extension fields retained from the mount mapping.

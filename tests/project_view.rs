@@ -12,7 +12,7 @@ use compose_lens::model::{
     DeployResourceMemoryKind, DeployResourceMemoryUnit, DeployResourcePids, DeployRestartCondition, Entrypoint,
     EnvironmentFileFormatKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
     HostAddressKind, HostnameKind, IdentityComponent, Labels, LimitValue, PidsLimitKind, Port, RestartPolicyKind,
-    SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel, ServiceNetworks, StopGracePeriod, ULIMIT_INVALID_NAME,
+    SYSCTLS_DUPLICATE_ITEM, SelinuxRelabel, ServiceInteger, ServiceNetworks, StopGracePeriod, ULIMIT_INVALID_NAME,
     ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceModeKind, VOLUME_EXTERNAL_DRIVER_CONFIGURATION,
     VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeMount,
 };
@@ -223,7 +223,10 @@ fn retains_effective_deploy_mode_merge_provenance_and_unmodeled_siblings() -> Re
         Some(DeployReplicas::YamlNumber(value)) if value == "2"
     ));
     assert!(view.service("global-replicas").is_some_and(|service| {
-        service
+        matches!(
+            service.scale().map(ProjectValue::value),
+            Some(ServiceInteger::Valid(value)) if value == "3"
+        ) && !service
             .unmodeled_fields()
             .iter()
             .any(|field| field.path() == ["services", "global-replicas", "scale"])
@@ -312,7 +315,10 @@ fn retains_effective_deploy_replicas_merge_provenance_and_scalar_category() -> R
         matches!(global.replicas().map(ProjectValue::value), Some(DeployReplicas::YamlNumber(value)) if value == "2")
     );
     assert!(view.service("global").is_some_and(|service| {
-        service
+        matches!(
+            service.scale().map(ProjectValue::value),
+            Some(ServiceInteger::Valid(value)) if value == "3"
+        ) && !service
             .unmodeled_fields()
             .iter()
             .any(|field| field.path() == ["services", "global", "scale"])

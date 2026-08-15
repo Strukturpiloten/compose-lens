@@ -2,7 +2,26 @@
 
 ComposeLens must be built around tests because YAML syntax, Compose processing, and implementation behavior contain many interacting edge cases.
 
+## Investment boundary
+
+Pull-request checks must remain deterministic and reasonably fast. New behavior should normally
+have focused positive and negative coverage, including malformed input, merge/reset behavior,
+public API use, or representative end-to-end behavior when relevant.
+
+The project does not require fuzzing or 100% code coverage. Coverage floors detect broad
+regressions; they do not replace meaningful assertions. Networked provider runs and other
+environment-dependent checks remain opt-in or scheduled unless they are the only practical way to
+protect a supported contract. See the [quality plan](quality-plan.md) for the prioritized work.
+
 ## Test layers
+
+### Repository policy tests
+
+Repository policy tests are offline. They verify the committed Compose schema snapshot digest, its
+closed root and immediate-service shapes, the exclusive `^x-` extension allowance, and the exact
+classified 9-root/93-service inventory. Positive and negative cases cover allowed classifications,
+required rationales for non-typed entries, unknown classes, and key-set drift. Upstream comparison
+is deliberately confined to the scheduled/manual `specification-drift` workflow.
 
 ### Syntax tests
 
@@ -15,6 +34,9 @@ unknown fields, extensions, image references, ports, volumes, host/container pat
 environment values, environment-file short/long forms and options, service-label forms,
 entrypoints, commands, service `attach` booleans/expressions and malformed recovery, raw
 `cpu_count`/`cpu_percent`/`cpu_period`/`cpu_quota`/`cpu_rt_period` scalar categories and malformed recovery,
+the related CPU/memory/namespace/OOM/scale and `volumes_from` service keys with interpolation,
+merge provenance, boundaries, malformed recovery, local-reference validation, and retained
+cross-field conflict diagnostics,
 extra hosts, service hostnames, service annotations, service logging drivers and options, ordered service capability additions and drops, ordered mixed service devices, raw service DNS scalar/list forms, raw service security options, raw identities, service-level PID limits, service and Build shared-memory sizes, service memory limits, service-level temporary filesystems, service sysctls, restart and image pull policies, raw `pull_refresh_after` and `platform` strings, independent stop signals and raw
 lifecycle grace periods, ulimits, health checks, dependency conditions, short/long build contexts,
 non-empty Dockerfile, map/list build arguments, opaque target/network scalars, ordered raw platforms/tags, and
@@ -36,6 +58,10 @@ lookup. Separate project-processing coverage validates local long-form `service`
 Provider tests cover strict-string type recovery, empty types, ordered scalar/sequence option
 categories, duplicate/empty/malformed evidence, spans, interpolation redaction, generic merge,
 reset/override provenance, public APIs, and the no-execution/discovery boundary.
+
+Long-volume option tests cover every currently typed option block, valid and invalid scalar
+categories, list/map labels, duplicates, extensions, unknown nested fields, interpolation,
+reset/override, and the public authored/effective API without generation or runtime access.
 
 ### Processing tests
 

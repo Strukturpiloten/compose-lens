@@ -4,7 +4,7 @@ use std::{collections::BTreeSet, error::Error, fmt};
 
 use crate::{
     model::{
-        ComposeDocument, MemLimitUnit, ShmSizeUnit, StopGracePeriod, valid_generated_device_string,
+        ComposeDocument, CpuRtRuntime, MemLimitUnit, ShmSizeUnit, StopGracePeriod, valid_generated_device_string,
         valid_generated_expose_item, valid_generated_mem_amount, valid_generated_shm_amount,
         valid_generated_tmpfs_item, valid_hostname, valid_positive_pids_decimal, valid_pull_policy_duration,
         valid_ulimit_name,
@@ -54,6 +54,10 @@ pub enum GenerationError {
     InvalidAnnotationName,
     /// A generated annotation value is deferred, multiline, or NUL-bearing.
     InvalidAnnotationValue,
+    /// A generated top-level config or secret name is not a resolved single-line identifier.
+    InvalidFileResourceName,
+    /// A generated top-level config or secret `file` value is not a resolved single-line value.
+    InvalidFileResourcePath,
     /// A service-level temporary-filesystem item is deferred, malformed, or provider-dependent.
     InvalidTmpfsItem,
     /// A generated short device or long-device member is empty where required, multiline, or deferred.
@@ -80,6 +84,8 @@ pub enum GenerationError {
     InvalidShortComponent(&'static str),
     /// A short bind spelling needed for `SELinux` cannot be encoded unambiguously.
     InvalidSelinuxBind,
+    /// A raw generated service-runtime field is empty, deferred, multiline, or outside its safe syntax subset.
+    InvalidServiceRuntimeField(&'static str),
     /// A singleton field was configured more than once.
     DuplicateField(&'static str),
     /// A named generated collection contains the same name more than once.
@@ -147,6 +153,12 @@ impl fmt::Display for GenerationError {
                 .write_str("generated annotation name must be a non-empty resolved single-line string"),
             Self::InvalidAnnotationValue => formatter
                 .write_str("generated annotation value must be a resolved single-line string"),
+            Self::InvalidFileResourceName => formatter.write_str(
+                "generated top-level config or secret name must be a non-empty resolved single-line string",
+            ),
+            Self::InvalidFileResourcePath => formatter.write_str(
+                "generated top-level config or secret file must be a non-empty resolved single-line string",
+            ),
             Self::InvalidTmpfsItem => formatter.write_str(
                 "generated tmpfs item must be a non-empty path optionally followed by a colon and non-empty comma-separated raw options",
             ),
@@ -184,6 +196,7 @@ impl fmt::Display for GenerationError {
             }
             Self::InvalidSelinuxBind => formatter
                 .write_str("generated SELinux bind source and target must not contain the short-syntax `:` separator"),
+            Self::InvalidServiceRuntimeField(field) => write!(formatter, "generated {field} must use a resolved, non-empty field-valid spelling"),
             Self::DuplicateField(field) => write!(formatter, "generated field `{field}` was configured more than once"),
             Self::DuplicateName { kind, name } => {
                 write!(formatter, "generated {kind} `{name}` was added more than once")
@@ -1772,6 +1785,128 @@ impl GeneratedResource {
     }
 }
 
+/// A generated `cpu_rt_runtime` spelling with an explicit YAML scalar category.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedCpuRtRuntime {
+    /// An unquoted integer microsecond scalar.
+    Microseconds(GeneratedString),
+    /// A quoted Compose duration string.
+    Duration(GeneratedString),
+}
+
+impl GeneratedCpuRtRuntime {
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::Microseconds(value) | Self::Duration(value) => value.is_sensitive(),
+        }
+    }
+}
+
+/// Raw service resource and namespace fields selected for deterministic generated output.
+/// String-bearing variants are emitted quoted so caller-selected spelling remains a YAML string;
+/// `cpu_rt_runtime` explicitly selects either an integer microsecond scalar or a duration string.
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum GeneratedServiceRuntimeField {
+    /// Raw resolved service domain name.
+    Domainname(GeneratedString),
+    /// Raw resolved service isolation spelling.
+    Isolation(GeneratedString),
+    /// Raw resolved service MAC-address spelling.
+    MacAddress(GeneratedString),
+    /// Raw resolved service UTS spelling.
+    Uts(GeneratedString),
+    /// Literal API-socket mount choice.
+    UseApiSocket(bool),
+    /// Safe scalar GPU selector.
+    GpusAll(GeneratedString),
+    /// `cpu_rt_runtime` with an explicit integer or duration scalar category.
+    CpuRtRuntime(GeneratedCpuRtRuntime),
+    /// `cpu_shares` raw integer spelling.
+    CpuShares(GeneratedString),
+    /// `cpus` raw decimal spelling.
+    Cpus(GeneratedString),
+    /// `cpuset` raw string spelling.
+    Cpuset(GeneratedString),
+    /// Ordered raw `device_cgroup_rules` strings.
+    DeviceCgroupRules(Vec<GeneratedString>),
+    /// `ipc` raw mode spelling.
+    Ipc(GeneratedString),
+    /// `mem_reservation` raw byte-value spelling.
+    MemReservation(GeneratedString),
+    /// `mem_swappiness` raw integer spelling.
+    MemSwappiness(GeneratedString),
+    /// `memswap_limit` raw unlimited, zero, or positive byte-quantity spelling.
+    MemswapLimit(GeneratedString),
+    /// `network_mode` raw mode spelling.
+    NetworkMode(GeneratedString),
+    /// Literal `oom_kill_disable` choice.
+    OomKillDisable(bool),
+    /// `oom_score_adj` raw integer spelling.
+    OomScoreAdj(GeneratedString),
+    /// `pid` raw mode spelling.
+    Pid(GeneratedString),
+    /// `scale` raw integer spelling.
+    Scale(GeneratedString),
+    /// Ordered raw `volumes_from` strings.
+    VolumesFrom(Vec<GeneratedString>),
+}
+
+impl GeneratedServiceRuntimeField {
+    fn field_name(&self) -> &'static str {
+        match self {
+            Self::Domainname(_) => "domainname",
+            Self::Isolation(_) => "isolation",
+            Self::MacAddress(_) => "mac_address",
+            Self::Uts(_) => "uts",
+            Self::UseApiSocket(_) => "use_api_socket",
+            Self::GpusAll(_) => "gpus",
+            Self::CpuRtRuntime(_) => "cpu_rt_runtime",
+            Self::CpuShares(_) => "cpu_shares",
+            Self::Cpus(_) => "cpus",
+            Self::Cpuset(_) => "cpuset",
+            Self::DeviceCgroupRules(_) => "device_cgroup_rules",
+            Self::Ipc(_) => "ipc",
+            Self::MemReservation(_) => "mem_reservation",
+            Self::MemSwappiness(_) => "mem_swappiness",
+            Self::MemswapLimit(_) => "memswap_limit",
+            Self::NetworkMode(_) => "network_mode",
+            Self::OomKillDisable(_) => "oom_kill_disable",
+            Self::OomScoreAdj(_) => "oom_score_adj",
+            Self::Pid(_) => "pid",
+            Self::Scale(_) => "scale",
+            Self::VolumesFrom(_) => "volumes_from",
+        }
+    }
+
+    fn is_sensitive(&self) -> bool {
+        match self {
+            Self::Domainname(value)
+            | Self::Isolation(value)
+            | Self::MacAddress(value)
+            | Self::Uts(value)
+            | Self::GpusAll(value)
+            | Self::CpuShares(value)
+            | Self::Cpus(value)
+            | Self::Cpuset(value)
+            | Self::Ipc(value)
+            | Self::MemReservation(value)
+            | Self::MemSwappiness(value)
+            | Self::MemswapLimit(value)
+            | Self::NetworkMode(value)
+            | Self::OomScoreAdj(value)
+            | Self::Pid(value)
+            | Self::Scale(value) => value.is_sensitive(),
+            Self::DeviceCgroupRules(values) | Self::VolumesFrom(values) => {
+                values.iter().any(GeneratedString::is_sensitive)
+            }
+            Self::UseApiSocket(_) | Self::OomKillDisable(_) => false,
+            Self::CpuRtRuntime(value) => value.is_sensitive(),
+        }
+    }
+}
+
 /// A typed generated Compose service definition.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GeneratedService {
@@ -1817,6 +1952,7 @@ pub struct GeneratedService {
     ports: Vec<GeneratedPort>,
     mounts: Vec<GeneratedMount>,
     networks: Vec<GeneratedNetworkAttachment>,
+    runtime_fields: Vec<GeneratedServiceRuntimeField>,
 }
 
 impl GeneratedService {
@@ -1869,6 +2005,7 @@ impl GeneratedService {
             ports: Vec::new(),
             mounts: Vec::new(),
             networks: Vec::new(),
+            runtime_fields: Vec::new(),
         })
     }
 
@@ -1876,6 +2013,38 @@ impl GeneratedService {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Adds one generated raw-preserving resource or namespace field exactly once.
+    ///
+    /// All string values must be resolved single-line strings. The generated YAML is parse-back
+    /// validated with the rest of the document; this method deliberately makes no provider or
+    /// runtime support claim.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateField`] when the same runtime field was already
+    /// selected, or [`GenerationError::InvalidServiceRuntimeField`] when its value is not safe
+    /// for generated Compose YAML.
+    pub fn add_runtime_field(&mut self, field: GeneratedServiceRuntimeField) -> Result<(), GenerationError> {
+        if self
+            .runtime_fields
+            .iter()
+            .any(|existing| existing.field_name() == field.field_name())
+        {
+            return Err(GenerationError::DuplicateField(field.field_name()));
+        }
+        if !generated_runtime_field_safe(&field) {
+            return Err(GenerationError::InvalidServiceRuntimeField(field.field_name()));
+        }
+        self.runtime_fields.push(field);
+        Ok(())
+    }
+
+    /// Returns the selected raw-preserving generated runtime fields in insertion order.
+    #[must_use]
+    pub fn runtime_fields(&self) -> &[GeneratedServiceRuntimeField] {
+        &self.runtime_fields
     }
 
     /// Sets one resolved RFC-1123 service hostname exactly once.
@@ -2625,6 +2794,10 @@ impl GeneratedService {
                 .dns_options
                 .as_ref()
                 .is_some_and(|items| items.iter().any(GeneratedString::is_sensitive))
+            || self
+                .runtime_fields
+                .iter()
+                .any(GeneratedServiceRuntimeField::is_sensitive)
             || match self.dns_search.as_ref() {
                 Some(GeneratedDnsSearch::Scalar(value)) => value.is_sensitive(),
                 Some(GeneratedDnsSearch::List(values)) => values.iter().any(GeneratedString::is_sensitive),
@@ -2719,6 +2892,106 @@ impl GeneratedNetwork {
     }
 }
 
+/// One generated top-level config definition backed by a caller-supplied file spelling.
+///
+/// The builder deliberately supports no inline content, environment, external lifecycle,
+/// labels, template driver, or file access through this type.
+#[derive(Clone, Eq, PartialEq)]
+pub struct GeneratedConfigFileDefinition {
+    name: String,
+    file: GeneratedString,
+}
+
+impl GeneratedConfigFileDefinition {
+    /// Creates a config definition with one required resolved single-line `file` value.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, deferred, multiline, or NUL-bearing names and file values.
+    pub fn new(name: impl Into<String>, file: GeneratedString) -> Result<Self, GenerationError> {
+        Ok(Self {
+            name: generated_file_resource_name(name.into())?,
+            file: generated_file_resource_path(file)?,
+        })
+    }
+
+    /// Returns the exact generated config name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the explicit generated file value through its sensitivity boundary.
+    #[must_use]
+    pub const fn file(&self) -> &GeneratedString {
+        &self.file
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.file.is_sensitive()
+    }
+}
+
+impl fmt::Debug for GeneratedConfigFileDefinition {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GeneratedConfigFileDefinition")
+            .field("name", &self.name)
+            .field("file", &self.file)
+            .finish()
+    }
+}
+
+/// One generated top-level secret definition backed by a caller-supplied file spelling.
+///
+/// The builder deliberately supports no environment, driver, labels, template driver, external
+/// lifecycle, or file access through this type.
+#[derive(Clone, Eq, PartialEq)]
+pub struct GeneratedSecretFileDefinition {
+    name: String,
+    file: GeneratedString,
+}
+
+impl GeneratedSecretFileDefinition {
+    /// Creates a secret definition with one required resolved single-line `file` value.
+    ///
+    /// # Errors
+    ///
+    /// Rejects empty, deferred, multiline, or NUL-bearing names and file values.
+    pub fn new(name: impl Into<String>, file: GeneratedString) -> Result<Self, GenerationError> {
+        Ok(Self {
+            name: generated_file_resource_name(name.into())?,
+            file: generated_file_resource_path(file)?,
+        })
+    }
+
+    /// Returns the exact generated secret name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the explicit generated file value through its sensitivity boundary.
+    #[must_use]
+    pub const fn file(&self) -> &GeneratedString {
+        &self.file
+    }
+
+    fn is_sensitive(&self) -> bool {
+        self.file.is_sensitive()
+    }
+}
+
+impl fmt::Debug for GeneratedSecretFileDefinition {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GeneratedSecretFileDefinition")
+            .field("name", &self.name)
+            .field("file", &self.file)
+            .finish()
+    }
+}
+
 /// Builder for one new deterministic Compose document.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ComposeDocumentBuilder {
@@ -2726,6 +2999,8 @@ pub struct ComposeDocumentBuilder {
     services: Vec<GeneratedService>,
     networks: Vec<GeneratedNetwork>,
     volumes: Vec<GeneratedVolume>,
+    configs: Vec<GeneratedConfigFileDefinition>,
+    secrets: Vec<GeneratedSecretFileDefinition>,
 }
 
 impl ComposeDocumentBuilder {
@@ -2737,6 +3012,8 @@ impl ComposeDocumentBuilder {
             services: Vec::new(),
             networks: Vec::new(),
             volumes: Vec::new(),
+            configs: Vec::new(),
+            secrets: Vec::new(),
         }
     }
 
@@ -2824,6 +3101,24 @@ impl ComposeDocumentBuilder {
         )
     }
 
+    /// Adds one uniquely named top-level config file definition in output order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateName`] for a duplicate config name.
+    pub fn add_config_file(&mut self, config: GeneratedConfigFileDefinition) -> Result<(), GenerationError> {
+        insert_named(&mut self.configs, config, "config", GeneratedConfigFileDefinition::name)
+    }
+
+    /// Adds one uniquely named top-level secret file definition in output order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GenerationError::DuplicateName`] for a duplicate secret name.
+    pub fn add_secret_file(&mut self, secret: GeneratedSecretFileDefinition) -> Result<(), GenerationError> {
+        insert_named(&mut self.secrets, secret, "secret", GeneratedSecretFileDefinition::name)
+    }
+
     /// Generates YAML and parses it back through `ComposeLens`'s syntax and typed-model boundaries.
     ///
     /// # Errors
@@ -2836,7 +3131,9 @@ impl ComposeDocumentBuilder {
         }
         let sensitive = self.services.iter().any(GeneratedService::is_sensitive)
             || self.networks.iter().any(GeneratedNetwork::is_sensitive)
-            || self.volumes.iter().any(GeneratedVolume::is_sensitive);
+            || self.volumes.iter().any(GeneratedVolume::is_sensitive)
+            || self.configs.iter().any(GeneratedConfigFileDefinition::is_sensitive)
+            || self.secrets.iter().any(GeneratedSecretFileDefinition::is_sensitive);
         let text = render_document(&self);
         let syntax = SyntaxDocument::parse(source_id, text.clone())
             .map_err(|_| GenerationError::InternalInvariant("syntax-tree"))?;
@@ -2914,6 +3211,20 @@ fn render_document(project: &ComposeDocumentBuilder) -> String {
     }
     render_network_definitions(&mut output, &project.networks);
     render_volume_definitions(&mut output, &project.volumes);
+    render_file_definitions(
+        &mut output,
+        "configs",
+        &project.configs,
+        GeneratedConfigFileDefinition::name,
+        GeneratedConfigFileDefinition::file,
+    );
+    render_file_definitions(
+        &mut output,
+        "secrets",
+        &project.secrets,
+        GeneratedSecretFileDefinition::name,
+        GeneratedSecretFileDefinition::file,
+    );
     output
 }
 
@@ -2974,6 +3285,7 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     if let Some(mem_limit) = &service.mem_limit {
         render_mem_limit(output, mem_limit);
     }
+    render_runtime_fields(output, &service.runtime_fields);
     if let Some(devices) = &service.devices {
         render_devices(output, devices);
     }
@@ -3016,6 +3328,174 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     render_ports(output, &service.ports);
     render_mounts(output, &service.mounts);
     render_networks(output, &service.networks);
+}
+
+fn render_runtime_fields(output: &mut String, fields: &[GeneratedServiceRuntimeField]) {
+    for field in fields {
+        match field {
+            GeneratedServiceRuntimeField::Domainname(value) => {
+                render_optional_string(output, "domainname", Some(value));
+            }
+            GeneratedServiceRuntimeField::Isolation(value) => {
+                render_optional_string(output, "isolation", Some(value));
+            }
+            GeneratedServiceRuntimeField::MacAddress(value) => {
+                render_optional_string(output, "mac_address", Some(value));
+            }
+            GeneratedServiceRuntimeField::Uts(value) => {
+                render_optional_string(output, "uts", Some(value));
+            }
+            GeneratedServiceRuntimeField::UseApiSocket(value) => {
+                write_field(output, 2, "use_api_socket");
+                output.push_str(if *value { "true\n" } else { "false\n" });
+            }
+            GeneratedServiceRuntimeField::GpusAll(value) => {
+                render_optional_string(output, "gpus", Some(value));
+            }
+            GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(value)) => {
+                write_field(output, 2, "cpu_rt_runtime");
+                output.push_str(value.expose());
+                output.push('\n');
+            }
+            GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(value)) => {
+                render_optional_string(output, "cpu_rt_runtime", Some(value));
+            }
+            GeneratedServiceRuntimeField::CpuShares(value) => {
+                render_optional_string(output, "cpu_shares", Some(value));
+            }
+            GeneratedServiceRuntimeField::Cpus(value) => {
+                render_optional_string(output, "cpus", Some(value));
+            }
+            GeneratedServiceRuntimeField::Cpuset(value) => {
+                render_optional_string(output, "cpuset", Some(value));
+            }
+            GeneratedServiceRuntimeField::DeviceCgroupRules(values) => {
+                render_configured_string_sequence(output, "device_cgroup_rules", values);
+            }
+            GeneratedServiceRuntimeField::Ipc(value) => {
+                render_optional_string(output, "ipc", Some(value));
+            }
+            GeneratedServiceRuntimeField::MemReservation(value) => {
+                render_optional_string(output, "mem_reservation", Some(value));
+            }
+            GeneratedServiceRuntimeField::MemSwappiness(value) => {
+                render_optional_string(output, "mem_swappiness", Some(value));
+            }
+            GeneratedServiceRuntimeField::MemswapLimit(value) => {
+                render_optional_string(output, "memswap_limit", Some(value));
+            }
+            GeneratedServiceRuntimeField::NetworkMode(value) => {
+                render_optional_string(output, "network_mode", Some(value));
+            }
+            GeneratedServiceRuntimeField::OomKillDisable(value) => {
+                write_field(output, 2, "oom_kill_disable");
+                output.push_str(if *value { "true\n" } else { "false\n" });
+            }
+            GeneratedServiceRuntimeField::OomScoreAdj(value) => {
+                render_optional_string(output, "oom_score_adj", Some(value));
+            }
+            GeneratedServiceRuntimeField::Pid(value) => {
+                render_optional_string(output, "pid", Some(value));
+            }
+            GeneratedServiceRuntimeField::Scale(value) => {
+                render_optional_string(output, "scale", Some(value));
+            }
+            GeneratedServiceRuntimeField::VolumesFrom(values) => {
+                render_configured_string_sequence(output, "volumes_from", values);
+            }
+        }
+    }
+}
+
+fn generated_runtime_field_safe(field: &GeneratedServiceRuntimeField) -> bool {
+    let safe = |value: &GeneratedString| !value.expose().is_empty() && !value.expose().contains(['\n', '\r', '$']);
+    let unsigned = |value: &GeneratedString| safe(value) && value.expose().bytes().all(|byte| byte.is_ascii_digit());
+    let bounded_unsigned = |value: &GeneratedString| unsigned(value) && value.expose().parse::<i128>().is_ok();
+    let signed_range = |value: &GeneratedString, min: i32, max: i32| {
+        safe(value)
+            && value
+                .expose()
+                .parse::<i32>()
+                .is_ok_and(|number| (min..=max).contains(&number))
+    };
+    let decimal = |value: &GeneratedString| safe(value) && normalize_generated_decimal(value.expose()).is_some();
+    let reference = |value: &GeneratedString| {
+        safe(value)
+            && (!value.expose().contains(':')
+                || value
+                    .expose()
+                    .split_once(':')
+                    .is_some_and(|(_, target)| !target.is_empty()))
+    };
+    match field {
+        GeneratedServiceRuntimeField::Domainname(value)
+        | GeneratedServiceRuntimeField::Isolation(value)
+        | GeneratedServiceRuntimeField::MacAddress(value)
+        | GeneratedServiceRuntimeField::Uts(value)
+        | GeneratedServiceRuntimeField::Cpuset(value) => safe(value),
+        GeneratedServiceRuntimeField::UseApiSocket(_) | GeneratedServiceRuntimeField::OomKillDisable(_) => true,
+        GeneratedServiceRuntimeField::GpusAll(value) => safe(value) && value.expose() == "all",
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(value)) => unsigned(value),
+        GeneratedServiceRuntimeField::CpuShares(value) | GeneratedServiceRuntimeField::Scale(value) => {
+            bounded_unsigned(value)
+        }
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(value)) => {
+            safe(value)
+                && matches!(
+                    CpuRtRuntime::parse_string(value.expose().to_owned()),
+                    CpuRtRuntime::Duration(_)
+                )
+        }
+        GeneratedServiceRuntimeField::Cpus(value) => decimal(value),
+        GeneratedServiceRuntimeField::DeviceCgroupRules(values) => values.iter().all(safe),
+        GeneratedServiceRuntimeField::Ipc(value)
+        | GeneratedServiceRuntimeField::NetworkMode(value)
+        | GeneratedServiceRuntimeField::Pid(value) => reference(value),
+        GeneratedServiceRuntimeField::MemReservation(value) => {
+            safe(value) && valid_generated_runtime_memory(value.expose(), false)
+        }
+        GeneratedServiceRuntimeField::MemswapLimit(value) => {
+            safe(value) && valid_generated_runtime_memory(value.expose(), true)
+        }
+        GeneratedServiceRuntimeField::MemSwappiness(value) => signed_range(value, 0, 100),
+        GeneratedServiceRuntimeField::OomScoreAdj(value) => signed_range(value, -1000, 1000),
+        GeneratedServiceRuntimeField::VolumesFrom(values) => values.iter().all(reference),
+    }
+}
+
+fn normalize_generated_decimal(value: &str) -> Option<()> {
+    let (whole, fraction) = value.split_once('.').map_or((value, ""), |parts| parts);
+    let valid_shape = if value.contains('.') {
+        !whole.is_empty() && !fraction.is_empty()
+    } else {
+        !whole.is_empty()
+    };
+    (valid_shape
+        && whole.bytes().all(|byte| byte.is_ascii_digit())
+        && fraction.bytes().all(|byte| byte.is_ascii_digit())
+        && value.bytes().filter(|byte| *byte == b'.').count() <= 1)
+        .then_some(())
+}
+
+/// Validates resolved byte-value spellings without applying a host-size conversion.
+///
+/// `memswap_limit` additionally permits Compose's explicit `-1` unlimited branch. The
+/// relationship between a positive swap value and `mem_limit` remains a project diagnostic,
+/// because it cannot be decided while fields are added independently.
+fn valid_generated_runtime_memory(value: &str, allow_unlimited: bool) -> bool {
+    if allow_unlimited && value == "-1" {
+        return true;
+    }
+    if !value.is_empty() && value.bytes().all(|byte| byte == b'0') {
+        return true;
+    }
+    let Some(amount) = ["kb", "mb", "gb", "b", "k", "m", "g"]
+        .into_iter()
+        .find_map(|unit| value.strip_suffix(unit))
+    else {
+        return false;
+    };
+    !amount.is_empty() && amount.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn render_pids_limit(output: &mut String, limit: &GeneratedPidsLimit) {
@@ -3577,6 +4057,27 @@ fn render_volume_definitions(output: &mut String, volumes: &[GeneratedVolume]) {
     }
 }
 
+fn render_file_definitions<T>(
+    output: &mut String,
+    field: &str,
+    definitions: &[T],
+    name: impl Fn(&T) -> &str,
+    file: impl Fn(&T) -> &GeneratedString,
+) {
+    if definitions.is_empty() {
+        return;
+    }
+    output.push_str(field);
+    output.push_str(":\n");
+    for definition in definitions {
+        output.push_str("  ");
+        write_quoted(output, name(definition));
+        output.push_str(":\n    file: ");
+        write_quoted(output, file(definition).expose());
+        output.push('\n');
+    }
+}
+
 fn render_volume_definition(output: &mut String, volume: &GeneratedVolumeDefinition) {
     output.push_str("  ");
     write_quoted(output, &volume.name);
@@ -3677,6 +4178,22 @@ fn require_generated_string(kind: &'static str, value: &GeneratedString) -> Resu
         return Err(GenerationError::EmptyValue(kind));
     }
     Ok(())
+}
+
+fn generated_file_resource_name(value: String) -> Result<String, GenerationError> {
+    if value.is_empty() || value.contains(['\0', '\r', '\n', '$']) {
+        Err(GenerationError::InvalidFileResourceName)
+    } else {
+        Ok(value)
+    }
+}
+
+fn generated_file_resource_path(value: GeneratedString) -> Result<GeneratedString, GenerationError> {
+    if value.expose().is_empty() || value.expose().contains(['\0', '\r', '\n', '$']) {
+        Err(GenerationError::InvalidFileResourcePath)
+    } else {
+        Ok(value)
+    }
 }
 
 fn validate_generated_device_member(

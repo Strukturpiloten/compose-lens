@@ -35,7 +35,8 @@ mapfile -d '' markdown_files < <(
 mapfile -d '' structured_files < <(
   git ls-files --cached --others --exclude-standard -z -- \
     '*.json' '*.jsonc' '*.yaml' '*.yml' '*.code-workspace' \
-    ':(exclude,glob)fixtures/**'
+    ':(exclude,glob)fixtures/**' \
+    ':(exclude)schema/compose-spec.json'
 )
 mapfile -d '' toml_files < <(
   git ls-files --cached --others --exclude-standard -z -- '*.toml'

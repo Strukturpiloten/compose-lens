@@ -2,7 +2,10 @@
 
 mod support;
 
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeSet, fs, path::PathBuf, process::Command};
+
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 const FIXTURE_SUITES: &[&str] = &[
     "syntax",
@@ -26,7 +29,7 @@ fn repository_supply_chain_has_single_sources_and_immutable_pins() -> Result<(),
 #[test]
 fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
     const ACTION: &str = "obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9";
-    const CONFIGURATION: &str = "package: compose-lens\n          release-type: patch";
+    const CONFIGURATION: &str = "package: compose-lens";
 
     for workflow_name in ["ci.yml", "release.yml"] {
         let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
@@ -34,9 +37,12 @@ fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
             .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
 
         let configured_action = format!("uses: {ACTION}\n        with:\n          {CONFIGURATION}");
-        if workflow.matches(ACTION).count() != 1 || workflow.matches(&configured_action).count() != 1 {
+        if workflow.matches(ACTION).count() != 1
+            || workflow.matches(&configured_action).count() != 1
+            || workflow.contains("release-type:")
+        {
             return Err(format!(
-                "{workflow_name} must contain one pinned cargo-semver-checks action for compose-lens patch releases"
+                "{workflow_name} must contain one version-derived cargo-semver-checks action for compose-lens"
             ));
         }
     }
@@ -97,7 +103,7 @@ fn local_developer_workflow_covers_format_lint_test_and_release_checks() -> Resu
         "${CARGO_TARGET_DIR:-${repository_root}/target}/cargo-home",
         "env CARGO_HOME=\"${semver_cargo_home}\"",
         "cargo semver-checks check-release",
-        "--package compose-lens --release-type patch",
+        "--package compose-lens",
     ] {
         if !script.contains(required) {
             return Err(format!("local validation runner missing `{required}`"));
@@ -106,6 +112,10 @@ fn local_developer_workflow_covers_format_lint_test_and_release_checks() -> Resu
 
     if script.contains("semver_cargo_home=\"${CARGO_HOME:-}\"") {
         return Err("local SemVer checks must not reuse ambient CARGO_HOME".to_owned());
+    }
+
+    if script.contains("--release-type") {
+        return Err("local SemVer checks must derive the release type from Cargo versions".to_owned());
     }
 
     for (path, required) in [
@@ -151,6 +161,7 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
         "git ls-files --cached --others --exclude-standard",
         ":(exclude,glob)fixtures/**",
         ":(exclude,glob)conformance/records/**",
+        ":(exclude)schema/compose-spec.json",
         "markdownlint-cli2 --fix",
         "prettier --write",
         "prettier --check",
@@ -204,6 +215,309 @@ fn routine_link_checks_are_offline_and_external_checks_are_scheduled() -> Result
         }
     }
 
+    Ok(())
+}
+
+#[test]
+fn specification_drift_check_is_scheduled_manual_and_read_only() -> Result<(), String> {
+    let workflow = read_repository_file(".github/workflows/specification-drift.yml")?;
+    for required in [
+        "schedule:",
+        "workflow_dispatch:",
+        "contents: read",
+        "bash scripts/check-specification-drift.sh",
+    ] {
+        if !workflow.contains(required) {
+            return Err(format!("specification-drift workflow is missing `{required}`"));
+        }
+    }
+    for forbidden in ["pull_request:", "push:", "issues: write", "pull-requests: write"] {
+        if workflow.contains(forbidden) {
+            return Err(format!("specification-drift workflow must not contain `{forbidden}`"));
+        }
+    }
+
+    let script = read_repository_file("scripts/check-specification-drift.sh")?;
+    for required in [
+        "https://raw.githubusercontent.com/compose-spec/compose-spec/main/schema/compose-spec.json",
+        "Committed snapshot SHA-256:",
+        "added:",
+        "removed:",
+        "Inventory drift detected:",
+        "Content-only drift detected:",
+        "no inventory-key changes",
+    ] {
+        if !script.contains(required) {
+            return Err(format!("specification-drift script is missing `{required}`"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn specification_drift_reports_content_only_changes_without_hiding_them() -> Result<(), String> {
+    let root = repository_root();
+    let upstream_path = std::env::temp_dir().join(format!(
+        "compose-lens-specification-drift-{}-content-only.json",
+        std::process::id()
+    ));
+    let mut content = fs::read(root.join("schema/compose-spec.json"))
+        .map_err(|error| format!("failed to read committed schema: {error}"))?;
+    content.push(b'\n');
+    fs::write(&upstream_path, content)
+        .map_err(|error| format!("failed to write temporary upstream schema: {error}"))?;
+
+    let command_result = Command::new("bash")
+        .arg(root.join("scripts/check-specification-drift.sh"))
+        .env(
+            "COMPOSE_SPECIFICATION_URL",
+            format!("file://{}", upstream_path.display()),
+        )
+        .output();
+    let cleanup_result = fs::remove_file(&upstream_path);
+    let output = command_result.map_err(|error| format!("failed to run specification-drift script: {error}"))?;
+    cleanup_result.map_err(|error| format!("failed to remove temporary upstream schema: {error}"))?;
+
+    if output.status.success() {
+        return Err("content-only schema drift must fail the check".to_owned());
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.contains("no inventory-key changes") {
+        return Err(format!(
+            "content-only drift must report unchanged inventory sets; stdout was {stdout:?}"
+        ));
+    }
+    if !stderr.contains("Content-only drift detected")
+        || !stderr.contains("nested, prose, or other non-inventory schema changes")
+    {
+        return Err(format!(
+            "content-only drift must provide actionable review guidance; stderr was {stderr:?}"
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn compose_schema_snapshot_and_inventory_are_complete() -> Result<(), String> {
+    let root = repository_root();
+    let schema_path = root.join("schema/compose-spec.json");
+    let inventory_path = root.join("schema/compose-key-inventory.json");
+    let schema_bytes =
+        fs::read(&schema_path).map_err(|error| format!("failed to read {}: {error}", schema_path.display()))?;
+    let schema: Value = serde_json::from_slice(&schema_bytes)
+        .map_err(|error| format!("failed to parse {}: {error}", schema_path.display()))?;
+    let inventory: Value = serde_json::from_str(
+        &fs::read_to_string(&inventory_path)
+            .map_err(|error| format!("failed to read {}: {error}", inventory_path.display()))?,
+    )
+    .map_err(|error| format!("failed to parse {}: {error}", inventory_path.display()))?;
+
+    validate_inventory_header(&inventory)?;
+
+    let expected_digest = inventory
+        .pointer("/upstream/sha256")
+        .and_then(Value::as_str)
+        .ok_or("inventory must declare `upstream.sha256`")?;
+    let digest = format!("{:x}", Sha256::digest(schema_bytes));
+    if digest != expected_digest {
+        return Err(format!(
+            "schema digest mismatch: expected {expected_digest}, found {digest}"
+        ));
+    }
+
+    for (field, expected) in [
+        ("repository", "https://github.com/compose-spec/compose-spec"),
+        ("commit", "11296e387ba76c77db1db768b9153a4304a3c9bd"),
+        ("path", "schema/compose-spec.json"),
+        ("blob", "fe0e45d68542fee8ba7b1e483760c2f8802f8a4c"),
+    ] {
+        let actual = inventory
+            .pointer(&format!("/upstream/{field}"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("inventory must declare `upstream.{field}`"))?;
+        if actual != expected {
+            return Err(format!(
+                "inventory `upstream.{field}` must be `{expected}`, found `{actual}`"
+            ));
+        }
+    }
+
+    validate_closed_object(&schema, "", "root")?;
+    validate_closed_object(&schema, "/$defs/service", "service")?;
+    validate_inventory_set(&schema, &inventory, "root", "/properties")?;
+    validate_inventory_set(&schema, &inventory, "service", "/$defs/service/properties")
+}
+
+#[test]
+fn inventory_accepts_each_allowed_classification_with_required_shape() -> Result<(), String> {
+    for entry in [
+        serde_json::json!({ "classification": "typed" }),
+        serde_json::json!({
+            "classification": "preserved-only",
+            "rationale": "Nested semantics remain intentionally outside this bounded inventory."
+        }),
+        serde_json::json!({
+            "classification": "intentionally-unsupported",
+            "rationale": "The supported public contract deliberately excludes this key."
+        }),
+    ] {
+        validate_classification("service", "example", &entry)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn inventory_rejects_missing_rationales_unknown_classes_and_key_drift() -> Result<(), String> {
+    let missing_rationale = serde_json::json!({ "classification": "preserved-only" });
+    let missing_rationale_error = validate_classification("root", "example", &missing_rationale)
+        .err()
+        .ok_or_else(|| "non-typed entries must require rationales".to_owned())?;
+    assert!(missing_rationale_error.contains("rationale"));
+
+    let unknown_classification = serde_json::json!({ "classification": "eventually" });
+    let unknown_classification_error = validate_classification("root", "example", &unknown_classification)
+        .err()
+        .ok_or_else(|| "unknown classifications must fail".to_owned())?;
+    assert!(unknown_classification_error.contains("unsupported classification"));
+
+    let schema = serde_json::json!({ "properties": { "known": {} } });
+    let inventory = serde_json::json!({
+        "root": { "unexpected": { "classification": "typed" } }
+    });
+    let key_drift_error = validate_inventory_set(&schema, &inventory, "root", "/properties")
+        .err()
+        .ok_or_else(|| "schema and inventory keys must match exactly".to_owned())?;
+    assert!(key_drift_error.contains("does not match schema"));
+    Ok(())
+}
+
+fn validate_closed_object(schema: &Value, pointer: &str, name: &str) -> Result<(), String> {
+    let object = schema
+        .pointer(pointer)
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("schema {name} must be an object"))?;
+    if object.get("additionalProperties") != Some(&Value::Bool(false)) {
+        return Err(format!("schema {name} must set `additionalProperties` to false"));
+    }
+    let patterns = object
+        .get("patternProperties")
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("schema {name} must declare `patternProperties`"))?;
+    if patterns.len() != 1 || !patterns.contains_key("^x-") {
+        return Err(format!("schema {name} must allow only the `^x-` extension namespace"));
+    }
+    Ok(())
+}
+
+fn validate_inventory_header(inventory: &Value) -> Result<(), String> {
+    let root = inventory.as_object().ok_or("inventory must be an object")?;
+    let expected_top_level = BTreeSet::from([
+        "root".to_owned(),
+        "schema".to_owned(),
+        "service".to_owned(),
+        "upstream".to_owned(),
+    ]);
+    let actual_top_level: BTreeSet<_> = root.keys().cloned().collect();
+    if actual_top_level != expected_top_level {
+        return Err(format!(
+            "inventory must contain only schema, upstream, root, and service; found {actual_top_level:?}"
+        ));
+    }
+    if root.get("schema") != Some(&Value::from(1)) {
+        return Err("inventory `schema` must be integer 1".to_owned());
+    }
+
+    let upstream = root
+        .get("upstream")
+        .and_then(Value::as_object)
+        .ok_or("inventory `upstream` must be an object")?;
+    let expected_upstream = BTreeSet::from([
+        "blob".to_owned(),
+        "commit".to_owned(),
+        "path".to_owned(),
+        "repository".to_owned(),
+        "sha256".to_owned(),
+    ]);
+    let actual_upstream: BTreeSet<_> = upstream.keys().cloned().collect();
+    if actual_upstream != expected_upstream {
+        return Err(format!(
+            "inventory upstream metadata must have the pinned source fields only; found {actual_upstream:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_inventory_set(schema: &Value, inventory: &Value, scope: &str, schema_pointer: &str) -> Result<(), String> {
+    let schema_keys = object_keys(
+        schema
+            .pointer(schema_pointer)
+            .ok_or_else(|| format!("schema missing `{schema_pointer}`"))?,
+        &format!("schema {scope} properties"),
+    )?;
+    let inventory_properties = inventory
+        .get(scope)
+        .ok_or_else(|| format!("inventory missing `{scope}`"))?;
+    let inventory_keys = object_keys(inventory_properties, &format!("inventory {scope}"))?;
+
+    if schema_keys != inventory_keys {
+        let missing = schema_keys.difference(&inventory_keys).cloned().collect::<Vec<_>>();
+        let unexpected = inventory_keys.difference(&schema_keys).cloned().collect::<Vec<_>>();
+        return Err(format!(
+            "{scope} inventory does not match schema; missing {missing:?}, unexpected {unexpected:?}"
+        ));
+    }
+
+    for (key, entry) in inventory_properties
+        .as_object()
+        .ok_or_else(|| format!("inventory {scope} must be an object"))?
+    {
+        validate_classification(scope, key, entry)?;
+    }
+    Ok(())
+}
+
+fn object_keys(value: &Value, name: &str) -> Result<BTreeSet<String>, String> {
+    value
+        .as_object()
+        .ok_or_else(|| format!("{name} must be an object"))
+        .map(|properties| properties.keys().cloned().collect())
+}
+
+fn validate_classification(scope: &str, key: &str, entry: &Value) -> Result<(), String> {
+    let entry = entry
+        .as_object()
+        .ok_or_else(|| format!("inventory {scope}.{key} must be an object"))?;
+    let classification = entry
+        .get("classification")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("inventory {scope}.{key} must declare `classification`"))?;
+    match classification {
+        "typed" => {
+            if entry.len() != 1 {
+                return Err(format!(
+                    "typed inventory entry {scope}.{key} may contain only `classification`"
+                ));
+            }
+        }
+        "preserved-only" | "intentionally-unsupported" => {
+            let rationale = entry
+                .get("rationale")
+                .and_then(Value::as_str)
+                .filter(|rationale| !rationale.trim().is_empty())
+                .ok_or_else(|| format!("non-typed inventory entry {scope}.{key} needs a non-empty `rationale`"))?;
+            if entry.len() != 2 || rationale.is_empty() {
+                return Err(format!(
+                    "non-typed inventory entry {scope}.{key} may contain only `classification` and `rationale`"
+                ));
+            }
+        }
+        other => {
+            return Err(format!(
+                "inventory {scope}.{key} has unsupported classification `{other}`"
+            ));
+        }
+    }
     Ok(())
 }
 

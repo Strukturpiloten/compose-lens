@@ -46,6 +46,8 @@ It is designed for tools that need more than strict deserialization: source-awar
   quota, duration, CPU, host, runtime, provider, or cross-format interpretation.
 - Preserve authored and effective service `cpu_rt_period` YAML number, duration, expression, and
   other-string categories without CPU, scheduler, host, runtime, provider, or cross-format interpretation.
+- Preserve authored and effective service CPU, memory, namespace, OOM, scale, device-cgroup, and
+  `volumes_from` spellings with merge provenance and local-reference diagnostics, without host or runtime inference.
 - Preserve, merge, and inspect service image pull policies and raw `pull_refresh_after` strings
   without inventing provider behavior, refresh semantics, or defaults.
 - Preserve, merge, inspect, and generate independent service stop signals and raw Compose stop
@@ -183,6 +185,7 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 - [Real-world fixture corpus](docs/real-world-corpus.md)
 - [Cross-repository implementation plan](docs/implementation-plan.md)
 - [API stability policy](docs/api-stability.md)
+- [0.2.0 release notes](docs/releases/0.2.0.md) — complete closed-schema coverage and consolidated source-aware APIs
 - [0.1.17 release notes](docs/releases/0.1.17.md) — test boundaries, coverage guards, and local developer workflow
 - [0.1.16 release notes](docs/releases/0.1.16.md) — Build, Deploy, source-aware service configuration, and generated network/volume support
 - [0.1.15 release notes](docs/releases/0.1.15.md) — DNS, expose, annotations, and security options

@@ -173,6 +173,7 @@ pub fn validate_references(project: &MergedProject, selection: Option<&ProfileSe
     let volumes = resource_names(project, "volumes");
     let configs = resource_names(project, "configs");
     let secrets = resource_names(project, "secrets");
+    let models = resource_names(project, "models");
     let mut references = Vec::new();
 
     for service in services {
@@ -198,6 +199,7 @@ pub fn validate_references(project: &MergedProject, selection: Option<&ProfileSe
             &mut diagnostics,
         );
         collect_service_references(service, &service_names, selection, &mut references, &mut diagnostics);
+        validate_service_models(service, &models, &mut diagnostics);
         validate_dependency_healthchecks(service, services, selection, &mut diagnostics);
     }
 
@@ -205,6 +207,53 @@ pub fn validate_references(project: &MergedProject, selection: Option<&ProfileSe
         references,
         diagnostics,
     }
+}
+
+fn validate_service_models(service: &MergedEntry, models: &BTreeSet<&str>, diagnostics: &mut Vec<Diagnostic>) {
+    let Some(value) = service.value().get("models") else {
+        return;
+    };
+    match value.kind() {
+        crate::merge::MergedValueKind::Sequence(items) => {
+            for item in items {
+                if let Some(scalar) = item.as_scalar() {
+                    diagnose_missing_model(
+                        service.key(),
+                        scalar.value(),
+                        super::effective_span(item),
+                        models,
+                        diagnostics,
+                    );
+                }
+            }
+        }
+        crate::merge::MergedValueKind::Mapping(entries) => {
+            for entry in entries {
+                diagnose_missing_model(service.key(), entry.key(), entry_span(entry), models, diagnostics);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn diagnose_missing_model(
+    _service: &str,
+    model: &str,
+    source: SourceSpan,
+    models: &BTreeSet<&str>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if models.contains(model) {
+        return;
+    }
+    diagnostics.push(
+        Diagnostic::new(
+            MISSING_REFERENCE,
+            Severity::Error,
+            "selected service model binding references an undefined model",
+        )
+        .with_label(DiagnosticLabel::primary(source, "model is not declared")),
+    );
 }
 
 fn resource_names<'a>(project: &'a MergedProject, field: &str) -> BTreeSet<&'a str> {
@@ -388,18 +437,25 @@ fn collect_service_references(
             );
         }
     }
-    if let Some(links) = service.value().get("links").and_then(MergedValue::as_sequence) {
-        for link in links {
-            if let Some(scalar) = link.as_scalar() {
-                let target = scalar
-                    .value()
-                    .split_once(':')
-                    .map_or(scalar.value(), |(target, _)| target);
+    if let Some(values) = service.value().get("volumes_from").and_then(MergedValue::as_sequence) {
+        for value in values {
+            let Some(scalar) = value.as_scalar() else {
+                continue;
+            };
+            let source = scalar.value().rsplit_once(':').map_or(scalar.value(), |(name, mode)| {
+                if matches!(mode, "ro" | "rw") {
+                    name
+                } else {
+                    scalar.value()
+                }
+            });
+            let source = source.strip_prefix("service:").unwrap_or(source);
+            if !source.starts_with("container:") {
                 push_service(
                     service.key(),
-                    target,
-                    super::effective_span(link),
-                    ReferenceKind::Link,
+                    source,
+                    super::effective_span(value),
+                    ReferenceKind::ServiceNamespace,
                     scalar.is_sensitive(),
                     true,
                     service_names,
@@ -410,6 +466,7 @@ fn collect_service_references(
             }
         }
     }
+    collect_service_links(service, service_names, selection, references, diagnostics);
     if let Some(extends) = service.value().get("extends") {
         if extends.get("file").is_none() {
             if let Some(target) = extends.get("service") {
@@ -429,6 +486,39 @@ fn collect_service_references(
                 }
             }
         }
+    }
+}
+
+fn collect_service_links(
+    service: &MergedEntry,
+    service_names: &BTreeSet<&str>,
+    selection: Option<&ProfileSelection>,
+    references: &mut Vec<Reference>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(links) = service.value().get("links").and_then(MergedValue::as_sequence) else {
+        return;
+    };
+    for link in links {
+        let Some(scalar) = link.as_scalar() else {
+            continue;
+        };
+        let target = scalar
+            .value()
+            .split_once(':')
+            .map_or(scalar.value(), |(target, _)| target);
+        push_service(
+            service.key(),
+            target,
+            super::effective_span(link),
+            ReferenceKind::Link,
+            scalar.is_sensitive(),
+            true,
+            service_names,
+            selection,
+            references,
+            diagnostics,
+        );
     }
 }
 

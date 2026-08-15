@@ -8,27 +8,33 @@ use crate::model::{
     ANNOTATIONS_DUPLICATE_NAME, ANNOTATIONS_EMPTY_NAME, ANNOTATIONS_EXPECTED_STRING, ANNOTATIONS_KEY_ONLY,
     BUILD_DOCKERFILE_INLINE_CONFLICT, BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM, BindOptions, BlkioScalar, BooleanValue,
     BuildNoCache, BuildProvenance, BuildSbom, CAP_ADD_DUPLICATE_ITEM, CAP_DROP_DUPLICATE_ITEM, CPU_COUNT_NEGATIVE,
-    CPU_PERCENT_OUT_OF_RANGE, CapabilityAddItem, CapabilityDropItem, CgroupNamespace, Command, ComposeScalar,
-    ConfigDefinition, CpuCount, CpuPercent, CpuPeriod, CpuQuota, CpuRtPeriod, DEPLOY_ENDPOINT_MODE_PORTABILITY,
-    DEPLOY_MODE_PORTABILITY, DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT,
+    CPU_PERCENT_OUT_OF_RANGE, CPU_RT_RUNTIME_INVALID, CapabilityAddItem, CapabilityDropItem, CgroupNamespace, Command,
+    ComposeScalar, ConfigDefinition, CpuCount, CpuPercent, CpuPeriod, CpuQuota, CpuRtPeriod, CpuRtRuntime, Cpus,
+    DEPLOY_ENDPOINT_MODE_PORTABILITY, DEPLOY_MODE_PORTABILITY, DEPLOY_RESERVATION_DEVICE_ALLOCATION_SELECTOR_CONFLICT,
     DEPLOY_RESERVATION_DEVICE_CAPABILITY_DUPLICATE_ITEM, DEPLOY_RESERVATION_DEVICE_OPTIONS_DUPLICATE_ITEM,
     DEPLOY_RESERVATION_DEVICE_OPTIONS_INVALID_KEY, DEPLOY_ROLLBACK_CONFIG_ORDER_PORTABILITY,
-    DEPLOY_UPDATE_CONFIG_ORDER_PORTABILITY, DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING, DNS_EXPECTED_FORM,
-    DNS_EXPECTED_STRING, DNS_OPT_DUPLICATE_ITEM, DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING,
-    DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM, DNS_SEARCH_EXPECTED_STRING, DependencyCondition,
-    DeployDiscreteResourceValue, DeployEndpointMode, DeployMode, DeployPlacementMaxReplicasPerNode, DeployReplicas,
-    DeployReservationDeviceCount, DeployResourceCpus, DeployResourceMemory, DeployResourcePids, DeployRestartCondition,
-    DeployRestartDuration, DeployRestartMaxAttempts, DeployRollbackMaxFailureRatio, DeployRollbackOrder,
-    DeployRollbackParallelism, DeployUpdateMaxFailureRatio, DeployUpdateOrder, DeployUpdateParallelism,
-    EXPOSE_DUPLICATE_ITEM, EXPOSE_EXPECTED_SCALAR, EXPOSE_EXPECTED_SEQUENCE, EXPOSE_INVALID_ITEM,
-    EXPOSE_PROVIDER_DEPENDENT, EXTENDS_MISSING_SERVICE, Entrypoint, EnvironmentFileFormat, EnvironmentFileFormatKind,
-    ExposeItemKind, ExposeScalarKind, HealthcheckDuration, HealthcheckRetries, HealthcheckTest, HealthcheckTestKind,
-    HostAddress, Hostname, HostnameKind, ImageReference, Ipam, IpamConfig, KeyValueEntry,
-    LOGGING_DRIVER_EXPECTED_STRING, LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY, LOGGING_OPTION_EXPECTED_SCALAR,
+    DEPLOY_UPDATE_CONFIG_ORDER_PORTABILITY, DEVELOP_WATCH_EXEC_MISSING_COMMAND, DEVELOP_WATCH_INVALID_ACTION,
+    DEVELOP_WATCH_MISSING_ACTION, DEVELOP_WATCH_MISSING_EXEC, DEVELOP_WATCH_MISSING_PATH, DEVELOP_WATCH_MISSING_TARGET,
+    DEVICE_EXPECTED_FORM, DEVICE_EXPECTED_STRING, DNS_EXPECTED_FORM, DNS_EXPECTED_STRING, DNS_OPT_DUPLICATE_ITEM,
+    DNS_OPT_EXPECTED_SEQUENCE, DNS_OPT_EXPECTED_STRING, DNS_SEARCH_DUPLICATE_ITEM, DNS_SEARCH_EXPECTED_FORM,
+    DNS_SEARCH_EXPECTED_STRING, DependencyCondition, DeployDiscreteResourceValue, DeployEndpointMode, DeployMode,
+    DeployPlacementMaxReplicasPerNode, DeployReplicas, DeployReservationDeviceCount, DeployResourceCpus,
+    DeployResourceMemory, DeployResourcePids, DeployRestartCondition, DeployRestartDuration, DeployRestartMaxAttempts,
+    DeployRollbackMaxFailureRatio, DeployRollbackOrder, DeployRollbackParallelism, DeployUpdateMaxFailureRatio,
+    DeployUpdateOrder, DeployUpdateParallelism, Develop, DevelopWatch, DevelopWatchExec, EXPOSE_DUPLICATE_ITEM,
+    EXPOSE_EXPECTED_SCALAR, EXPOSE_EXPECTED_SEQUENCE, EXPOSE_INVALID_ITEM, EXPOSE_PROVIDER_DEPENDENT,
+    EXTENDS_MISSING_SERVICE, Entrypoint, Environment, EnvironmentFileFormat, EnvironmentFileFormatKind,
+    EnvironmentListEntry, EnvironmentMapEntry, ExposeItemKind, ExposeScalarKind, ExternalNameMapping, FieldReference,
+    GPU_MISSING_CAPABILITIES, GpuDevice, GpuOptions, Gpus, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
+    HealthcheckTestKind, HostAddress, Hostname, HostnameKind, ImageMountOptions, ImageReference, IncludeItem,
+    IncludeLong, Includes, Ipam, IpamConfig, IpcMode, KeyValueEntry, LOGGING_DRIVER_EXPECTED_STRING,
+    LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY, LOGGING_OPTION_EXPECTED_SCALAR,
     LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue, Located, LongPort, LongVolumeMount, MEM_LIMIT_AMBIGUOUS_ZERO,
-    MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER, MemLimit, MemLimitKind,
-    MemLimitScalarKind, MountType, NetworkDefinition, PIDS_LIMIT_AMBIGUOUS_ZERO, POST_START_MISSING_COMMAND,
-    PRE_STOP_MISSING_COMMAND, PROVIDER_MISSING_TYPE, PidsLimit, PidsLimitKind, Port, PullPolicy, RestartPolicy,
+    MEM_LIMIT_EXPECTED_VALUE, MEM_LIMIT_PROVIDER_DEPENDENT_STRING, MEM_LIMIT_SCHEMA_NUMBER,
+    MEMSWAP_LIMIT_EXPECTED_VALUE, MEMSWAP_LIMIT_INVALID, MemLimit, MemLimitKind, MemLimitScalarKind, MemswapLimit,
+    MemswapLimitKind, MemswapLimitScalarKind, ModelDefinition, ModelDefinitions, MountType, NetworkDefinition,
+    NetworkMode, PIDS_LIMIT_AMBIGUOUS_ZERO, POST_START_MISSING_COMMAND, PRE_STOP_MISSING_COMMAND,
+    PROVIDER_MISSING_TYPE, PidMode, PidsLimit, PidsLimitKind, Port, PullPolicy, ResourceExternal, RestartPolicy,
     SECURITY_OPT_APPARMOR_CONFLICT, SECURITY_OPT_APPARMOR_NEAR_MISS, SECURITY_OPT_EMPTY_ITEM,
     SECURITY_OPT_EXPECTED_SEQUENCE, SECURITY_OPT_EXPECTED_STRING, SECURITY_OPT_NO_NEW_PRIVILEGES_CONFLICT,
     SECURITY_OPT_NO_NEW_PRIVILEGES_NEAR_MISS, SECURITY_OPT_SECCOMP_CONFLICT, SECURITY_OPT_SECCOMP_NEAR_MISS,
@@ -39,12 +45,14 @@ use crate::model::{
     SECURITY_OPT_SECURITY_LABEL_TYPE_CONFLICT, SECURITY_OPT_SECURITY_LABEL_TYPE_NEAR_MISS, SHM_SIZE_AMBIGUOUS_ZERO,
     SHM_SIZE_EXPECTED_VALUE, SHM_SIZE_PROVIDER_DEPENDENT_NUMBER, SHM_SIZE_PROVIDER_DEPENDENT_STRING,
     SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING,
-    SecretDefinition, SecurityOptionCandidateCounts, SecurityOptionKind, SelinuxRelabel, ServiceNetwork,
-    ServiceNetworks, ShmSize, ShmSizeKind, ShmSizeScalarKind, ShortDevice, ShortExtraHost, ShortPort, ShortVolumeMount,
-    StopGracePeriod, TMPFS_EXPECTED_FORM, TMPFS_EXPECTED_STRING, TMPFS_PROVIDER_DEPENDENT, TmpfsItem, TmpfsItemKind,
-    ULIMIT_INVALID_NAME, ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceMode, UserSpec,
+    SecretDefinition, SecurityOptionCandidateCounts, SecurityOptionKind, SelinuxRelabel, ServiceInteger,
+    ServiceModelBinding, ServiceModels, ServiceNetwork, ServiceNetworks, ShmSize, ShmSizeKind, ShmSizeScalarKind,
+    ShortDevice, ShortExtraHost, ShortPort, ShortVolumeMount, StopGracePeriod, TMPFS_EXPECTED_FORM,
+    TMPFS_EXPECTED_STRING, TMPFS_PROVIDER_DEPENDENT, TmpfsItem, TmpfsItemKind, TmpfsMountOptions, ULIMIT_INVALID_NAME,
+    ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UserNamespaceMode, UserSpec,
     VOLUME_EXTERNAL_DRIVER_CONFIGURATION, VOLUME_EXTERNAL_LABELS_CONFIGURATION, VolumeDefinition, VolumeMount,
-    classify_expose_item, classify_security_option, security_path_option_diagnostic, valid_ulimit_name,
+    VolumeMountOptions, VolumesFrom, classify_expose_item, classify_security_option, security_path_option_diagnostic,
+    valid_ulimit_name,
 };
 use crate::profiles::ProfileSelection;
 use crate::resolution::{SELECTION_PROJECT_MISMATCH, service_in_scope};
@@ -62,6 +70,43 @@ pub const PROJECT_MISSING_FIELD: DiagnosticCode = DiagnosticCode::new("compose.p
 
 /// A scalar cannot be represented by the requested native value type.
 pub const PROJECT_INVALID_VALUE: DiagnosticCode = DiagnosticCode::new("compose.project.invalid-value");
+/// A malformed effective item from a sequence requiring YAML string scalars.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectInvalidServiceStringItem {
+    span: SourceSpan,
+}
+
+type ProjectStringCollection = Option<ProjectValue<Vec<ProjectValue<String>>>>;
+type ProjectVolumesFromCollection = Option<ProjectValue<Vec<ProjectValue<VolumesFrom>>>>;
+type ProjectInvalidServiceStringItems = Vec<ProjectInvalidServiceStringItem>;
+impl ProjectInvalidServiceStringItem {
+    /// Returns the malformed item's effective source span.
+    #[must_use]
+    pub const fn span(self) -> SourceSpan {
+        self.span
+    }
+}
+/// Service CPU allocation conflicts with its deploy CPU limit spelling.
+pub const SERVICE_CPUS_DEPLOY_LIMIT_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.cpus.deploy-limit-conflict");
+/// Service memory reservation coexists with a deploy reservation.
+pub const SERVICE_MEMORY_RESERVATION_DEPLOY_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.mem-reservation.deploy-reservation-conflict");
+/// A memory-plus-swap limit requires an explicit service memory limit.
+pub const SERVICE_MEMSWAP_REQUIRES_MEMORY_LIMIT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.memswap-limit.requires-mem-limit");
+/// A positive memory-plus-swap limit is below a comparable service memory limit.
+pub const SERVICE_MEMSWAP_BELOW_MEMORY_LIMIT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.memswap-limit.below-mem-limit");
+/// Service network mode and explicit networks are mutually exclusive.
+pub const SERVICE_NETWORK_MODE_NETWORKS_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.network-mode.networks-conflict");
+/// Service scale conflicts with the deploy replica spelling.
+pub const SERVICE_SCALE_DEPLOY_REPLICAS_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.scale.deploy-replicas-conflict");
+/// A scalar GPU selector coexists with deploy device reservations and needs caller reconciliation.
+pub const SERVICE_GPUS_DEPLOY_DEVICES_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.service.gpus.deploy-devices-conflict");
 
 /// A typed value together with every source span that contributed to it during merging.
 #[derive(Clone, PartialEq, Eq)]
@@ -1121,6 +1166,59 @@ pub enum ProjectDnsSearch {
     Scalar(ProjectValue<String>),
     /// One effective ordered list, including an explicit empty or reset list.
     List(Vec<ProjectValue<String>>),
+}
+
+/// Effective service `label_file` syntax with collection and per-item merge provenance retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ProjectLabelFiles {
+    /// One effective raw label-file path scalar.
+    Scalar(ProjectValue<String>),
+    /// One effective ordered list, including an explicit empty or reset list.
+    List(Vec<ProjectValue<String>>),
+}
+
+/// Effective malformed `label_file` list-item evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectLabelFileEvidence {
+    reference: ProjectFieldReference,
+}
+
+impl ProjectLabelFileEvidence {
+    fn new(reference: ProjectFieldReference) -> Self {
+        Self { reference }
+    }
+
+    /// Returns the source-aware malformed item reference.
+    #[must_use]
+    pub const fn reference(&self) -> &ProjectFieldReference {
+        &self.reference
+    }
+}
+
+/// Effective service `label_file` values with malformed list-item evidence retained.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectServiceLabelFiles {
+    form: ProjectLabelFiles,
+    unmodeled_items: Vec<ProjectLabelFileEvidence>,
+}
+
+impl ProjectServiceLabelFiles {
+    fn new(form: ProjectLabelFiles, unmodeled_items: Vec<ProjectLabelFileEvidence>) -> Self {
+        Self { form, unmodeled_items }
+    }
+
+    /// Returns the effective scalar or ordered-list syntax form.
+    #[must_use]
+    pub const fn form(&self) -> &ProjectLabelFiles {
+        &self.form
+    }
+
+    /// Returns malformed list items retained as source-aware evidence.
+    #[must_use]
+    pub fn unmodeled_items(&self) -> &[ProjectLabelFileEvidence] {
+        &self.unmodeled_items
+    }
 }
 
 /// One effective service `expose` scalar with authored spelling and YAML kind retained.
@@ -2709,15 +2807,200 @@ pub enum ProjectPreStartHook {
     Unmodeled,
 }
 
+/// Effective nested evidence for one service-volume mount.
+///
+/// The collection returned by [`ProjectService::volume_mount_options`] keeps the same order as
+/// [`ProjectService::volumes`]. It supplements, rather than replaces, the stable native mount API.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectVolumeMountOptions {
+    consistency: Option<ProjectValue<String>>,
+    bind: Option<ProjectBindMountOptions>,
+    image: Option<ProjectImageMountOptions>,
+    tmpfs: Option<ProjectTmpfsMountOptions>,
+    volume: Option<ProjectNamedVolumeMountOptions>,
+    unmodeled_fields: Vec<ProjectFieldReference>,
+}
+
+impl ProjectVolumeMountOptions {
+    fn new() -> Self {
+        Self {
+            consistency: None,
+            bind: None,
+            image: None,
+            tmpfs: None,
+            volume: None,
+            unmodeled_fields: Vec::new(),
+        }
+    }
+    /// Returns the effective mount-consistency token and its contributors.
+    #[must_use]
+    pub const fn consistency(&self) -> Option<&ProjectValue<String>> {
+        self.consistency.as_ref()
+    }
+    /// Returns effective bind-option evidence.
+    #[must_use]
+    pub const fn bind(&self) -> Option<&ProjectBindMountOptions> {
+        self.bind.as_ref()
+    }
+    /// Returns effective image-mount option evidence.
+    #[must_use]
+    pub const fn image(&self) -> Option<&ProjectImageMountOptions> {
+        self.image.as_ref()
+    }
+    /// Returns effective tmpfs-mount option evidence.
+    #[must_use]
+    pub const fn tmpfs(&self) -> Option<&ProjectTmpfsMountOptions> {
+        self.tmpfs.as_ref()
+    }
+    /// Returns effective named-volume option evidence.
+    #[must_use]
+    pub const fn volume(&self) -> Option<&ProjectNamedVolumeMountOptions> {
+        self.volume.as_ref()
+    }
+    /// Returns malformed or unrecognized long-mount fields with effective provenance.
+    #[must_use]
+    pub fn unmodeled_fields(&self) -> &[ProjectFieldReference] {
+        &self.unmodeled_fields
+    }
+}
+
+/// Effective bind-option evidence for one long mount.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectBindMountOptions {
+    recursive: Option<ProjectValue<String>>,
+    extension_fields: Vec<ProjectFieldReference>,
+    unknown_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectBindMountOptions {
+    /// Returns the effective recursive bind token and its contributors.
+    #[must_use]
+    pub const fn recursive(&self) -> Option<&ProjectValue<String>> {
+        self.recursive.as_ref()
+    }
+    /// Returns retained effective `x-` bind-option fields.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[ProjectFieldReference] {
+        &self.extension_fields
+    }
+    /// Returns malformed or unrecognized effective bind-option fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[ProjectFieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Effective image-mount option evidence for one long mount.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectImageMountOptions {
+    subpath: Option<ProjectValue<String>>,
+    extension_fields: Vec<ProjectFieldReference>,
+    unknown_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectImageMountOptions {
+    /// Returns the effective image subpath and its contributors.
+    #[must_use]
+    pub const fn subpath(&self) -> Option<&ProjectValue<String>> {
+        self.subpath.as_ref()
+    }
+    /// Returns retained effective `x-` image-option fields.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[ProjectFieldReference] {
+        &self.extension_fields
+    }
+    /// Returns malformed or unrecognized effective image-option fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[ProjectFieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Effective tmpfs-mount option evidence for one long mount.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectTmpfsMountOptions {
+    size: Option<ProjectValue<ComposeScalar>>,
+    mode: Option<ProjectValue<ComposeScalar>>,
+    extension_fields: Vec<ProjectFieldReference>,
+    unknown_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectTmpfsMountOptions {
+    /// Returns the effective raw tmpfs size scalar and its contributors.
+    #[must_use]
+    pub const fn size(&self) -> Option<&ProjectValue<ComposeScalar>> {
+        self.size.as_ref()
+    }
+    /// Returns the effective raw tmpfs mode scalar and its contributors.
+    #[must_use]
+    pub const fn mode(&self) -> Option<&ProjectValue<ComposeScalar>> {
+        self.mode.as_ref()
+    }
+    /// Returns retained effective `x-` tmpfs-option fields.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[ProjectFieldReference] {
+        &self.extension_fields
+    }
+    /// Returns malformed or unrecognized effective tmpfs-option fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[ProjectFieldReference] {
+        &self.unknown_fields
+    }
+}
+
+/// Effective named-volume option evidence for one long mount.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectNamedVolumeMountOptions {
+    nocopy: Option<ProjectValue<BooleanValue>>,
+    subpath: Option<ProjectValue<String>>,
+    labels: Option<ProjectValue<Labels>>,
+    extension_fields: Vec<ProjectFieldReference>,
+    unknown_fields: Vec<ProjectFieldReference>,
+}
+impl ProjectNamedVolumeMountOptions {
+    /// Returns the effective copy-prevention choice and its contributors.
+    #[must_use]
+    pub const fn nocopy(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.nocopy.as_ref()
+    }
+    /// Returns the effective named-volume subpath and its contributors.
+    #[must_use]
+    pub const fn subpath(&self) -> Option<&ProjectValue<String>> {
+        self.subpath.as_ref()
+    }
+    /// Returns effective named-volume labels in their list/map form with provenance.
+    #[must_use]
+    pub const fn labels(&self) -> Option<&ProjectValue<Labels>> {
+        self.labels.as_ref()
+    }
+    /// Returns retained effective `x-` named-volume-option fields.
+    #[must_use]
+    pub fn extension_fields(&self) -> &[ProjectFieldReference] {
+        &self.extension_fields
+    }
+    /// Returns malformed or unrecognized effective named-volume-option fields.
+    #[must_use]
+    pub fn unknown_fields(&self) -> &[ProjectFieldReference] {
+        &self.unknown_fields
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct ProjectVolumeViews {
+    volumes: Option<ProjectValue<Vec<ProjectValue<VolumeMount>>>>,
+    options: Option<ProjectValue<Vec<ProjectValue<ProjectVolumeMountOptions>>>>,
+}
+
 /// One selected service with the native fields needed by the first conversion boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectService {
     name: ProjectKey,
     provenance: MergeProvenance,
     hostname: Option<ProjectValue<Hostname>>,
+    domainname: Option<ProjectValue<String>>,
     container_name: Option<ProjectValue<String>>,
     image: Option<ProjectValue<ImageReference>>,
     platform: Option<ProjectValue<String>>,
+    isolation: Option<ProjectValue<String>>,
+    mac_address: Option<ProjectValue<String>>,
+    uts: Option<ProjectValue<String>>,
     entrypoint: Option<ProjectValue<Entrypoint>>,
     command: Option<ProjectValue<Command>>,
     credential_spec: Option<ProjectValue<ProjectCredentialSpec>>,
@@ -2734,11 +3017,19 @@ pub struct ProjectService {
     stdin_open: Option<ProjectValue<BooleanValue>>,
     tty: Option<ProjectValue<BooleanValue>>,
     privileged: Option<ProjectValue<BooleanValue>>,
+    use_api_socket: Option<ProjectValue<BooleanValue>>,
     environment: Option<ProjectValue<ProjectEnvironment>>,
     environment_files: Option<ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>>,
+    label_files: Option<ProjectValue<ProjectServiceLabelFiles>>,
     labels: Option<ProjectValue<ProjectLabels>>,
     annotations: Option<ProjectValue<ProjectAnnotations>>,
     extra_hosts: Option<ProjectValue<ProjectExtraHosts>>,
+    external_links: Option<ProjectValue<Vec<ProjectValue<String>>>>,
+    links: Option<ProjectValue<Vec<ProjectValue<String>>>>,
+    storage_opt: Option<ProjectValue<Labels>>,
+    models: Option<ProjectValue<ServiceModels>>,
+    gpus: Option<ProjectValue<Gpus>>,
+    develop: Option<ProjectValue<Develop>>,
     user: Option<ProjectValue<UserSpec>>,
     userns_mode: Option<ProjectValue<UserNamespaceMode>>,
     group_add: Option<ProjectValue<Vec<ProjectValue<String>>>>,
@@ -2758,6 +3049,23 @@ pub struct ProjectService {
     cpu_period: Option<ProjectValue<CpuPeriod>>,
     cpu_quota: Option<ProjectValue<CpuQuota>>,
     cpu_rt_period: Option<ProjectValue<CpuRtPeriod>>,
+    cpu_rt_runtime: Option<ProjectValue<CpuRtRuntime>>,
+    cpu_shares: Option<ProjectValue<ServiceInteger>>,
+    cpus: Option<ProjectValue<Cpus>>,
+    cpuset: Option<ProjectValue<String>>,
+    device_cgroup_rules: Option<ProjectValue<Vec<ProjectValue<String>>>>,
+    invalid_device_cgroup_rules: Vec<ProjectInvalidServiceStringItem>,
+    ipc: Option<ProjectValue<IpcMode>>,
+    mem_reservation: Option<ProjectValue<MemLimit>>,
+    mem_swappiness: Option<ProjectValue<ServiceInteger>>,
+    memswap_limit: Option<ProjectValue<MemswapLimit>>,
+    network_mode: Option<ProjectValue<NetworkMode>>,
+    oom_kill_disable: Option<ProjectValue<BooleanValue>>,
+    oom_score_adj: Option<ProjectValue<ServiceInteger>>,
+    pid: Option<ProjectValue<PidMode>>,
+    scale: Option<ProjectValue<ServiceInteger>>,
+    volumes_from: Option<ProjectValue<Vec<ProjectValue<VolumesFrom>>>>,
+    invalid_volumes_from: Vec<ProjectInvalidServiceStringItem>,
     shm_size: Option<ProjectValue<ShmSize>>,
     mem_limit: Option<ProjectValue<MemLimit>>,
     tmpfs: Option<ProjectValue<ProjectTmpfs>>,
@@ -2775,7 +3083,7 @@ pub struct ProjectService {
     deploy: Option<ProjectValue<ProjectDeploy>>,
     depends_on: Option<ProjectValue<ProjectDependsOn>>,
     ports: Option<ProjectValue<Vec<ProjectValue<Port>>>>,
-    volumes: Option<ProjectValue<Vec<ProjectValue<VolumeMount>>>>,
+    volume_views: ProjectVolumeViews,
     configs: Option<ProjectValue<Vec<ProjectValue<ProjectGrant>>>>,
     secrets: Option<ProjectValue<Vec<ProjectValue<ProjectGrant>>>>,
     networks: Option<ProjectValue<ServiceNetworks>>,
@@ -2789,9 +3097,13 @@ impl ProjectService {
             name: ProjectKey::from_entry(entry),
             provenance: entry.value().provenance().clone(),
             hostname: None,
+            domainname: None,
             container_name: None,
             image: None,
             platform: None,
+            isolation: None,
+            mac_address: None,
+            uts: None,
             entrypoint: None,
             command: None,
             credential_spec: None,
@@ -2808,11 +3120,19 @@ impl ProjectService {
             stdin_open: None,
             tty: None,
             privileged: None,
+            use_api_socket: None,
             environment: None,
             environment_files: None,
+            label_files: None,
             labels: None,
             annotations: None,
             extra_hosts: None,
+            external_links: None,
+            links: None,
+            storage_opt: None,
+            models: None,
+            gpus: None,
+            develop: None,
             user: None,
             userns_mode: None,
             group_add: None,
@@ -2832,6 +3152,23 @@ impl ProjectService {
             cpu_period: None,
             cpu_quota: None,
             cpu_rt_period: None,
+            cpu_rt_runtime: None,
+            cpu_shares: None,
+            cpus: None,
+            cpuset: None,
+            device_cgroup_rules: None,
+            invalid_device_cgroup_rules: Vec::new(),
+            ipc: None,
+            mem_reservation: None,
+            mem_swappiness: None,
+            memswap_limit: None,
+            network_mode: None,
+            oom_kill_disable: None,
+            oom_score_adj: None,
+            pid: None,
+            scale: None,
+            volumes_from: None,
+            invalid_volumes_from: Vec::new(),
             shm_size: None,
             mem_limit: None,
             tmpfs: None,
@@ -2849,7 +3186,7 @@ impl ProjectService {
             deploy: None,
             depends_on: None,
             ports: None,
-            volumes: None,
+            volume_views: ProjectVolumeViews::default(),
             configs: None,
             secrets: None,
             networks: None,
@@ -2876,6 +3213,12 @@ impl ProjectService {
         self.hostname.as_ref()
     }
 
+    /// Returns the effective raw service domain name without DNS or runtime interpretation.
+    #[must_use]
+    pub const fn domainname(&self) -> Option<&ProjectValue<String>> {
+        self.domainname.as_ref()
+    }
+
     /// Returns the effective explicit runtime container name.
     #[must_use]
     pub const fn container_name(&self) -> Option<&ProjectValue<String>> {
@@ -2892,6 +3235,24 @@ impl ProjectService {
     #[must_use]
     pub const fn platform(&self) -> Option<&ProjectValue<String>> {
         self.platform.as_ref()
+    }
+
+    /// Returns the effective raw service isolation spelling.
+    #[must_use]
+    pub const fn isolation(&self) -> Option<&ProjectValue<String>> {
+        self.isolation.as_ref()
+    }
+
+    /// Returns the effective raw service MAC-address spelling.
+    #[must_use]
+    pub const fn mac_address(&self) -> Option<&ProjectValue<String>> {
+        self.mac_address.as_ref()
+    }
+
+    /// Returns the effective raw service UTS-mode spelling.
+    #[must_use]
+    pub const fn uts(&self) -> Option<&ProjectValue<String>> {
+        self.uts.as_ref()
     }
 
     /// Returns the effective entrypoint without normalizing scalar and list forms.
@@ -3002,6 +3363,12 @@ impl ProjectService {
         self.privileged.as_ref()
     }
 
+    /// Returns the effective API-socket choice without inspecting a local socket or environment.
+    #[must_use]
+    pub const fn use_api_socket(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.use_api_socket.as_ref()
+    }
+
     /// Returns environment entries normalized by key with per-entry syntax retained.
     #[must_use]
     pub const fn environment(&self) -> Option<&ProjectValue<ProjectEnvironment>> {
@@ -3012,6 +3379,12 @@ impl ProjectService {
     #[must_use]
     pub const fn environment_files(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectEnvironmentFile>>>> {
         self.environment_files.as_ref()
+    }
+
+    /// Returns effective scalar or ordered-list label-file paths. No file contents are read.
+    #[must_use]
+    pub const fn label_files(&self) -> Option<&ProjectValue<ProjectServiceLabelFiles>> {
+        self.label_files.as_ref()
     }
 
     /// Returns effective service labels normalized by key with entry syntax retained.
@@ -3030,6 +3403,42 @@ impl ProjectService {
     #[must_use]
     pub const fn extra_hosts(&self) -> Option<&ProjectValue<ProjectExtraHosts>> {
         self.extra_hosts.as_ref()
+    }
+
+    /// Returns effective external links without resolving external services.
+    #[must_use]
+    pub const fn external_links(&self) -> Option<&ProjectValue<Vec<ProjectValue<String>>>> {
+        self.external_links.as_ref()
+    }
+
+    /// Returns effective legacy links without injecting dependency behavior.
+    #[must_use]
+    pub const fn links(&self) -> Option<&ProjectValue<Vec<ProjectValue<String>>>> {
+        self.links.as_ref()
+    }
+
+    /// Returns effective storage options without storage-driver interpretation.
+    #[must_use]
+    pub const fn storage_opt(&self) -> Option<&ProjectValue<Labels>> {
+        self.storage_opt.as_ref()
+    }
+
+    /// Returns effective raw model bindings without model-provider resolution.
+    #[must_use]
+    pub const fn models(&self) -> Option<&ProjectValue<ServiceModels>> {
+        self.models.as_ref()
+    }
+
+    /// Returns the effective raw scalar GPU selector.
+    #[must_use]
+    pub const fn gpus(&self) -> Option<&ProjectValue<Gpus>> {
+        self.gpus.as_ref()
+    }
+
+    /// Returns source provenance for the effective `develop` declaration.
+    #[must_use]
+    pub const fn develop(&self) -> Option<&ProjectValue<Develop>> {
+        self.develop.as_ref()
     }
 
     /// Returns the effective container user and optional group spelling.
@@ -3162,6 +3571,91 @@ impl ProjectService {
     pub const fn cpu_rt_period(&self) -> Option<&ProjectValue<CpuRtPeriod>> {
         self.cpu_rt_period.as_ref()
     }
+    /// Returns the effective real-time CPU-runtime spelling.
+    #[must_use]
+    pub const fn cpu_rt_runtime(&self) -> Option<&ProjectValue<CpuRtRuntime>> {
+        self.cpu_rt_runtime.as_ref()
+    }
+    /// Returns effective relative CPU shares.
+    #[must_use]
+    pub const fn cpu_shares(&self) -> Option<&ProjectValue<ServiceInteger>> {
+        self.cpu_shares.as_ref()
+    }
+    /// Returns effective raw decimal CPU allocation.
+    #[must_use]
+    pub const fn cpus(&self) -> Option<&ProjectValue<Cpus>> {
+        self.cpus.as_ref()
+    }
+    /// Returns effective raw CPU-set spelling.
+    #[must_use]
+    pub const fn cpuset(&self) -> Option<&ProjectValue<String>> {
+        self.cpuset.as_ref()
+    }
+    /// Returns ordered effective device-cgroup rules, including duplicates.
+    #[must_use]
+    pub const fn device_cgroup_rules(&self) -> Option<&ProjectValue<Vec<ProjectValue<String>>>> {
+        self.device_cgroup_rules.as_ref()
+    }
+    /// Returns malformed device-cgroup rule items retained with effective spans.
+    #[must_use]
+    pub fn invalid_device_cgroup_rules(&self) -> &[ProjectInvalidServiceStringItem] {
+        &self.invalid_device_cgroup_rules
+    }
+    /// Returns the effective IPC mode.
+    #[must_use]
+    pub const fn ipc(&self) -> Option<&ProjectValue<IpcMode>> {
+        self.ipc.as_ref()
+    }
+    /// Returns the effective raw memory reservation.
+    #[must_use]
+    pub const fn mem_reservation(&self) -> Option<&ProjectValue<MemLimit>> {
+        self.mem_reservation.as_ref()
+    }
+    /// Returns effective memory swappiness.
+    #[must_use]
+    pub const fn mem_swappiness(&self) -> Option<&ProjectValue<ServiceInteger>> {
+        self.mem_swappiness.as_ref()
+    }
+    /// Returns effective raw memory-plus-swap limit.
+    #[must_use]
+    pub const fn memswap_limit(&self) -> Option<&ProjectValue<MemswapLimit>> {
+        self.memswap_limit.as_ref()
+    }
+    /// Returns the effective network mode.
+    #[must_use]
+    pub const fn network_mode(&self) -> Option<&ProjectValue<NetworkMode>> {
+        self.network_mode.as_ref()
+    }
+    /// Returns the effective OOM-kill setting.
+    #[must_use]
+    pub const fn oom_kill_disable(&self) -> Option<&ProjectValue<BooleanValue>> {
+        self.oom_kill_disable.as_ref()
+    }
+    /// Returns effective OOM-score adjustment.
+    #[must_use]
+    pub const fn oom_score_adj(&self) -> Option<&ProjectValue<ServiceInteger>> {
+        self.oom_score_adj.as_ref()
+    }
+    /// Returns the effective PID mode.
+    #[must_use]
+    pub const fn pid(&self) -> Option<&ProjectValue<PidMode>> {
+        self.pid.as_ref()
+    }
+    /// Returns effective scale spelling.
+    #[must_use]
+    pub const fn scale(&self) -> Option<&ProjectValue<ServiceInteger>> {
+        self.scale.as_ref()
+    }
+    /// Returns ordered effective `volumes_from` references.
+    #[must_use]
+    pub const fn volumes_from(&self) -> Option<&ProjectValue<Vec<ProjectValue<VolumesFrom>>>> {
+        self.volumes_from.as_ref()
+    }
+    /// Returns malformed `volumes_from` items retained with effective spans.
+    #[must_use]
+    pub fn invalid_volumes_from(&self) -> &[ProjectInvalidServiceStringItem] {
+        &self.invalid_volumes_from
+    }
 
     /// Returns the effective raw-preserving service shared-memory size.
     #[must_use]
@@ -3263,7 +3757,16 @@ impl ProjectService {
     /// Returns the effective volume-mount collection and per-item provenance.
     #[must_use]
     pub const fn volumes(&self) -> Option<&ProjectValue<Vec<ProjectValue<VolumeMount>>>> {
-        self.volumes.as_ref()
+        self.volume_views.volumes.as_ref()
+    }
+
+    /// Returns effective long-mount option blocks with nested contributor provenance and retained evidence.
+    ///
+    /// This companion view does not replace [`Self::volumes`]: the latter remains the stable
+    /// syntax-preserving mount API. Short mounts have an empty option view at their matching index.
+    #[must_use]
+    pub const fn volume_mount_options(&self) -> Option<&ProjectValue<Vec<ProjectValue<ProjectVolumeMountOptions>>>> {
+        self.volume_views.options.as_ref()
     }
 
     /// Returns effective service config grants with syntax and field-level provenance retained.
@@ -3456,6 +3959,9 @@ pub struct ProjectView {
     base_directory: PathBuf,
     provenance: MergeProvenance,
     name: Option<ProjectValue<String>>,
+    version: Option<ProjectValue<String>>,
+    include: Option<ProjectValue<Includes>>,
+    models: Option<ProjectValue<ModelDefinitions>>,
     services: Vec<ProjectService>,
     networks: Vec<ProjectResource<NetworkDefinition>>,
     volumes: Vec<ProjectResource<VolumeDefinition>>,
@@ -3487,6 +3993,24 @@ impl ProjectView {
     #[must_use]
     pub const fn name(&self) -> Option<&ProjectValue<String>> {
         self.name.as_ref()
+    }
+
+    /// Returns the effective obsolete version spelling without selecting provider behavior.
+    #[must_use]
+    pub const fn version(&self) -> Option<&ProjectValue<String>> {
+        self.version.as_ref()
+    }
+
+    /// Returns simple effective include paths in merge order; no files are loaded.
+    #[must_use]
+    pub const fn include(&self) -> Option<&ProjectValue<Includes>> {
+        self.include.as_ref()
+    }
+
+    /// Returns effective model definitions without loading a provider or context.
+    #[must_use]
+    pub const fn models(&self) -> Option<&ProjectValue<ModelDefinitions>> {
+        self.models.as_ref()
     }
 
     /// Returns profile-active services in merged order.
@@ -3612,6 +4136,9 @@ impl<'a> Builder<'a> {
         let root = self.project.root();
         let entries = root.as_mapping().unwrap_or_default();
         let mut name = None;
+        let mut version = None;
+        let mut include = None;
+        let mut models = None;
         let mut services = Vec::new();
         let mut networks = Vec::new();
         let mut volumes = Vec::new();
@@ -3621,6 +4148,19 @@ impl<'a> Builder<'a> {
         for entry in entries {
             match entry.key() {
                 "name" => name = self.project_string(entry.value(), "project name"),
+                "version" => version = self.project_string(entry.value(), "Compose version"),
+                "include" => {
+                    include = self.includes(entry);
+                    if include.is_none() {
+                        self.record_root_unmodeled(&[], entry);
+                    }
+                }
+                "models" => {
+                    models = self.model_definitions(entry.value());
+                    if models.is_none() {
+                        self.record_root_unmodeled(&[], entry);
+                    }
+                }
                 "services" => services = self.services(entry.value()),
                 "networks" => networks = self.network_definitions(entry.value()),
                 "volumes" => volumes = self.volume_definitions(entry.value()),
@@ -3636,6 +4176,9 @@ impl<'a> Builder<'a> {
                 base_directory: self.project.base_directory().to_path_buf(),
                 provenance: root.provenance().clone(),
                 name,
+                version,
+                include,
+                models,
                 services,
                 networks,
                 volumes,
@@ -3667,6 +4210,9 @@ impl<'a> Builder<'a> {
         let mut service = ProjectService::from_entry(entry);
         let path = ["services".to_owned(), entry.key().to_owned()];
         for field in fields {
+            if self.set_extra_service_field(&mut service, field, &path) {
+                continue;
+            }
             match field.key() {
                 "hostname" => service.hostname = self.hostname(field.value()),
                 "container_name" => {
@@ -3715,9 +4261,6 @@ impl<'a> Builder<'a> {
                 "security_opt" => service.security_options = self.security_options(field.value()),
                 "working_dir" => service.working_dir = self.project_string(field.value(), "service working directory"),
                 "read_only" => service.read_only = self.read_only(field.value()),
-                "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "pids_limit" => {
-                    self.set_service_count(&mut service, field, &path);
-                }
                 "shm_size" => service.shm_size = self.shm_size(field.value()),
                 "mem_limit" => service.mem_limit = self.mem_limit(field.value()),
                 "tmpfs" => service.tmpfs = self.tmpfs(field.value()),
@@ -3749,7 +4292,7 @@ impl<'a> Builder<'a> {
                 "deploy" => self.set_service_deploy(&mut service, field, &path),
                 "depends_on" => service.depends_on = self.depends_on(field.value(), &path),
                 "ports" => service.ports = self.ports(field.value(), &path),
-                "volumes" => service.volumes = self.volumes(field.value(), &path),
+                "volumes" => self.set_volumes(&mut service, field, &path),
                 "configs" => service.configs = self.grants(field.value(), &path, "config"),
                 "secrets" => service.secrets = self.grants(field.value(), &path, "secret"),
                 "networks" => service.networks = self.service_networks(field.value(), &path),
@@ -3760,7 +4303,1137 @@ impl<'a> Builder<'a> {
         service
             .unmodeled_fields
             .extend(self.pending_unmodeled.drain(pending_start..));
+        self.validate_service_cross_fields(&service);
         Some(service)
+    }
+
+    fn set_extra_service_field(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) -> bool {
+        self.set_service_runtime_field(service, field, path) || self.set_service_remaining_field(service, field, path)
+    }
+
+    fn set_service_remaining_field(
+        &mut self,
+        service: &mut ProjectService,
+        field: &MergedEntry,
+        path: &[String],
+    ) -> bool {
+        match field.key() {
+            "domainname" => {
+                service.domainname =
+                    self.strict_project_string(field.value(), "service domainname must be a YAML string scalar");
+            }
+            "isolation" => {
+                service.isolation =
+                    self.strict_project_string(field.value(), "service isolation must be a YAML string scalar");
+            }
+            "mac_address" => {
+                service.mac_address =
+                    self.strict_project_string(field.value(), "service mac_address must be a YAML string scalar");
+            }
+            "uts" => {
+                service.uts = self.strict_project_string(field.value(), "service uts must be a YAML string scalar");
+            }
+            "gpus" => service.gpus = self.gpus(field.value(), path),
+            "use_api_socket" => {
+                service.use_api_socket = self.boolean(field.value(), "service use_api_socket must be a boolean");
+            }
+            "label_file" => {
+                service.label_files = self.label_files(field.value(), path);
+                if service.label_files.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "external_links" => {
+                service.external_links = self.string_collection(field.value(), "external_links must be a sequence");
+            }
+            "links" => service.links = self.string_collection(field.value(), "links must be a sequence"),
+            "storage_opt" => {
+                service.storage_opt = self
+                    .labels(field.value())
+                    .map(|value| ProjectValue::new(value, field.value()));
+            }
+            "models" => service.models = self.service_models(field, path),
+            "develop" if field.value().as_mapping().is_some() => service.develop = self.develop(field.value(), path),
+            "develop" => {
+                self.expected(field.value(), "service develop must be a mapping");
+                service.unmodeled_fields.push(field_reference(path, field));
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn includes(&mut self, entry: &MergedEntry) -> Option<ProjectValue<Includes>> {
+        let value = entry.value();
+        let sequence = value.as_sequence()?;
+        let mut items = Vec::new();
+        for item in sequence {
+            match item.kind() {
+                MergedValueKind::Scalar(_) => {
+                    if let Some(path) = self.strict_located_string(item, "include item must be a YAML string scalar") {
+                        items.push(IncludeItem::Short(path));
+                    } else {
+                        self.record_root_unmodeled(&[], entry);
+                        items.push(IncludeItem::Unmodeled);
+                    }
+                }
+                MergedValueKind::Mapping(fields) => {
+                    let span = effective_span(item);
+                    let mut paths = Vec::new();
+                    let mut env_files = Vec::new();
+                    let mut project_directory = None;
+                    let mut unmodeled_fields = Vec::new();
+                    for field in fields {
+                        match field.key() {
+                            "path" => {
+                                paths = self.strict_string_or_sequence(
+                                    field.value(),
+                                    "include path must be a YAML string or sequence",
+                                );
+                                if !Self::is_strict_string_or_sequence(field.value()) {
+                                    self.record_root_unmodeled(&["include".to_owned()], field);
+                                    unmodeled_fields.push(FieldReference::generated(
+                                        Located::new(field.key().to_owned(), entry_span(field)),
+                                        entry_span(field),
+                                        Some(effective_span(field.value())),
+                                    ));
+                                }
+                            }
+                            "env_file" => {
+                                env_files = self.strict_string_or_sequence(
+                                    field.value(),
+                                    "include env_file must be a YAML string or sequence",
+                                );
+                                if !Self::is_strict_string_or_sequence(field.value()) {
+                                    self.record_root_unmodeled(&["include".to_owned()], field);
+                                    unmodeled_fields.push(FieldReference::generated(
+                                        Located::new(field.key().to_owned(), entry_span(field)),
+                                        entry_span(field),
+                                        Some(effective_span(field.value())),
+                                    ));
+                                }
+                            }
+                            "project_directory" => {
+                                project_directory = self.strict_located_string(
+                                    field.value(),
+                                    "include project_directory must be a YAML string",
+                                );
+                                if project_directory.is_none() {
+                                    self.record_root_unmodeled(&["include".to_owned()], field);
+                                    unmodeled_fields.push(FieldReference::generated(
+                                        Located::new(field.key().to_owned(), entry_span(field)),
+                                        entry_span(field),
+                                        Some(effective_span(field.value())),
+                                    ));
+                                }
+                            }
+                            _ => {
+                                self.record_root_unmodeled(&["include".to_owned()], field);
+                                unmodeled_fields.push(FieldReference::generated(
+                                    Located::new(field.key().to_owned(), entry_span(field)),
+                                    entry_span(field),
+                                    Some(effective_span(field.value())),
+                                ));
+                            }
+                        }
+                    }
+                    if paths.is_empty() {
+                        self.diagnostics.push(
+                            Diagnostic::new(PROJECT_MISSING_FIELD, Severity::Error, "include mapping requires path")
+                                .with_label(DiagnosticLabel::primary(span, "path is missing")),
+                        );
+                    }
+                    items.push(IncludeItem::Long(IncludeLong::new(
+                        span,
+                        paths,
+                        env_files,
+                        project_directory,
+                        unmodeled_fields,
+                    )));
+                }
+                _ => {
+                    self.expected(item, "include items must be strings or mappings");
+                    self.record_root_unmodeled(&[], entry);
+                    items.push(IncludeItem::Unmodeled);
+                }
+            }
+        }
+        Some(ProjectValue::new(
+            Includes::new(effective_span(value), items, Vec::new()),
+            value,
+        ))
+    }
+
+    fn model_definitions(&mut self, value: &MergedValue) -> Option<ProjectValue<ModelDefinitions>> {
+        let entries = value.as_mapping()?;
+        let mut definitions = Vec::new();
+        for entry in entries {
+            let span = effective_span(entry.value());
+            let mut definition = ModelDefinition::new(Located::new(entry.key().to_owned(), entry_span(entry)), span);
+            let Some(members) = entry.value().as_mapping() else {
+                self.expected(entry.value(), "model definition must be a mapping");
+                self.record_root_unmodeled(&["models".to_owned()], entry);
+                continue;
+            };
+            for member in members {
+                match member.key() {
+                    "name" => {
+                        let parsed = self.strict_located_string(member.value(), "model name must be a YAML string");
+                        if let Some(value) = parsed {
+                            definition.set_name(value);
+                        } else {
+                            definition.push_unmodeled(FieldReference::generated(
+                                Located::new(member.key().to_owned(), entry_span(member)),
+                                entry_span(member),
+                                Some(effective_span(member.value())),
+                            ));
+                            self.record_root_unmodeled(&["models".to_owned(), entry.key().to_owned()], member);
+                        }
+                    }
+                    "model" => {
+                        let parsed =
+                            self.strict_located_string(member.value(), "model reference must be a YAML string");
+                        if let Some(value) = parsed {
+                            definition.set_model(value);
+                        } else {
+                            definition.push_unmodeled(FieldReference::generated(
+                                Located::new(member.key().to_owned(), entry_span(member)),
+                                entry_span(member),
+                                Some(effective_span(member.value())),
+                            ));
+                            self.record_root_unmodeled(&["models".to_owned(), entry.key().to_owned()], member);
+                        }
+                    }
+                    "context_size" => {
+                        if let Some(value) =
+                            self.located_yaml_integer(member.value(), "model context_size must be a YAML integer")
+                        {
+                            definition.set_context_size(value);
+                        } else {
+                            self.record_root_unmodeled(&["models".to_owned(), entry.key().to_owned()], member);
+                        }
+                    }
+                    "runtime_flags" => {
+                        let flags = self.strict_string_or_sequence(
+                            member.value(),
+                            "model runtime_flags must be a string or sequence",
+                        );
+                        if !Self::is_strict_string_or_sequence(member.value()) {
+                            definition.push_unmodeled(FieldReference::generated(
+                                Located::new(member.key().to_owned(), entry_span(member)),
+                                entry_span(member),
+                                Some(effective_span(member.value())),
+                            ));
+                            self.record_root_unmodeled(&["models".to_owned(), entry.key().to_owned()], member);
+                        }
+                        definition.set_runtime_flags(flags);
+                    }
+                    _ => {
+                        definition.push_unmodeled(FieldReference::generated(
+                            Located::new(member.key().to_owned(), entry_span(member)),
+                            entry_span(member),
+                            Some(effective_span(member.value())),
+                        ));
+                        self.record_root_unmodeled(&["models".to_owned(), entry.key().to_owned()], member);
+                    }
+                }
+            }
+            if definition.model().is_none() {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        PROJECT_MISSING_FIELD,
+                        Severity::Error,
+                        "model definition requires model",
+                    )
+                    .with_label(DiagnosticLabel::primary(span, "model is missing")),
+                );
+            }
+            definitions.push(definition);
+        }
+        Some(ProjectValue::new(
+            ModelDefinitions::new(effective_span(value), definitions, Vec::new()),
+            value,
+        ))
+    }
+
+    fn service_models(&mut self, field: &MergedEntry, path: &[String]) -> Option<ProjectValue<ServiceModels>> {
+        let value = field.value();
+        let mut bindings = Vec::new();
+        match value.kind() {
+            MergedValueKind::Sequence(items) => {
+                for item in items {
+                    if let Some(model) = self.strict_located_string(item, "service model binding must be a YAML string")
+                    {
+                        bindings.push(ServiceModelBinding::new(model, effective_span(item)));
+                    } else {
+                        self.record_pending_unmodeled(path, field);
+                    }
+                }
+            }
+            MergedValueKind::Mapping(entries) => {
+                for entry in entries {
+                    let mut binding = ServiceModelBinding::new(
+                        Located::new(entry.key().to_owned(), entry_span(entry)),
+                        effective_span(entry.value()),
+                    );
+                    if let Some(members) = entry.value().as_mapping() {
+                        for member in members {
+                            match member.key() {
+                                "endpoint_var" => {
+                                    let parsed = self.strict_located_string(
+                                        member.value(),
+                                        "model endpoint_var must be a YAML string",
+                                    );
+                                    if let Some(value) = parsed {
+                                        binding.set_endpoint_var(value);
+                                    } else {
+                                        binding.push_unmodeled(FieldReference::generated(
+                                            Located::new(member.key().to_owned(), entry_span(member)),
+                                            entry_span(member),
+                                            Some(effective_span(member.value())),
+                                        ));
+                                    }
+                                }
+                                "model_var" => {
+                                    let parsed = self
+                                        .strict_located_string(member.value(), "model model_var must be a YAML string");
+                                    if let Some(value) = parsed {
+                                        binding.set_model_var(value);
+                                    } else {
+                                        binding.push_unmodeled(FieldReference::generated(
+                                            Located::new(member.key().to_owned(), entry_span(member)),
+                                            entry_span(member),
+                                            Some(effective_span(member.value())),
+                                        ));
+                                    }
+                                }
+                                _ => binding.push_unmodeled(FieldReference::generated(
+                                    Located::new(member.key().to_owned(), entry_span(member)),
+                                    entry_span(member),
+                                    Some(effective_span(member.value())),
+                                )),
+                            }
+                        }
+                    } else if !matches!(entry.value().kind(), MergedValueKind::Null(_)) {
+                        self.expected(entry.value(), "service model binding must be null or a mapping");
+                        binding.push_unmodeled(FieldReference::generated(
+                            Located::new(entry.key().to_owned(), entry_span(entry)),
+                            entry_span(entry),
+                            Some(effective_span(entry.value())),
+                        ));
+                    }
+                    if !binding.unmodeled_fields().is_empty() {
+                        self.record_pending_unmodeled(path, field);
+                    }
+                    bindings.push(binding);
+                }
+            }
+            _ => return None,
+        }
+        Some(ProjectValue::new(
+            ServiceModels::new(effective_span(value), bindings, Vec::new()),
+            value,
+        ))
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "GPU selectors retain every supported field and malformed source evidence"
+    )]
+    fn gpus(&mut self, value: &MergedValue, path: &[String]) -> Option<ProjectValue<Gpus>> {
+        let mut gpu_path = path.to_vec();
+        gpu_path.push("gpus".to_owned());
+        let result = match value.kind() {
+            MergedValueKind::Scalar(_) => self
+                .located_string(value, "service gpus must be a string or sequence")
+                .and_then(|selector| {
+                    if selector.value() == "all" {
+                        Some(Gpus::All(selector))
+                    } else {
+                        self.expected(value, "service gpus scalar must be exactly `all`");
+                        None
+                    }
+                }),
+            MergedValueKind::Sequence(items) => {
+                let mut devices = Vec::new();
+                for item in items {
+                    let Some(members) = item.as_mapping() else {
+                        self.expected(item, "GPU selector must be a mapping");
+                        self.pending_unmodeled.push(value_reference(&gpu_path, item));
+                        continue;
+                    };
+                    let mut device = GpuDevice::new(effective_span(item));
+                    for member in members {
+                        match member.key() {
+                            "capabilities" => {
+                                let capabilities = self.strict_string_sequence(
+                                    member.value(),
+                                    "GPU capabilities must be a YAML sequence of strings",
+                                );
+                                if !Self::is_strict_string_sequence(member.value()) {
+                                    self.record_pending_unmodeled(&gpu_path, member);
+                                }
+                                device.set_capabilities(capabilities);
+                            }
+                            "count" => {
+                                let parsed = self.located_integer_or_string_scalar(
+                                    member.value(),
+                                    "GPU count must be a YAML integer or string",
+                                );
+                                if let Some(value) = parsed {
+                                    device.set_count(value);
+                                } else {
+                                    self.record_pending_unmodeled(&gpu_path, member);
+                                }
+                            }
+                            "device_ids" => {
+                                let ids = self.strict_string_or_sequence(
+                                    member.value(),
+                                    "GPU device_ids must be a string or sequence",
+                                );
+                                if !Self::is_strict_string_or_sequence(member.value()) {
+                                    self.record_pending_unmodeled(&gpu_path, member);
+                                }
+                                device.set_device_ids(ids);
+                            }
+                            "driver" => {
+                                let parsed =
+                                    self.strict_located_string(member.value(), "GPU driver must be a YAML string");
+                                if let Some(value) = parsed {
+                                    device.set_driver(value);
+                                } else {
+                                    self.record_pending_unmodeled(&gpu_path, member);
+                                }
+                            }
+                            "options" => match member.value().kind() {
+                                MergedValueKind::Mapping(_) => self
+                                    .key_value_mapping(member.value(), "GPU options must be a scalar mapping")
+                                    .map(GpuOptions::Mapping)
+                                    .into_iter()
+                                    .for_each(|value| device.set_options(value)),
+                                MergedValueKind::Sequence(_) => {
+                                    let options = self.strict_string_or_sequence(
+                                        member.value(),
+                                        "GPU options must be a string sequence",
+                                    );
+                                    if !Self::is_strict_string_or_sequence(member.value()) {
+                                        self.record_pending_unmodeled(&gpu_path, member);
+                                    }
+                                    device.set_options(GpuOptions::List(options));
+                                }
+                                _ => {
+                                    self.expected(member.value(), "GPU options must be a mapping or sequence");
+                                    self.record_pending_unmodeled(&gpu_path, member);
+                                }
+                            },
+                            _ => self.record_pending_unmodeled(&gpu_path, member),
+                        }
+                    }
+                    if device.count().is_some() && !device.device_ids().is_empty() {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                crate::model::GPU_COUNT_DEVICE_IDS_CONFLICT,
+                                Severity::Warning,
+                                "GPU selector cannot use count and device_ids together",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                device.span(),
+                                "conflicting GPU allocation selectors",
+                            )),
+                        );
+                    }
+                    if !device.capabilities().iter().any(|value| !value.value().is_empty()) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                GPU_MISSING_CAPABILITIES,
+                                Severity::Error,
+                                "GPU selector requires a non-empty capabilities declaration",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                device.span(),
+                                "capabilities are missing, empty, or malformed",
+                            )),
+                        );
+                    }
+                    devices.push(device);
+                }
+                Some(Gpus::Devices {
+                    span: effective_span(value),
+                    devices,
+                    unmodeled_items: Vec::new(),
+                })
+            }
+            _ => None,
+        }?;
+        Some(ProjectValue::new(result, value))
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "develop watch retains each documented member and nested source evidence explicitly"
+    )]
+    fn develop(&mut self, value: &MergedValue, path: &[String]) -> Option<ProjectValue<Develop>> {
+        let entries = value.as_mapping()?;
+        let mut develop_path = path.to_vec();
+        develop_path.push("develop".to_owned());
+        let mut watch = Vec::new();
+        for entry in entries {
+            if entry.key() != "watch" {
+                self.record_pending_unmodeled(&develop_path, entry);
+                continue;
+            }
+            let Some(items) = entry.value().as_sequence() else {
+                self.expected(entry.value(), "develop watch must be a sequence");
+                self.record_pending_unmodeled(&develop_path, entry);
+                continue;
+            };
+            for item_value in items {
+                let Some(members) = item_value.as_mapping() else {
+                    self.expected(item_value, "develop watch item must be a mapping");
+                    self.pending_unmodeled.push(value_reference(&develop_path, item_value));
+                    continue;
+                };
+                let mut item = DevelopWatch::new(effective_span(item_value));
+                let mut has_exec = false;
+                for member in members {
+                    match member.key() {
+                        "action" => {
+                            let parsed =
+                                self.strict_located_string(member.value(), "develop action must be a YAML string");
+                            if let Some(value) = parsed {
+                                item.set_action(value);
+                            } else {
+                                self.record_pending_unmodeled(&develop_path, member);
+                            }
+                        }
+                        "path" => {
+                            let parsed =
+                                self.strict_located_string(member.value(), "develop path must be a YAML string");
+                            if let Some(value) = parsed {
+                                item.set_path(value);
+                            } else {
+                                self.record_pending_unmodeled(&develop_path, member);
+                            }
+                        }
+                        "target" => {
+                            let parsed =
+                                self.strict_located_string(member.value(), "develop target must be a YAML string");
+                            if let Some(value) = parsed {
+                                item.set_target(value);
+                            } else {
+                                self.record_pending_unmodeled(&develop_path, member);
+                            }
+                        }
+                        "ignore" => {
+                            let values = self.strict_string_or_sequence(
+                                member.value(),
+                                "develop ignore must be a string or sequence",
+                            );
+                            if !Self::is_strict_string_or_sequence(member.value()) {
+                                self.record_pending_unmodeled(&develop_path, member);
+                            }
+                            item.set_ignore(values);
+                        }
+                        "include" => {
+                            let values = self.strict_string_or_sequence(
+                                member.value(),
+                                "develop include must be a string or sequence",
+                            );
+                            if !Self::is_strict_string_or_sequence(member.value()) {
+                                self.record_pending_unmodeled(&develop_path, member);
+                            }
+                            item.set_include(values);
+                        }
+                        "initial_sync" => {
+                            let parsed = self.located_boolean(member.value(), "develop initial_sync must be a boolean");
+                            if let Some(value) = parsed {
+                                item.set_initial_sync(value);
+                            } else {
+                                self.record_pending_unmodeled(&develop_path, member);
+                            }
+                        }
+                        "exec" if matches!(member.value().kind(), MergedValueKind::Mapping(_)) => {
+                            let exec = self.develop_exec(member.value(), &develop_path);
+                            has_exec = exec.command().is_some_and(project_command_is_non_empty);
+                            if !has_exec {
+                                self.diagnostics.push(
+                                    Diagnostic::new(
+                                        DEVELOP_WATCH_EXEC_MISSING_COMMAND,
+                                        Severity::Error,
+                                        "develop watch exec mapping requires a non-empty command member",
+                                    )
+                                    .with_label(DiagnosticLabel::primary(
+                                        entry_span(member),
+                                        "exec command is missing",
+                                    )),
+                                );
+                            }
+                            item.set_exec(exec);
+                        }
+                        "exec" => {
+                            self.expected(member.value(), "develop exec must be a mapping");
+                            self.record_pending_unmodeled(&develop_path, member);
+                        }
+                        _ => {
+                            item.push_unmodeled(FieldReference::generated(
+                                Located::new(member.key().to_owned(), entry_span(member)),
+                                entry_span(member),
+                                Some(effective_span(member.value())),
+                            ));
+                            self.record_pending_unmodeled(&develop_path, member);
+                        }
+                    }
+                }
+                self.validate_develop_watch(&item, has_exec);
+                watch.push(item);
+            }
+        }
+        if watch.is_empty() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    crate::model::DEVELOP_MISSING_WATCH,
+                    Severity::Error,
+                    "develop requires a watch sequence",
+                )
+                .with_label(DiagnosticLabel::primary(effective_span(value), "watch is missing")),
+            );
+        }
+        Some(ProjectValue::new(
+            Develop::new(effective_span(value), watch, Vec::new(), Vec::new()),
+            value,
+        ))
+    }
+
+    fn develop_exec(&mut self, value: &MergedValue, path: &[String]) -> DevelopWatchExec {
+        let mut exec = DevelopWatchExec::new(effective_span(value));
+        let Some(entries) = value.as_mapping() else {
+            return exec;
+        };
+        for entry in entries {
+            match entry.key() {
+                "command" => match self.command(entry.value()) {
+                    Some(value) => exec.set_command(value.into_value()),
+                    None => self.record_pending_unmodeled(path, entry),
+                },
+                "user" => match self.strict_located_string(entry.value(), "develop exec user must be a YAML string") {
+                    Some(value) => exec.set_user(value),
+                    None => self.record_pending_unmodeled(path, entry),
+                },
+                "privileged" => {
+                    match self.located_boolean(entry.value(), "develop exec privileged must be a boolean") {
+                        Some(value) => exec.set_privileged(value),
+                        None => self.record_pending_unmodeled(path, entry),
+                    }
+                }
+                "working_dir" => {
+                    match self.strict_located_string(entry.value(), "develop exec working_dir must be a YAML string") {
+                        Some(value) => exec.set_working_dir(value),
+                        None => self.record_pending_unmodeled(path, entry),
+                    }
+                }
+                "environment" => match self.develop_exec_environment(entry.value()) {
+                    Some(value) => exec.set_environment(value),
+                    None => self.record_pending_unmodeled(path, entry),
+                },
+                _ => exec.push_unmodeled(FieldReference::generated(
+                    Located::new(entry.key().to_owned(), entry_span(entry)),
+                    entry_span(entry),
+                    Some(effective_span(entry.value())),
+                )),
+            }
+        }
+        exec
+    }
+
+    fn develop_exec_environment(&mut self, value: &MergedValue) -> Option<Environment> {
+        let span = effective_span(value);
+        match value.kind() {
+            MergedValueKind::Sequence(items) => {
+                let mut entries = Vec::new();
+                for item in items {
+                    entries.push(EnvironmentListEntry::parse(
+                        self.located_string(item, "develop exec environment list item must be a scalar")?,
+                    ));
+                }
+                Some(Environment::List { span, entries })
+            }
+            MergedValueKind::Mapping(items) => {
+                let mut entries = Vec::new();
+                for item in items {
+                    let scalar = self.compose_scalar(
+                        item.value(),
+                        "develop exec environment mapping value must be a scalar or null",
+                    )?;
+                    entries.push(EnvironmentMapEntry::new(
+                        Located::new(item.key().to_owned(), entry_span(item)),
+                        Located::new(scalar, effective_span(item.value())),
+                        entry_span(item),
+                    ));
+                }
+                Some(Environment::Map { span, entries })
+            }
+            _ => {
+                self.expected(value, "develop exec environment must be a sequence or mapping");
+                None
+            }
+        }
+    }
+
+    fn validate_develop_watch(&mut self, item: &DevelopWatch, has_exec: bool) {
+        if item.action().is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_MISSING_ACTION,
+                    Severity::Error,
+                    "develop watch item requires an action",
+                )
+                .with_label(DiagnosticLabel::primary(item.span(), "action is missing")),
+            );
+        }
+        if item.path().is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_MISSING_PATH,
+                    Severity::Error,
+                    "develop watch item requires a path",
+                )
+                .with_label(DiagnosticLabel::primary(item.span(), "path is missing")),
+            );
+        }
+        let Some(action) = item.action() else {
+            return;
+        };
+        let action_value = action.value();
+        let synchronizes = matches!(action_value.as_str(), "sync" | "sync+restart" | "sync+exec");
+        if !matches!(
+            action_value.as_str(),
+            "rebuild" | "sync" | "restart" | "sync+restart" | "sync+exec"
+        ) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_INVALID_ACTION,
+                    Severity::Error,
+                    "develop watch action is not one of rebuild, sync, restart, sync+restart, or sync+exec",
+                )
+                .with_label(DiagnosticLabel::primary(action.span(), "unknown watch action")),
+            );
+        }
+        if synchronizes && item.target().is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_MISSING_TARGET,
+                    Severity::Error,
+                    "synchronizing develop watch action requires a target",
+                )
+                .with_label(DiagnosticLabel::primary(item.span(), "target is missing")),
+            );
+        }
+        if action_value == "sync+exec" && !has_exec {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_MISSING_EXEC,
+                    Severity::Error,
+                    "sync+exec develop watch action requires an exec command mapping",
+                )
+                .with_label(DiagnosticLabel::primary(item.span(), "exec is missing")),
+            );
+        }
+    }
+
+    fn strict_string_or_sequence(&mut self, value: &MergedValue, message: &str) -> Vec<Located<String>> {
+        match value.kind() {
+            MergedValueKind::Scalar(_) => self.strict_located_string(value, message).into_iter().collect(),
+            MergedValueKind::Sequence(items) => items
+                .iter()
+                .filter_map(|item| self.strict_located_string(item, message))
+                .collect(),
+            _ => {
+                self.expected(value, message);
+                Vec::new()
+            }
+        }
+    }
+
+    fn strict_string_sequence(&mut self, value: &MergedValue, message: &str) -> Vec<Located<String>> {
+        let MergedValueKind::Sequence(items) = value.kind() else {
+            self.expected(value, message);
+            return Vec::new();
+        };
+        items
+            .iter()
+            .filter_map(|item| self.strict_located_string(item, message))
+            .collect()
+    }
+
+    fn is_strict_string_or_sequence(value: &MergedValue) -> bool {
+        match value.kind() {
+            MergedValueKind::Scalar(scalar) => {
+                scalar.kind() == MergedScalarKind::String && scalar.is_strict_yaml_string()
+            }
+            MergedValueKind::Sequence(items) => items.iter().all(|item| {
+                matches!(
+                    item.kind(),
+                    MergedValueKind::Scalar(scalar)
+                        if scalar.kind() == MergedScalarKind::String && scalar.is_strict_yaml_string()
+                )
+            }),
+            _ => false,
+        }
+    }
+
+    fn is_strict_string_sequence(value: &MergedValue) -> bool {
+        matches!(value.kind(), MergedValueKind::Sequence(items) if items.iter().all(|item| {
+            matches!(
+                item.kind(),
+                MergedValueKind::Scalar(scalar)
+                    if scalar.kind() == MergedScalarKind::String && scalar.is_strict_yaml_string()
+            )
+        }))
+    }
+
+    fn label_files(
+        &mut self,
+        value: &MergedValue,
+        service_path: &[String],
+    ) -> Option<ProjectValue<ProjectServiceLabelFiles>> {
+        let form = match value.kind() {
+            MergedValueKind::Scalar(_) => {
+                let path =
+                    self.strict_project_string(value, "service label_file must be a YAML string scalar or sequence")?;
+                ProjectLabelFiles::Scalar(path)
+            }
+            MergedValueKind::Sequence(items) => {
+                let mut paths = Vec::new();
+                let mut unmodeled_items = Vec::new();
+                for (index, item) in items.iter().enumerate() {
+                    let Some(path) =
+                        self.strict_project_string(item, "service label_file entries must be YAML string scalars")
+                    else {
+                        let mut item_path = service_path.to_vec();
+                        item_path.push("label_file".to_owned());
+                        item_path.push(index.to_string());
+                        unmodeled_items.push(ProjectLabelFileEvidence::new(value_reference(&item_path, item)));
+                        continue;
+                    };
+                    paths.push(path);
+                }
+                return Some(ProjectValue::new(
+                    ProjectServiceLabelFiles::new(ProjectLabelFiles::List(paths), unmodeled_items),
+                    value,
+                ));
+            }
+            _ => {
+                self.expected(value, "service label_file must be a YAML string scalar or sequence");
+                return None;
+            }
+        };
+        Some(ProjectValue::new(
+            ProjectServiceLabelFiles::new(form, Vec::new()),
+            value,
+        ))
+    }
+
+    fn located_integer_or_string_scalar(
+        &mut self,
+        value: &MergedValue,
+        message: &str,
+    ) -> Option<Located<ComposeScalar>> {
+        let scalar = value.as_scalar()?;
+        let parsed = match scalar.kind() {
+            MergedScalarKind::Number if CpuCount::yaml_integer_spelling(scalar.raw()) => {
+                ComposeScalar::Number(scalar.value().to_owned())
+            }
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                ComposeScalar::String(scalar.value().to_owned())
+            }
+            _ => {
+                self.expected(value, message);
+                return None;
+            }
+        };
+        Some(Located::new(parsed, effective_span(value)))
+    }
+
+    fn located_yaml_integer(&mut self, value: &MergedValue, message: &str) -> Option<Located<ComposeScalar>> {
+        let scalar = value.as_scalar()?;
+        if scalar.kind() != MergedScalarKind::Number || !CpuCount::yaml_integer_spelling(scalar.raw()) {
+            self.expected(value, message);
+            return None;
+        }
+        Some(Located::new(
+            ComposeScalar::Number(scalar.value().to_owned()),
+            effective_span(value),
+        ))
+    }
+
+    fn set_service_runtime_field(
+        &mut self,
+        service: &mut ProjectService,
+        field: &MergedEntry,
+        path: &[String],
+    ) -> bool {
+        match field.key() {
+            "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "cpu_rt_runtime"
+            | "cpu_shares" | "cpus" | "mem_swappiness" | "oom_score_adj" | "scale" | "pids_limit" => {
+                self.set_service_count(service, field, path);
+            }
+            "cpuset" => {
+                service.cpuset = self.project_string(field.value(), "service cpuset must be a YAML string scalar");
+                if service.cpuset.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "device_cgroup_rules" => {
+                if field.value().as_sequence().is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+                let (items, invalid) = self.strict_string_collection(field.value(), "device_cgroup_rules");
+                service.device_cgroup_rules = items;
+                service.invalid_device_cgroup_rules = invalid;
+            }
+            "ipc" => {
+                service.ipc = self
+                    .project_string(field.value(), "service ipc must be a YAML string scalar")
+                    .map(|raw| ProjectValue {
+                        value: IpcMode::parse(raw.value),
+                        provenance: raw.provenance,
+                        sensitive: raw.sensitive,
+                    });
+                if service.ipc.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "mem_reservation" => {
+                service.mem_reservation = self.mem_limit(field.value());
+                if service.mem_reservation.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "memswap_limit" => {
+                service.memswap_limit = self.memswap_limit(field.value());
+                if service.memswap_limit.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "network_mode" => {
+                service.network_mode = self
+                    .project_string(field.value(), "service network_mode must be a YAML string scalar")
+                    .map(|raw| ProjectValue {
+                        value: NetworkMode::parse(raw.value),
+                        provenance: raw.provenance,
+                        sensitive: raw.sensitive,
+                    });
+                if service.network_mode.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "oom_kill_disable" => {
+                service.oom_kill_disable = self.boolean(field.value(), "service oom_kill_disable must be a boolean");
+                if service.oom_kill_disable.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "pid" => {
+                service.pid = self
+                    .project_string(field.value(), "service pid must be a YAML string scalar")
+                    .map(|raw| ProjectValue {
+                        value: PidMode::parse(raw.value),
+                        provenance: raw.provenance,
+                        sensitive: raw.sensitive,
+                    });
+                if service.pid.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "volumes_from" => {
+                if field.value().as_sequence().is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+                let (items, invalid) = self.volumes_from(field.value());
+                service.volumes_from = items;
+                service.invalid_volumes_from = invalid;
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn validate_service_cross_fields(&mut self, service: &ProjectService) {
+        if let (Some(network_mode), Some(networks)) = (service.network_mode.as_ref(), service.networks.as_ref()) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    SERVICE_NETWORK_MODE_NETWORKS_CONFLICT,
+                    Severity::Error,
+                    "network_mode and networks are mutually exclusive service settings",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    project_value_span(network_mode),
+                    "network_mode retained",
+                ))
+                .with_label(DiagnosticLabel::secondary(
+                    project_value_span(networks),
+                    "networks retained",
+                )),
+            );
+        }
+        let deploy = service.deploy.as_ref().map(ProjectValue::value);
+        self.validate_service_memory_cross_fields(service, deploy);
+        self.validate_service_scale_cross_fields(service, deploy);
+        self.validate_service_cpu_cross_fields(service, deploy);
+        if let (Some(gpus), Some(devices)) = (
+            service.gpus.as_ref(),
+            deploy
+                .and_then(ProjectDeploy::resources)
+                .and_then(|value| value.value().reservations())
+                .and_then(|value| value.value().devices()),
+        ) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    SERVICE_GPUS_DEPLOY_DEVICES_CONFLICT,
+                    Severity::Warning,
+                    "service gpus and deploy reservation devices are both retained for caller reconciliation",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    project_value_span(gpus),
+                    "service gpus retained",
+                ))
+                .with_label(DiagnosticLabel::secondary(
+                    project_value_span(devices),
+                    "deploy reservation devices retained",
+                )),
+            );
+        }
+    }
+
+    fn validate_service_memory_cross_fields(&mut self, service: &ProjectService, deploy: Option<&ProjectDeploy>) {
+        if let (Some(reservation), Some(deploy_reservation)) = (
+            service.mem_reservation.as_ref(),
+            deploy
+                .and_then(ProjectDeploy::resources)
+                .and_then(|value| value.value().reservations())
+                .and_then(|value| value.value().memory()),
+        ) {
+            if same_memory_value(reservation.value(), deploy_reservation.value()) == Some(false) {
+                self.diagnostics.push(
+                Diagnostic::new(
+                    SERVICE_MEMORY_RESERVATION_DEPLOY_CONFLICT,
+                    Severity::Warning,
+                    "service mem_reservation and deploy reservation memory are both retained for caller reconciliation",
+                )
+                .with_label(DiagnosticLabel::primary(project_value_span(reservation), "service mem_reservation retained"))
+                .with_label(DiagnosticLabel::secondary(project_value_span(deploy_reservation), "deploy reservation memory retained")),
+            );
+            }
+        }
+        if let Some(memswap) = service
+            .memswap_limit
+            .as_ref()
+            .filter(|value| service.mem_limit.is_none() && value.value().is_positive())
+        {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    SERVICE_MEMSWAP_REQUIRES_MEMORY_LIMIT,
+                    Severity::Error,
+                    "memswap_limit requires an explicit service mem_limit; no host default is inferred",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    project_value_span(memswap),
+                    "memory-plus-swap value retained without memory limit",
+                )),
+            );
+        }
+        if let (Some(memswap), Some(memory)) = (service.memswap_limit.as_ref(), service.mem_limit.as_ref()) {
+            if memswap.value().is_positive()
+                && memory_compare_same_unit(memswap.value().raw().value(), memory.value().raw().value())
+                    == Some(std::cmp::Ordering::Less)
+            {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SERVICE_MEMSWAP_BELOW_MEMORY_LIMIT,
+                        Severity::Error,
+                        "positive memswap_limit is below the comparable service mem_limit",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        project_value_span(memswap),
+                        "memory-plus-swap limit retained",
+                    ))
+                    .with_label(DiagnosticLabel::secondary(
+                        project_value_span(memory),
+                        "service memory limit retained",
+                    )),
+                );
+            }
+        }
+    }
+
+    fn validate_service_scale_cross_fields(&mut self, service: &ProjectService, deploy: Option<&ProjectDeploy>) {
+        if let (Some(scale), Some(replicas)) = (service.scale.as_ref(), deploy.and_then(ProjectDeploy::replicas)) {
+            let scale_raw = match scale.value() {
+                ServiceInteger::Valid(raw) | ServiceInteger::OutOfRange(raw) | ServiceInteger::Other(raw) => raw,
+            };
+            let replica_raw = match replicas.value() {
+                DeployReplicas::YamlNumber(raw) | DeployReplicas::String(raw) => raw,
+            };
+            if let (Some(scale_number), Some(replica_number)) =
+                (normalize_integer(scale_raw), normalize_integer(replica_raw))
+            {
+                if scale_number != replica_number {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            SERVICE_SCALE_DEPLOY_REPLICAS_CONFLICT,
+                            Severity::Warning,
+                            "scale and deploy.replicas have different proven integer values",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            project_value_span(scale),
+                            "service scale retained",
+                        ))
+                        .with_label(DiagnosticLabel::secondary(
+                            project_value_span(replicas),
+                            "deploy replicas retained",
+                        )),
+                    );
+                }
+            }
+        }
+    }
+
+    fn validate_service_cpu_cross_fields(&mut self, service: &ProjectService, deploy: Option<&ProjectDeploy>) {
+        if let (Some(cpus), Some(limit)) = (
+            service.cpus.as_ref(),
+            deploy
+                .and_then(ProjectDeploy::resources)
+                .and_then(|value| value.value().limits())
+                .and_then(|value| value.value().cpus()),
+        ) {
+            let service_raw = match cpus.value() {
+                Cpus::Decimal(raw) | Cpus::Expression(raw) | Cpus::Other(raw) => raw,
+            };
+            let limit_raw = match limit.value() {
+                DeployResourceCpus::YamlNumber(raw) | DeployResourceCpus::String(raw) => raw,
+            };
+            if let (Some(service_number), Some(limit_number)) =
+                (normalize_decimal(service_raw), normalize_decimal(limit_raw))
+            {
+                if service_number != limit_number {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            SERVICE_CPUS_DEPLOY_LIMIT_CONFLICT,
+                            Severity::Warning,
+                            "cpus and deploy.resources.limits.cpus have different proven decimal values",
+                        )
+                        .with_label(DiagnosticLabel::primary(
+                            project_value_span(cpus),
+                            "service cpus retained",
+                        ))
+                        .with_label(DiagnosticLabel::secondary(
+                            project_value_span(limit),
+                            "deploy CPU limit retained",
+                        )),
+                    );
+                }
+            }
+        }
     }
 
     fn boolean(&mut self, field: &MergedValue, message: &str) -> Option<ProjectValue<BooleanValue>> {
@@ -3778,6 +5451,11 @@ impl<'a> Builder<'a> {
         if service.deploy.is_none() {
             service.unmodeled_fields.push(field_reference(path, field));
         }
+    }
+
+    fn set_volumes(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
+        service.volume_views.volumes = self.volumes(field.value(), path);
+        service.volume_views.options = Self::project_volume_mount_options_collection(field.value(), path);
     }
 
     fn set_credential_spec(&mut self, service: &mut ProjectService, field: &MergedEntry, path: &[String]) {
@@ -3862,6 +5540,9 @@ impl<'a> Builder<'a> {
             "privileged" => {
                 service.privileged = self.boolean(field.value(), "service privileged must be a boolean");
             }
+            "use_api_socket" => {
+                service.use_api_socket = self.boolean(field.value(), "service use_api_socket must be a boolean");
+            }
             _ => {}
         }
     }
@@ -3895,6 +5576,42 @@ impl<'a> Builder<'a> {
             "cpu_rt_period" => {
                 service.cpu_rt_period = self.cpu_rt_period(field.value());
                 if service.cpu_rt_period.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpu_rt_runtime" => {
+                service.cpu_rt_runtime = self.cpu_rt_runtime(field.value());
+                if service.cpu_rt_runtime.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpu_shares" => {
+                service.cpu_shares = self.service_integer(field.value(), 0, i128::MAX, "cpu_shares");
+                if service.cpu_shares.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "cpus" => {
+                service.cpus = self.cpus(field.value());
+                if service.cpus.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "mem_swappiness" => {
+                service.mem_swappiness = self.service_integer(field.value(), 0, 100, "mem_swappiness");
+                if service.mem_swappiness.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "oom_score_adj" => {
+                service.oom_score_adj = self.service_integer(field.value(), -1000, 1000, "oom_score_adj");
+                if service.oom_score_adj.is_none() {
+                    service.unmodeled_fields.push(field_reference(path, field));
+                }
+            }
+            "scale" => {
+                service.scale = self.service_integer(field.value(), 0, i128::MAX, "scale");
+                if service.scale.is_none() {
                     service.unmodeled_fields.push(field_reference(path, field));
                 }
             }
@@ -6636,6 +8353,119 @@ impl<'a> Builder<'a> {
         Some(ProjectValue::new(period, value))
     }
 
+    fn cpu_rt_runtime(&mut self, value: &MergedValue) -> Option<ProjectValue<CpuRtRuntime>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(
+                value,
+                "cpu_rt_runtime must be an integer microsecond or duration string scalar",
+            );
+            return None;
+        };
+        let runtime = match scalar.kind() {
+            MergedScalarKind::Number if scalar.raw().bytes().all(|byte| byte.is_ascii_digit()) => {
+                CpuRtRuntime::Microseconds(scalar.raw().to_owned())
+            }
+            MergedScalarKind::Number => CpuRtRuntime::Other(scalar.raw().to_owned()),
+            MergedScalarKind::String if scalar.is_strict_yaml_string() => {
+                CpuRtRuntime::parse_string(scalar.value().to_owned())
+            }
+            MergedScalarKind::String | MergedScalarKind::Boolean => {
+                self.expected(
+                    value,
+                    "cpu_rt_runtime must be an integer microsecond or duration string scalar",
+                );
+                return None;
+            }
+        };
+        if !runtime.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    CPU_RT_RUNTIME_INVALID,
+                    Severity::Error,
+                    "cpu_rt_runtime must be an integer microsecond value, Compose duration, or interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "invalid service real-time CPU runtime",
+                )),
+            );
+        }
+        Some(ProjectValue::new(runtime, value))
+    }
+
+    fn service_integer(
+        &mut self,
+        value: &MergedValue,
+        min: i128,
+        max: i128,
+        description: &str,
+    ) -> Option<ProjectValue<ServiceInteger>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, &format!("{description} must be an integer scalar"));
+            return None;
+        };
+        if matches!(scalar.kind(), MergedScalarKind::Boolean) {
+            self.expected(value, &format!("{description} must be an integer scalar"));
+            return None;
+        }
+        let parsed = ServiceInteger::parse(scalar.value().to_owned(), min, max);
+        if !parsed.is_valid() {
+            let _ = description;
+            self.invalid(effective_span(value), "service integer must be in its documented range");
+        }
+        Some(ProjectValue::new(parsed, value))
+    }
+
+    fn cpus(&mut self, value: &MergedValue) -> Option<ProjectValue<Cpus>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, "cpus must be a decimal scalar");
+            return None;
+        };
+        if matches!(scalar.kind(), MergedScalarKind::Boolean) {
+            self.expected(value, "cpus must be a decimal scalar");
+            return None;
+        }
+        let parsed = Cpus::parse(scalar.value().to_owned());
+        if !parsed.is_valid() {
+            self.invalid(
+                effective_span(value),
+                "cpus must be a decimal allocation or interpolation expression",
+            );
+        }
+        Some(ProjectValue::new(parsed, value))
+    }
+
+    fn volumes_from(
+        &mut self,
+        value: &MergedValue,
+    ) -> (ProjectVolumesFromCollection, ProjectInvalidServiceStringItems) {
+        let MergedValueKind::Sequence(items) = value.kind() else {
+            self.expected(value, "volumes_from must be a sequence");
+            return (None, Vec::new());
+        };
+        let mut result = Vec::new();
+        let mut invalid = Vec::new();
+        for item in items {
+            let MergedValueKind::Scalar(scalar) = item.kind() else {
+                self.expected(item, "volumes_from entries must be string scalars");
+                invalid.push(ProjectInvalidServiceStringItem {
+                    span: effective_span(item),
+                });
+                continue;
+            };
+            if !matches!(scalar.kind(), MergedScalarKind::String) {
+                self.expected(item, "volumes_from entries must be string scalars");
+                invalid.push(ProjectInvalidServiceStringItem {
+                    span: effective_span(item),
+                });
+                continue;
+            }
+            let raw = Located::new(scalar.value().to_owned(), effective_span(item));
+            result.push(ProjectValue::new(VolumesFrom::parse(raw), item));
+        }
+        (Some(ProjectValue::new(result, value)), invalid)
+    }
+
     fn pids_limit(&mut self, value: &MergedValue) -> Option<ProjectValue<PidsLimit>> {
         let scalar = match value.kind() {
             MergedValueKind::Scalar(scalar) if scalar.kind() != MergedScalarKind::Boolean => scalar,
@@ -6779,6 +8609,49 @@ impl<'a> Builder<'a> {
                 .with_label(DiagnosticLabel::primary(effective_span(value), label))
                 .with_note(note),
         );
+        Some(ProjectValue::new(limit, value))
+    }
+
+    fn memswap_limit(&mut self, value: &MergedValue) -> Option<ProjectValue<MemswapLimit>> {
+        let scalar = match value.kind() {
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::Number => {
+                (scalar, MemswapLimitScalarKind::Number)
+            }
+            MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                (scalar, MemswapLimitScalarKind::String)
+            }
+            _ => {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        MEMSWAP_LIMIT_EXPECTED_VALUE,
+                        Severity::Error,
+                        "memswap_limit must be a YAML number or string scalar",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        effective_span(value),
+                        "unexpected memory-plus-swap-limit form",
+                    )),
+                );
+                return None;
+            }
+        };
+        let limit = MemswapLimit::parse(
+            Located::new(scalar.0.value().to_owned(), effective_span(value)),
+            scalar.1,
+        );
+        if matches!(limit.kind(), MemswapLimitKind::Other(_)) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    MEMSWAP_LIMIT_INVALID,
+                    Severity::Error,
+                    "memswap_limit must be `-1`, a decimal byte quantity, or an interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    effective_span(value),
+                    "invalid memory-plus-swap limit retained",
+                )),
+            );
+        }
         Some(ProjectValue::new(limit, value))
     }
 
@@ -8875,6 +10748,33 @@ impl<'a> Builder<'a> {
         Some(ProjectValue::new(strings, value))
     }
 
+    fn strict_string_collection(
+        &mut self,
+        value: &MergedValue,
+        description: &str,
+    ) -> (ProjectStringCollection, ProjectInvalidServiceStringItems) {
+        let Some(values) = value.as_sequence() else {
+            self.expected(value, &format!("{description} must be a sequence"));
+            return (None, Vec::new());
+        };
+        let mut strings = Vec::new();
+        let mut invalid = Vec::new();
+        for item in values {
+            match item.kind() {
+                MergedValueKind::Scalar(scalar) if scalar.kind() == MergedScalarKind::String => {
+                    strings.push(ProjectValue::new(scalar.value().to_owned(), item));
+                }
+                _ => {
+                    self.expected(item, &format!("{description} entries must be YAML string scalars"));
+                    invalid.push(ProjectInvalidServiceStringItem {
+                        span: effective_span(item),
+                    });
+                }
+            }
+        }
+        (Some(ProjectValue::new(strings, value)), invalid)
+    }
+
     fn capability_drop(&mut self, value: &MergedValue) -> Option<ProjectValue<Vec<ProjectValue<CapabilityDropItem>>>> {
         let Some(values) = value.as_sequence() else {
             self.expected(value, "cap_drop must be a sequence of string scalars");
@@ -9052,6 +10952,27 @@ impl<'a> Builder<'a> {
 
     fn located_string(&mut self, value: &MergedValue, message: &str) -> Option<Located<String>> {
         let scalar = self.scalar(value, message)?;
+        Some(Located::new(scalar.value().to_owned(), effective_span(value)))
+    }
+
+    fn located_string_or_number(&mut self, value: &MergedValue, message: &str) -> Option<Located<ComposeScalar>> {
+        let scalar = self.scalar(value, message)?;
+        if !matches!(scalar.kind(), MergedScalarKind::String | MergedScalarKind::Number) {
+            self.expected(value, message);
+            return None;
+        }
+        Some(Located::new(compose_scalar_from_merged(scalar), effective_span(value)))
+    }
+
+    fn strict_located_string(&mut self, value: &MergedValue, message: &str) -> Option<Located<String>> {
+        let MergedValueKind::Scalar(scalar) = value.kind() else {
+            self.expected(value, message);
+            return None;
+        };
+        if scalar.kind() != MergedScalarKind::String || !scalar.is_strict_yaml_string() {
+            self.expected(value, message);
+            return None;
+        }
         Some(Located::new(scalar.value().to_owned(), effective_span(value)))
     }
 
@@ -9401,6 +11322,233 @@ impl Builder<'_> {
         Some(ProjectValue::new(mounts, value))
     }
 
+    /// Builds the additive project-aware view for long-mount option blocks without emitting a
+    /// second copy of diagnostics already produced by [`Self::volumes`].
+    fn project_volume_mount_options_collection(
+        value: &MergedValue,
+        service_path: &[String],
+    ) -> Option<ProjectValue<Vec<ProjectValue<ProjectVolumeMountOptions>>>> {
+        let values = value.as_sequence()?;
+        let mut mounts = Vec::new();
+        for (index, item) in values.iter().enumerate() {
+            let mut path = service_path.to_vec();
+            path.push("volumes".to_owned());
+            path.push(index.to_string());
+            let options = match item.kind() {
+                MergedValueKind::Scalar(_) => ProjectVolumeMountOptions::new(),
+                MergedValueKind::Mapping(fields) => Self::project_volume_mount_options(fields, &path),
+                _ => continue,
+            };
+            mounts.push(ProjectValue::new(options, item));
+        }
+        Some(ProjectValue::new(mounts, value))
+    }
+
+    fn project_volume_mount_options(fields: &[MergedEntry], path: &[String]) -> ProjectVolumeMountOptions {
+        let mut options = ProjectVolumeMountOptions::new();
+        for field in fields {
+            match field.key() {
+                "type" | "source" | "target" | "read_only" => {}
+                "consistency" => match Self::volume_option_string(field.value()) {
+                    Some(value) => options.consistency = Some(value),
+                    None => options.unmodeled_fields.push(field_reference(path, field)),
+                },
+                "bind" => match Self::project_bind_mount_options(field.value(), path) {
+                    Some(value) => options.bind = Some(value),
+                    None => options.unmodeled_fields.push(field_reference(path, field)),
+                },
+                "image" => match Self::project_image_mount_options(field.value(), path) {
+                    Some(value) => options.image = Some(value),
+                    None => options.unmodeled_fields.push(field_reference(path, field)),
+                },
+                "tmpfs" => match Self::project_tmpfs_mount_options(field.value(), path) {
+                    Some(value) => options.tmpfs = Some(value),
+                    None => options.unmodeled_fields.push(field_reference(path, field)),
+                },
+                "volume" => match Self::project_named_volume_mount_options(field.value(), path) {
+                    Some(value) => options.volume = Some(value),
+                    None => options.unmodeled_fields.push(field_reference(path, field)),
+                },
+                _ => options.unmodeled_fields.push(field_reference(path, field)),
+            }
+        }
+        options
+    }
+
+    fn project_bind_mount_options(value: &MergedValue, parent_path: &[String]) -> Option<ProjectBindMountOptions> {
+        let fields = value.as_mapping()?;
+        let mut options = ProjectBindMountOptions {
+            recursive: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        };
+        let mut path = parent_path.to_vec();
+        path.push("bind".to_owned());
+        for field in fields {
+            match field.key() {
+                "recursive" => match Self::volume_option_string(field.value()) {
+                    Some(value) => options.recursive = Some(value),
+                    None => options.unknown_fields.push(field_reference(&path, field)),
+                },
+                "propagation" | "create_host_path" | "selinux" => {}
+                key if key.starts_with("x-") => options.extension_fields.push(field_reference(&path, field)),
+                _ => options.unknown_fields.push(field_reference(&path, field)),
+            }
+        }
+        Some(options)
+    }
+
+    fn project_image_mount_options(value: &MergedValue, parent_path: &[String]) -> Option<ProjectImageMountOptions> {
+        let fields = value.as_mapping()?;
+        let mut options = ProjectImageMountOptions {
+            subpath: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        };
+        let mut path = parent_path.to_vec();
+        path.push("image".to_owned());
+        for field in fields {
+            match field.key() {
+                "subpath" => match Self::volume_option_string(field.value()) {
+                    Some(value) => options.subpath = Some(value),
+                    None => options.unknown_fields.push(field_reference(&path, field)),
+                },
+                key if key.starts_with("x-") => options.extension_fields.push(field_reference(&path, field)),
+                _ => options.unknown_fields.push(field_reference(&path, field)),
+            }
+        }
+        Some(options)
+    }
+
+    fn project_tmpfs_mount_options(value: &MergedValue, parent_path: &[String]) -> Option<ProjectTmpfsMountOptions> {
+        let fields = value.as_mapping()?;
+        let mut options = ProjectTmpfsMountOptions {
+            size: None,
+            mode: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        };
+        let mut path = parent_path.to_vec();
+        path.push("tmpfs".to_owned());
+        for field in fields {
+            match field.key() {
+                "size" => match Self::volume_option_string_or_number(field.value()) {
+                    Some(value) => options.size = Some(value),
+                    None => options.unknown_fields.push(field_reference(&path, field)),
+                },
+                "mode" => match Self::volume_option_string_or_number(field.value()) {
+                    Some(value) => options.mode = Some(value),
+                    None => options.unknown_fields.push(field_reference(&path, field)),
+                },
+                key if key.starts_with("x-") => options.extension_fields.push(field_reference(&path, field)),
+                _ => options.unknown_fields.push(field_reference(&path, field)),
+            }
+        }
+        Some(options)
+    }
+
+    fn project_named_volume_mount_options(
+        value: &MergedValue,
+        parent_path: &[String],
+    ) -> Option<ProjectNamedVolumeMountOptions> {
+        let fields = value.as_mapping()?;
+        let mut options = ProjectNamedVolumeMountOptions {
+            nocopy: None,
+            subpath: None,
+            labels: None,
+            extension_fields: Vec::new(),
+            unknown_fields: Vec::new(),
+        };
+        let mut path = parent_path.to_vec();
+        path.push("volume".to_owned());
+        for field in fields {
+            match field.key() {
+                "nocopy" => match Self::volume_option_boolean(field.value()) {
+                    Some(value) => options.nocopy = Some(value),
+                    None => options.unknown_fields.push(field_reference(&path, field)),
+                },
+                "subpath" => match Self::volume_option_string(field.value()) {
+                    Some(value) => options.subpath = Some(value),
+                    None => options.unknown_fields.push(field_reference(&path, field)),
+                },
+                "labels" => match Self::volume_option_labels(field.value()) {
+                    Some(value) => options.labels = Some(value),
+                    None => options.unknown_fields.push(field_reference(&path, field)),
+                },
+                key if key.starts_with("x-") => options.extension_fields.push(field_reference(&path, field)),
+                _ => options.unknown_fields.push(field_reference(&path, field)),
+            }
+        }
+        Some(options)
+    }
+
+    fn volume_option_string(value: &MergedValue) -> Option<ProjectValue<String>> {
+        let scalar = value.as_scalar()?;
+        Some(ProjectValue::new(scalar.value().to_owned(), value))
+    }
+
+    fn volume_option_string_or_number(value: &MergedValue) -> Option<ProjectValue<ComposeScalar>> {
+        let scalar = value.as_scalar()?;
+        matches!(scalar.kind(), MergedScalarKind::String | MergedScalarKind::Number)
+            .then(|| ProjectValue::new(compose_scalar_from_merged(scalar), value))
+    }
+
+    fn volume_option_boolean(value: &MergedValue) -> Option<ProjectValue<BooleanValue>> {
+        let scalar = value.as_scalar()?;
+        let boolean = if scalar.kind() == MergedScalarKind::Boolean {
+            BooleanValue::Literal(scalar.value().eq_ignore_ascii_case("true"))
+        } else if value.is_sensitive() && matches!(scalar.value(), "true" | "false") {
+            BooleanValue::Literal(scalar.value() == "true")
+        } else if scalar.value().contains('$') {
+            BooleanValue::Expression(scalar.value().to_owned())
+        } else {
+            return None;
+        };
+        Some(ProjectValue::new(boolean, value))
+    }
+
+    fn volume_option_labels(value: &MergedValue) -> Option<ProjectValue<Labels>> {
+        let labels = match value.kind() {
+            MergedValueKind::Sequence(values) => {
+                let mut labels = Vec::new();
+                for value in values {
+                    let scalar = value.as_scalar()?;
+                    labels.push(Located::new(scalar.value().to_owned(), effective_span(value)));
+                }
+                Labels::List {
+                    span: effective_span(value),
+                    values: labels,
+                }
+            }
+            MergedValueKind::Mapping(entries) => {
+                let mut labels = Vec::new();
+                for entry in entries {
+                    let scalar = Self::volume_option_compose_scalar(entry.value())?;
+                    let span = effective_span(entry.value());
+                    labels.push(KeyValueEntry::new(
+                        Located::new(entry.key().to_owned(), entry_span(entry)),
+                        Located::new(scalar, span),
+                        span,
+                    ));
+                }
+                Labels::Map {
+                    span: effective_span(value),
+                    entries: labels,
+                }
+            }
+            _ => return None,
+        };
+        Some(ProjectValue::new(labels, value))
+    }
+
+    fn volume_option_compose_scalar(value: &MergedValue) -> Option<ComposeScalar> {
+        match value.kind() {
+            MergedValueKind::Null(_) => Some(ComposeScalar::Null),
+            MergedValueKind::Scalar(scalar) => Some(compose_scalar_from_merged(scalar)),
+            _ => None,
+        }
+    }
+
     fn long_volume(&mut self, value: &MergedValue, fields: &[MergedEntry], path: &[String]) -> LongVolumeMount {
         let mut mount = LongVolumeMount::new(effective_span(value));
         let mut has_type = false;
@@ -9427,10 +11575,38 @@ impl Builder<'_> {
                     .located_boolean(field.value(), "volume read_only must be a boolean")
                     .into_iter()
                     .for_each(|value| mount.set_read_only(value)),
+                "consistency" => {
+                    if let Some(value) = self.located_string(field.value(), "volume consistency must be a scalar") {
+                        mount.set_consistency(value);
+                    } else {
+                        self.record_pending_unmodeled(path, field);
+                    }
+                }
                 "bind" => self
                     .bind_options(field.value(), path)
                     .into_iter()
                     .for_each(|value| mount.set_bind(value)),
+                "image" => {
+                    if let Some(value) = self.image_mount_options(field.value(), path) {
+                        mount.set_image(value);
+                    } else {
+                        self.record_pending_unmodeled(path, field);
+                    }
+                }
+                "tmpfs" => {
+                    if let Some(value) = self.tmpfs_mount_options(field.value(), path) {
+                        mount.set_tmpfs(value);
+                    } else {
+                        self.record_pending_unmodeled(path, field);
+                    }
+                }
+                "volume" => {
+                    if let Some(value) = self.volume_mount_options(field.value(), path) {
+                        mount.set_volume(value);
+                    } else {
+                        self.record_pending_unmodeled(path, field);
+                    }
+                }
                 _ => self.record_pending_unmodeled(path, field),
             }
         }
@@ -9572,10 +11748,102 @@ impl Builder<'_> {
                         }
                     }
                 }
+                "recursive" => {
+                    if let Some(value) = self.located_string(field.value(), "bind recursive mode must be a scalar") {
+                        bind.set_recursive(value);
+                    } else {
+                        self.record_pending_unmodeled(&path, field);
+                    }
+                }
                 _ => self.record_pending_unmodeled(&path, field),
             }
         }
         Some(bind)
+    }
+
+    fn image_mount_options(&mut self, value: &MergedValue, parent_path: &[String]) -> Option<ImageMountOptions> {
+        let fields = self.mapping(value, "volume image options must be a mapping")?;
+        let mut options = ImageMountOptions::new(effective_span(value));
+        let mut path = parent_path.to_vec();
+        path.push("image".to_owned());
+        for field in fields {
+            match field.key() {
+                "subpath" => {
+                    if let Some(value) = self.located_string(field.value(), "image mount subpath must be a scalar") {
+                        options.set_subpath(value);
+                    } else {
+                        self.record_pending_unmodeled(&path, field);
+                    }
+                }
+                _ => self.record_pending_unmodeled(&path, field),
+            }
+        }
+        Some(options)
+    }
+
+    fn tmpfs_mount_options(&mut self, value: &MergedValue, parent_path: &[String]) -> Option<TmpfsMountOptions> {
+        let fields = self.mapping(value, "volume tmpfs options must be a mapping")?;
+        let mut options = TmpfsMountOptions::new(effective_span(value));
+        let mut path = parent_path.to_vec();
+        path.push("tmpfs".to_owned());
+        for field in fields {
+            match field.key() {
+                "size" => {
+                    if let Some(value) =
+                        self.located_string_or_number(field.value(), "tmpfs size must be a number or string")
+                    {
+                        options.set_size(value);
+                    } else {
+                        self.record_pending_unmodeled(&path, field);
+                    }
+                }
+                "mode" => {
+                    if let Some(value) =
+                        self.located_string_or_number(field.value(), "tmpfs mode must be a number or string")
+                    {
+                        options.set_mode(value);
+                    } else {
+                        self.record_pending_unmodeled(&path, field);
+                    }
+                }
+                _ => self.record_pending_unmodeled(&path, field),
+            }
+        }
+        Some(options)
+    }
+
+    fn volume_mount_options(&mut self, value: &MergedValue, parent_path: &[String]) -> Option<VolumeMountOptions> {
+        let fields = self.mapping(value, "named-volume options must be a mapping")?;
+        let mut options = VolumeMountOptions::new(effective_span(value));
+        let mut path = parent_path.to_vec();
+        path.push("volume".to_owned());
+        for field in fields {
+            match field.key() {
+                "nocopy" => {
+                    if let Some(value) = self.located_boolean(field.value(), "volume nocopy must be a boolean") {
+                        options.set_nocopy(value);
+                    } else {
+                        self.record_pending_unmodeled(&path, field);
+                    }
+                }
+                "subpath" => {
+                    if let Some(value) = self.located_string(field.value(), "volume subpath must be a scalar") {
+                        options.set_subpath(value);
+                    } else {
+                        self.record_pending_unmodeled(&path, field);
+                    }
+                }
+                "labels" => {
+                    if let Some(value) = self.labels(field.value()) {
+                        options.set_labels(value);
+                    } else {
+                        self.record_pending_unmodeled(&path, field);
+                    }
+                }
+                _ => self.record_pending_unmodeled(&path, field),
+            }
+        }
+        Some(options)
     }
 
     fn service_networks(
@@ -9681,6 +11949,101 @@ impl Builder<'_> {
         Some(Located::new(boolean, effective_span(value)))
     }
 
+    fn resource_external(&mut self, value: &MergedValue, kind: &str) -> Option<ResourceExternal> {
+        let Some(entries) = value.as_mapping() else {
+            return self
+                .located_boolean(value, &format!("{kind} external must be a boolean"))
+                .map(ResourceExternal::Boolean);
+        };
+        let mut name_mapping = ExternalNameMapping::new(effective_span(value));
+        for entry in entries {
+            match entry.key() {
+                "name" => match self.strict_located_string(
+                    entry.value(),
+                    "deprecated external name must be a non-empty YAML string",
+                ) {
+                    Some(name) if !name.value().is_empty() => name_mapping.set_name(name),
+                    Some(_) | None => name_mapping.push_unknown(FieldReference::generated(
+                        Located::new(entry.key().to_owned(), entry_span(entry)),
+                        entry_span(entry),
+                        Some(effective_span(entry.value())),
+                    )),
+                },
+                key if key.starts_with("x-") => name_mapping.push_extension(FieldReference::generated(
+                    Located::new(key.to_owned(), entry_span(entry)),
+                    entry_span(entry),
+                    Some(effective_span(entry.value())),
+                )),
+                _ => name_mapping.push_unknown(FieldReference::generated(
+                    Located::new(entry.key().to_owned(), entry_span(entry)),
+                    entry_span(entry),
+                    Some(effective_span(entry.value())),
+                )),
+            }
+        }
+        if name_mapping.name().is_none() {
+            self.missing(value, "deprecated external mapping requires a non-empty `name` string");
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                crate::model::RESOURCE_EXTERNAL_NAME_MAPPING_DEPRECATED,
+                Severity::Warning,
+                format!("{kind} `external.name` mapping syntax is deprecated"),
+            )
+            .with_label(DiagnosticLabel::primary(
+                name_mapping.span(),
+                "use `name: VALUE` with `external: true` instead",
+            )),
+        );
+        Some(ResourceExternal::NameMapping(Box::new(name_mapping)))
+    }
+
+    fn validate_resource_external_name(
+        &mut self,
+        external: Option<&ResourceExternal>,
+        modern: Option<&Located<String>>,
+        fallback: SourceSpan,
+    ) {
+        let (Some(ResourceExternal::NameMapping(name_mapping)), Some(modern)) = (external, modern) else {
+            return;
+        };
+        self.diagnostics.push(
+            Diagnostic::new(
+                crate::model::RESOURCE_EXTERNAL_NAME_CONFLICT,
+                Severity::Error,
+                "resource cannot use both `name` and deprecated `external.name` mapping syntax",
+            )
+            .with_label(DiagnosticLabel::primary(modern.span(), "resource name"))
+            .with_label(DiagnosticLabel::secondary(
+                name_mapping.name().map_or_else(|| name_mapping.span(), Located::span),
+                "deprecated external name",
+            ))
+            .with_label(DiagnosticLabel::secondary(fallback, "both values remain retained")),
+        );
+    }
+
+    fn validate_external_creation_configuration(
+        &mut self,
+        external: Option<&ResourceExternal>,
+        fields: &[Option<SourceSpan>],
+        kind: &str,
+    ) {
+        if !external.is_some_and(ResourceExternal::is_explicitly_external) {
+            return;
+        }
+        let Some(span) = fields.iter().flatten().next().copied() else {
+            return;
+        };
+        self.diagnostics.push(
+            Diagnostic::new(
+                crate::model::RESOURCE_EXTERNAL_CREATION_CONFIGURATION,
+                Severity::Error,
+                format!("external {kind} cannot also configure creation-time metadata"),
+            )
+            .with_label(DiagnosticLabel::primary(span, "metadata remains retained for review")),
+        );
+    }
+
     fn located_string_sequence(&mut self, value: &MergedValue, message: &str) -> Option<Vec<Located<String>>> {
         let Some(values) = value.as_sequence() else {
             self.expected(value, message);
@@ -9763,7 +12126,7 @@ impl Builder<'_> {
                     .into_iter()
                     .for_each(|value| network.set_enable_ipv6(value)),
                 "external" => self
-                    .located_boolean(field.value(), "network external must be a boolean")
+                    .resource_external(field.value(), "network")
                     .into_iter()
                     .for_each(|value| network.set_external(value)),
                 "internal" => self
@@ -9785,6 +12148,7 @@ impl Builder<'_> {
                 _ => self.record_root_unmodeled(&path, field),
             }
         }
+        self.validate_resource_external_name(network.external(), network.custom_name(), network.span());
         Some(network)
     }
 
@@ -9894,7 +12258,7 @@ impl Builder<'_> {
                     .into_iter()
                     .for_each(|value| volume.set_driver_opts(value)),
                 "external" => self
-                    .located_boolean(field.value(), "volume external must be a boolean")
+                    .resource_external(field.value(), "volume")
                     .into_iter()
                     .for_each(|value| volume.set_external(value)),
                 "labels" => self
@@ -9910,11 +12274,12 @@ impl Builder<'_> {
         }
         self.validate_external_volume_driver_configuration(&volume);
         self.validate_external_volume_labels_configuration(&volume);
+        self.validate_resource_external_name(volume.external(), volume.custom_name(), volume.span());
         Some(volume)
     }
 
     fn validate_external_volume_driver_configuration(&mut self, volume: &VolumeDefinition) {
-        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
+        if !volume.external().is_some_and(ResourceExternal::is_explicitly_external)
             || (volume.driver().is_none() && volume.driver_opts().is_empty())
         {
             return;
@@ -9938,9 +12303,7 @@ impl Builder<'_> {
     }
 
     fn validate_external_volume_labels_configuration(&mut self, volume: &VolumeDefinition) {
-        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
-            || volume.labels().is_none()
-        {
+        if !volume.external().is_some_and(ResourceExternal::is_explicitly_external) || volume.labels().is_none() {
             return;
         }
         let span = volume.labels().map_or_else(|| volume.span(), Labels::span);
@@ -9998,9 +12361,17 @@ impl Builder<'_> {
                     .into_iter()
                     .for_each(|value| config.set_content(value)),
                 "external" => self
-                    .located_boolean(field.value(), "config external must be a boolean")
+                    .resource_external(field.value(), "config")
                     .into_iter()
                     .for_each(|value| config.set_external(value)),
+                "labels" => self
+                    .labels(field.value())
+                    .into_iter()
+                    .for_each(|value| config.set_labels(value)),
+                "template_driver" => self
+                    .strict_located_string(field.value(), "config template_driver must be a YAML string")
+                    .into_iter()
+                    .for_each(|value| config.set_template_driver(value)),
                 "name" => self
                     .located_string(field.value(), "config custom name must be a scalar")
                     .into_iter()
@@ -10008,6 +12379,18 @@ impl Builder<'_> {
                 _ => self.record_root_unmodeled(&path, field),
             }
         }
+        self.validate_resource_external_name(config.external(), config.custom_name(), config.span());
+        self.validate_external_creation_configuration(
+            config.external(),
+            &[
+                config.file().map(Located::span),
+                config.environment().map(Located::span),
+                config.content().map(Located::span),
+                config.labels().map(Labels::span),
+                config.template_driver().map(Located::span),
+            ],
+            "config",
+        );
         Some(config)
     }
 
@@ -10051,9 +12434,25 @@ impl Builder<'_> {
                     .into_iter()
                     .for_each(|value| secret.set_environment(value)),
                 "external" => self
-                    .located_boolean(field.value(), "secret external must be a boolean")
+                    .resource_external(field.value(), "secret")
                     .into_iter()
                     .for_each(|value| secret.set_external(value)),
+                "driver" => self
+                    .strict_located_string(field.value(), "secret driver must be a YAML string")
+                    .into_iter()
+                    .for_each(|value| secret.set_driver(value)),
+                "driver_opts" => self
+                    .key_value_mapping(field.value(), "secret driver_opts must be a mapping")
+                    .into_iter()
+                    .for_each(|value| secret.set_driver_opts(value)),
+                "labels" => self
+                    .labels(field.value())
+                    .into_iter()
+                    .for_each(|value| secret.set_labels(value)),
+                "template_driver" => self
+                    .strict_located_string(field.value(), "secret template_driver must be a YAML string")
+                    .into_iter()
+                    .for_each(|value| secret.set_template_driver(value)),
                 "name" => self
                     .located_string(field.value(), "secret custom name must be a scalar")
                     .into_iter()
@@ -10061,6 +12460,19 @@ impl Builder<'_> {
                 _ => self.record_root_unmodeled(&path, field),
             }
         }
+        self.validate_resource_external_name(secret.external(), secret.custom_name(), secret.span());
+        self.validate_external_creation_configuration(
+            secret.external(),
+            &[
+                secret.file().map(Located::span),
+                secret.environment().map(Located::span),
+                secret.driver().map(Located::span),
+                secret.driver_opts().first().map(KeyValueEntry::span),
+                secret.labels().map(Labels::span),
+                secret.template_driver().map(Located::span),
+            ],
+            "secret",
+        );
         Some(secret)
     }
 
@@ -10087,6 +12499,100 @@ fn compose_scalar_from_merged(scalar: &crate::merge::MergedScalar) -> ComposeSca
         MergedScalarKind::Boolean => ComposeScalar::Boolean(scalar.value().eq_ignore_ascii_case("true")),
         MergedScalarKind::Number => ComposeScalar::Number(scalar.value().to_owned()),
     }
+}
+
+fn project_command_is_non_empty(command: &Command) -> bool {
+    match command {
+        Command::Null(_) => false,
+        Command::String(value) => !value.value().is_empty(),
+        Command::List { values, .. } => !values.is_empty(),
+    }
+}
+
+fn project_value_span<T>(value: &ProjectValue<T>) -> SourceSpan {
+    let Some(span) = value.provenance().effective_source() else {
+        unreachable!("merged project values retain source provenance");
+    };
+    span
+}
+
+/// Returns one canonical arbitrary-precision unsigned integer spelling.
+///
+/// Sign, exponent, whitespace, and expression spellings intentionally have no proven semantic
+/// comparison at this layer.
+fn normalize_integer(value: &str) -> Option<String> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    Some(value.trim_start_matches('0').to_owned().if_empty_then("0"))
+}
+
+trait EmptyStringExt {
+    fn if_empty_then(self, fallback: &str) -> Self;
+}
+impl EmptyStringExt for String {
+    fn if_empty_then(self, fallback: &str) -> Self {
+        if self.is_empty() { fallback.to_owned() } else { self }
+    }
+}
+
+/// Returns a canonical arbitrary-precision decimal without floating-point conversion.
+fn normalize_decimal(value: &str) -> Option<String> {
+    let (whole, fraction) = value.split_once('.').map_or((value, ""), |parts| parts);
+    if whole.is_empty()
+        || (value.contains('.') && fraction.is_empty())
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let whole = whole.trim_start_matches('0');
+    let fraction = fraction.trim_end_matches('0');
+    let whole = if whole.is_empty() { "0" } else { whole };
+    Some(if fraction.is_empty() {
+        whole.to_owned()
+    } else {
+        format!("{whole}.{fraction}")
+    })
+}
+
+/// Compares only documented byte spellings using the same explicit suffix and arbitrary-precision
+/// integral amount. Different units remain unresolved coexistence rather than an inferred ratio.
+fn same_memory_value(service: &MemLimit, deploy: &DeployResourceMemory) -> Option<bool> {
+    fn parts(value: &str) -> Option<(&str, &str)> {
+        ["kb", "mb", "gb", "b", "k", "m", "g"]
+            .into_iter()
+            .find_map(|suffix| value.strip_suffix(suffix).map(|amount| (amount, suffix)))
+    }
+    let (service_amount, service_unit) = parts(service.raw().value())?;
+    let (deploy_amount, deploy_unit) = parts(deploy.raw())?;
+    let (Some(service_amount), Some(deploy_amount)) =
+        (normalize_integer(service_amount), normalize_integer(deploy_amount))
+    else {
+        return None;
+    };
+    Some(service_unit == deploy_unit && service_amount == deploy_amount)
+}
+
+fn memory_compare_same_unit(left: &str, right: &str) -> Option<std::cmp::Ordering> {
+    fn parts(value: &str) -> Option<(&str, &str)> {
+        ["kb", "mb", "gb", "b", "k", "m", "g"]
+            .into_iter()
+            .find_map(|unit| value.strip_suffix(unit).map(|amount| (amount, unit)))
+    }
+    let (left_amount, left_unit) = parts(left)?;
+    let (right_amount, right_unit) = parts(right)?;
+    if left_unit != right_unit {
+        return None;
+    }
+    let left_amount = normalize_integer(left_amount)?;
+    let right_amount = normalize_integer(right_amount)?;
+    Some(
+        left_amount
+            .len()
+            .cmp(&right_amount.len())
+            .then_with(|| left_amount.cmp(&right_amount)),
+    )
 }
 
 fn field_reference(path: &[String], entry: &MergedEntry) -> ProjectFieldReference {

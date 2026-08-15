@@ -4,20 +4,21 @@ use compose_lens::{
     model::{
         AnnotationsForm, BooleanValue, Command, ComposeScalar, DnsForm, DnsSearchForm, Entrypoint, Environment,
         EnvironmentFile, EnvironmentFileFormatKind, ExtraHosts, HostnameKind, Labels, MemLimitKind, MemLimitScalarKind,
-        MemLimitUnit, Port, ServiceNetworks, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit, StopGracePeriod, SysctlsForm,
-        UlimitValue, VolumeMount,
+        MemLimitUnit, MemswapLimitKind, Port, ServiceNetworks, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit,
+        StopGracePeriod, SysctlsForm, UlimitValue, VolumeMount,
     },
     render::{
-        ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument, GeneratedDevice,
-        GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile,
-        GeneratedEnvironmentFileFormat, GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLogging,
-        GeneratedLoggingOption, GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount,
+        ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument,
+        GeneratedConfigFileDefinition, GeneratedCpuRtRuntime, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
+        GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat,
+        GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLogging, GeneratedLoggingOption,
+        GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount,
         GeneratedNetworkAttachment, GeneratedNetworkDefinition, GeneratedNetworkDriverOption,
         GeneratedNetworkDriverOptionValue, GeneratedPidsLimit, GeneratedPort, GeneratedProtocol, GeneratedPullPolicy,
-        GeneratedResource, GeneratedRestartPolicy, GeneratedSelinux, GeneratedService, GeneratedShmSize,
-        GeneratedString, GeneratedSysctl, GeneratedSysctls, GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue,
-        GeneratedUlimits, GeneratedVolumeDefinition, GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue,
-        GenerationError,
+        GeneratedResource, GeneratedRestartPolicy, GeneratedSecretFileDefinition, GeneratedSelinux, GeneratedService,
+        GeneratedServiceRuntimeField, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls,
+        GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition,
+        GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, GenerationError,
     },
     source::SourceId,
 };
@@ -3361,5 +3362,289 @@ fn generates_literal_privileged_choices_and_rejects_replacement() -> Result<(), 
             Some(&BooleanValue::Literal(expected))
         );
     }
+    Ok(())
+}
+
+#[test]
+fn generates_all_raw_service_runtime_fields_and_parses_them_back() -> Result<(), Box<dyn std::error::Error>> {
+    let mut service = GeneratedService::new("app")?;
+    for field in [
+        GeneratedServiceRuntimeField::Domainname(plain("example.test")?),
+        GeneratedServiceRuntimeField::Isolation(plain("process")?),
+        GeneratedServiceRuntimeField::MacAddress(plain("02:42:ac:11:00:02")?),
+        GeneratedServiceRuntimeField::Uts(plain("host")?),
+        GeneratedServiceRuntimeField::UseApiSocket(true),
+        GeneratedServiceRuntimeField::GpusAll(plain("all")?),
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(plain("500us")?)),
+        GeneratedServiceRuntimeField::CpuShares(plain("1024")?),
+        GeneratedServiceRuntimeField::Cpus(plain("0.000")?),
+        GeneratedServiceRuntimeField::Cpuset(plain("0-3")?),
+        GeneratedServiceRuntimeField::DeviceCgroupRules(vec![plain("c 1:3 mr")?, plain("c 1:3 mr")?]),
+        GeneratedServiceRuntimeField::Ipc(plain("service:db")?),
+        GeneratedServiceRuntimeField::MemReservation(plain("64m")?),
+        GeneratedServiceRuntimeField::MemSwappiness(plain("100")?),
+        GeneratedServiceRuntimeField::MemswapLimit(plain("-1")?),
+        GeneratedServiceRuntimeField::NetworkMode(plain("service:db")?),
+        GeneratedServiceRuntimeField::OomKillDisable(false),
+        GeneratedServiceRuntimeField::OomScoreAdj(plain("-1000")?),
+        GeneratedServiceRuntimeField::Pid(plain("container:external")?),
+        GeneratedServiceRuntimeField::Scale(plain("2")?),
+        GeneratedServiceRuntimeField::VolumesFrom(vec![plain("db:ro")?, plain("cache")?, plain("cache")?]),
+    ] {
+        service.add_runtime_field(field)?;
+    }
+    assert_eq!(
+        service.add_runtime_field(GeneratedServiceRuntimeField::Cpus(plain("1")?)),
+        Err(GenerationError::DuplicateField("cpus"))
+    );
+    let mut invalid = GeneratedService::new("invalid")?;
+    assert_eq!(
+        invalid.add_runtime_field(GeneratedServiceRuntimeField::Cpuset(plain("0\n1")?)),
+        Err(GenerationError::InvalidServiceRuntimeField("cpuset"))
+    );
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let mut microseconds = GeneratedService::new("microseconds")?;
+    microseconds.add_runtime_field(GeneratedServiceRuntimeField::CpuRtRuntime(
+        GeneratedCpuRtRuntime::Microseconds(plain("500")?),
+    ))?;
+    builder.add_service(microseconds)?;
+    let mut zero_swap = GeneratedService::new("zero-swap")?;
+    zero_swap.add_runtime_field(GeneratedServiceRuntimeField::MemswapLimit(plain("0")?))?;
+    builder.add_service(zero_swap)?;
+    let mut positive_swap = GeneratedService::new("positive-swap")?;
+    positive_swap.add_runtime_field(GeneratedServiceRuntimeField::MemswapLimit(plain("64m")?))?;
+    builder.add_service(positive_swap)?;
+    let generated = builder.build(SourceId::new(9104))?;
+    let app = generated.document().service("app").ok_or("app expected")?;
+    assert!(matches!(
+        app.cpu_rt_runtime().map(compose_lens::model::Located::value),
+        Some(compose_lens::model::CpuRtRuntime::Duration(value)) if value == "500us"
+    ));
+    assert!(app.cpu_shares().is_some() && app.cpus().is_some());
+    assert_eq!(
+        app.domainname().map(compose_lens::model::Located::value),
+        Some(&"example.test".to_owned())
+    );
+    assert_eq!(
+        app.isolation().map(compose_lens::model::Located::value),
+        Some(&"process".to_owned())
+    );
+    assert!(app.mac_address().is_some() && app.uts().is_some() && app.use_api_socket().is_some());
+    assert!(matches!(app.gpus(), Some(compose_lens::model::Gpus::All(value)) if value.value() == "all"));
+    assert_eq!(app.device_cgroup_rules().len(), 2);
+    assert_eq!(app.volumes_from().len(), 3);
+    assert!(app.mem_reservation().is_some() && app.memswap_limit().is_some());
+    assert!(matches!(
+        app.memswap_limit().map(compose_lens::model::MemswapLimit::kind),
+        Some(MemswapLimitKind::Unlimited)
+    ));
+    assert!(matches!(
+        generated
+            .document()
+            .service("microseconds")
+            .and_then(compose_lens::model::Service::cpu_rt_runtime)
+            .map(compose_lens::model::Located::value),
+        Some(compose_lens::model::CpuRtRuntime::Microseconds(value)) if value == "500"
+    ));
+    assert!(matches!(
+        generated
+            .document()
+            .service("zero-swap")
+            .and_then(compose_lens::model::Service::memswap_limit)
+            .map(compose_lens::model::MemswapLimit::kind),
+        Some(MemswapLimitKind::Zero { .. })
+    ));
+    assert!(matches!(
+        generated
+            .document()
+            .service("positive-swap")
+            .and_then(compose_lens::model::Service::memswap_limit)
+            .map(compose_lens::model::MemswapLimit::kind),
+        Some(MemswapLimitKind::Positive { .. })
+    ));
+    assert!(generated.text().contains("cpu_rt_runtime: 500\n"));
+    assert!(generated.text().contains("cpu_rt_runtime: \"500us\"\n"));
+    assert!(generated.text().contains("gpus: \"all\"\n"));
+    Ok(())
+}
+
+#[test]
+fn rejects_deferred_empty_and_out_of_range_generated_runtime_fields() -> Result<(), Box<dyn std::error::Error>> {
+    let invalid = [
+        GeneratedServiceRuntimeField::Domainname(plain("${DOMAIN}")?),
+        GeneratedServiceRuntimeField::Isolation(plain("line\nbreak")?),
+        GeneratedServiceRuntimeField::MacAddress(plain("")?),
+        GeneratedServiceRuntimeField::Uts(plain("${UTS}")?),
+        GeneratedServiceRuntimeField::GpusAll(plain("one")?),
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Microseconds(plain("${CPU}")?)),
+        GeneratedServiceRuntimeField::CpuRtRuntime(GeneratedCpuRtRuntime::Duration(plain("500")?)),
+        GeneratedServiceRuntimeField::CpuShares(plain("-1")?),
+        GeneratedServiceRuntimeField::Cpus(plain("1e3")?),
+        GeneratedServiceRuntimeField::Cpus(plain(".5")?),
+        GeneratedServiceRuntimeField::Cpus(plain("1.")?),
+        GeneratedServiceRuntimeField::Cpuset(plain("")?),
+        GeneratedServiceRuntimeField::DeviceCgroupRules(vec![plain("${RULE}")?]),
+        GeneratedServiceRuntimeField::Ipc(plain("service:")?),
+        GeneratedServiceRuntimeField::MemReservation(plain("${MEM}")?),
+        GeneratedServiceRuntimeField::MemReservation(plain("nonsense")?),
+        GeneratedServiceRuntimeField::MemReservation(plain("64")?),
+        GeneratedServiceRuntimeField::MemSwappiness(plain("101")?),
+        GeneratedServiceRuntimeField::MemswapLimit(plain("")?),
+        GeneratedServiceRuntimeField::MemswapLimit(plain("-2")?),
+        GeneratedServiceRuntimeField::MemswapLimit(plain("64")?),
+        GeneratedServiceRuntimeField::NetworkMode(plain("container:")?),
+        GeneratedServiceRuntimeField::OomScoreAdj(plain("1001")?),
+        GeneratedServiceRuntimeField::Pid(plain("service:")?),
+        GeneratedServiceRuntimeField::Scale(plain("-1")?),
+        GeneratedServiceRuntimeField::VolumesFrom(vec![plain("")?]),
+    ];
+    for field in invalid {
+        let name = match &field {
+            GeneratedServiceRuntimeField::Domainname(_) => "domainname",
+            GeneratedServiceRuntimeField::Isolation(_) => "isolation",
+            GeneratedServiceRuntimeField::MacAddress(_) => "mac_address",
+            GeneratedServiceRuntimeField::Uts(_) => "uts",
+            GeneratedServiceRuntimeField::GpusAll(_) => "gpus",
+            GeneratedServiceRuntimeField::CpuRtRuntime(_) => "cpu_rt_runtime",
+            GeneratedServiceRuntimeField::CpuShares(_) => "cpu_shares",
+            GeneratedServiceRuntimeField::Cpus(_) => "cpus",
+            GeneratedServiceRuntimeField::Cpuset(_) => "cpuset",
+            GeneratedServiceRuntimeField::DeviceCgroupRules(_) => "device_cgroup_rules",
+            GeneratedServiceRuntimeField::Ipc(_) => "ipc",
+            GeneratedServiceRuntimeField::MemReservation(_) => "mem_reservation",
+            GeneratedServiceRuntimeField::MemSwappiness(_) => "mem_swappiness",
+            GeneratedServiceRuntimeField::MemswapLimit(_) => "memswap_limit",
+            GeneratedServiceRuntimeField::NetworkMode(_) => "network_mode",
+            GeneratedServiceRuntimeField::OomScoreAdj(_) => "oom_score_adj",
+            GeneratedServiceRuntimeField::Pid(_) => "pid",
+            GeneratedServiceRuntimeField::Scale(_) => "scale",
+            GeneratedServiceRuntimeField::VolumesFrom(_) => "volumes_from",
+            _ => unreachable!(),
+        };
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.add_runtime_field(field),
+            Err(GenerationError::InvalidServiceRuntimeField(name))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn rejects_generated_cpu_share_and_scale_values_outside_i128_range() -> Result<(), Box<dyn std::error::Error>> {
+    for field in [
+        GeneratedServiceRuntimeField::CpuShares(plain("170141183460469231731687303715884105728")?),
+        GeneratedServiceRuntimeField::Scale(plain("170141183460469231731687303715884105728")?),
+    ] {
+        let name = match &field {
+            GeneratedServiceRuntimeField::CpuShares(_) => "cpu_shares",
+            GeneratedServiceRuntimeField::Scale(_) => "scale",
+            _ => unreachable!(),
+        };
+        let mut service = GeneratedService::new("app")?;
+        assert_eq!(
+            service.add_runtime_field(field),
+            Err(GenerationError::InvalidServiceRuntimeField(name))
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn generates_top_level_config_and_secret_file_definitions_with_parse_back() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  \"app\":\n",
+        "    image: \"example/app\"\n",
+        "configs:\n",
+        "  \"application-config\":\n",
+        "    file: \"config/application.yaml\"\n",
+        "secrets:\n",
+        "  \"database-password\":\n",
+        "    file: \"secrets/db.txt\"\n",
+    );
+    let syntax = compose_lens::syntax::SyntaxDocument::parse(SourceId::new(20_049), source)?;
+    let parsed = compose_lens::model::ComposeDocument::parse(syntax.document());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    let config = GeneratedConfigFileDefinition::new("application-config", plain("config/application.yaml")?)?;
+    let secret =
+        GeneratedSecretFileDefinition::new("database-password", GeneratedString::sensitive("secrets/db.txt")?)?;
+    assert_eq!(config.name(), "application-config");
+    assert_eq!(config.file().expose(), "config/application.yaml");
+    assert_eq!(secret.name(), "database-password");
+    assert_eq!(secret.file().expose(), "secrets/db.txt");
+    assert!(!format!("{secret:?}").contains("secrets/db.txt"));
+
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.set_image(plain("example/app")?)?;
+    builder.add_service(service)?;
+    builder.add_config_file(config)?;
+    builder.add_secret_file(secret)?;
+    assert!(!format!("{builder:?}").contains("secrets/db.txt"));
+    let generated = builder.build(SourceId::new(20_050))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("secrets/db.txt"));
+    assert_eq!(generated.text(), source);
+    assert_eq!(
+        generated
+            .document()
+            .configs()
+            .iter()
+            .find(|config| config.name().value() == "application-config")
+            .and_then(compose_lens::model::ConfigDefinition::file)
+            .map(compose_lens::model::Located::value),
+        Some(&"config/application.yaml".to_owned())
+    );
+    assert_eq!(
+        generated
+            .document()
+            .secrets()
+            .iter()
+            .find(|secret| secret.name().value() == "database-password")
+            .and_then(compose_lens::model::SecretDefinition::file)
+            .map(compose_lens::model::Located::value),
+        Some(&"secrets/db.txt".to_owned())
+    );
+    Ok(())
+}
+
+#[test]
+fn rejects_invalid_or_duplicate_generated_top_level_file_definitions() -> Result<(), Box<dyn std::error::Error>> {
+    for name in ["", "${CONFIG}", "contains\0nul", "line\nbreak", "line\rbreak"] {
+        assert_eq!(
+            GeneratedConfigFileDefinition::new(name, plain("config.yaml")?),
+            Err(GenerationError::InvalidFileResourceName)
+        );
+    }
+    for file in ["", "${CONFIG_PATH}", "line\nbreak", "line\rbreak"] {
+        assert_eq!(
+            GeneratedSecretFileDefinition::new("secret", plain(file)?),
+            Err(GenerationError::InvalidFileResourcePath)
+        );
+    }
+    assert_eq!(
+        GeneratedString::plain("contains\0nul"),
+        Err(GenerationError::ContainsNul("string"))
+    );
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_config_file(GeneratedConfigFileDefinition::new("config", plain("first.yaml")?)?)?;
+    assert_eq!(
+        builder.add_config_file(GeneratedConfigFileDefinition::new("config", plain("second.yaml")?)?),
+        Err(GenerationError::DuplicateName {
+            kind: "config",
+            name: "config".to_owned(),
+        })
+    );
+    builder.add_secret_file(GeneratedSecretFileDefinition::new("config", plain("first.txt")?)?)?;
+    assert_eq!(
+        builder.add_secret_file(GeneratedSecretFileDefinition::new("config", plain("second.txt")?)?),
+        Err(GenerationError::DuplicateName {
+            kind: "secret",
+            name: "config".to_owned(),
+        })
+    );
     Ok(())
 }

@@ -11,6 +11,7 @@ mod cpu_percent;
 mod cpu_period;
 mod cpu_quota;
 mod cpu_rt_period;
+mod cpu_rt_runtime;
 mod credential_spec;
 mod dependency;
 mod device;
@@ -34,10 +35,12 @@ mod pids;
 mod port;
 mod provider;
 mod pull;
+mod remaining;
 mod resource;
 mod restart;
 mod sections;
 mod security_option;
+mod service_runtime;
 mod shm;
 mod sysctl;
 mod tmpfs;
@@ -58,6 +61,7 @@ pub use cpu_percent::CpuPercent;
 pub use cpu_period::CpuPeriod;
 pub use cpu_quota::CpuQuota;
 pub use cpu_rt_period::CpuRtPeriod;
+pub use cpu_rt_runtime::CpuRtRuntime;
 pub use credential_spec::CredentialSpec;
 pub use dependency::{
     DependencyCondition, DependsOn, Healthcheck, HealthcheckDuration, HealthcheckRetries, HealthcheckTest,
@@ -96,7 +100,14 @@ pub use port::{LongPort, Port, ShortPort};
 pub use provider::{Provider, ProviderOption, ProviderOptionItem, ProviderOptionValue, ProviderOptions};
 pub(crate) use pull::valid_pull_policy_duration;
 pub use pull::{PullPolicy, PullPolicyKind};
-pub use resource::{ConfigDefinition, ConfigGrant, LongGrant, SecretDefinition, SecretGrant, VolumeDefinition};
+pub use remaining::{
+    Develop, DevelopWatch, DevelopWatchExec, GpuDevice, GpuOptions, Gpus, IncludeItem, IncludeLong, Includes,
+    LabelFiles, LabelFilesForm, ModelDefinition, ModelDefinitions, ServiceModelBinding, ServiceModels,
+};
+pub use resource::{
+    ConfigDefinition, ConfigGrant, ExternalNameMapping, LongGrant, ResourceExternal, SecretDefinition, SecretGrant,
+    VolumeDefinition,
+};
 pub use restart::{RestartPolicy, RestartPolicyKind};
 pub use sections::{
     Build, BuildAdditionalContexts, BuildArgs, BuildDefinition, BuildField, BuildFieldKind, BuildNoCacheFilter,
@@ -115,6 +126,10 @@ pub use sections::{
 };
 pub(crate) use security_option::{SecurityOptionCandidateCounts, classify_security_option};
 pub use security_option::{SecurityOptionItem, SecurityOptionKind, SecurityOptions};
+pub use service_runtime::{
+    Cpus, InvalidServiceStringItem, IpcMode, MemswapLimit, MemswapLimitKind, MemswapLimitScalarKind, NetworkMode,
+    PidMode, ServiceInteger, VolumesFrom,
+};
 pub(crate) use shm::valid_generated_shm_amount;
 pub use shm::{ShmSize, ShmSizeKind, ShmSizeScalarKind, ShmSizeUnit};
 pub use sysctl::{Sysctls, SysctlsForm};
@@ -124,8 +139,8 @@ pub(crate) use ulimit::valid_ulimit_name;
 pub use ulimit::{LimitValue, Ulimit, UlimitRange, UlimitValue, Ulimits};
 pub use value::{BooleanValue, BuildNoCache, BuildProvenance, BuildSbom, ComposeScalar, KeyValueEntry, Labels};
 pub use volume::{
-    BindOptions, ContainerPath, ContainerPathKind, LongVolumeMount, MountType, SelinuxRelabel, ShortVolumeMount,
-    VolumeMount, VolumeSyntax,
+    BindOptions, ContainerPath, ContainerPathKind, ImageMountOptions, LongVolumeMount, MountType, SelinuxRelabel,
+    ShortVolumeMount, TmpfsMountOptions, VolumeMount, VolumeMountOptions, VolumeSyntax,
 };
 
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
@@ -142,6 +157,27 @@ pub const MULTIPLE_DOCUMENTS: DiagnosticCode = DiagnosticCode::new("compose.docu
 
 /// A mapping contains a duplicate field.
 pub const DUPLICATE_FIELD: DiagnosticCode = DiagnosticCode::new("compose.model.duplicate-field");
+/// The legacy top-level Compose `version` field is retained but no longer selects a specification version.
+pub const VERSION_OBSOLETE: DiagnosticCode = DiagnosticCode::new("compose.version.obsolete");
+/// A service `develop` declaration lacks the required watch sequence.
+pub const DEVELOP_MISSING_WATCH: DiagnosticCode = DiagnosticCode::new("compose.develop.missing-watch");
+/// A Compose develop watch entry lacks its required action member.
+pub const DEVELOP_WATCH_MISSING_ACTION: DiagnosticCode = DiagnosticCode::new("compose.develop.watch.missing-action");
+/// A Compose develop watch entry lacks its required path member.
+pub const DEVELOP_WATCH_MISSING_PATH: DiagnosticCode = DiagnosticCode::new("compose.develop.watch.missing-path");
+/// A Compose develop watch entry uses an action outside the documented action set.
+pub const DEVELOP_WATCH_INVALID_ACTION: DiagnosticCode = DiagnosticCode::new("compose.develop.watch.invalid-action");
+/// A synchronizing Compose develop watch action lacks its required target member.
+pub const DEVELOP_WATCH_MISSING_TARGET: DiagnosticCode = DiagnosticCode::new("compose.develop.watch.missing-target");
+/// A `sync+exec` Compose develop watch action lacks its required exec command mapping.
+pub const DEVELOP_WATCH_MISSING_EXEC: DiagnosticCode = DiagnosticCode::new("compose.develop.watch.missing-exec");
+/// A `develop.watch.exec` mapping omits its required non-empty command member.
+pub const DEVELOP_WATCH_EXEC_MISSING_COMMAND: DiagnosticCode =
+    DiagnosticCode::new("compose.develop.watch.exec.missing-command");
+/// A long GPU selector asks for both a count and explicit device IDs.
+pub const GPU_COUNT_DEVICE_IDS_CONFLICT: DiagnosticCode = DiagnosticCode::new("compose.gpus.count-device-ids-conflict");
+/// A long GPU selector omits its required non-empty capabilities declaration.
+pub const GPU_MISSING_CAPABILITIES: DiagnosticCode = DiagnosticCode::new("compose.gpus.missing-capabilities");
 /// A strict YAML-string service cgroup namespace is not a documented literal or deferred expression.
 pub const CGROUP_NAMESPACE_INVALID: DiagnosticCode = DiagnosticCode::new("compose.cgroup.invalid-namespace");
 /// A deploy endpoint mode is retained but is outside Compose's documented portable values.
@@ -260,6 +296,16 @@ pub const VOLUME_EXTERNAL_DRIVER_CONFIGURATION: DiagnosticCode =
 pub const VOLUME_EXTERNAL_LABELS_CONFIGURATION: DiagnosticCode =
     DiagnosticCode::new("compose.volume.external-labels-configuration");
 
+/// A deprecated `external: { name: ... }` resource declaration is retained for migration.
+pub const RESOURCE_EXTERNAL_NAME_MAPPING_DEPRECATED: DiagnosticCode =
+    DiagnosticCode::new("compose.resource.external-name-mapping-deprecated");
+/// A resource uses both the modern `name` field and the deprecated external name mapping.
+pub const RESOURCE_EXTERNAL_NAME_CONFLICT: DiagnosticCode =
+    DiagnosticCode::new("compose.resource.external-name-conflict");
+/// An explicitly external resource also declares creation-time metadata.
+pub const RESOURCE_EXTERNAL_CREATION_CONFIGURATION: DiagnosticCode =
+    DiagnosticCode::new("compose.resource.external-creation-configuration");
+
 /// A service-volume item is neither short nor long syntax.
 pub const VOLUME_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose.volume.expected-short-or-long");
 
@@ -271,6 +317,10 @@ pub const VOLUME_MISSING_TARGET: DiagnosticCode = DiagnosticCode::new("compose.v
 
 /// A long-syntax bind mount has an invalid `SELinux` value.
 pub const VOLUME_INVALID_SELINUX: DiagnosticCode = DiagnosticCode::new("compose.volume.bind.invalid-selinux");
+
+/// A long-mount nested option block must be a mapping.
+pub const VOLUME_OPTION_EXPECTED_MAPPING: DiagnosticCode =
+    DiagnosticCode::new("compose.volume.long.option.expected-mapping");
 
 /// A short `extra_hosts` entry does not contain a hostname/address separator.
 pub const EXTRA_HOST_INVALID_ENTRY: DiagnosticCode = DiagnosticCode::new("compose.extra-hosts.invalid-entry");
@@ -339,6 +389,8 @@ pub const CPU_RT_PERIOD_EXPECTED_VALUE: DiagnosticCode =
 
 /// A service real-time CPU-period string is outside the raw Compose duration policy.
 pub const CPU_RT_PERIOD_INVALID: DiagnosticCode = DiagnosticCode::new("compose.cpu-rt-period.invalid-duration");
+/// A `cpu_rt_runtime` scalar is neither an integer microsecond value, duration, nor deferred expression.
+pub const CPU_RT_RUNTIME_INVALID: DiagnosticCode = DiagnosticCode::new("compose.cpu-rt-runtime.invalid-value");
 
 /// A service shared-memory size is not a number or string scalar.
 pub const SHM_SIZE_EXPECTED_VALUE: DiagnosticCode = DiagnosticCode::new("compose.shm-size.expected-number-or-string");
@@ -366,6 +418,13 @@ pub const MEM_LIMIT_SCHEMA_NUMBER: DiagnosticCode = DiagnosticCode::new("compose
 /// A schema-accepted string memory limit is outside the documented lowercase suffix family.
 pub const MEM_LIMIT_PROVIDER_DEPENDENT_STRING: DiagnosticCode =
     DiagnosticCode::new("compose.mem-limit.provider-dependent-string");
+
+/// A service memory-plus-swap limit is not a YAML number or string scalar.
+pub const MEMSWAP_LIMIT_EXPECTED_VALUE: DiagnosticCode =
+    DiagnosticCode::new("compose.memswap-limit.expected-number-or-string");
+
+/// A service memory-plus-swap limit is neither `-1`, a decimal quantity, nor an expression.
+pub const MEMSWAP_LIMIT_INVALID: DiagnosticCode = DiagnosticCode::new("compose.memswap-limit.invalid-value");
 
 /// A service image pull policy is not documented, schema-recognized, or deferred.
 pub const PULL_POLICY_INVALID: DiagnosticCode = DiagnosticCode::new("compose.pull-policy.invalid-policy");
@@ -805,6 +864,10 @@ pub struct FieldReference {
 }
 
 impl FieldReference {
+    pub(crate) const fn generated(name: Located<String>, span: SourceSpan, value_span: Option<SourceSpan>) -> Self {
+        Self { name, span, value_span }
+    }
+
     /// Returns the semantic field name and its source span.
     #[must_use]
     pub const fn name(&self) -> &Located<String> {
@@ -830,9 +893,13 @@ pub struct Service {
     name: Located<String>,
     span: SourceSpan,
     hostname: Option<Hostname>,
+    domainname: Option<Located<String>>,
     container_name: Option<Located<String>>,
     image: Option<Located<ImageReference>>,
     platform: Option<Located<String>>,
+    isolation: Option<Located<String>>,
+    mac_address: Option<Located<String>>,
+    uts: Option<Located<String>>,
     entrypoint: Option<Entrypoint>,
     command: Option<Command>,
     credential_spec: Option<CredentialSpec>,
@@ -849,11 +916,19 @@ pub struct Service {
     stdin_open: Option<Located<BooleanValue>>,
     tty: Option<Located<BooleanValue>>,
     privileged: Option<Located<BooleanValue>>,
+    use_api_socket: Option<Located<BooleanValue>>,
     environment: Option<Environment>,
     environment_files: Vec<EnvironmentFile>,
+    label_files: Option<LabelFiles>,
     labels: Option<Labels>,
     annotations: Option<Annotations>,
     extra_hosts: Option<ExtraHosts>,
+    external_links: Vec<Located<String>>,
+    links: Vec<Located<String>>,
+    storage_opt: Option<Labels>,
+    models: Option<ServiceModels>,
+    gpus: Option<Gpus>,
+    develop: Option<Develop>,
     user: Option<UserSpec>,
     userns_mode: Option<UserNamespaceMode>,
     group_add: Vec<Located<String>>,
@@ -873,6 +948,23 @@ pub struct Service {
     cpu_period: Option<Located<CpuPeriod>>,
     cpu_quota: Option<Located<CpuQuota>>,
     cpu_rt_period: Option<Located<CpuRtPeriod>>,
+    cpu_rt_runtime: Option<Located<CpuRtRuntime>>,
+    cpu_shares: Option<Located<ServiceInteger>>,
+    cpus: Option<Located<Cpus>>,
+    cpuset: Option<Located<String>>,
+    device_cgroup_rules: Vec<Located<String>>,
+    invalid_device_cgroup_rules: Vec<InvalidServiceStringItem>,
+    ipc: Option<Located<IpcMode>>,
+    mem_reservation: Option<MemLimit>,
+    mem_swappiness: Option<Located<ServiceInteger>>,
+    memswap_limit: Option<MemswapLimit>,
+    network_mode: Option<Located<NetworkMode>>,
+    oom_kill_disable: Option<Located<BooleanValue>>,
+    oom_score_adj: Option<Located<ServiceInteger>>,
+    pid: Option<Located<PidMode>>,
+    scale: Option<Located<ServiceInteger>>,
+    volumes_from: Vec<VolumesFrom>,
+    invalid_volumes_from: Vec<InvalidServiceStringItem>,
     shm_size: Option<ShmSize>,
     mem_limit: Option<MemLimit>,
     tmpfs: Option<Tmpfs>,
@@ -900,14 +992,22 @@ pub struct Service {
 }
 
 impl Service {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "each source-aware field has an explicit omission state; grouping would obscure that contract"
+    )]
     fn new(name: Located<String>, span: SourceSpan) -> Self {
         Self {
             name,
             span,
             hostname: None,
+            domainname: None,
             container_name: None,
             image: None,
             platform: None,
+            isolation: None,
+            mac_address: None,
+            uts: None,
             entrypoint: None,
             command: None,
             credential_spec: None,
@@ -924,11 +1024,19 @@ impl Service {
             stdin_open: None,
             tty: None,
             privileged: None,
+            use_api_socket: None,
             environment: None,
             environment_files: Vec::new(),
+            label_files: None,
             labels: None,
             annotations: None,
             extra_hosts: None,
+            external_links: Vec::new(),
+            links: Vec::new(),
+            storage_opt: None,
+            models: None,
+            gpus: None,
+            develop: None,
             user: None,
             userns_mode: None,
             group_add: Vec::new(),
@@ -948,6 +1056,23 @@ impl Service {
             cpu_period: None,
             cpu_quota: None,
             cpu_rt_period: None,
+            cpu_rt_runtime: None,
+            cpu_shares: None,
+            cpus: None,
+            cpuset: None,
+            device_cgroup_rules: Vec::new(),
+            invalid_device_cgroup_rules: Vec::new(),
+            ipc: None,
+            mem_reservation: None,
+            mem_swappiness: None,
+            memswap_limit: None,
+            network_mode: None,
+            oom_kill_disable: None,
+            oom_score_adj: None,
+            pid: None,
+            scale: None,
+            volumes_from: Vec::new(),
+            invalid_volumes_from: Vec::new(),
             shm_size: None,
             mem_limit: None,
             tmpfs: None,
@@ -993,6 +1118,12 @@ impl Service {
         self.hostname.as_ref()
     }
 
+    /// Returns the explicitly authored service domain name without DNS or runtime interpretation.
+    #[must_use]
+    pub const fn domainname(&self) -> Option<&Located<String>> {
+        self.domainname.as_ref()
+    }
+
     /// Returns the explicitly authored runtime container name.
     #[must_use]
     pub const fn container_name(&self) -> Option<&Located<String>> {
@@ -1009,6 +1140,24 @@ impl Service {
     #[must_use]
     pub const fn platform(&self) -> Option<&Located<String>> {
         self.platform.as_ref()
+    }
+
+    /// Returns the raw service isolation spelling without platform or runtime interpretation.
+    #[must_use]
+    pub const fn isolation(&self) -> Option<&Located<String>> {
+        self.isolation.as_ref()
+    }
+
+    /// Returns the raw service MAC-address spelling without validating host or network support.
+    #[must_use]
+    pub const fn mac_address(&self) -> Option<&Located<String>> {
+        self.mac_address.as_ref()
+    }
+
+    /// Returns the raw service UTS-mode spelling without namespace interpretation.
+    #[must_use]
+    pub const fn uts(&self) -> Option<&Located<String>> {
+        self.uts.as_ref()
     }
 
     /// Returns the entrypoint without normalizing its authored form.
@@ -1119,6 +1268,12 @@ impl Service {
         self.privileged.as_ref()
     }
 
+    /// Returns the explicit API-socket mount choice without inspecting the socket or host.
+    #[must_use]
+    pub const fn use_api_socket(&self) -> Option<&Located<BooleanValue>> {
+        self.use_api_socket.as_ref()
+    }
+
     /// Returns environment variables with list and mapping forms kept distinct.
     #[must_use]
     pub const fn environment(&self) -> Option<&Environment> {
@@ -1129,6 +1284,12 @@ impl Service {
     #[must_use]
     pub fn environment_files(&self) -> &[EnvironmentFile] {
         &self.environment_files
+    }
+
+    /// Returns the authored scalar or ordered-list `label_file` form. `ComposeLens` never reads these files.
+    #[must_use]
+    pub const fn label_files(&self) -> Option<&LabelFiles> {
+        self.label_files.as_ref()
     }
 
     /// Returns service metadata labels with list and mapping forms kept distinct.
@@ -1147,6 +1308,42 @@ impl Service {
     #[must_use]
     pub const fn extra_hosts(&self) -> Option<&ExtraHosts> {
         self.extra_hosts.as_ref()
+    }
+
+    /// Returns raw external-link declarations in authored order without resolving them.
+    #[must_use]
+    pub fn external_links(&self) -> &[Located<String>] {
+        &self.external_links
+    }
+
+    /// Returns raw legacy link declarations in authored order without resolving them.
+    #[must_use]
+    pub fn links(&self) -> &[Located<String>] {
+        &self.links
+    }
+
+    /// Returns storage options as a source-aware scalar map without storage-driver interpretation.
+    #[must_use]
+    pub const fn storage_opt(&self) -> Option<&Labels> {
+        self.storage_opt.as_ref()
+    }
+
+    /// Returns raw service model bindings without loading model definitions or providers.
+    #[must_use]
+    pub const fn models(&self) -> Option<&ServiceModels> {
+        self.models.as_ref()
+    }
+
+    /// Returns the raw GPU selector when it uses the scalar form.
+    #[must_use]
+    pub const fn gpus(&self) -> Option<&Gpus> {
+        self.gpus.as_ref()
+    }
+
+    /// Returns side-effect-free `develop` watch declarations.
+    #[must_use]
+    pub const fn develop(&self) -> Option<&Develop> {
+        self.develop.as_ref()
     }
 
     /// Returns the raw-preserving container user/group value.
@@ -1261,6 +1458,92 @@ impl Service {
     #[must_use]
     pub const fn cpu_rt_period(&self) -> Option<&Located<CpuRtPeriod>> {
         self.cpu_rt_period.as_ref()
+    }
+
+    /// Returns the authored real-time CPU-runtime scalar without scheduler interpretation.
+    #[must_use]
+    pub const fn cpu_rt_runtime(&self) -> Option<&Located<CpuRtRuntime>> {
+        self.cpu_rt_runtime.as_ref()
+    }
+    /// Returns the authored relative CPU-share scalar.
+    #[must_use]
+    pub const fn cpu_shares(&self) -> Option<&Located<ServiceInteger>> {
+        self.cpu_shares.as_ref()
+    }
+    /// Returns the authored decimal CPU allocation spelling.
+    #[must_use]
+    pub const fn cpus(&self) -> Option<&Located<Cpus>> {
+        self.cpus.as_ref()
+    }
+    /// Returns the raw CPU-set spelling without provider grammar inference.
+    #[must_use]
+    pub const fn cpuset(&self) -> Option<&Located<String>> {
+        self.cpuset.as_ref()
+    }
+    /// Returns ordered raw device cgroup rules, including duplicates.
+    #[must_use]
+    pub fn device_cgroup_rules(&self) -> &[Located<String>] {
+        &self.device_cgroup_rules
+    }
+    /// Returns malformed device-cgroup rule items retained with their source spans.
+    #[must_use]
+    pub fn invalid_device_cgroup_rules(&self) -> &[InvalidServiceStringItem] {
+        &self.invalid_device_cgroup_rules
+    }
+    /// Returns the authored IPC mode.
+    #[must_use]
+    pub const fn ipc(&self) -> Option<&Located<IpcMode>> {
+        self.ipc.as_ref()
+    }
+    /// Returns the authored memory reservation.
+    #[must_use]
+    pub const fn mem_reservation(&self) -> Option<&MemLimit> {
+        self.mem_reservation.as_ref()
+    }
+    /// Returns the authored memory-swappiness scalar.
+    #[must_use]
+    pub const fn mem_swappiness(&self) -> Option<&Located<ServiceInteger>> {
+        self.mem_swappiness.as_ref()
+    }
+    /// Returns the authored memory-plus-swap limit spelling.
+    #[must_use]
+    pub const fn memswap_limit(&self) -> Option<&MemswapLimit> {
+        self.memswap_limit.as_ref()
+    }
+    /// Returns the authored network mode.
+    #[must_use]
+    pub const fn network_mode(&self) -> Option<&Located<NetworkMode>> {
+        self.network_mode.as_ref()
+    }
+    /// Returns the authored OOM-kill choice or deferred expression.
+    #[must_use]
+    pub const fn oom_kill_disable(&self) -> Option<&Located<BooleanValue>> {
+        self.oom_kill_disable.as_ref()
+    }
+    /// Returns the authored OOM-score adjustment scalar.
+    #[must_use]
+    pub const fn oom_score_adj(&self) -> Option<&Located<ServiceInteger>> {
+        self.oom_score_adj.as_ref()
+    }
+    /// Returns the authored PID namespace mode.
+    #[must_use]
+    pub const fn pid(&self) -> Option<&Located<PidMode>> {
+        self.pid.as_ref()
+    }
+    /// Returns the authored scale scalar.
+    #[must_use]
+    pub const fn scale(&self) -> Option<&Located<ServiceInteger>> {
+        self.scale.as_ref()
+    }
+    /// Returns ordered `volumes_from` references with default access retained.
+    #[must_use]
+    pub fn volumes_from(&self) -> &[VolumesFrom] {
+        &self.volumes_from
+    }
+    /// Returns malformed `volumes_from` items retained with their source spans.
+    #[must_use]
+    pub fn invalid_volumes_from(&self) -> &[InvalidServiceStringItem] {
+        &self.invalid_volumes_from
     }
 
     /// Returns the raw-preserving service shared-memory size.
@@ -1402,6 +1685,9 @@ pub struct ComposeDocument {
     source_id: SourceId,
     span: SourceSpan,
     name: Option<Located<String>>,
+    version: Option<Located<String>>,
+    include: Option<Includes>,
+    models: Option<ModelDefinitions>,
     services: Vec<Service>,
     networks: Vec<NetworkDefinition>,
     volumes: Vec<VolumeDefinition>,
@@ -1438,6 +1724,25 @@ impl ComposeDocument {
     #[must_use]
     pub const fn name(&self) -> Option<&Located<String>> {
         self.name.as_ref()
+    }
+
+    /// Returns the authored obsolete Compose version string. It is retained for migration tooling
+    /// and never selects a schema or provider behavior.
+    #[must_use]
+    pub const fn version(&self) -> Option<&Located<String>> {
+        self.version.as_ref()
+    }
+
+    /// Returns simple include paths in authored order. `ComposeLens` does not read or load them.
+    #[must_use]
+    pub const fn include(&self) -> Option<&Includes> {
+        self.include.as_ref()
+    }
+
+    /// Returns top-level model definitions as raw scalar-map evidence without provider access.
+    #[must_use]
+    pub const fn models(&self) -> Option<&ModelDefinitions> {
+        self.models.as_ref()
     }
 
     /// Returns services in authored order.
@@ -1707,6 +2012,9 @@ impl Parser {
             source_id: self.source_id,
             span,
             name: None,
+            version: None,
+            include: None,
+            models: None,
             services: Vec::new(),
             networks: Vec::new(),
             volumes: Vec::new(),
@@ -1722,6 +2030,29 @@ impl Parser {
             match field.name.value.as_str() {
                 "name" if !duplicate => {
                     document.name = self.parse_string(&field, "project name");
+                }
+                "version" if !duplicate => {
+                    document.version = self.parse_string(&field, "Compose version");
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            VERSION_OBSOLETE,
+                            Severity::Warning,
+                            "top-level Compose version is obsolete and does not select provider behavior",
+                        )
+                        .with_label(DiagnosticLabel::primary(field.span, "obsolete version retained")),
+                    );
+                }
+                "include" if !duplicate => {
+                    document.include = self.parse_includes(&field);
+                    if document.include.is_none() {
+                        document.unknown_fields.push(field.reference());
+                    }
+                }
+                "models" if !duplicate => {
+                    document.models = self.parse_model_definitions(&field);
+                    if document.models.is_none() {
+                        document.unknown_fields.push(field.reference());
+                    }
                 }
                 "services" if !duplicate => {
                     document.services = self.parse_services(&field);
@@ -1770,6 +2101,9 @@ impl Parser {
         let (mut service, mut seen) = (Service::new(field.name.clone(), field.span), BTreeMap::new());
         for service_field in self.fields(mapping) {
             let duplicate = self.record_duplicate(&mut seen, &service_field);
+            if !duplicate && self.parse_extra_service_field(&mut service, &service_field) {
+                continue;
+            }
             match service_field.name.value.as_str() {
                 "hostname" if !duplicate => service.hostname = self.parse_hostname(&service_field),
                 "container_name" if !duplicate => {
@@ -1812,11 +2146,6 @@ impl Parser {
                     service.working_dir = self.parse_string(&service_field, "service working directory");
                 }
                 "read_only" if !duplicate => service.read_only = self.parse_service_read_only(&service_field),
-                "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "pids_limit"
-                    if !duplicate =>
-                {
-                    self.set_service_count(&mut service, &service_field);
-                }
                 "shm_size" if !duplicate => service.shm_size = self.parse_shm_size(&service_field),
                 "mem_limit" if !duplicate => service.mem_limit = self.parse_mem_limit(&service_field),
                 "tmpfs" if !duplicate => service.tmpfs = self.parse_tmpfs(&service_field),
@@ -1869,6 +2198,133 @@ impl Parser {
         service
     }
 
+    fn parse_extra_service_field(&mut self, service: &mut Service, field: &ParsedField) -> bool {
+        self.parse_service_runtime_field(service, field) || self.parse_service_remaining_field(service, field)
+    }
+
+    fn parse_service_remaining_field(&mut self, service: &mut Service, field: &ParsedField) -> bool {
+        let scalar = |parser: &mut Self, description| parser.parse_extends_string(field, description);
+        match field.name.value().as_str() {
+            "domainname" => service.domainname = scalar(self, "service domainname must be a YAML string scalar"),
+            "isolation" => service.isolation = scalar(self, "service isolation must be a YAML string scalar"),
+            "mac_address" => service.mac_address = scalar(self, "service mac_address must be a YAML string scalar"),
+            "uts" => service.uts = scalar(self, "service uts must be a YAML string scalar"),
+            "gpus" => {
+                service.gpus = self.parse_gpus(field);
+                if service.gpus.as_ref().is_some_and(|gpus| {
+                    !gpus.unmodeled_items().is_empty()
+                        || matches!(gpus, Gpus::Devices { devices, .. } if devices.iter().any(|device| !device.unmodeled_fields().is_empty()))
+                }) {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "use_api_socket" => service.use_api_socket = self.parse_boolean(field, "service use_api_socket"),
+            "label_file" => service.label_files = self.parse_label_files(field),
+            "external_links" => service.external_links = self.parse_string_sequence(field, "service external_links"),
+            "links" => service.links = self.parse_string_sequence(field, "service links"),
+            "storage_opt" => service.storage_opt = self.parse_labels(field),
+            "models" => service.models = self.parse_service_models(field),
+            "develop" => {
+                service.develop = self.parse_develop(field);
+            }
+            _ => return false,
+        }
+        let is_scalar_sequence = matches!(field.name.value().as_str(), "external_links" | "links");
+        let parsed = match field.name.value().as_str() {
+            "domainname" => service.domainname.is_some(),
+            "isolation" => service.isolation.is_some(),
+            "mac_address" => service.mac_address.is_some(),
+            "uts" => service.uts.is_some(),
+            "gpus" => service.gpus.is_some(),
+            "use_api_socket" => service.use_api_socket.is_some(),
+            "storage_opt" => service.storage_opt.is_some(),
+            "models" => service.models.is_some(),
+            "develop" => service.develop.is_some(),
+            "label_file" => service.label_files.is_some(),
+            "external_links" | "links" => field.value.as_ref().is_some_and(|value| value.as_sequence().is_some()),
+            _ => unreachable!("all supported remaining service fields are listed above"),
+        };
+        if !parsed || (is_scalar_sequence && field.value.as_ref().is_some_and(|value| value.as_sequence().is_none())) {
+            service.unknown_fields.push(field.reference());
+        }
+        true
+    }
+
+    fn parse_service_runtime_field(&mut self, service: &mut Service, field: &ParsedField) -> bool {
+        match field.name.value().as_str() {
+            "cpu_count" | "cpu_percent" | "cpu_period" | "cpu_quota" | "cpu_rt_period" | "cpu_rt_runtime"
+            | "cpu_shares" | "cpus" | "mem_swappiness" | "oom_score_adj" | "scale" | "pids_limit" => {
+                self.set_service_count(service, field);
+            }
+            "cpuset" => {
+                service.cpuset = self.parse_string(field, "service cpuset");
+                if service.cpuset.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "device_cgroup_rules" => {
+                if field.value.as_ref().and_then(YamlNode::as_sequence).is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+                let (items, invalid) = self.parse_strict_string_sequence(field, "device_cgroup_rules");
+                service.device_cgroup_rules = items;
+                service.invalid_device_cgroup_rules = invalid;
+            }
+            "ipc" => {
+                service.ipc = self
+                    .parse_string(field, "service ipc mode")
+                    .map(|value| Located::new(IpcMode::parse(value.value), value.span));
+                if service.ipc.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "mem_reservation" => {
+                service.mem_reservation = self.parse_mem_limit(field);
+                if service.mem_reservation.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "memswap_limit" => {
+                service.memswap_limit = self.parse_memswap_limit(field);
+                if service.memswap_limit.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "network_mode" => {
+                service.network_mode = self
+                    .parse_string(field, "service network mode")
+                    .map(|value| Located::new(NetworkMode::parse(value.value), value.span));
+                if service.network_mode.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "oom_kill_disable" => {
+                service.oom_kill_disable = self.parse_boolean(field, "service oom_kill_disable");
+                if service.oom_kill_disable.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "pid" => {
+                service.pid = self
+                    .parse_string(field, "service pid mode")
+                    .map(|value| Located::new(PidMode::parse(value.value), value.span));
+                if service.pid.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "volumes_from" => {
+                if field.value.as_ref().and_then(YamlNode::as_sequence).is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+                let (items, invalid) = self.parse_strict_string_sequence(field, "volumes_from");
+                service.volumes_from = items.into_iter().map(VolumesFrom::parse).collect();
+                service.invalid_volumes_from = invalid;
+            }
+            _ => return false,
+        }
+        true
+    }
+
     fn hooks(&mut self, service: &mut Service, field: &ParsedField) {
         match field.name.value().as_str() {
             "post_start" => service.post_start = self.parse_post_start(field),
@@ -1876,6 +2332,706 @@ impl Parser {
             "pre_start" => service.pre_start = self.parse_pre_start(field),
             _ => {}
         }
+    }
+
+    fn parse_includes(&mut self, field: &ParsedField) -> Option<Includes> {
+        let sequence = field.value.as_ref().and_then(YamlNode::as_sequence)?;
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut items = Vec::new();
+        let mut unmodeled_fields = Vec::new();
+        for node in sequence.values() {
+            match node {
+                YamlNode::Scalar(scalar) if ScalarValue::from_scalar(&scalar).scalar_type() == ScalarType::String => {
+                    items.push(IncludeItem::Short(Located::new(
+                        scalar_string_from_source(&self.source, &scalar),
+                        span_from_position(self.source_id, scalar.byte_range()),
+                    )));
+                }
+                YamlNode::Scalar(_) => {
+                    self.unsupported_sequence_item(
+                        EXPECTED_SCALAR,
+                        &node,
+                        field.span,
+                        "include items must be YAML string paths or mappings",
+                    );
+                    unmodeled_fields.push(field.reference());
+                    items.push(IncludeItem::Unmodeled);
+                }
+                YamlNode::Mapping(mapping) => items.push(IncludeItem::Long(self.parse_include_long(&mapping))),
+                other => {
+                    self.unsupported_sequence_item(
+                        EXPECTED_FIELD_FORM,
+                        &other,
+                        field.span,
+                        "include items must be paths or mappings",
+                    );
+                    unmodeled_fields.push(field.reference());
+                    items.push(IncludeItem::Unmodeled);
+                }
+            }
+        }
+        Some(Includes::new(span, items, unmodeled_fields))
+    }
+
+    fn parse_include_long(&mut self, mapping: &Mapping) -> IncludeLong {
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut paths = Vec::new();
+        let mut env_files = Vec::new();
+        let mut project_directory = None;
+        let mut unmodeled_fields = Vec::new();
+        let mut seen = BTreeMap::new();
+        for field in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &field) {
+                unmodeled_fields.push(field.reference());
+                continue;
+            }
+            match field.name.value().as_str() {
+                "path" => {
+                    paths = self.string_or_sequence(&field, "include path must be a YAML string or sequence");
+                    if !Self::is_strict_string_or_sequence(&field) {
+                        unmodeled_fields.push(field.reference());
+                    }
+                }
+                "env_file" => {
+                    env_files = self.string_or_sequence(&field, "include env_file must be a YAML string or sequence");
+                    if !Self::is_strict_string_or_sequence(&field) {
+                        unmodeled_fields.push(field.reference());
+                    }
+                }
+                "project_directory" => {
+                    project_directory =
+                        self.parse_extends_string(&field, "include project_directory must be a YAML string scalar");
+                    if project_directory.is_none() {
+                        unmodeled_fields.push(field.reference());
+                    }
+                }
+                _ => unmodeled_fields.push(field.reference()),
+            }
+        }
+        if paths.is_empty() {
+            self.diagnostics.push(
+                Diagnostic::new(EXPECTED_FIELD_FORM, Severity::Error, "include mapping requires path")
+                    .with_label(DiagnosticLabel::primary(span, "path is missing")),
+            );
+        }
+        IncludeLong::new(span, paths, env_files, project_directory, unmodeled_fields)
+    }
+
+    fn string_or_sequence(&mut self, field: &ParsedField, message: &str) -> Vec<Located<String>> {
+        if field.value.as_ref().and_then(YamlNode::as_scalar).is_some() {
+            self.parse_extends_string(field, message).into_iter().collect()
+        } else {
+            self.parse_strict_string_sequence(field, message).0
+        }
+    }
+
+    fn is_strict_string_or_sequence(field: &ParsedField) -> bool {
+        match field.value.as_ref() {
+            Some(YamlNode::Scalar(scalar)) => ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String,
+            Some(YamlNode::Sequence(sequence)) => sequence.values().all(|item| {
+                item.as_scalar()
+                    .is_some_and(|scalar| ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String)
+            }),
+            _ => false,
+        }
+    }
+
+    fn parse_label_files(&mut self, field: &ParsedField) -> Option<LabelFiles> {
+        let value = field.value.as_ref()?;
+        if let Some(scalar) = value.as_scalar() {
+            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "service label_file must be a YAML string scalar or sequence",
+                );
+                return None;
+            }
+            let span = span_from_position(self.source_id, scalar.byte_range());
+            return Some(LabelFiles::new(
+                span,
+                LabelFilesForm::Scalar(Located::new(scalar_string_from_source(&self.source, scalar), span)),
+                Vec::new(),
+            ));
+        }
+        let Some(sequence) = value.as_sequence() else {
+            self.expected(
+                EXPECTED_FIELD_FORM,
+                field,
+                "service label_file must be a YAML string scalar or sequence",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, sequence.byte_range());
+        let mut paths = Vec::new();
+        let mut unmodeled_items = Vec::new();
+        for item in sequence.values() {
+            let item_span = node_span(self.source_id, &item).unwrap_or(field.span);
+            let Some(scalar) = item.as_scalar() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &item,
+                    field.span,
+                    "service label_file entries must be YAML string scalars",
+                );
+                unmodeled_items.push(item_span);
+                continue;
+            };
+            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &item,
+                    field.span,
+                    "service label_file entries must be YAML string scalars",
+                );
+                unmodeled_items.push(item_span);
+                continue;
+            }
+            paths.push(Located::new(scalar_string_from_source(&self.source, scalar), item_span));
+        }
+        Some(LabelFiles::new(span, LabelFilesForm::List(paths), unmodeled_items))
+    }
+
+    fn parse_model_definitions(&mut self, field: &ParsedField) -> Option<ModelDefinitions> {
+        let mapping = field.value.as_ref().and_then(YamlNode::as_mapping)?;
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut definitions = Vec::new();
+        let mut unmodeled_fields = Vec::new();
+        let mut seen = BTreeMap::new();
+        for definition_field in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &definition_field) {
+                unmodeled_fields.push(definition_field.reference());
+                continue;
+            }
+            let Some(definition_mapping) = definition_field.value.as_ref().and_then(YamlNode::as_mapping) else {
+                self.expected(
+                    EXPECTED_MAPPING,
+                    &definition_field,
+                    "model definition must be a mapping",
+                );
+                unmodeled_fields.push(definition_field.reference());
+                continue;
+            };
+            let mut definition = ModelDefinition::new(definition_field.name.clone(), definition_field.span);
+            let mut member_seen = BTreeMap::new();
+            for member in self.fields(definition_mapping) {
+                if self.record_duplicate(&mut member_seen, &member) {
+                    definition.push_unmodeled(member.reference());
+                    continue;
+                }
+                match member.name.value().as_str() {
+                    "name" => {
+                        let parsed = self.parse_extends_string(&member, "model name must be a YAML string scalar");
+                        if let Some(value) = parsed {
+                            definition.set_name(value);
+                        } else {
+                            definition.push_unmodeled(member.reference());
+                        }
+                    }
+                    "model" => {
+                        let parsed = self.parse_extends_string(&member, "model reference must be a YAML string scalar");
+                        if let Some(value) = parsed {
+                            definition.set_model(value);
+                        } else {
+                            definition.push_unmodeled(member.reference());
+                        }
+                    }
+                    "context_size" => {
+                        let parsed = self.parse_integer_scalar(&member, "model context_size must be a YAML integer");
+                        if let Some(value) = parsed {
+                            definition.set_context_size(value);
+                        } else {
+                            definition.push_unmodeled(member.reference());
+                        }
+                    }
+                    "runtime_flags" => {
+                        let flags =
+                            self.string_or_sequence(&member, "model runtime_flags must be a YAML string or sequence");
+                        if !Self::is_strict_string_or_sequence(&member) {
+                            definition.push_unmodeled(member.reference());
+                        }
+                        definition.set_runtime_flags(flags);
+                    }
+                    _ => definition.push_unmodeled(member.reference()),
+                }
+            }
+            if definition.model().is_none() {
+                self.diagnostics.push(
+                    Diagnostic::new(EXPECTED_FIELD_FORM, Severity::Error, "model definition requires model")
+                        .with_label(DiagnosticLabel::primary(definition.span(), "model is missing")),
+                );
+            }
+            definitions.push(definition);
+        }
+        Some(ModelDefinitions::new(span, definitions, unmodeled_fields))
+    }
+
+    fn parse_service_models(&mut self, field: &ParsedField) -> Option<ServiceModels> {
+        let span = field
+            .value
+            .as_ref()
+            .and_then(|value| node_span(self.source_id, value))
+            .unwrap_or(field.span);
+        let mut bindings = Vec::new();
+        let mut unmodeled_fields = Vec::new();
+        match field.value.as_ref()? {
+            YamlNode::Sequence(sequence) => {
+                for node in sequence.values() {
+                    let Some(scalar) = node.as_scalar() else {
+                        self.unsupported_sequence_item(
+                            EXPECTED_SCALAR,
+                            &node,
+                            field.span,
+                            "service model bindings must be strings",
+                        );
+                        unmodeled_fields.push(field.reference());
+                        continue;
+                    };
+                    if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                        self.unsupported_sequence_item(
+                            EXPECTED_SCALAR,
+                            &node,
+                            field.span,
+                            "service model bindings must be YAML strings",
+                        );
+                        unmodeled_fields.push(field.reference());
+                        continue;
+                    }
+                    bindings.push(ServiceModelBinding::new(
+                        Located::new(
+                            scalar_string_from_source(&self.source, scalar),
+                            span_from_position(self.source_id, scalar.byte_range()),
+                        ),
+                        span_from_position(self.source_id, scalar.byte_range()),
+                    ));
+                }
+            }
+            YamlNode::Mapping(mapping) => {
+                for binding_field in self.fields(mapping) {
+                    let mut binding = ServiceModelBinding::new(binding_field.name.clone(), binding_field.span);
+                    match binding_field.value.as_ref() {
+                        None => {}
+                        Some(YamlNode::Scalar(scalar))
+                            if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null => {}
+                        Some(YamlNode::Mapping(value)) => {
+                            let mut seen = BTreeMap::new();
+                            for member in self.fields(value) {
+                                if self.record_duplicate(&mut seen, &member) {
+                                    continue;
+                                }
+                                match member.name.value().as_str() {
+                                    "endpoint_var" => self
+                                        .parse_extends_string(
+                                            &member,
+                                            "model endpoint_var must be a YAML string scalar",
+                                        )
+                                        .into_iter()
+                                        .for_each(|value| binding.set_endpoint_var(value)),
+                                    "model_var" => self
+                                        .parse_extends_string(&member, "model model_var must be a YAML string scalar")
+                                        .into_iter()
+                                        .for_each(|value| binding.set_model_var(value)),
+                                    _ => binding.push_unmodeled(member.reference()),
+                                }
+                            }
+                        }
+                        Some(_) => {
+                            self.expected(
+                                EXPECTED_FIELD_FORM,
+                                &binding_field,
+                                "service model binding must be null or a mapping",
+                            );
+                            binding.push_unmodeled(binding_field.reference());
+                        }
+                    }
+                    bindings.push(binding);
+                }
+            }
+            _ => return None,
+        }
+        Some(ServiceModels::new(span, bindings, unmodeled_fields))
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "GPU selectors retain supported members and every rejected source member"
+    )]
+    fn parse_gpus(&mut self, field: &ParsedField) -> Option<Gpus> {
+        match field.value.as_ref()? {
+            YamlNode::Scalar(_) => self
+                .parse_extends_string(field, "service gpus must be a YAML string scalar or sequence")
+                .and_then(|value| {
+                    if value.value() == "all" {
+                        Some(Gpus::All(value))
+                    } else {
+                        self.expected(EXPECTED_FIELD_FORM, field, "service gpus scalar must be exactly `all`");
+                        None
+                    }
+                }),
+            YamlNode::Sequence(sequence) => {
+                let span = span_from_position(self.source_id, sequence.byte_range());
+                let mut devices = Vec::new();
+                let mut unmodeled_items = Vec::new();
+                for node in sequence.values() {
+                    let Some(mapping) = node.as_mapping() else {
+                        self.unsupported_sequence_item(
+                            EXPECTED_MAPPING,
+                            &node,
+                            field.span,
+                            "GPU selector must be a mapping",
+                        );
+                        unmodeled_items.push(node_span(self.source_id, &node).unwrap_or(field.span));
+                        continue;
+                    };
+                    let mut device = GpuDevice::new(node_span(self.source_id, &node).unwrap_or(field.span));
+                    let mut seen = BTreeMap::new();
+                    for member in self.fields(mapping) {
+                        if self.record_duplicate(&mut seen, &member) {
+                            continue;
+                        }
+                        match member.name.value().as_str() {
+                            "capabilities" => {
+                                let (values, invalid_items) =
+                                    self.parse_strict_string_sequence(&member, "GPU capabilities");
+                                if !matches!(member.value.as_ref(), Some(YamlNode::Sequence(_)))
+                                    || !invalid_items.is_empty()
+                                {
+                                    device.push_unmodeled(member.reference());
+                                }
+                                device.set_capabilities(values);
+                            }
+                            "count" => {
+                                let parsed = self.parse_integer_or_string_scalar(
+                                    &member,
+                                    "GPU count must be a YAML integer or string",
+                                );
+                                if let Some(value) = parsed {
+                                    device.set_count(value);
+                                } else {
+                                    device.push_unmodeled(member.reference());
+                                }
+                            }
+                            "device_ids" => {
+                                let values = self
+                                    .string_or_sequence(&member, "GPU device_ids must be a YAML string or sequence");
+                                if !Self::is_strict_string_or_sequence(&member) {
+                                    device.push_unmodeled(member.reference());
+                                }
+                                device.set_device_ids(values);
+                            }
+                            "driver" => {
+                                let parsed =
+                                    self.parse_extends_string(&member, "GPU driver must be a YAML string scalar");
+                                if let Some(value) = parsed {
+                                    device.set_driver(value);
+                                } else {
+                                    device.push_unmodeled(member.reference());
+                                }
+                            }
+                            "options" => match member.value.as_ref() {
+                                Some(YamlNode::Mapping(_)) => {
+                                    device.set_options(GpuOptions::Mapping(
+                                        self.parse_scalar_mapping(&member, "GPU options"),
+                                    ));
+                                }
+                                Some(YamlNode::Sequence(_)) => {
+                                    let options = self.parse_string_sequence(&member, "GPU options");
+                                    if !Self::is_strict_string_or_sequence(&member) {
+                                        device.push_unmodeled(member.reference());
+                                    }
+                                    device.set_options(GpuOptions::List(options));
+                                }
+                                _ => {
+                                    self.expected(
+                                        EXPECTED_FIELD_FORM,
+                                        &member,
+                                        "GPU options must be a mapping or sequence",
+                                    );
+                                    device.push_unmodeled(member.reference());
+                                }
+                            },
+                            _ => device.push_unmodeled(member.reference()),
+                        }
+                    }
+                    if device.count().is_some() && !device.device_ids().is_empty() {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                GPU_COUNT_DEVICE_IDS_CONFLICT,
+                                Severity::Warning,
+                                "GPU selector cannot use count and device_ids together",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                device.span(),
+                                "conflicting GPU allocation selectors",
+                            )),
+                        );
+                    }
+                    if !gpu_has_capabilities(&device) {
+                        self.diagnostics.push(
+                            Diagnostic::new(
+                                GPU_MISSING_CAPABILITIES,
+                                Severity::Error,
+                                "GPU selector requires a non-empty capabilities declaration",
+                            )
+                            .with_label(DiagnosticLabel::primary(
+                                device.span(),
+                                "capabilities are missing, empty, or malformed",
+                            )),
+                        );
+                    }
+                    devices.push(device);
+                }
+                Some(Gpus::Devices {
+                    span,
+                    devices,
+                    unmodeled_items,
+                })
+            }
+            _ => None,
+        }
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "develop watch retains supported members and every rejected source member"
+    )]
+    fn parse_develop(&mut self, field: &ParsedField) -> Option<Develop> {
+        let mapping = field.value.as_ref().and_then(YamlNode::as_mapping)?;
+        let span = span_from_position(self.source_id, mapping.byte_range());
+        let mut watch = Vec::new();
+        let mut unmodeled = Vec::new();
+        let mut unmodeled_items = Vec::new();
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &member) {
+                unmodeled.push(member.reference());
+                continue;
+            }
+            if member.name.value() != "watch" {
+                unmodeled.push(member.reference());
+                continue;
+            }
+            let Some(sequence) = member.value.as_ref().and_then(YamlNode::as_sequence) else {
+                self.expected(EXPECTED_SEQUENCE, &member, "develop watch must be a sequence");
+                unmodeled.push(member.reference());
+                continue;
+            };
+            for node in sequence.values() {
+                let Some(watch_mapping) = node.as_mapping() else {
+                    self.unsupported_sequence_item(
+                        EXPECTED_MAPPING,
+                        &node,
+                        member.span,
+                        "develop watch items must be mappings",
+                    );
+                    unmodeled_items.push(node_span(self.source_id, &node).unwrap_or(member.span));
+                    continue;
+                };
+                let mut item = DevelopWatch::new(node_span(self.source_id, &node).unwrap_or(member.span));
+                let mut item_seen = BTreeMap::new();
+                for watch_member in self.fields(watch_mapping) {
+                    if self.record_duplicate(&mut item_seen, &watch_member) {
+                        item.push_unmodeled(watch_member.reference());
+                        continue;
+                    }
+                    match watch_member.name.value().as_str() {
+                        "action" => {
+                            let parsed = self.parse_extends_string(
+                                &watch_member,
+                                "develop watch action must be a YAML string scalar",
+                            );
+                            if let Some(value) = parsed {
+                                item.set_action(value);
+                            } else {
+                                item.push_unmodeled(watch_member.reference());
+                            }
+                        }
+                        "path" => {
+                            let parsed = self
+                                .parse_extends_string(&watch_member, "develop watch path must be a YAML string scalar");
+                            if let Some(value) = parsed {
+                                item.set_path(value);
+                            } else {
+                                item.push_unmodeled(watch_member.reference());
+                            }
+                        }
+                        "target" => {
+                            let parsed = self.parse_extends_string(
+                                &watch_member,
+                                "develop watch target must be a YAML string scalar",
+                            );
+                            if let Some(value) = parsed {
+                                item.set_target(value);
+                            } else {
+                                item.push_unmodeled(watch_member.reference());
+                            }
+                        }
+                        "ignore" => {
+                            let values = self.string_or_sequence(
+                                &watch_member,
+                                "develop watch ignore must be a YAML string or sequence",
+                            );
+                            if !Self::is_strict_string_or_sequence(&watch_member) {
+                                item.push_unmodeled(watch_member.reference());
+                            }
+                            item.set_ignore(values);
+                        }
+                        "include" => {
+                            let values = self.string_or_sequence(
+                                &watch_member,
+                                "develop watch include must be a YAML string or sequence",
+                            );
+                            if !Self::is_strict_string_or_sequence(&watch_member) {
+                                item.push_unmodeled(watch_member.reference());
+                            }
+                            item.set_include(values);
+                        }
+                        "initial_sync" => {
+                            let parsed =
+                                self.parse_boolean(&watch_member, "develop watch initial_sync must be a boolean");
+                            if let Some(value) = parsed {
+                                item.set_initial_sync(value);
+                            } else {
+                                item.push_unmodeled(watch_member.reference());
+                            }
+                        }
+                        "exec" if matches!(watch_member.value.as_ref(), Some(YamlNode::Mapping(_))) => {
+                            let exec = self.parse_develop_exec(&watch_member);
+                            if !exec.command().is_some_and(command_is_non_empty) {
+                                self.diagnostics.push(
+                                    Diagnostic::new(
+                                        DEVELOP_WATCH_EXEC_MISSING_COMMAND,
+                                        Severity::Error,
+                                        "develop watch exec mapping requires a non-empty command member",
+                                    )
+                                    .with_label(DiagnosticLabel::primary(watch_member.span, "exec command is missing")),
+                                );
+                            }
+                            item.set_exec(exec);
+                        }
+                        "exec" => {
+                            self.expected(EXPECTED_MAPPING, &watch_member, "develop watch exec must be a mapping");
+                            item.push_unmodeled(watch_member.reference());
+                        }
+                        _ => item.push_unmodeled(watch_member.reference()),
+                    }
+                }
+                self.validate_develop_watch(&item);
+                watch.push(item);
+            }
+        }
+        if watch.is_empty() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_MISSING_WATCH,
+                    Severity::Error,
+                    "develop requires a watch sequence",
+                )
+                .with_label(DiagnosticLabel::primary(span, "watch is missing")),
+            );
+        }
+        Some(Develop::new(span, watch, unmodeled, unmodeled_items))
+    }
+
+    fn validate_develop_watch(&mut self, item: &DevelopWatch) {
+        if item.action().is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_MISSING_ACTION,
+                    Severity::Error,
+                    "develop watch item requires an action",
+                )
+                .with_label(DiagnosticLabel::primary(item.span(), "action is missing")),
+            );
+        }
+        if item.path().is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_MISSING_PATH,
+                    Severity::Error,
+                    "develop watch item requires a path",
+                )
+                .with_label(DiagnosticLabel::primary(item.span(), "path is missing")),
+            );
+        }
+        let Some(action) = item.action() else {
+            return;
+        };
+        let action_value = action.value();
+        let synchronizes = matches!(action_value.as_str(), "sync" | "sync+restart" | "sync+exec");
+        if !matches!(
+            action_value.as_str(),
+            "rebuild" | "sync" | "restart" | "sync+restart" | "sync+exec"
+        ) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_INVALID_ACTION,
+                    Severity::Error,
+                    "develop watch action is not one of rebuild, sync, restart, sync+restart, or sync+exec",
+                )
+                .with_label(DiagnosticLabel::primary(action.span(), "unknown watch action")),
+            );
+        }
+        if synchronizes && item.target().is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_MISSING_TARGET,
+                    Severity::Error,
+                    "synchronizing develop watch action requires a target",
+                )
+                .with_label(DiagnosticLabel::primary(item.span(), "target is missing")),
+            );
+        }
+        if action_value == "sync+exec" && item.exec().is_none() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DEVELOP_WATCH_MISSING_EXEC,
+                    Severity::Error,
+                    "sync+exec develop watch action requires an exec command mapping",
+                )
+                .with_label(DiagnosticLabel::primary(item.span(), "exec is missing")),
+            );
+        }
+    }
+
+    fn parse_develop_exec(&mut self, field: &ParsedField) -> DevelopWatchExec {
+        let Some(YamlNode::Mapping(mapping)) = field.value.as_ref() else {
+            unreachable!("caller checks the mapping form");
+        };
+        let mut exec = DevelopWatchExec::new(field.span);
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &member) {
+                exec.push_unmodeled(member.reference());
+                continue;
+            }
+            match member.name.value().as_str() {
+                "command" => match self.parse_command(&member) {
+                    Some(value) => exec.set_command(value),
+                    None => exec.push_unmodeled(member.reference()),
+                },
+                "user" => match self.parse_extends_string(&member, "develop exec user must be a YAML string scalar") {
+                    Some(value) => exec.set_user(value),
+                    None => exec.push_unmodeled(member.reference()),
+                },
+                "privileged" => match self.parse_boolean(&member, "develop exec privileged must be a boolean") {
+                    Some(value) => exec.set_privileged(value),
+                    None => exec.push_unmodeled(member.reference()),
+                },
+                "working_dir" => {
+                    match self.parse_extends_string(&member, "develop exec working_dir must be a YAML string scalar") {
+                        Some(value) => exec.set_working_dir(value),
+                        None => exec.push_unmodeled(member.reference()),
+                    }
+                }
+                "environment" => match self.parse_environment(&member) {
+                    Some(value) => exec.set_environment(value),
+                    None => exec.push_unmodeled(member.reference()),
+                },
+                _ => exec.push_unmodeled(member.reference()),
+            }
+        }
+        exec
     }
 
     fn parse_service_read_only(&mut self, field: &ParsedField) -> Option<Located<BooleanValue>> {
@@ -1915,6 +3071,42 @@ impl Parser {
             "cpu_rt_period" => {
                 service.cpu_rt_period = self.parse_cpu_rt_period(field);
                 if service.cpu_rt_period.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpu_rt_runtime" => {
+                service.cpu_rt_runtime = self.parse_cpu_rt_runtime(field);
+                if service.cpu_rt_runtime.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpu_shares" => {
+                service.cpu_shares = self.parse_service_integer(field, 0, i128::MAX, "cpu_shares");
+                if service.cpu_shares.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "cpus" => {
+                service.cpus = self.parse_cpus(field);
+                if service.cpus.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "mem_swappiness" => {
+                service.mem_swappiness = self.parse_service_integer(field, 0, 100, "mem_swappiness");
+                if service.mem_swappiness.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "oom_score_adj" => {
+                service.oom_score_adj = self.parse_service_integer(field, -1000, 1000, "oom_score_adj");
+                if service.oom_score_adj.is_none() {
+                    service.unknown_fields.push(field.reference());
+                }
+            }
+            "scale" => {
+                service.scale = self.parse_service_integer(field, 0, i128::MAX, "scale");
+                if service.scale.is_none() {
                     service.unknown_fields.push(field.reference());
                 }
             }
@@ -1959,6 +3151,7 @@ impl Parser {
             "stdin_open" => service.stdin_open = self.parse_boolean(field, "stdin_open"),
             "tty" => service.tty = self.parse_boolean(field, "tty"),
             "privileged" => service.privileged = self.parse_boolean(field, "privileged"),
+            "use_api_socket" => service.use_api_socket = self.parse_boolean(field, "use_api_socket"),
             _ => {}
         }
     }
@@ -3902,6 +5095,106 @@ impl Parser {
         Some(Located::new(period, span))
     }
 
+    fn parse_cpu_rt_runtime(&mut self, field: &ParsedField) -> Option<Located<CpuRtRuntime>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                "cpu_rt_runtime must be an integer microsecond or duration string scalar",
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let scalar_value = ScalarValue::from_scalar(scalar);
+        let raw = scalar_string_from_source(&self.source, scalar);
+        let runtime = match scalar_value.scalar_type() {
+            ScalarType::Integer => CpuRtRuntime::parse_number(raw, true),
+            ScalarType::Float => CpuRtRuntime::parse_number(raw, false),
+            ScalarType::String => CpuRtRuntime::parse_string(raw),
+            _ => {
+                self.expected(
+                    EXPECTED_SCALAR,
+                    field,
+                    "cpu_rt_runtime must be an integer microsecond or duration string scalar",
+                );
+                return None;
+            }
+        };
+        if !runtime.is_valid() {
+            self.diagnostics.push(Diagnostic::new(CPU_RT_RUNTIME_INVALID, Severity::Error,
+                "cpu_rt_runtime must be an integer microsecond value, a Compose duration, or an interpolation expression")
+                .with_label(DiagnosticLabel::primary(span, "invalid service real-time CPU runtime")));
+        }
+        Some(Located::new(runtime, span))
+    }
+
+    fn parse_service_integer(
+        &mut self,
+        field: &ParsedField,
+        min: i128,
+        max: i128,
+        description: &str,
+    ) -> Option<Located<ServiceInteger>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                format!("{description} must be an integer scalar"),
+            );
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let value = ScalarValue::from_scalar(scalar);
+        if matches!(
+            value.scalar_type(),
+            ScalarType::Boolean | ScalarType::Timestamp | ScalarType::Regex
+        ) {
+            self.expected(
+                EXPECTED_SCALAR,
+                field,
+                format!("{description} must be an integer scalar"),
+            );
+            return None;
+        }
+        let parsed = ServiceInteger::parse(scalar_string_from_source(&self.source, scalar), min, max);
+        if !parsed.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    EXPECTED_FIELD_FORM,
+                    Severity::Error,
+                    format!("{description} must be an integer in its documented range"),
+                )
+                .with_label(DiagnosticLabel::primary(span, "invalid integer spelling retained")),
+            );
+        }
+        Some(Located::new(parsed, span))
+    }
+
+    fn parse_cpus(&mut self, field: &ParsedField) -> Option<Located<Cpus>> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_SCALAR, field, "cpus must be a decimal scalar");
+            return None;
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let kind = ScalarValue::from_scalar(scalar).scalar_type();
+        if matches!(kind, ScalarType::Boolean | ScalarType::Timestamp | ScalarType::Regex) {
+            self.expected(EXPECTED_SCALAR, field, "cpus must be a decimal scalar");
+            return None;
+        }
+        let value = Cpus::parse(scalar_string_from_source(&self.source, scalar));
+        if !value.is_valid() {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    EXPECTED_FIELD_FORM,
+                    Severity::Error,
+                    "cpus must be a decimal allocation or interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(span, "invalid CPU allocation retained")),
+            );
+        }
+        Some(Located::new(value, span))
+    }
+
     fn parse_shm_size(&mut self, field: &ParsedField) -> Option<ShmSize> {
         let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
             self.expected(
@@ -3988,6 +5281,48 @@ impl Parser {
             scalar_kind,
         );
         self.diagnose_mem_limit(&limit);
+        Some(limit)
+    }
+
+    fn parse_memswap_limit(&mut self, field: &ParsedField) -> Option<MemswapLimit> {
+        let Some(scalar) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(
+                MEMSWAP_LIMIT_EXPECTED_VALUE,
+                field,
+                "memswap_limit must be a YAML number or string scalar",
+            );
+            return None;
+        };
+        let scalar_kind = match ScalarValue::from_scalar(scalar).scalar_type() {
+            ScalarType::Integer | ScalarType::Float => MemswapLimitScalarKind::Number,
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => MemswapLimitScalarKind::String,
+            ScalarType::Boolean | ScalarType::Null => {
+                self.expected(
+                    MEMSWAP_LIMIT_EXPECTED_VALUE,
+                    field,
+                    "memswap_limit must be a YAML number or string scalar",
+                );
+                return None;
+            }
+        };
+        let span = span_from_position(self.source_id, scalar.byte_range());
+        let limit = MemswapLimit::parse(
+            Located::new(scalar_string_from_source(&self.source, scalar), span),
+            scalar_kind,
+        );
+        if matches!(limit.kind(), MemswapLimitKind::Other(_)) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    MEMSWAP_LIMIT_INVALID,
+                    Severity::Error,
+                    "memswap_limit must be `-1`, a decimal byte quantity, or an interpolation expression",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "invalid memory-plus-swap limit retained",
+                )),
+            );
+        }
         Some(limit)
     }
 
@@ -6845,9 +8180,39 @@ impl Parser {
                         mount.set_read_only(value);
                     }
                 }
+                "consistency" if !duplicate => {
+                    if let Some(value) = self.parse_string(&field, "volume consistency") {
+                        mount.set_consistency(value);
+                    } else {
+                        mount.push_unknown(field.reference());
+                    }
+                }
                 "bind" if !duplicate => {
                     if let Some(value) = self.parse_bind_options(&field) {
                         mount.set_bind(value);
+                    } else {
+                        mount.push_unknown(field.reference());
+                    }
+                }
+                "image" if !duplicate => {
+                    if let Some(value) = self.parse_image_mount_options(&field) {
+                        mount.set_image(value);
+                    } else {
+                        mount.push_unknown(field.reference());
+                    }
+                }
+                "tmpfs" if !duplicate => {
+                    if let Some(value) = self.parse_tmpfs_mount_options(&field) {
+                        mount.set_tmpfs(value);
+                    } else {
+                        mount.push_unknown(field.reference());
+                    }
+                }
+                "volume" if !duplicate => {
+                    if let Some(value) = self.parse_volume_mount_options(&field) {
+                        mount.set_volume(value);
+                    } else {
+                        mount.push_unknown(field.reference());
                     }
                 }
                 name if name.starts_with("x-") => mount.push_extension(field.reference()),
@@ -6907,12 +8272,131 @@ impl Parser {
                         }
                     }
                 }
+                "recursive" if !duplicate => {
+                    if let Some(value) = self.parse_string(&bind_field, "bind recursive mode") {
+                        bind.set_recursive(value);
+                    } else {
+                        bind.push_unknown(bind_field.reference());
+                    }
+                }
                 name if name.starts_with("x-") => bind.push_extension(bind_field.reference()),
                 _ if duplicate => {}
                 _ => bind.push_unknown(bind_field.reference()),
             }
         }
         Some(bind)
+    }
+
+    fn parse_image_mount_options(&mut self, field: &ParsedField) -> Option<ImageMountOptions> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                VOLUME_OPTION_EXPECTED_MAPPING,
+                field,
+                "volume image options must be a mapping",
+            );
+            return None;
+        };
+        let mut options = ImageMountOptions::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &option);
+            match option.name.value.as_str() {
+                "subpath" if !duplicate => {
+                    if let Some(value) = self.parse_string(&option, "image mount subpath") {
+                        options.set_subpath(value);
+                    } else {
+                        options.push_unknown(option.reference());
+                    }
+                }
+                name if name.starts_with("x-") => options.push_extension(option.reference()),
+                _ if duplicate => {}
+                _ => options.push_unknown(option.reference()),
+            }
+        }
+        Some(options)
+    }
+
+    fn parse_tmpfs_mount_options(&mut self, field: &ParsedField) -> Option<TmpfsMountOptions> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                VOLUME_OPTION_EXPECTED_MAPPING,
+                field,
+                "volume tmpfs options must be a mapping",
+            );
+            return None;
+        };
+        let mut options = TmpfsMountOptions::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &option);
+            match option.name.value.as_str() {
+                "size" if !duplicate => {
+                    if let Some(value) =
+                        self.parse_string_or_number_scalar(&option, "tmpfs size must be a number or string")
+                    {
+                        options.set_size(value);
+                    } else {
+                        options.push_unknown(option.reference());
+                    }
+                }
+                "mode" if !duplicate => {
+                    if let Some(value) =
+                        self.parse_string_or_number_scalar(&option, "tmpfs mode must be a number or string")
+                    {
+                        options.set_mode(value);
+                    } else {
+                        options.push_unknown(option.reference());
+                    }
+                }
+                name if name.starts_with("x-") => options.push_extension(option.reference()),
+                _ if duplicate => {}
+                _ => options.push_unknown(option.reference()),
+            }
+        }
+        Some(options)
+    }
+
+    fn parse_volume_mount_options(&mut self, field: &ParsedField) -> Option<VolumeMountOptions> {
+        let Some(mapping) = field.value.as_ref().and_then(YamlNode::as_mapping) else {
+            self.expected(
+                VOLUME_OPTION_EXPECTED_MAPPING,
+                field,
+                "named-volume options must be a mapping",
+            );
+            return None;
+        };
+        let mut options = VolumeMountOptions::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for option in self.fields(mapping) {
+            let duplicate = self.record_duplicate(&mut seen, &option);
+            match option.name.value.as_str() {
+                "nocopy" if !duplicate => {
+                    if let Some(value) = self.parse_boolean(&option, "volume nocopy") {
+                        options.set_nocopy(value);
+                    } else {
+                        options.push_unknown(option.reference());
+                    }
+                }
+                "subpath" if !duplicate => {
+                    if let Some(value) = self.parse_string(&option, "volume subpath") {
+                        options.set_subpath(value);
+                    } else {
+                        options.push_unknown(option.reference());
+                    }
+                }
+                "labels" if !duplicate => {
+                    if let Some(value) = self.parse_labels(&option) {
+                        options.set_labels(value);
+                    } else {
+                        options.push_unknown(option.reference());
+                    }
+                }
+                name if name.starts_with("x-") => options.push_extension(option.reference()),
+                _ if duplicate => {}
+                _ => options.push_unknown(option.reference()),
+            }
+        }
+        Some(options)
     }
 
     fn parse_network_definitions(&mut self, field: &ParsedField) -> Vec<NetworkDefinition> {
@@ -6968,7 +8452,7 @@ impl Parser {
                     .into_iter()
                     .for_each(|value| network.set_enable_ipv6(value)),
                 "external" if !duplicate => self
-                    .parse_boolean(&option, "network external")
+                    .parse_resource_external(&option, "network")
                     .into_iter()
                     .for_each(|value| network.set_external(value)),
                 "internal" if !duplicate => self
@@ -6992,6 +8476,7 @@ impl Parser {
                 _ => network.push_unknown(option.reference()),
             }
         }
+        self.validate_resource_external_name(network.external(), network.custom_name(), network.span());
         network
     }
 
@@ -7108,7 +8593,7 @@ impl Parser {
                         volume.set_driver_opts(self.parse_scalar_mapping(&option, "volume driver options"));
                     }
                     "external" if !duplicate => self
-                        .parse_boolean(&option, "volume external")
+                        .parse_resource_external(&option, "volume")
                         .into_iter()
                         .for_each(|value| volume.set_external(value)),
                     "labels" if !duplicate => self
@@ -7126,13 +8611,14 @@ impl Parser {
             }
             self.validate_external_volume_driver_configuration(&volume);
             self.validate_external_volume_labels_configuration(&volume);
+            self.validate_resource_external_name(volume.external(), volume.custom_name(), volume.span());
             definitions.push(volume);
         }
         definitions
     }
 
     fn validate_external_volume_driver_configuration(&mut self, volume: &VolumeDefinition) {
-        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
+        if !volume.external().is_some_and(ResourceExternal::is_explicitly_external)
             || (volume.driver().is_none() && volume.driver_opts().is_empty())
         {
             return;
@@ -7156,9 +8642,7 @@ impl Parser {
     }
 
     fn validate_external_volume_labels_configuration(&mut self, volume: &VolumeDefinition) {
-        if !matches!(volume.external().map(Located::value), Some(BooleanValue::Literal(true)))
-            || volume.labels().is_none()
-        {
+        if !volume.external().is_some_and(ResourceExternal::is_explicitly_external) || volume.labels().is_none() {
             return;
         }
         let span = volume.labels().map_or_else(|| volume.span(), Labels::span);
@@ -7212,9 +8696,17 @@ impl Parser {
                         .into_iter()
                         .for_each(|value| config.set_content(value)),
                     "external" if !duplicate => self
-                        .parse_boolean(&option, "config external")
+                        .parse_resource_external(&option, "config")
                         .into_iter()
                         .for_each(|value| config.set_external(value)),
+                    "labels" if !duplicate => self
+                        .parse_labels(&option)
+                        .into_iter()
+                        .for_each(|value| config.set_labels(value)),
+                    "template_driver" if !duplicate => self
+                        .parse_extends_string(&option, "config template_driver must be a YAML string scalar")
+                        .into_iter()
+                        .for_each(|value| config.set_template_driver(value)),
                     "name" if !duplicate => self
                         .parse_string(&option, "config custom name")
                         .into_iter()
@@ -7224,6 +8716,18 @@ impl Parser {
                     _ => config.push_unknown(option.reference()),
                 }
             }
+            self.validate_resource_external_name(config.external(), config.custom_name(), config.span());
+            self.validate_external_creation_configuration(
+                config.external(),
+                &[
+                    config.file().map(Located::span),
+                    config.environment().map(Located::span),
+                    config.content().map(Located::span),
+                    config.labels().map(Labels::span),
+                    config.template_driver().map(Located::span),
+                ],
+                "config",
+            );
             definitions.push(config);
         }
         definitions
@@ -7265,9 +8769,24 @@ impl Parser {
                         .into_iter()
                         .for_each(|value| secret.set_environment(value)),
                     "external" if !duplicate => self
-                        .parse_boolean(&option, "secret external")
+                        .parse_resource_external(&option, "secret")
                         .into_iter()
                         .for_each(|value| secret.set_external(value)),
+                    "driver" if !duplicate => self
+                        .parse_extends_string(&option, "secret driver must be a YAML string scalar")
+                        .into_iter()
+                        .for_each(|value| secret.set_driver(value)),
+                    "driver_opts" if !duplicate => {
+                        secret.set_driver_opts(self.parse_scalar_mapping(&option, "secret driver options"));
+                    }
+                    "labels" if !duplicate => self
+                        .parse_labels(&option)
+                        .into_iter()
+                        .for_each(|value| secret.set_labels(value)),
+                    "template_driver" if !duplicate => self
+                        .parse_extends_string(&option, "secret template_driver must be a YAML string scalar")
+                        .into_iter()
+                        .for_each(|value| secret.set_template_driver(value)),
                     "name" if !duplicate => self
                         .parse_string(&option, "secret custom name")
                         .into_iter()
@@ -7277,9 +8796,128 @@ impl Parser {
                     _ => secret.push_unknown(option.reference()),
                 }
             }
+            self.validate_resource_external_name(secret.external(), secret.custom_name(), secret.span());
+            self.validate_external_creation_configuration(
+                secret.external(),
+                &[
+                    secret.file().map(Located::span),
+                    secret.environment().map(Located::span),
+                    secret.driver().map(Located::span),
+                    secret.driver_opts().first().map(KeyValueEntry::span),
+                    secret.labels().map(Labels::span),
+                    secret.template_driver().map(Located::span),
+                ],
+                "secret",
+            );
             definitions.push(secret);
         }
         definitions
+    }
+
+    fn parse_resource_external(&mut self, field: &ParsedField, kind: &str) -> Option<ResourceExternal> {
+        let Some(value) = field.value.as_ref() else {
+            self.expected(
+                EXPECTED_FIELD_FORM,
+                field,
+                format!("{kind} external must be a boolean or mapping"),
+            );
+            return None;
+        };
+        let Some(mapping) = value.as_mapping() else {
+            return self
+                .parse_boolean(field, &format!("{kind} external"))
+                .map(ResourceExternal::Boolean);
+        };
+        let mut name_mapping = ExternalNameMapping::new(span_from_position(self.source_id, mapping.byte_range()));
+        let mut seen = BTreeMap::new();
+        for member in self.fields(mapping) {
+            if self.record_duplicate(&mut seen, &member) {
+                name_mapping.push_unknown(member.reference());
+                continue;
+            }
+            match member.name.value().as_str() {
+                "name" => {
+                    match self.parse_extends_string(&member, "deprecated external name must be a YAML string scalar") {
+                        Some(value) if !value.value().is_empty() => name_mapping.set_name(value),
+                        Some(value) => {
+                            self.expected(
+                                EXPECTED_SCALAR,
+                                &member,
+                                "deprecated external name must be a non-empty YAML string scalar",
+                            );
+                            let _ = value;
+                            name_mapping.push_unknown(member.reference());
+                        }
+                        None => name_mapping.push_unknown(member.reference()),
+                    }
+                }
+                name if name.starts_with("x-") => name_mapping.push_extension(member.reference()),
+                _ => name_mapping.push_unknown(member.reference()),
+            }
+        }
+        if name_mapping.name().is_none() {
+            self.missing(
+                EXPECTED_SCALAR,
+                name_mapping.span(),
+                "deprecated external mapping requires a non-empty `name` string",
+            );
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                RESOURCE_EXTERNAL_NAME_MAPPING_DEPRECATED,
+                Severity::Warning,
+                format!("{kind} `external.name` mapping syntax is deprecated"),
+            )
+            .with_label(DiagnosticLabel::primary(
+                name_mapping.span(),
+                "use `name: VALUE` with `external: true` instead",
+            )),
+        );
+        Some(ResourceExternal::NameMapping(Box::new(name_mapping)))
+    }
+
+    fn validate_resource_external_name(
+        &mut self,
+        external: Option<&ResourceExternal>,
+        custom_name: Option<&Located<String>>,
+        fallback: SourceSpan,
+    ) {
+        let (Some(ResourceExternal::NameMapping(name_mapping)), Some(modern)) = (external, custom_name) else {
+            return;
+        };
+        let mapping_span = name_mapping.name().map_or_else(|| name_mapping.span(), Located::span);
+        self.diagnostics.push(
+            Diagnostic::new(
+                RESOURCE_EXTERNAL_NAME_CONFLICT,
+                Severity::Error,
+                "resource cannot use both `name` and deprecated `external.name` mapping syntax",
+            )
+            .with_label(DiagnosticLabel::primary(modern.span(), "resource name"))
+            .with_label(DiagnosticLabel::secondary(mapping_span, "deprecated external name"))
+            .with_label(DiagnosticLabel::secondary(fallback, "both values remain retained")),
+        );
+    }
+
+    fn validate_external_creation_configuration(
+        &mut self,
+        external: Option<&ResourceExternal>,
+        fields: &[Option<SourceSpan>],
+        kind: &str,
+    ) {
+        if !external.is_some_and(ResourceExternal::is_explicitly_external) {
+            return;
+        }
+        let Some(span) = fields.iter().flatten().next().copied() else {
+            return;
+        };
+        self.diagnostics.push(
+            Diagnostic::new(
+                RESOURCE_EXTERNAL_CREATION_CONFIGURATION,
+                Severity::Error,
+                format!("external {kind} cannot also configure creation-time metadata"),
+            )
+            .with_label(DiagnosticLabel::primary(span, "metadata remains retained for review")),
+        );
     }
 
     fn resource_collection(&mut self, field: &ParsedField, kind: &str) -> Option<Mapping> {
@@ -7578,6 +9216,49 @@ impl Parser {
         )
     }
 
+    fn parse_strict_string_sequence(
+        &mut self,
+        field: &ParsedField,
+        description: &str,
+    ) -> (Vec<Located<String>>, Vec<InvalidServiceStringItem>) {
+        let Some(sequence) = field.value.as_ref().and_then(YamlNode::as_sequence) else {
+            self.expected(EXPECTED_SEQUENCE, field, format!("{description} must be a sequence"));
+            return (Vec::new(), Vec::new());
+        };
+        let mut values = Vec::new();
+        let mut invalid = Vec::new();
+        for node in sequence.values() {
+            let span = match &node {
+                YamlNode::Scalar(value) => span_from_position(self.source_id, value.byte_range()),
+                YamlNode::Sequence(value) => span_from_position(self.source_id, value.byte_range()),
+                YamlNode::Mapping(value) => span_from_position(self.source_id, value.byte_range()),
+                _ => field.span,
+            };
+            let Some(scalar) = node.as_scalar() else {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &node,
+                    field.span,
+                    format!("{description} entries must be YAML string scalars"),
+                );
+                invalid.push(InvalidServiceStringItem::new(span));
+                continue;
+            };
+            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                self.unsupported_sequence_item(
+                    EXPECTED_SCALAR,
+                    &node,
+                    field.span,
+                    format!("{description} entries must be YAML string scalars"),
+                );
+                invalid.push(InvalidServiceStringItem::new(span));
+                continue;
+            }
+            values.push(Located::new(scalar_string_from_source(&self.source, scalar), span));
+        }
+        (values, invalid)
+    }
+
     fn parse_scalar_nodes(
         &mut self,
         nodes: impl Iterator<Item = YamlNode>,
@@ -7645,6 +9326,58 @@ impl Parser {
             }
         };
         Some(Located::new(typed, span))
+    }
+
+    fn parse_integer_or_string_scalar(
+        &mut self,
+        field: &ParsedField,
+        message: impl Into<String>,
+    ) -> Option<Located<ComposeScalar>> {
+        let message = message.into();
+        let Some(node) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_FIELD_FORM, field, message);
+            return None;
+        };
+        let type_ = ScalarValue::from_scalar(node).scalar_type();
+        if type_ != ScalarType::Integer && type_ != ScalarType::String {
+            self.expected(EXPECTED_FIELD_FORM, field, message);
+            return None;
+        }
+        self.parse_compose_scalar(field, "integer or string scalar already checked")
+    }
+
+    fn parse_string_or_number_scalar(
+        &mut self,
+        field: &ParsedField,
+        message: impl Into<String>,
+    ) -> Option<Located<ComposeScalar>> {
+        let message = message.into();
+        let Some(node) = field.value.as_ref().and_then(YamlNode::as_scalar) else {
+            self.expected(EXPECTED_FIELD_FORM, field, message);
+            return None;
+        };
+        if !matches!(
+            ScalarValue::from_scalar(node).scalar_type(),
+            ScalarType::String | ScalarType::Timestamp | ScalarType::Regex | ScalarType::Integer | ScalarType::Float
+        ) {
+            self.expected(EXPECTED_FIELD_FORM, field, message);
+            return None;
+        }
+        self.parse_compose_scalar(field, "number or string scalar already checked")
+    }
+
+    fn parse_integer_scalar(
+        &mut self,
+        field: &ParsedField,
+        message: impl Into<String>,
+    ) -> Option<Located<ComposeScalar>> {
+        let message = message.into();
+        let node = field.value.as_ref().and_then(YamlNode::as_scalar)?;
+        if ScalarValue::from_scalar(node).scalar_type() != ScalarType::Integer {
+            self.expected(EXPECTED_FIELD_FORM, field, message);
+            return None;
+        }
+        self.parse_compose_scalar(field, "integer scalar already checked")
     }
 
     fn parse_labels(&mut self, field: &ParsedField) -> Option<Labels> {
@@ -7985,6 +9718,18 @@ fn unwrap_processing_tag(node: YamlNode) -> YamlNode {
         .as_node()
         .and_then(|syntax| syntax.children().find_map(YamlNode::from_syntax))
         .unwrap_or(node)
+}
+
+fn command_is_non_empty(command: &Command) -> bool {
+    match command {
+        Command::Null(_) => false,
+        Command::String(value) => !value.value().is_empty(),
+        Command::List { values, .. } => !values.is_empty(),
+    }
+}
+
+fn gpu_has_capabilities(device: &GpuDevice) -> bool {
+    device.capabilities().iter().any(|value| !value.value().is_empty())
 }
 
 #[derive(Debug, Clone)]

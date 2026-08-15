@@ -16,6 +16,6 @@ Suites are introduced with the behavior they verify:
 - `conformance` — exact provider/probe matrix policy plus an explicitly invoked observation runner
 - `runtime-conformance` — exact planned runtime contexts, fixture hashes, and fail-closed isolation policy
 - `real-world` — licensed external projects and regression cases
-- `public-api` — consumer-facing compile and behavior contract for the supported 0.1.x pipeline
+- `public-api` — consumer-facing compile and behavior contract for the supported 0.2.x pipeline
 
 Do not add an empty test binary merely to reserve a suite name. Add the entry point, its fixtures, and meaningful assertions together.

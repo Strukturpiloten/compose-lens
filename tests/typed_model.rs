@@ -23,7 +23,7 @@ use compose_lens::model::{
     LOGGING_DRIVER_EXPECTED_STRING, LOGGING_EXPECTED_MAPPING, LOGGING_OPTION_EMPTY_KEY, LOGGING_OPTION_EXPECTED_SCALAR,
     LOGGING_OPTIONS_EXPECTED_MAPPING, Labels, LimitValue, Located, LoggingOptionValue, MountType, PORT_EXPECTED_FORM,
     PORT_MISSING_TARGET, POST_START_MISSING_COMMAND, PRE_STOP_MISSING_COMMAND, PROVIDER_MISSING_TYPE, Port,
-    RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY, RestartPolicyKind, STOP_GRACE_PERIOD_INVALID,
+    RESOURCE_EXPECTED_FORM, RESTART_INVALID_POLICY, ResourceExternal, RestartPolicyKind, STOP_GRACE_PERIOD_INVALID,
     SYSCTLS_DUPLICATE_ITEM, SYSCTLS_EMPTY_KEY, SYSCTLS_EXPECTED_FORM, SYSCTLS_EXPECTED_SCALAR, SYSCTLS_EXPECTED_STRING,
     SecretGrant, SelinuxRelabel, ServiceNetworks, StopGracePeriod, SysctlsForm, ULIMIT_INVALID_NAME,
     ULIMIT_INVALID_VALUE, ULIMIT_MISSING_RANGE_MEMBER, UlimitValue, UserNamespaceModeKind, VOLUME_EXPECTED_FORM,
@@ -5364,8 +5364,12 @@ fn retains_short_and_long_volume_forms_as_distinct_variants() -> Result<(), Box<
     assert_eq!(long.source().map(|value| value.value().as_str()), Some("./strict"));
     assert_eq!(long.target().map(|value| value.value().as_str()), Some("/srv/strict"));
     assert_eq!(long.read_only().map(Located::value), Some(&BooleanValue::Literal(true)));
+    assert_eq!(
+        long.consistency().map(Located::value).map(String::as_str),
+        Some("delegated")
+    );
     assert_eq!(long.extension_fields().len(), 1);
-    assert_eq!(long.unknown_fields().len(), 1);
+    assert_eq!(long.unknown_fields().len(), 0);
 
     let bind = long.bind().ok_or("long mount bind options are missing")?;
     assert_eq!(
@@ -5620,7 +5624,10 @@ fn types_top_level_network_and_volume_definitions() -> Result<(), Box<dyn std::e
     assert_eq!(volume.driver().map(|value| value.value().as_str()), Some("local"));
     assert_eq!(volume.driver_opts().len(), 3);
     assert_eq!(
-        volume.external().map(Located::value),
+        volume
+            .external()
+            .and_then(ResourceExternal::boolean)
+            .map(Located::value),
         Some(&BooleanValue::Expression("${CACHE_EXTERNAL:-false}".to_owned()))
     );
     assert!(matches!(volume.labels(), Some(Labels::List { values, .. }) if values.len() == 1));
@@ -5694,7 +5701,7 @@ fn retains_volume_driver_option_scalar_kinds_and_external_driver_conflicts() -> 
         parsed
             .diagnostics()
             .iter()
-            .any(|diagnostic| diagnostic.code() == EXPECTED_BOOLEAN)
+            .any(|diagnostic| diagnostic.code() == EXPECTED_FIELD_FORM)
     );
     Ok(())
 }
@@ -6045,7 +6052,10 @@ fn types_top_level_configs_and_secrets() -> Result<(), Box<dyn std::error::Error
         Some("APP_CONFIG")
     );
     assert_eq!(
-        external_config.external().map(Located::value),
+        external_config
+            .external()
+            .and_then(ResourceExternal::boolean)
+            .map(Located::value),
         Some(&BooleanValue::Expression("${CONFIG_EXTERNAL:-true}".to_owned()))
     );
     assert_eq!(document.configs()[0].name().value(), "implicit");
@@ -6060,7 +6070,10 @@ fn types_top_level_configs_and_secrets() -> Result<(), Box<dyn std::error::Error
         Some("APP_TOKEN")
     );
     assert_eq!(
-        external_secret.external().map(Located::value),
+        external_secret
+            .external()
+            .and_then(ResourceExternal::boolean)
+            .map(Located::value),
         Some(&BooleanValue::Literal(true))
     );
     assert_eq!(document.secrets()[0].name().value(), "implicit");

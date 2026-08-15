@@ -114,6 +114,22 @@ fractional spelling without conversion; dollar-bearing strings are expressions. 
 microsecond conversion, realtime scheduler, OS, host, default, provider, version, runtime,
 generated-document, or conversion interpretation.
 
+The related service resource and namespace keys `cpu_rt_runtime`, `cpu_shares`, `cpus`, `cpuset`,
+`device_cgroup_rules`, `ipc`, `mem_reservation`, `mem_swappiness`, `memswap_limit`,
+`network_mode`, `oom_kill_disable`, `oom_score_adj`, `pid`, `scale`, and `volumes_from` are native
+at authored and effective-project boundaries. Decimal/integer checks retain invalid raw evidence;
+ordered rules and volume references preserve duplicates; `service:` references are validated only
+against the selected project. The effective view emits structured, source-spanned diagnostics for
+conflicting CPU/replica/network/reservation declarations, a positive `memswap_limit` without
+`mem_limit`, and a comparable positive `memswap_limit` below `mem_limit`; values remain
+recoverable and no host default is inferred. Memory comparisons use only matching documented
+suffixes and arbitrary-precision integral spellings, so cross-unit values remain unresolved rather
+than receiving an inferred conversion. Generated construction accepts only resolved non-empty
+field-valid spellings (including bounded integer fields and non-empty reference targets) and
+ordered duplicate-capable sequences. It emits deterministic YAML, with generated
+`cpu_rt_runtime` selecting either an integer microsecond scalar or a quoted duration string,
+rejects duplicate field requests, and parse-back validates without provider or runtime claims.
+
 Execution identity and context are native at both document and merged-project layers. Effective
 `user`, `userns_mode`, `group_add`, `working_dir`, and `read_only` values retain raw spelling,
 field provenance, and, for supplementary groups, per-item provenance. No account, group, path, or
@@ -206,6 +222,13 @@ schema-only numbers, and other provider-dependent strings remain distinct with r
 diagnostics. ComposeLens does not normalize units, parse a machine integer, reconcile deploy
 values, inspect host/cgroup state, or claim non-byte values are exactly transferable.
 
+Service `memswap_limit` has its own raw-preserving type and diagnostics. Exact `-1` is the
+unlimited branch; all-zero quantities and positive decimal quantities remain separate categories
+with optional documented lowercase byte suffixes, while dollar-bearing strings remain deferred.
+Other scalar spellings diagnose as invalid without being erased. A positive value requires an
+explicit `mem_limit`; only matching documented units with integral amounts are compared, and no
+host default or cross-unit conversion is inferred.
+
 Service-level `tmpfs` is distinct from long-syntax volume type `tmpfs` and retains omission,
 scalar/list form, explicit empty lists, ordering, exact duplicates, source spans, and sensitivity.
 Each exact string uses `<path>[:<options>]`: a non-empty path alone or colon-delimited non-empty
@@ -281,14 +304,14 @@ stage, not the typed parser, applies the tag's semantics.
 
 ## Typed boundary
 
-| Location           | Phase 2 fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Document           | `name`, `services`, `networks`, `volumes`, `configs`, `secrets`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Service            | `hostname`, `container_name`, `image`, `platform`, `build`, `entrypoint`, `command`, `credential_spec`, `extends`, `provider`, `post_start`, `pre_stop`, `pre_start`, `blkio_config`, `attach`, `init`, `stdin_open`, `tty`, `privileged`, `environment`, `env_file`, `labels`, `annotations`, `logging`, `extra_hosts`, `user`, `userns_mode`, `group_add`, `cap_add`, `cap_drop`, `devices`, `dns`, `dns_opt`, `dns_search`, `expose`, `security_opt`, `working_dir`, `read_only`, `pids_limit`, `shm_size`, `mem_limit`, `tmpfs`, `sysctls`, `pull_policy`, `pull_refresh_after`, `restart`, `runtime`, `stop_signal`, `stop_grace_period`, `ulimits`, `depends_on`, `healthcheck`, `deploy`, `ports`, `volumes`, `networks`, `profiles`, `configs`, `secrets` |
-| Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, `external`, `internal`, `ipam`, `labels`, `name`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Volume definition  | `driver`, `driver_opts`, `external`, `labels`, `name`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Config definition  | `file`, `environment`, `content`, `external`, `name`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Secret definition  | `file`, `environment`, `external`, `name`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Location           | Phase 2 fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Document           | All 9 current top-level keys are typed: `name`, `services`, `networks`, `volumes`, `configs`, `secrets`, obsolete `version`, and the bounded `include` and `models` forms. The latter three retain diagnostics and source evidence without selecting a provider or loading files, environments, or models.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Service            | All 93 current immediate service keys are typed: identity and execution (`image`, `hostname`, `container_name`, `command`, `entrypoint`, `working_dir`, `user`, `platform`, `runtime`); lifecycle and interaction (`attach`, `init`, `stdin_open`, `tty`, `privileged`, `restart`, `stop_signal`, `stop_grace_period`, hooks, `healthcheck`, `depends_on`); configuration and metadata (`environment`, `env_file`, labels, annotations, logging, `credential_spec`, `extends`, `provider`, `develop`, `models`); networking, storage, and devices (networks, ports, volumes, configs, secrets, DNS, `expose`, capabilities, devices, GPUs, security options, `tmpfs`, `sysctls`); resources and namespaces (the CPU/memory/OOM/PID/cgroup families, `shm_size`, `ulimits`, `scale`, `volumes_from`); and `build` plus `deploy`. The exact exhaustive inventory and effective-view contract live in [the roadmap](roadmap.md#exact-service-gaps). |
+| Network definition | `driver`, `driver_opts`, `attachable`, `enable_ipv4`, `enable_ipv6`, boolean/name-mapping `external`, `internal`, `ipam`, `labels`, `name`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Volume definition  | `driver`, `driver_opts`, boolean/name-mapping `external`, `labels`, `name`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Config definition  | `file`, `environment`, `content`, boolean/name-mapping `external`, `labels`, `template_driver`, `name`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Secret definition  | `file`, `environment`, `driver`, `driver_opts`, boolean/name-mapping `external`, `labels`, `template_driver`, `name`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Every implemented mapping retains `x-` extensions and unrecognized fields with source spans.
 Collections retain authored order.
@@ -311,7 +334,13 @@ Field-specific variants retain forms whose behavior or meaning can differ:
 - environment files: a scalar path, ordered path list, or ordered long entries with `path`,
   `required`, and `format` retained independently;
 - ports: scalar short syntax or mapping long syntax;
-- service volumes: scalar short syntax or mapping long syntax;
+- service volumes: scalar short syntax or mapping long syntax. Long mounts retain `consistency`,
+  `bind.recursive`, and source-aware `image.subpath`, `tmpfs.size`/`mode`, and
+  `volume.nocopy`/`subpath`/list-or-map `labels` options. Size and mode retain YAML string/number
+  categories rather than provider coercion; no image, filesystem, permission, runtime, or default
+  behavior is inferred, and these additional long options are not generated yet. The additive
+  effective `volume_mount_options` companion view exposes `consistency` and option-member contributors plus nested
+  extensions, unknowns, and malformed evidence without replacing the stable mount API;
 - service networks: name sequence or options mapping;
 - service config and secret grants: name short syntax or mapping long syntax;
 - extra hosts: hostname/address sequence or mapping, retaining delimiters and IPv6 brackets;
@@ -411,7 +440,7 @@ maximum failure ratio preserves YAML-number or strict-string spelling; and order
 or provider-specific values. The current [Deploy update section](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#update_config)
 and [rollback section](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#rollback_config)
 name `continue` and `pause` for rollback `failure_action`, while the current
-[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json)
 accepts any string; this API follows the schema and retains it without rejection. The schema
 enumerates `order`, so other strings are retained with a mapping-specific portability diagnostic.
 Neither those sources nor the [Compose merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
@@ -422,7 +451,7 @@ ComposeLens injects none.
 and `registry` members, including explicit empties and malformed/unknown evidence. The current
 [Compose service reference](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#credential_spec)
 describes URI-like `file`/`registry` forms, while the current
-[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+[Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json)
 models all three as strings in one mapping; ComposeLens retains raw spelling without resolving that
 prose/mapping ambiguity. The [Compose merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
 therefore apply as generic recursive mapping merge. No file, registry, account, top-level config,
@@ -432,7 +461,7 @@ Windows/gMSA, platform, provider, runtime, or conversion behavior is inferred.
 long form retains optional strict YAML-string `service` and `file` members, explicit empties,
 mapping span, extensions, and malformed or unknown members; a missing `service` remains retained
 with a diagnostic. The [Compose service reference](https://github.com/compose-spec/compose-spec/blob/main/05-services.md#extends)
-focuses on the mapping while the [schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json)
+focuses on the mapping while the [schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json)
 also permits the short string. The [merge rules](https://github.com/compose-spec/compose-spec/blob/main/13-merge.md)
 apply only generic scalar replacement or recursive mapping merge. These raw types never expand or
 merge a referenced service, look up files, normalize paths, traverse cycles, or import resources.
@@ -440,7 +469,7 @@ The separate `validate_references` stage may validate a same-file long-form `ser
 `file` is absent; it performs none of those operations or provider, platform, runtime, or conversion inference.
 
 `provider` is a closed mapping with a required strict YAML-string `type` and optional `options`
-mapping, as defined by the [Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/master/schema/compose-spec.json).
+mapping, as defined by the [Compose JSON schema](https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json).
 Option keys are nonempty; each value is a YAML string, number, or boolean scalar or an ordered
 sequence of those categories. Empty types remain valid, while malformed or duplicate
 members and sequence items remain source-aware evidence and a missing type is diagnosed. Generic

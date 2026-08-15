@@ -41,6 +41,56 @@ environment access. Recoverable syntax and typed-model diagnostics stay attached
 and are aggregated without preventing analysis. File discovery and I/O belong in application
 adapters; paths retain the origin needed for later resolution.
 
+### Traverse and compose includes
+
+`IncludeResolution::load` accepts a caller-created root and an `IncludeLoader`. For each reached
+project it performs the existing ordered load, authored no-interpolation merge, and native project
+view before visiting effective includes depth-first. The loader receives raw path, `env_file`, and
+`project_directory` declarations plus their spans, origin, and parent context; it is the only I/O
+and authorization boundary. Cycles use caller-defined identities on the active stack, source IDs
+are unique across the whole traversal, and failures retain a partial graph with stable
+`compose.include.*` diagnostics.
+
+`IncludeResolution::compose` is an independent, I/O-free operation over those retained views. It
+composes children before importing them into their already merged parent. It imports only absent
+names in each of the services, networks, volumes, configs, secrets, and models namespaces. A local
+or earlier child selection wins; a same-name incoming candidate is retained as an explicit conflict
+with two source labels and never runs the ordinary merge rules. Its result retains the traversal
+diagnostics plus warnings and reports incomplete traversal or conflicts explicitly. It still does
+not canonicalize or join paths, interpolate values, read environment or `.env` files, infer project
+names, cache diamonds, render a composed document, or select provider behavior.
+
+### Plan include project directories
+
+`IncludeResolution::plan_project_directories` is an independent I/O-free planning operation. Root
+and undeclared child occurrences use their retained first-document directories. For an explicit raw
+`project_directory`, a caller-owned resolver receives the include edge, request, occurrence
+identities/indices, declaration span, effective parent directory when available, and child first
+document directory. It can return an authorized directory, defer non-fatally, or report typed
+unresolved status. The plan preserves traversal diagnostics, emits no path text, and does not join,
+canonicalize, open, interpolate, expand, or otherwise interpret paths. Cycle edges are skipped.
+
+### Resolve selected included resource paths
+
+`resolve_included_resource_paths` combines an `IncludeCompositionResult`, its matching
+`IncludeProjectDirectoryPlan`, and caller-owned `PathContext`. It visits selected service bind
+sources (path-like short syntax and `type: bind` long syntax) followed by selected top-level config
+and secret `file` values in deterministic namespace order. It applies the existing lexical relative,
+Unix absolute, Windows drive, UNC, and home-relative classifications. Each result retains the exact
+supplying occurrence and its authorized base.
+
+Long bind sources and config/secret `file` values retain their exact authored value-scalar spans.
+Short bind sources are decoded from one colon-delimited mount scalar, so their component byte range
+is not reconstructed through YAML quoting or escape spelling; their result instead retains the
+containing authored mount-scalar span.
+
+Occurrence index and identity must agree with the directory plan. Missing, deferred, unresolved,
+or mismatched entries stay unresolved with stable diagnostics; no root or parent fallback is used.
+The operation is authored and uninterpolated and performs no file access, canonicalization,
+existence check, URI interpretation, or resolution of another path family. Path and identity text
+is always redacted from debug output. Named, anonymous, image, and tmpfs mount sources remain
+outside this operation.
+
 ### Interpolate
 
 Evaluates supported variable expressions using an explicit provider. The provider may expose process environment variables, a supplied map, an `.env` document, or a test fixture. No provider is consulted during parsing.

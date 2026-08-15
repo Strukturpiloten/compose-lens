@@ -1,12 +1,13 @@
 # API stability policy
 
-ComposeLens is pre-1.0, but its API is not an unbounded experiment. Version 0.1 establishes one
-documented public release line for early BoxFerry integration and independent consumers. This
-policy is recorded by [ADR 0013](decisions/0013-versioned-public-api-and-release-contract.md).
+ComposeLens is pre-1.0, but its API is not an unbounded experiment. Version 0.2 establishes the
+current public release line for BoxFerry integration and independent consumers after consolidating
+the first source-aware APIs. This policy is recorded by
+[ADR 0019](decisions/0019-consolidated-0.2-public-api.md).
 
-## The 0.1.x contract
+## The 0.2.x contract
 
-Within the 0.1.x line:
+Within the 0.2.x line:
 
 - patch releases preserve source compatibility for supported public entry points;
 - public APIs use ComposeLens-owned types, while `yaml-edit` remains private;
@@ -23,7 +24,7 @@ rename a diagnostic code.
 
 ## Supported entry points
 
-The 0.1 consumer contract covers these explicit stages:
+The 0.2 consumer contract covers these explicit stages:
 
 | Stage                                                    | Public modules                               |
 | -------------------------------------------------------- | -------------------------------------------- |
@@ -39,6 +40,31 @@ consumer would. The additive `project` module provides native values without hid
 interpolation, merging, or profile selection. The modules remain separate deliberately; 0.1 does
 not add a convenience function that hides file access, interpolation, merging, profile selection,
 validation, or rendering.
+
+The additive `loader::{IncludeIdentity, IncludeLoader, IncludeRequest, IncludedProjectInput,
+IncludeResolution, IncludeCompositionResult, IncludeComposition, IncludeDefinition,
+IncludeResourceConflict}` contract is stable within 0.2.x. Identity canonicalization and all I/O remain
+caller-owned; raw include path, `env_file`, and `project_directory` values are not interpolated or
+normalized. Stable `compose.include.*` diagnostics report traversal failures while retaining
+partial nodes, edges, requests, and origins. The opt-in composition result exposes typed selected
+definitions and explicit local-wins resource conflicts without re-entering the loader. It excludes
+path joining, environment/.env precedence, project-name inference, caching, composed rendering,
+and provider behavior.
+
+The additive `IncludeProjectDirectoryResolver`, request, outcome, entry, and plan types are stable
+within 0.2.x. They are a separate opt-in planning API: only explicit declarations invoke the
+resolver, returned paths are authorized caller data, and typed unresolved status contains no
+arbitrary message text. No path policy, I/O, or interpolation is implied.
+
+The additive `resolve_included_resource_paths`, `IncludedResourcePath`, and
+`IncludedResourcePathResolution` contract lexically resolves selected service bind sources plus
+selected top-level config and secret `file` values in an `IncludeCompositionResult`. It requires the matching
+`IncludeProjectDirectoryPlan`, validates occurrence index and identity, and never falls back to a
+different occurrence base. Its values are authored and uninterpolated; debug output redacts all
+path and identity text. Build paths, environment files, and every other path family remain outside
+this API. Long bind and config/secret file results expose their exact value-scalar span; a short
+bind result exposes the containing authored mount-scalar span because ComposeLens does not guess a
+decoded component's byte range.
 
 The additive generated-document path accepts only explicit Compose-owned values and performs no
 processing or I/O. Successful output is parse-back validated through the syntax and native model.
@@ -266,6 +292,11 @@ Additive DNS types and getters cover `dns`, `dns_opt`, and `dns_search`, retaini
 authored form, ordering, duplicates, provenance, reset/override state, and sensitivity. Their
 generated APIs accept only resolved physical-line-safe values and parse back the emitted document.
 
+Resource-definition `external()` returns the complete `ResourceExternal` authored form for
+networks, volumes, configs, and secrets. Callers inspect `Boolean` for current Compose syntax or
+`NameMapping` for deprecated `external: { name: ... }` input. There is no compatibility alias or
+second syntax getter, and the deprecated input spelling is never silently normalized.
+
 Additive `Expose` and `Annotations` types retain scalar or syntax identity and their documented
 field-specific merge evidence. Generated construction requires safe, unambiguous values.
 
@@ -309,6 +340,13 @@ The same additive `GeneratedNetworkDefinition` API supports set-once literal `en
 `internal` choices. Their `Option<bool>` accessors preserve omission versus explicit `false` and
 `true`; generation injects no default and exposes no generated `enable_ipv4` counterpart.
 
+Additive `GeneratedConfigFileDefinition` and `GeneratedSecretFileDefinition` provide deterministic
+file-backed top-level resource generation. Names and file values are required resolved single-line
+strings, names are unique within their native namespace, and caller-marked file sensitivity
+propagates through builder and final-document debug redaction. They intentionally exclude content,
+environment, external lifecycle, drivers, labels, template drivers, file access, and runtime
+claims.
+
 ## Changes before 1.0
 
 Rust's semantic-versioning convention permits breaking changes in the next pre-1.0 minor release.
@@ -320,11 +358,11 @@ Adding a variant to one of the public compatibility-context enums marked `#[non_
 a breaking change. Other public enums may become non-exhaustive only in a breaking release because
 adding that attribute itself affects downstream exhaustive matches.
 
-## Not promised by 0.1
+## Not promised by 0.2
 
-The 0.1 contract does not claim:
+The 0.2 contract does not claim:
 
-- complete coverage of every Compose field;
+- complete provider/runtime semantics for every Compose value;
 - structural source editing beyond the documented scalar boundary;
 - behavior parity among the Compose Specification, Docker Compose, and `podman-compose`;
 - runtime effects from provider-only `config` observations; or

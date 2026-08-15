@@ -6,6 +6,25 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Added
+
+- Native authored and effective-project coverage for service CPU, memory, namespace, OOM, scale,
+  device-cgroup, and `volumes_from` keys, retaining merge provenance, interpolation sensitivity,
+  malformed evidence, local service-reference validation, and deterministic parse-back-generated
+  raw syntax without runtime inference.
+- Completes structured authored/effective coverage for the current closed-schema Compose keys,
+  including includes, models, GPU selectors, development watches, and local model references.
+- Adds authored and effective long-volume mount options for consistency, recursive binds, image,
+  tmpfs, and named-volume subsettings; generation and runtime interpretation remain excluded.
+
+### Changed
+
+- Starts the 0.2.x API line with one complete resource `external()` getter; removes the
+  compatibility-only `external_syntax()` path and renames the deprecated Compose name-mapping
+  model.
+- SemVer validation derives the release type from Cargo package versions instead of forcing every
+  candidate to be a patch.
+
 ## [0.1.17] - 2026-08-13
 
 ### Added

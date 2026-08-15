@@ -18,6 +18,9 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 
 - an optional resolved service `hostname`, independently validated with conservative ASCII
   RFC-1123 rules and never derived from another name;
+- resolved raw service `domainname`, `isolation`, `mac_address`, and `uts` spellings;
+- an explicit literal/deferred-safe `use_api_socket` choice; and
+- the scalar `gpus: all` selector, without device allocation or list-selector generation;
 - an optional explicit runtime `container_name` validated against Compose's portable grammar;
 - image references, including `name:tag@digest` spellings;
 - independent string/list entrypoints and exec/shell commands, including explicitly empty forms;
@@ -54,6 +57,14 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
   scalar-kind-aware driver options; and
 - application-owned or external top-level volume definitions, with optional exact platform-level names.
 
+`GeneratedConfigFileDefinition` and `GeneratedSecretFileDefinition` add the intentionally small
+file-backed resource subset. Each accepts one unique, resolved single-line name and one required,
+resolved single-line `GeneratedString` file spelling. The builder renders deterministic quoted
+mapping syntax, rejects duplicates independently in the config and secret namespaces, and
+parse-back validates the result. A sensitive file value redacts generated debug output. These APIs
+do not read files or represent content, environment, external lifecycle, drivers, labels, template
+drivers, or provider/runtime behavior.
+
 Generated collections retain insertion order and reject duplicate names where Compose mapping
 syntax would otherwise overwrite intent. Singleton service fields reject a second assignment.
 
@@ -63,6 +74,12 @@ and the native annotation model must parse it back successfully.
 
 Strings are always double-quoted by the private renderer, so YAML scalar inference cannot change
 their type.
+
+The generated raw service-runtime fields (`domainname`, `isolation`, `mac_address`, and `uts`) are
+single-line resolved strings only. They do not validate DNS, MAC, namespace, platform, provider,
+runtime, or cross-format behavior. `use_api_socket` is an explicit literal boolean, while generated
+`gpus` intentionally supports only the portable scalar `all`; detailed GPU devices remain
+authored/effective data because generation would imply an unsupported allocation policy.
 
 `GeneratedService::set_cap_add` and `GeneratedService::set_cap_drop` configure their complete
 vectors independently and exactly once. Not calling a setter omits its field; an empty vector emits
