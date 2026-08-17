@@ -57,10 +57,23 @@ jobs:
         run: rustup component add llvm-tools-preview
       - name: Install pinned cargo-llvm-cov
         run: cargo install --locked --version 0.8.7 cargo-llvm-cov
+      - name: Clean coverage artifacts
+        run: cargo llvm-cov clean --locked
       - name: Measure and enforce coarse coverage ratchet
         run: >-
-          cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only
+          cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only
           --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
+
+  portability:
+    name: Portability (macOS)
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - *checkout
+      - name: Check all deterministic targets
+        run: cargo ci-check
+      - name: Run deterministic tests
+        run: cargo ci-test
 
   msrv:
     name: MSRV
@@ -141,3 +154,55 @@ jobs:
             './**/*.md'
           fail: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  pr-gate:
+    name: PR gate
+    if: always()
+    needs: [rust, msrv, dependencies, api, documentation, coverage, portability]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every deterministic PR job to succeed
+        shell: bash
+        env:
+          RUST_RESULT: ${{ needs.rust.result }}
+          MSRV_RESULT: ${{ needs.msrv.result }}
+          DEPENDENCIES_RESULT: ${{ needs.dependencies.result }}
+          API_RESULT: ${{ needs.api.result }}
+          DOCUMENTATION_RESULT: ${{ needs.documentation.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          PORTABILITY_RESULT: ${{ needs.portability.result }}
+        run: |
+          set -euo pipefail
+          jobs=(
+            "Rust quality|${RUST_RESULT}"
+            "MSRV|${MSRV_RESULT}"
+            "Dependency and license policy|${DEPENDENCIES_RESULT}"
+            "Public API compatibility|${API_RESULT}"
+            "Documentation|${DOCUMENTATION_RESULT}"
+            "Coverage ratchet|${COVERAGE_RESULT}"
+            "macOS portability|${PORTABILITY_RESULT}"
+          )
+
+          {
+            printf '## Required PR job results\n\n'
+            printf '| Job | Result |\n'
+            printf '| --- | --- |\n'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          failures=0
+          for job in "${jobs[@]}"; do
+            name="${job%%|*}"
+            result="${job#*|}"
+            printf "| %s | \`%s\` |\n" "${name}" "${result}" >> "${GITHUB_STEP_SUMMARY}"
+            printf 'Required PR job %s: %s\n' "${name}" "${result}"
+            if [[ "${result}" != "success" ]]; then
+              echo "::error title=Required PR job did not succeed::${name} concluded ${result}."
+              echo "Required PR job did not succeed: ${name} concluded ${result}." >&2
+              failures=1
+            fi
+          done
+
+          if (( failures != 0 )); then
+            echo 'One or more required PR jobs did not succeed; see the result table and annotations above.' >&2
+            exit 1
+          fi

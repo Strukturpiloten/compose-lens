@@ -6,6 +6,11 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Changed
+
+- Automates version and changelog preparation with release-plz, makes this changelog the sole
+  release-history source, and retains the protected trusted-publishing workflow as publisher.
+
 ## [0.2.0] - 2026-08-17
 
 ### Added

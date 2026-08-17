@@ -22,6 +22,8 @@ closed root and immediate-service shapes, the exclusive `^x-` extension allowanc
 classified 9-root/93-service inventory. Positive and negative cases cover allowed classifications,
 required rationales for non-typed entries, unknown classes, and key-set drift. Upstream comparison
 is deliberately confined to the scheduled/manual `specification-drift` workflow.
+An offline content-only regression executes the same drift script on Ubuntu and macOS; its
+SHA-256 calculation uses the portable `shasum -a 256` interface available on both runners.
 
 ### Syntax tests
 
@@ -301,7 +303,8 @@ cargo ci-clippy
 cargo ci-test
 cargo ci-doctest
 RUSTDOCFLAGS="-D warnings" cargo ci-doc
-cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only \
+cargo llvm-cov clean --locked
+cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only \
   --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
 cargo +1.85.0 ci-check
 cargo +1.85.0 ci-policy
@@ -324,7 +327,14 @@ conformance command validates matrix policy and leaves its external runner ignor
 collection command is documented in [`../conformance/README.md`](../conformance/README.md). Add
 deterministic property-style commands here before any additional harness becomes a required check.
 
-The pinned `cargo-llvm-cov` 0.8.7 gate runs the locked workspace with all features and targets.
-Its coarse integer floors—88% regions, 87% functions, and 89% lines—are regression guards, not a
-claim that line execution proves behavior. Positive and negative assertions remain required at
-each supported boundary.
+The pinned `cargo-llvm-cov` 0.8.7 gate removes ComposeLens's repository-specific coverage artifact
+tree before running the locked workspace with all features and targets. The explicit cleanup
+prevents a persistent Dev Container cache from retaining a fingerprint for a missing test
+executable without racing another repository's coverage task. Its coarse integer floors—88%
+regions, 87% functions, and 89% lines—are regression guards, not a claim that line
+execution proves behavior. CI also runs the deterministic library suite on macOS. The
+always-running `PR gate` reports every required job result and requires Rust, MSRV, dependency,
+public-API, documentation, coverage, and macOS portability jobs to succeed. Repository branch
+protection should require that stable `PR gate` check. The protected release workflow repeats
+coverage and MSRV validation before publication. Positive and negative assertions remain required
+at each supported boundary.

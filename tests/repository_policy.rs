@@ -2,7 +2,12 @@
 
 mod support;
 
-use std::{collections::BTreeSet, fs, path::PathBuf, process::Command};
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+    process::{Command, Output},
+};
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -53,14 +58,15 @@ fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
 #[test]
 fn coverage_ratchet_runs_in_ci_and_release() -> Result<(), String> {
     const INSTALL: &str = "cargo install --locked --version 0.8.7 cargo-llvm-cov";
-    const COMMAND: &str = "cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only\n          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89";
+    const CLEAN: &str = "cargo llvm-cov clean --locked";
+    const COMMAND: &str = "cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only\n          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89";
 
     for workflow_name in ["ci.yml", "release.yml"] {
         let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
         let workflow = fs::read_to_string(&workflow_path)
             .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
 
-        for required in ["rustup component add llvm-tools-preview", INSTALL, COMMAND] {
+        for required in ["rustup component add llvm-tools-preview", INSTALL, CLEAN, COMMAND] {
             if workflow.matches(required).count() != 1 {
                 return Err(format!(
                     "{workflow_name} must contain one pinned ComposeLens coverage guard `{required}`"
@@ -73,10 +79,81 @@ fn coverage_ratchet_runs_in_ci_and_release() -> Result<(), String> {
 }
 
 #[test]
+fn ci_workflow_enforces_portability_and_an_actionable_pr_gate() -> Result<(), String> {
+    let workflow = read_repository_file(".github/workflows/ci.yml")?;
+
+    for required in [
+        "  portability:\n    name: Portability (macOS)",
+        "runs-on: macos-14",
+        "run: cargo ci-check",
+        "run: cargo ci-test",
+        "  pr-gate:\n    name: PR gate\n    if: always()",
+        "needs: [rust, msrv, dependencies, api, documentation, coverage, portability]",
+    ] {
+        if !workflow.contains(required) {
+            return Err(format!("CI workflow is missing contract `{required}`"));
+        }
+    }
+
+    for (job_name, result_variable, needs_job) in [
+        ("Rust quality", "RUST_RESULT", "rust"),
+        ("MSRV", "MSRV_RESULT", "msrv"),
+        ("Dependency and license policy", "DEPENDENCIES_RESULT", "dependencies"),
+        ("Public API compatibility", "API_RESULT", "api"),
+        ("Documentation", "DOCUMENTATION_RESULT", "documentation"),
+        ("Coverage ratchet", "COVERAGE_RESULT", "coverage"),
+        ("macOS portability", "PORTABILITY_RESULT", "portability"),
+    ] {
+        let required = format!("{result_variable}: ${{{{ needs.{needs_job}.result }}}}");
+        if !workflow.contains(&required) {
+            return Err(format!("PR gate does not expose a result variable for `{job_name}`"));
+        }
+    }
+
+    for required in [
+        "printf '| Job | Result |\\n'",
+        "printf \"| %s | \\`%s\\` |\\n\" \"${name}\" \"${result}\" >> \"${GITHUB_STEP_SUMMARY}\"",
+        "::error title=Required PR job did not succeed::${name} concluded ${result}.",
+        "Required PR job did not succeed: ${name} concluded ${result}.",
+        "if (( failures != 0 )); then",
+        "One or more required PR jobs did not succeed; see the result table and annotations above.",
+    ] {
+        if !workflow.contains(required) {
+            return Err(format!("PR gate is missing actionable failure diagnostic `{required}`"));
+        }
+    }
+    if workflow.contains("test \"${{ needs.") {
+        return Err("PR gate must not use opaque success test predicates".to_owned());
+    }
+    if workflow.contains("windows-") {
+        return Err("CI must not claim unsupported native Windows portability".to_owned());
+    }
+
+    Ok(())
+}
+
+#[test]
+fn release_workflow_rechecks_the_msrv() -> Result<(), String> {
+    let workflow = read_repository_file(".github/workflows/release.yml")?;
+    for required in [
+        "- name: Read the workspace MSRV",
+        "rustup toolchain install \"${RUST_MSRV}\" --profile minimal",
+        "cargo \"+${RUST_MSRV}\" ci-check",
+        "cargo \"+${RUST_MSRV}\" ci-policy",
+    ] {
+        if !workflow.contains(required) {
+            return Err(format!("release workflow is missing MSRV guard `{required}`"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn local_developer_workflow_covers_format_lint_test_and_release_checks() -> Result<(), String> {
     let script = read_repository_file("scripts/check-all.sh")?;
 
     for required in [
+        "list_existing_files",
         "cargo fmt --all",
         "bash scripts/check-files.sh --fix",
         "git --no-pager diff --check",
@@ -94,14 +171,23 @@ fn local_developer_workflow_covers_format_lint_test_and_release_checks() -> Resu
         "cargo test --locked --test public_api",
         "cargo test --locked --test generated_rendering",
         "cargo package --locked --allow-dirty",
-        "cargo llvm-cov --locked --workspace --all-features",
+        "cargo llvm-cov clean --locked",
+        "cargo llvm-cov --locked --no-clean --workspace --all-features",
         "cargo \"+${msrv}\" ci-check",
         "cargo \"+${msrv}\" ci-policy",
         "cargo deny --all-features check",
         "lychee --config lychee.toml --root-dir . --offline",
+        "validation_storage_root",
+        "coverage_target_dir",
         "semver_cargo_home",
-        "${CARGO_TARGET_DIR:-${repository_root}/target}/cargo-home",
+        "semver_target_dir",
+        "${CARGO_TARGET_DIR:-${repository_root}/target}/check-all/compose-lens",
+        "${validation_storage_root}/coverage",
+        "${validation_storage_root}/cargo-home",
+        "${validation_storage_root}/cargo-semver-checks-target",
+        "env CARGO_TARGET_DIR=\"${coverage_target_dir}\"",
         "env CARGO_HOME=\"${semver_cargo_home}\"",
+        "CARGO_TARGET_DIR=\"${semver_target_dir}\"",
         "cargo semver-checks check-release",
         "--package compose-lens",
     ] {
@@ -129,7 +215,7 @@ fn local_developer_workflow_covers_format_lint_test_and_release_checks() -> Resu
                 "DavidAnson.vscode-markdownlint",
                 "esbenp.prettier-vscode",
                 "mkhl.shfmt",
-                "tamasfe.even-better-toml",
+                "tombi-toml.tombi",
                 "timonwong.shellcheck",
             ][..],
         ),
@@ -159,20 +245,42 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
     let script = read_repository_file("scripts/check-files.sh")?;
     for required in [
         "git ls-files --cached --others --exclude-standard",
-        ":(exclude,glob)fixtures/**",
-        ":(exclude,glob)conformance/records/**",
+        "list_existing_files",
         ":(exclude)schema/compose-spec.json",
         "markdownlint-cli2 --fix",
         "prettier --write",
         "prettier --check",
-        "taplo fmt",
-        "taplo check",
+        "tombi format --check --offline",
+        "tombi lint --error-on-warnings --offline",
         "shfmt -w",
         "shellcheck --",
         "hadolint",
     ] {
         if !script.contains(required) {
             return Err(format!("non-Rust file runner missing `{required}`"));
+        }
+    }
+
+    let tombi = read_repository_file("tombi.toml")?;
+    for required in [
+        "dotted-keys-out-of-order = \"error\"",
+        "key-empty = \"error\"",
+        "tables-out-of-order = \"error\"",
+        "docs/schemas/tombi-cargo-offline.schema.json",
+        "include = [\"Cargo.toml\", \"**/Cargo.toml\"]",
+        "enabled = false",
+        "fixtures/**/*.toml",
+        "conformance/records/**/*.toml",
+    ] {
+        if !tombi.contains(required) {
+            return Err(format!("tombi.toml is missing `{required}`"));
+        }
+    }
+
+    let cargo_schema = read_repository_file("docs/schemas/tombi-cargo-offline.schema.json")?;
+    for required in [r#""type": "object""#, r#""additionalProperties": true"#] {
+        if !cargo_schema.contains(required) {
+            return Err(format!("offline Cargo schema must contain `{required}`"));
         }
     }
 
@@ -246,10 +354,14 @@ fn specification_drift_check_is_scheduled_manual_and_read_only() -> Result<(), S
         "Inventory drift detected:",
         "Content-only drift detected:",
         "no inventory-key changes",
+        "shasum -a 256",
     ] {
         if !script.contains(required) {
             return Err(format!("specification-drift script is missing `{required}`"));
         }
+    }
+    if script.contains("sha256sum") {
+        return Err("specification-drift script must not require Linux-only `sha256sum`".to_owned());
     }
     Ok(())
 }
@@ -283,16 +395,17 @@ fn specification_drift_reports_content_only_changes_without_hiding_them() -> Res
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let transcript = format!("status: {}; stdout: {stdout:?}; stderr: {stderr:?}", output.status);
     if !stdout.contains("no inventory-key changes") {
         return Err(format!(
-            "content-only drift must report unchanged inventory sets; stdout was {stdout:?}"
+            "content-only drift must report unchanged inventory sets; {transcript}"
         ));
     }
     if !stderr.contains("Content-only drift detected")
         || !stderr.contains("nested, prose, or other non-inventory schema changes")
     {
         return Err(format!(
-            "content-only drift must provide actionable review guidance; stderr was {stderr:?}"
+            "content-only drift must provide actionable review guidance; {transcript}"
         ));
     }
     Ok(())
@@ -604,6 +717,138 @@ fn release_workflow_uses_only_trusted_publishing() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[test]
+fn release_plz_prepares_only_guarded_releases() -> Result<(), String> {
+    validate_release_plz_contract("Strukturpiloten/compose-lens")
+}
+
+#[test]
+fn release_note_extraction_is_strict_and_bounded() -> Result<(), String> {
+    validate_release_note_extraction("compose-lens")
+}
+
+fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
+    if repository_root().join("docs/releases").exists() {
+        return Err("CHANGELOG.md must remain the only release-history source".to_owned());
+    }
+    let config_text = read_repository_file("release-plz.toml")?;
+    let config = toml::from_str::<toml::Value>(&config_text)
+        .map_err(|error| format!("failed to parse release-plz.toml: {error}"))?;
+    let workspace = config["workspace"]
+        .as_table()
+        .ok_or_else(|| "release-plz.toml must contain [workspace]".to_owned())?;
+    for (name, expected) in [
+        ("allow_dirty", false),
+        ("changelog_update", true),
+        ("dependencies_update", false),
+        ("git_release_enable", false),
+        ("git_tag_enable", false),
+        ("publish", false),
+        ("release_always", false),
+        ("semver_check", true),
+    ] {
+        if workspace.get(name).and_then(toml::Value::as_bool) != Some(expected) {
+            return Err(format!("release-plz workspace setting {name} must be {expected}"));
+        }
+    }
+    if workspace.get("changelog_path").and_then(toml::Value::as_str) != Some("CHANGELOG.md")
+        || workspace.get("pr_branch_prefix").and_then(toml::Value::as_str) != Some("release-plz-")
+    {
+        return Err("release-plz must use the root changelog and guarded branch prefix".to_owned());
+    }
+
+    let workflow = read_repository_file(".github/workflows/release-plz.yml")?;
+    for required in [
+        repository,
+        "secrets.RELEASE_PLZ_APP_ID",
+        "secrets.RELEASE_PLZ_APP_PRIVATE_KEY",
+        "permission-contents: write",
+        "permission-pull-requests: write",
+        "command: release-pr",
+        "version: \"0.3.160\"",
+        "release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131",
+        "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0",
+        "(.head.ref | startswith(\"release-plz-\"))",
+        "actions/workflows/release.yml/dispatches",
+        "actions: write",
+        "No release was dispatched.",
+    ] {
+        if !workflow.contains(required) {
+            return Err(format!("release-plz workflow is missing `{required}`"));
+        }
+    }
+    for forbidden in ["command: release\n", "cargo publish", "git tag", "gh release create"] {
+        if workflow.contains(forbidden) {
+            return Err(format!("release-plz workflow must not contain `{forbidden}`"));
+        }
+    }
+
+    let release = read_repository_file(".github/workflows/release.yml")?;
+    if release.contains("docs/releases/${version}.md") || !release.contains("bash scripts/extract-release-notes.sh") {
+        return Err("protected publication must derive release notes from CHANGELOG.md".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_release_note_extraction(repository: &str) -> Result<(), String> {
+    let root = repository_root();
+    let directory = std::env::temp_dir().join(format!("{repository}-release-notes-{}", std::process::id()));
+    let changelog = directory.join("CHANGELOG.md");
+    fs::create_dir_all(&directory).map_err(|error| format!("failed to create {}: {error}", directory.display()))?;
+    fs::write(
+        &changelog,
+        "# Changelog\n\n## [Unreleased]\n\n## [1.2.3](https://example.invalid/v1.2.3) - 2026-08-17\n\n### Added\n\n- Useful change.\n\n## [1.2.2] - 2026-08-16\n\n- Older change.\n",
+    )
+    .map_err(|error| format!("failed to write {}: {error}", changelog.display()))?;
+    let valid = run_release_notes_script(&root, "1.2.3", &changelog)?;
+    let valid_stdout = String::from_utf8(valid.stdout).map_err(|error| error.to_string())?;
+    if !valid.status.success() || !valid_stdout.contains("Useful change") || valid_stdout.contains("Older change") {
+        return Err("valid release notes were not extracted as one bounded section".to_owned());
+    }
+
+    let missing = run_release_notes_script(&root, "9.9.9", &changelog)?;
+    if missing.status.success() || !String::from_utf8_lossy(&missing.stderr).contains("no release section") {
+        return Err("a missing release section must fail with an actionable diagnostic".to_owned());
+    }
+    let malformed_version = run_release_notes_script(&root, "v1.2.3", &changelog)?;
+    if malformed_version.status.success()
+        || !String::from_utf8_lossy(&malformed_version.stderr).contains("major.minor.patch")
+    {
+        return Err("a malformed release version must fail before extraction".to_owned());
+    }
+
+    fs::write(
+        &changelog,
+        "# Changelog\n\n## [1.2.3] - 2026-08-17\n\n## [1.2.2] - 2026-08-16\n",
+    )
+    .map_err(|error| format!("failed to write {}: {error}", changelog.display()))?;
+    let empty = run_release_notes_script(&root, "1.2.3", &changelog)?;
+    if empty.status.success() || !String::from_utf8_lossy(&empty.stderr).contains("is empty") {
+        return Err("an empty release section must fail".to_owned());
+    }
+
+    fs::write(&changelog, "# Changelog\n\n## [1.2.3] - not-a-date\n\n- Change.\n")
+        .map_err(|error| format!("failed to write {}: {error}", changelog.display()))?;
+    let malformed_heading = run_release_notes_script(&root, "1.2.3", &changelog)?;
+    if malformed_heading.status.success() || !String::from_utf8_lossy(&malformed_heading.stderr).contains("YYYY-MM-DD")
+    {
+        return Err("a malformed release heading must fail".to_owned());
+    }
+
+    fs::remove_dir_all(&directory).map_err(|error| format!("failed to remove {}: {error}", directory.display()))?;
+    Ok(())
+}
+
+fn run_release_notes_script(root: &Path, version: &str, changelog: &Path) -> Result<Output, String> {
+    Command::new("bash")
+        .arg(root.join("scripts/extract-release-notes.sh"))
+        .arg(version)
+        .arg(changelog)
+        .current_dir(root)
+        .output()
+        .map_err(|error| format!("failed to run release-note extractor: {error}"))
 }
 
 #[test]

@@ -31,7 +31,7 @@ test, documentation, conformance, public-API, and package tasks support shorter 
 
 The image provides Rust, Cargo, rustfmt, Clippy, rust-analyzer, CodeLLDB, Git, GitHub CLI, Node.js,
 `cargo-deny`, `cargo-llvm-cov`, `cargo-semver-checks`, `lychee`, `zizmor`, `actionlint`, Prettier,
-markdownlint-cli2, Taplo, shfmt, ShellCheck, and Hadolint. Node tools use the committed lockfile;
+markdownlint-cli2, Tombi, shfmt, ShellCheck, and Hadolint. Node tools use the committed lockfile;
 downloaded native tools use reviewed SHA-256 checksums.
 
 Run the complete deterministic local workflow with:
@@ -43,17 +43,26 @@ Run the complete deterministic local workflow with:
 It formats Rust and owned non-Rust files, then runs all deterministic checks. It intentionally
 does not execute the ignored provider capture lane. Run only the non-Rust layer with
 `./scripts/check-files.sh --fix`; CI and release validation use its non-mutating `--check` mode.
+Coverage starts by removing its complete repository-specific artifact tree, so the persistent
+target volume cannot retain a fingerprint for a missing test executable and another repository's
+concurrent cleanup cannot remove a ComposeLens executable.
 Authored YAML fixtures are excluded from generic formatting because malformed and byte-exact
 source is part of their test contract. TOML fixture metadata and retained conformance records are
 syntax-checked but not rewritten.
+Offline Tombi runs select the repository's structural Cargo-manifest schema instead of Tombi
+1.4.0's embedded Cargo schema, whose lint subsections reference two remote-only schemas. Cargo
+metadata, checks, Clippy, tests, and packaging remain the authoritative semantic manifest
+validation. This keeps an empty CI cache equivalent to an established local cache without
+disabling schema discovery for other TOML files.
 Routine documentation-link checks are offline. A scheduled workflow performs the slower,
 rate-limited external-link check.
 
-The final API-compatibility check always uses an isolated `cargo-home` directory under
-`CARGO_TARGET_DIR`. It never reuses the container image's `/usr/local/cargo`, because that
-directory can appear writable while its existing global package-lock file remains read-only.
-Registry downloads and the SemVer check's exclusive lock therefore stay in writable, disposable
-build storage.
+The script keeps coverage and API-compatibility artifacts under
+`$CARGO_TARGET_DIR/check-all/compose-lens`. It never reuses the container image's
+`/usr/local/cargo`, another repository's validation tree, or an older `target/semver-checks` tree,
+because those locations can contain read-only package locks or incompatible build artifacts.
+Registry downloads, the SemVer check's exclusive lock, and its generated rustdoc projects
+therefore stay in writable, repository-specific build storage.
 
 Useful focused checks include:
 
