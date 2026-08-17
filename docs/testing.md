@@ -22,6 +22,8 @@ closed root and immediate-service shapes, the exclusive `^x-` extension allowanc
 classified 9-root/93-service inventory. Positive and negative cases cover allowed classifications,
 required rationales for non-typed entries, unknown classes, and key-set drift. Upstream comparison
 is deliberately confined to the scheduled/manual `specification-drift` workflow.
+An offline content-only regression executes the same drift script on Ubuntu and macOS; its
+SHA-256 calculation uses the portable `shasum -a 256` interface available on both runners.
 
 ### Syntax tests
 

@@ -354,10 +354,14 @@ fn specification_drift_check_is_scheduled_manual_and_read_only() -> Result<(), S
         "Inventory drift detected:",
         "Content-only drift detected:",
         "no inventory-key changes",
+        "shasum -a 256",
     ] {
         if !script.contains(required) {
             return Err(format!("specification-drift script is missing `{required}`"));
         }
+    }
+    if script.contains("sha256sum") {
+        return Err("specification-drift script must not require Linux-only `sha256sum`".to_owned());
     }
     Ok(())
 }
@@ -391,16 +395,17 @@ fn specification_drift_reports_content_only_changes_without_hiding_them() -> Res
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let transcript = format!("status: {}; stdout: {stdout:?}; stderr: {stderr:?}", output.status);
     if !stdout.contains("no inventory-key changes") {
         return Err(format!(
-            "content-only drift must report unchanged inventory sets; stdout was {stdout:?}"
+            "content-only drift must report unchanged inventory sets; {transcript}"
         ));
     }
     if !stderr.contains("Content-only drift detected")
         || !stderr.contains("nested, prose, or other non-inventory schema changes")
     {
         return Err(format!(
-            "content-only drift must provide actionable review guidance; stderr was {stderr:?}"
+            "content-only drift must provide actionable review guidance; {transcript}"
         ));
     }
     Ok(())

@@ -11,7 +11,7 @@ inventory_path="${repository_root}/schema/compose-key-inventory.json"
 upstream_url="${COMPOSE_SPECIFICATION_URL:-https://raw.githubusercontent.com/compose-spec/compose-spec/main/schema/compose-spec.json}"
 readonly snapshot_path inventory_path upstream_url
 
-for required_tool in awk comm curl jq mktemp sha256sum sort; do
+for required_tool in awk comm curl jq mktemp shasum sort; do
   if ! command -v "${required_tool}" > /dev/null 2>&1; then
     printf 'ComposeLens specification-drift check requires %s.\n' "${required_tool}" >&2
     exit 2
@@ -25,8 +25,8 @@ trap 'rm -f -- "${upstream_snapshot}"' EXIT
 curl --fail --location --silent --show-error "${upstream_url}" --output "${upstream_snapshot}"
 
 expected_digest="$(jq --raw-output '.upstream.sha256' "${inventory_path}")"
-snapshot_digest="$(sha256sum "${snapshot_path}" | awk '{print $1}')"
-upstream_digest="$(sha256sum "${upstream_snapshot}" | awk '{print $1}')"
+snapshot_digest="$(shasum -a 256 "${snapshot_path}" | awk '{print $1}')"
+upstream_digest="$(shasum -a 256 "${upstream_snapshot}" | awk '{print $1}')"
 
 printf 'Committed snapshot SHA-256: %s\n' "${snapshot_digest}"
 printf 'Inventory SHA-256:          %s\n' "${expected_digest}"
