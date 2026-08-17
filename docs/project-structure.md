@@ -15,6 +15,7 @@ compose-lens/
 ├── lychee.toml            # offline/local and rate-limited external link policy
 ├── Cargo.toml
 ├── Cargo.lock
+├── release-plz.toml      # release-PR preparation only; publication stays protected
 ├── rust-toolchain.toml
 ├── rustfmt.toml
 ├── clippy.toml
@@ -71,13 +72,13 @@ compose-lens/
 ├── docs/
 │   ├── fixture-format.md   # versioned fixture manifest contract
 │   ├── typed-model.md      # completed Phase 2 boundary and parse contract
-│   ├── releases/           # release notes and credentialed publication checklist
 │   └── research/           # versioned technical evaluations
 └── .github/
     ├── renovate.json
     └── workflows/
         ├── ci.yml
         ├── documentation-links.yml
+        ├── release-plz.yml
         └── release.yml
 ```
 

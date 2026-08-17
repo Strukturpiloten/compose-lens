@@ -10,7 +10,7 @@ cd -- "${repository_root}"
 
 current_step="preflight"
 step=0
-readonly total_steps=23
+readonly total_steps=24
 
 fail() {
   printf 'ComposeLens local validation failed: %s\n' "$1" >&2
@@ -53,7 +53,7 @@ required_tools=(
   rustup
   shellcheck
   shfmt
-  taplo
+  tombi
   zizmor
 )
 
@@ -69,8 +69,16 @@ if ((${#missing_tools[@]} != 0)); then
   fail "missing required tool(s):${missing_list}. Use the ComposeLens Dev Container."
 fi
 
+list_existing_files() {
+  while IFS= read -r -d '' file; do
+    if [[ -f "${file}" ]]; then
+      printf '%s\0' "${file}"
+    fi
+  done < <(git ls-files --cached --others --exclude-standard -z -- "$@")
+}
+
 mapfile -d '' markdown_files < <(
-  git ls-files --cached --others --exclude-standard -z -- '*.md'
+  list_existing_files '*.md'
 )
 if ((${#markdown_files[@]} == 0)); then
   fail "the repository contains no tracked or untracked Markdown files"
@@ -97,15 +105,22 @@ if ! rustup run "${msrv}" rustc --version > /dev/null 2>&1; then
   fi
 fi
 
-semver_cargo_home="${CARGO_TARGET_DIR:-${repository_root}/target}/cargo-home"
-if ! mkdir -p -- "${semver_cargo_home}"; then
-  fail "cannot create the cargo-semver-checks cache: ${semver_cargo_home}"
-fi
-if [[ ! -w "${semver_cargo_home}" ]]; then
-  fail "cargo-semver-checks cache is not writable: ${semver_cargo_home}"
-fi
-readonly semver_cargo_home
-printf 'Using isolated cargo-semver-checks cache: %s\n' "${semver_cargo_home}"
+validation_storage_root="${CARGO_TARGET_DIR:-${repository_root}/target}/check-all/compose-lens"
+coverage_target_dir="${validation_storage_root}/coverage"
+semver_cargo_home="${validation_storage_root}/cargo-home"
+semver_target_dir="${validation_storage_root}/cargo-semver-checks-target"
+for validation_directory in "${coverage_target_dir}" "${semver_cargo_home}" "${semver_target_dir}"; do
+  if ! mkdir -p -- "${validation_directory}"; then
+    fail "cannot create isolated validation storage: ${validation_directory}"
+  fi
+  if [[ ! -w "${validation_directory}" ]]; then
+    fail "isolated validation storage is not writable: ${validation_directory}"
+  fi
+done
+readonly validation_storage_root coverage_target_dir semver_cargo_home semver_target_dir
+printf 'Using isolated coverage target directory: %s\n' "${coverage_target_dir}"
+printf 'Using isolated cargo-semver-checks Cargo home: %s\n' "${semver_cargo_home}"
+printf 'Using isolated cargo-semver-checks target directory: %s\n' "${semver_target_dir}"
 
 run_step "Format Rust" cargo fmt --all
 run_step "Format and lint non-Rust files" bash scripts/check-files.sh --fix
@@ -124,7 +139,10 @@ run_step "Run licensed real-world fixture tests" cargo test --locked --test real
 run_step "Check the public API contract" cargo test --locked --test public_api
 run_step "Check generated rendering" cargo test --locked --test generated_rendering
 run_step "Verify the release package" cargo package --locked --allow-dirty
-run_step "Enforce coverage ratchets" cargo llvm-cov --locked --workspace --all-features \
+run_step "Clean coverage artifacts" env CARGO_TARGET_DIR="${coverage_target_dir}" \
+  cargo llvm-cov clean --locked
+run_step "Enforce coverage ratchets" env CARGO_TARGET_DIR="${coverage_target_dir}" \
+  cargo llvm-cov --locked --no-clean --workspace --all-features \
   --all-targets --summary-only --fail-under-regions 88 --fail-under-functions 87 \
   --fail-under-lines 89
 run_step "Check all targets with the MSRV" cargo "+${msrv}" ci-check
@@ -133,6 +151,7 @@ run_step "Audit dependencies, licenses, bans, and sources" cargo deny --all-feat
 run_step "Check local documentation links" lychee --config lychee.toml --root-dir . --offline \
   "${markdown_files[@]}"
 run_step "Check published API compatibility" env CARGO_HOME="${semver_cargo_home}" \
+  CARGO_TARGET_DIR="${semver_target_dir}" \
   cargo semver-checks check-release \
   --package compose-lens
 

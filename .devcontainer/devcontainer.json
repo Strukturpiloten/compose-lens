@@ -36,7 +36,7 @@
         "redhat.vscode-yaml",
         "rust-lang.rust-analyzer",
         "streetsidesoftware.code-spell-checker",
-        "tamasfe.even-better-toml",
+        "tombi-toml.tombi",
         "vadimcn.vscode-lldb"
       ]
     }

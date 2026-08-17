@@ -67,13 +67,11 @@ jobs:
               jq -er '.packages[] | select(.name == "compose-lens") | .version'
           )"
           tag="v${version}"
-          notes="docs/releases/${version}.md"
+          notes="${RUNNER_TEMP}/compose-lens-release-notes-${version}.md"
           crate="target/package/compose-lens-${version}.crate"
 
-          test -f "${notes}"
-          escaped_version="${version//./\\.}"
-          if ! grep -Eq "^## \\[${escaped_version}\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
-            echo "CHANGELOG.md must contain '## [${version}] - YYYY-MM-DD'." >&2
+          if ! bash scripts/extract-release-notes.sh "${version}" > "${notes}"; then
+            echo "CHANGELOG.md does not contain usable release notes for ${version}." >&2
             exit 1
           fi
 
@@ -104,10 +102,33 @@ jobs:
         run: rustup component add llvm-tools-preview
       - name: Install pinned cargo-llvm-cov
         run: cargo install --locked --version 0.8.7 cargo-llvm-cov
+      - name: Clean coverage artifacts
+        run: cargo llvm-cov clean --locked
       - name: Measure and enforce coarse coverage ratchet
         run: >-
-          cargo llvm-cov --locked --workspace --all-features --all-targets --summary-only
+          cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only
           --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
+      - name: Read the workspace MSRV
+        id: msrv
+        shell: bash
+        run: |
+          msrv="$(
+            cargo metadata --locked --no-deps --format-version 1 |
+              jq -er '[.packages[].rust_version] | unique | if length == 1 and .[0] != null then .[0] else error("workspace packages must declare one common rust-version") end'
+          )"
+          printf 'version=%s\n' "${msrv}" >> "${GITHUB_OUTPUT}"
+      - name: Install minimum supported Rust
+        env:
+          RUST_MSRV: ${{ steps.msrv.outputs.version }}
+        run: rustup toolchain install "${RUST_MSRV}" --profile minimal
+      - name: Check all targets with the MSRV
+        env:
+          RUST_MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+${RUST_MSRV}" ci-check
+      - name: Check repository policies with the MSRV
+        env:
+          RUST_MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo "+${RUST_MSRV}" ci-policy
       - name: Audit dependencies, licenses, bans, and sources
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:

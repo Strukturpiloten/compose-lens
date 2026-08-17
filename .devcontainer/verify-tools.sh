@@ -40,7 +40,7 @@ tools=(
   rustup
   shellcheck
   shfmt
-  taplo
+  tombi
   zizmor
 )
 
