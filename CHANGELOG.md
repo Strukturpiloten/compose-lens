@@ -6,6 +6,8 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-17
+
 ### Added
 
 - Native authored and effective-project coverage for service CPU, memory, namespace, OOM, scale,
