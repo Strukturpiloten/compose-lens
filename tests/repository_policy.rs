@@ -27,6 +27,22 @@ fn github_actions_are_immutable_and_versioned() -> Result<(), String> {
 }
 
 #[test]
+fn ci_runs_once_per_pull_request_update_and_on_main_pushes() -> Result<(), String> {
+    let workflow_path = repository_root().join(".github/workflows/ci.yml");
+    let workflow = fs::read_to_string(&workflow_path)
+        .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
+    let expected = "on:\n  push:\n    branches:\n      - main\n  pull_request:\n  workflow_dispatch:\n";
+    if !workflow.contains(expected) {
+        return Err(
+            "CI must run for main pushes, pull requests, and manual dispatch without duplicate feature-branch push runs"
+                .to_owned(),
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
 fn repository_supply_chain_has_single_sources_and_immutable_pins() -> Result<(), String> {
     support::validate_repository_supply_chain(&repository_root())
 }
