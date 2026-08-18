@@ -84,6 +84,30 @@ The ordinary conformance tests validate repository policy and never invoke a pro
 The explicitly ignored evidence-capture command and its required isolation inputs are documented in
 `conformance/README.md`.
 
+## GitHub issue-to-PR workflow
+
+When the user authorizes creating an issue, branch, commit, push, and pull request, follow this
+sequence:
+
+1. Inspect `git status` and the complete diff. Identify the exact pull-request scope and preserve
+   unrelated changes.
+2. Search for an existing issue, then create a focused GitHub issue when no duplicate exists.
+3. Fetch `origin/main`, verify local `main` is synchronized, and create
+   `TheRealBecks/issue<NUMBER>` from it.
+4. Complete and review the change without staging unrelated files.
+5. Run `./scripts/check-all.sh` from the repository root. Do not commit, push, or create the pull
+   request unless every step passes. Any source, test, configuration, or documentation change made
+   after the successful run invalidates it and requires the complete task to run again.
+6. Stage only explicit in-scope paths, run `git diff --cached --check`, review the staged diff, and
+   create one intentional commit.
+7. Push the issue branch and open a ready-for-review pull request containing `Closes #<NUMBER>`.
+8. Read the pull request back from GitHub and report its issue, branch, commit, validation result,
+   URL, and current check state.
+
+The issue may be created before local validation so failed work remains traceable, but a failed or
+incomplete `./scripts/check-all.sh` run is a hard gate against commit, push, and pull-request
+creation.
+
 ## Multi-agent coordination
 
 - Delegate only concrete, bounded tasks with an independently verifiable result.

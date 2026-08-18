@@ -28,16 +28,19 @@ Do not silence an advisory, allow a Git source, clarify a license, or skip a dup
 
 ## Automation
 
--
+Release preparation uses release-plz Action 0.5.131 at immutable commit
+`2eb1d8bcb770b4c48ccfaad919734b38b51958c9`, release-plz CLI 0.3.160, and SHA-pinned GitHub App
+token Action 3.2.0. These are repository-only workflow dependencies. The configuration disables
+publication, tags, and GitHub releases; the existing protected workflow retains those
+responsibilities. Renovate's GitHub Actions manager tracks the Action SHA and release comment, and
+a custom workflow-tool manager tracks the release-plz CLI input. Review the Action, CLI,
+least-privilege App token inputs, and preparation-only policy together.
 
-Release preparation uses SHA-pinned release-plz Action 0.5.131 with the pinned 0.3.160 CLI and
-SHA-pinned GitHub App token Action 3.2.0. Both are repository-only workflow dependencies. The
-configuration disables publication, tags, and GitHub releases; the existing protected workflow
-retains those responsibilities. Renovate may propose action updates, but the action SHA, release
-comment, CLI version, least-privilege App token inputs, and preparation-only policy must be reviewed
-together.
-
-Run `cargo deny check` after installing `cargo-deny`. CI checks advisories, licenses, bans, and sources. Renovate proposes Cargo, lockfile, Rust toolchain, and GitHub Actions updates; updates still require the same tests and review as human-authored dependency changes.
+Run `cargo deny check` after installing `cargo-deny`. CI checks advisories, licenses, bans, and
+sources. Renovate proposes Cargo, npm development-tool, lockfile, Rust toolchain, Dev Container,
+GitHub Actions, directly pinned workflow-tool, checksum-pinned file-tool, base-image, GitHub CLI,
+and documented Dev Container CLI updates. Updates still require the same tests and review as
+human-authored dependency changes.
 
 Repository-only file quality uses tools outside the published Rust dependency graph:
 markdownlint-cli2 and Prettier for Markdown, Prettier for JSON and YAML, Tombi for TOML, shfmt and
