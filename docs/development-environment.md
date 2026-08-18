@@ -43,6 +43,30 @@ Run the complete deterministic local workflow with:
 It formats Rust and owned non-Rust files, then runs all deterministic checks. It intentionally
 does not execute the ignored provider capture lane. Run only the non-Rust layer with
 `./scripts/check-files.sh --fix`; CI and release validation use its non-mutating `--check` mode.
+
+## Issue-to-PR contribution workflow
+
+For an issue-backed change, inspect the complete working-tree diff first and preserve unrelated
+work. Search for a duplicate issue, create the issue, synchronize local `main` with `origin/main`,
+and create `TheRealBecks/issue<NUMBER>`. After the implementation and final diff review, run:
+
+```console
+./scripts/check-all.sh
+```
+
+All steps must pass before the change is committed, pushed, or submitted as a pull request. If any
+source, test, configuration, or documentation file changes after that successful run, run the
+complete task again. Then stage only explicit in-scope paths, check the staged diff, commit, push,
+and open a ready-for-review pull request containing `Closes #<NUMBER>`. Read the created pull
+request back from GitHub to verify its base branch, head branch, issue linkage, draft state, and
+check status.
+
+The primary Sol agent uses high reasoning effort and owns the issue, branch, final integration,
+complete local gate, staging, commit, push, pull request, and GitHub readback. Terra agents may
+perform bounded implementation, research, read-only review, or non-mutating verification, but they
+never perform Git or GitHub writes. The formatting `./scripts/check-all.sh` task therefore remains
+Sol's final responsibility.
+
 Coverage starts by removing its complete repository-specific artifact tree, so the persistent
 target volume cannot retain a fingerprint for a missing test executable and another repository's
 concurrent cleanup cannot remove a ComposeLens executable.

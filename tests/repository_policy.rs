@@ -241,6 +241,48 @@ fn local_developer_workflow_covers_format_lint_test_and_release_checks() -> Resu
 }
 
 #[test]
+fn issue_to_pr_workflow_requires_the_complete_local_gate() -> Result<(), String> {
+    for (path, required) in [
+        (
+            "AGENTS.md",
+            &[
+                "## GitHub issue-to-PR workflow",
+                "Run `./scripts/check-all.sh`",
+                "is a hard gate against commit, push, and pull-request",
+                "ready-for-review pull request",
+                "primary Sol agent runs this workflow",
+                "high reasoning effort",
+                "Terra subagents",
+                "never execute the Git or GitHub",
+                "remains Sol's responsibility",
+            ][..],
+        ),
+        (
+            "docs/development-environment.md",
+            &[
+                "## Issue-to-PR contribution workflow",
+                "./scripts/check-all.sh",
+                "All steps must pass before the change is committed, pushed, or submitted",
+                "ready-for-review pull request",
+                "primary Sol agent uses high reasoning effort",
+                "Terra agents",
+                "never perform Git or GitHub writes",
+                "Sol's final responsibility",
+            ][..],
+        ),
+    ] {
+        let contents = read_repository_file(path)?;
+        for value in required {
+            if !contents.contains(value) {
+                return Err(format!("{path} is missing `{value}`"));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
     let script = read_repository_file("scripts/check-files.sh")?;
     for required in [
@@ -762,11 +804,16 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
     let workflow = read_repository_file(".github/workflows/release-plz.yml")?;
     for required in [
         repository,
-        "secrets.RELEASE_PLZ_APP_ID",
+        "vars.RELEASE_PLZ_APP_CLIENT_ID",
+        "client-id:",
         "secrets.RELEASE_PLZ_APP_PRIVATE_KEY",
         "permission-contents: write",
         "permission-pull-requests: write",
+        "continue-on-error: true",
+        "steps.app-token.outcome == 'failure'",
+        "approve the updated permissions for the App installation",
         "command: release-pr",
+        "renovate: datasource=crate depName=release-plz",
         "version: \"0.3.160\"",
         "release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131",
         "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0",
@@ -779,7 +826,14 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
             return Err(format!("release-plz workflow is missing `{required}`"));
         }
     }
-    for forbidden in ["command: release\n", "cargo publish", "git tag", "gh release create"] {
+    for forbidden in [
+        "secrets.RELEASE_PLZ_APP_ID",
+        "app-id:",
+        "command: release\n",
+        "cargo publish",
+        "git tag",
+        "gh release create",
+    ] {
         if workflow.contains(forbidden) {
             return Err(format!("release-plz workflow must not contain `{forbidden}`"));
         }
@@ -789,6 +843,41 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
     if release.contains("docs/releases/${version}.md") || !release.contains("bash scripts/extract-release-notes.sh") {
         return Err("protected publication must derive release notes from CHANGELOG.md".to_owned());
     }
+    Ok(())
+}
+
+#[test]
+fn renovate_tracks_every_directly_pinned_development_tool() -> Result<(), String> {
+    let renovate = read_repository_file(".github/renovate.json")?;
+    for required in [
+        "Update versioned Dev Container tools",
+        "Signal updates for checksum-pinned file-quality tools",
+        "Update directly pinned workflow tool versions",
+        "Update the documented Dev Container CLI",
+        "Update the GitHub CLI installed in the Dev Container",
+        r#""matchManagers": ["cargo"]"#,
+        r#""matchManagers": ["npm"]"#,
+        r#""matchManagers": ["github-actions"]"#,
+        r#""matchManagers": ["devcontainer"]"#,
+        r#""matchManagers": ["rust-toolchain"]"#,
+    ] {
+        if !renovate.contains(required) {
+            return Err(format!("Renovate configuration is missing `{required}`"));
+        }
+    }
+
+    for workflow_name in ["ci.yml", "release.yml"] {
+        let workflow = read_repository_file(&format!(".github/workflows/{workflow_name}"))?;
+        for required in [
+            "renovate: datasource=crate depName=cargo-llvm-cov",
+            "renovate: datasource=node-version depName=node",
+        ] {
+            if !workflow.contains(required) {
+                return Err(format!("{workflow_name} is missing Renovate marker `{required}`"));
+            }
+        }
+    }
+
     Ok(())
 }
 
