@@ -48,6 +48,8 @@ ShellCheck for shell, and Hadolint for Dockerfiles. `package-lock.json` fixes th
 tool graph, while `scripts/install-file-tools.sh` pins native Linux release assets and SHA-256
 checksums. The Dev Container provides them, and CI plus release validation run the same
 `scripts/check-files.sh --check` boundary. These tools do not affect the library package or MSRV.
+The release-plz-owned root `CHANGELOG.md` remains Markdownlint-checked and release-structure-
+validated but is the sole Markdown file excluded from Prettier through `.prettierignore`.
 
 ## Current representation dependency
 

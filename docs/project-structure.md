@@ -12,6 +12,7 @@ compose-lens/
 ├── scripts/               # complete local checks and non-Rust file-quality tooling
 ├── package.json           # pinned repository-only Node tooling
 ├── package-lock.json      # complete repository-tool dependency graph
+├── .prettierignore        # release-plz-owned generated Markdown boundary
 ├── lychee.toml            # offline/local and rate-limited external link policy
 ├── Cargo.toml
 ├── Cargo.lock

@@ -342,6 +342,28 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
         }
     }
 
+    let prettier_ignore = read_repository_file(".prettierignore")?;
+    if prettier_ignore
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.is_empty())
+        .collect::<Vec<_>>()
+        != ["/CHANGELOG.md"]
+    {
+        return Err("only the release-plz-owned CHANGELOG.md may be excluded from Prettier".to_owned());
+    }
+    for required in [
+        r#"prettier --write --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}""#,
+        r#"markdownlint-cli2 --fix "${markdown_literals[@]}""#,
+        r#"markdownlint-cli2 "${markdown_literals[@]}""#,
+        r#"prettier --check --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}""#,
+    ] {
+        if !script.contains(required) {
+            return Err(format!(
+                "non-Rust file runner must preserve generated-changelog boundary `{required}`"
+            ));
+        }
+    }
+
     let lock = read_repository_file("package-lock.json")?;
     for package in ["markdownlint-cli2", "prettier"] {
         if !lock.contains(&format!("\"{package}\"")) {
