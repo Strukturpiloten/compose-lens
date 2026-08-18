@@ -58,6 +58,10 @@ the existing hand-authored `[Unreleased]` material into the generated version se
 release-plz did not already represent it, then leave `[Unreleased]` empty. Future entries come from
 merged pull-request and commit titles.
 
+Release-plz also owns the generated changelog layout. The non-Rust file checker keeps
+`CHANGELOG.md` in Markdownlint and release-structure validation, but `.prettierignore` excludes
+only that file from Prettier so generated wrapping cannot make a release pull request fail.
+
 ## Recovery
 
 `workflow_dispatch` remains available for release-plz preparation and protected publication
