@@ -13,6 +13,7 @@
 *.userosscache
 *.sln.docstates
 *.env
+!fixtures/real-world/strukturpiloten-typo3-postgresql/environment.env
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

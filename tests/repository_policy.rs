@@ -800,6 +800,13 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
     {
         return Err("release-plz must use the root changelog and guarded branch prefix".to_owned());
     }
+    if workspace.get("release_commits").and_then(toml::Value::as_str)
+        != Some(r"^(feat|fix|perf|refactor|revert)(\([^)]+\))?!?:")
+    {
+        return Err("release-plz must prepare releases only for release-worthy code commits".to_owned());
+    }
+
+    validate_release_plz_changelog(&config)?;
 
     let workflow = read_repository_file(".github/workflows/release-plz.yml")?;
     for required in [
@@ -843,6 +850,76 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
     if release.contains("docs/releases/${version}.md") || !release.contains("bash scripts/extract-release-notes.sh") {
         return Err("protected publication must derive release notes from CHANGELOG.md".to_owned());
     }
+    Ok(())
+}
+
+fn validate_release_plz_changelog(config: &toml::Value) -> Result<(), String> {
+    let changelog = config["changelog"]
+        .as_table()
+        .ok_or_else(|| "release-plz.toml must contain [changelog]".to_owned())?;
+    if changelog.get("protect_breaking_commits").and_then(toml::Value::as_bool) != Some(true) {
+        return Err("release-plz must preserve breaking commits in generated changelogs".to_owned());
+    }
+
+    let parsers = changelog
+        .get("commit_parsers")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "release-plz must configure changelog commit parsers".to_owned())?;
+    let expected = [
+        ("^feat", Some("Added"), false),
+        ("^fix", Some("Fixed"), false),
+        ("^perf", Some("Performance"), false),
+        ("^refactor", Some("Changed"), false),
+        ("^revert", Some("Reverted"), false),
+        ("^.*", None, true),
+    ];
+    if parsers.len() != expected.len() {
+        return Err("release-plz must configure the exact code-only changelog parser set".to_owned());
+    }
+    for (parser, (message, group, skip)) in parsers.iter().zip(expected) {
+        if parser["message"].as_str() != Some(message)
+            || parser.get("group").and_then(toml::Value::as_str) != group
+            || parser.get("skip").and_then(toml::Value::as_bool).unwrap_or(false) != skip
+        {
+            return Err(format!("release-plz changelog parser for {message} is invalid"));
+        }
+    }
+
+    let releasing = read_repository_file("docs/releasing.md")?;
+    for required in [
+        "classification contract",
+        "`feat`, `fix`, `perf`, `refactor`, or `revert`",
+        "`docs`, `test`, `ci`, `build`, `style`, or `chore`",
+    ] {
+        if !releasing.contains(required) {
+            return Err(format!("release documentation is missing `{required}`"));
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn tracked_files_are_not_ignored() -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["ls-files", "-ci", "--exclude-standard"])
+        .current_dir(repository_root())
+        .output()
+        .map_err(|error| format!("failed to inspect tracked ignored files: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git ls-files failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let tracked_ignored = String::from_utf8_lossy(&output.stdout);
+    if !tracked_ignored.trim().is_empty() {
+        return Err(format!(
+            "tracked files must not also be ignored:\n{}",
+            tracked_ignored.trim()
+        ));
+    }
+
     Ok(())
 }
 
