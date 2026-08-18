@@ -250,6 +250,11 @@ fn issue_to_pr_workflow_requires_the_complete_local_gate() -> Result<(), String>
                 "Run `./scripts/check-all.sh`",
                 "is a hard gate against commit, push, and pull-request",
                 "ready-for-review pull request",
+                "primary Sol agent runs this workflow",
+                "high reasoning effort",
+                "Terra subagents",
+                "never execute the Git or GitHub",
+                "remains Sol's responsibility",
             ][..],
         ),
         (
@@ -259,6 +264,10 @@ fn issue_to_pr_workflow_requires_the_complete_local_gate() -> Result<(), String>
                 "./scripts/check-all.sh",
                 "All steps must pass before the change is committed, pushed, or submitted",
                 "ready-for-review pull request",
+                "primary Sol agent uses high reasoning effort",
+                "Terra agents",
+                "never perform Git or GitHub writes",
+                "Sol's final responsibility",
             ][..],
         ),
     ] {

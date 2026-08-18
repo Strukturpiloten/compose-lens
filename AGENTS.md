@@ -108,6 +108,13 @@ The issue may be created before local validation so failed work remains traceabl
 incomplete `./scripts/check-all.sh` run is a hard gate against commit, push, and pull-request
 creation.
 
+The primary Sol agent runs this workflow with high reasoning effort. Sol owns the issue and branch,
+final integration and diff review, complete local gate, explicit staging, commit, push, pull-request
+creation, and GitHub readback. Terra subagents may perform bounded research, implementation,
+read-only review, or non-mutating verification assigned by Sol, but never execute the Git or GitHub
+write steps. Because `./scripts/check-all.sh` formats repository files, its mandatory final run
+remains Sol's responsibility and is not replaced by read-only Terra verification.
+
 ## Multi-agent coordination
 
 - Delegate only concrete, bounded tasks with an independently verifiable result.
