@@ -1,3 +1,4 @@
+---
 services:
   omitted:
     image: example.invalid/composelens/shm-omitted:1

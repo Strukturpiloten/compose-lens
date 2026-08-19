@@ -1,3 +1,4 @@
+---
 services:
   always:
     image: example/always

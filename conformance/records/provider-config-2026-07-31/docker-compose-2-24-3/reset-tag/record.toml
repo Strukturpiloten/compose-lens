@@ -6,7 +6,7 @@ fixture_files = [
     "compose.yaml",
     "compose.override.yaml",
 ]
-fixture_sha256 = "08ba353851044f900021773cce056557b620174f078aaf24de8056a18d7502a1"
+fixture_sha256 = "23d82593ea763f9f9c06813afbf8622b50496aa4a09597c0096733660524fcfe"
 launcher_file = "docker-compose-2.24.3"
 launcher_sha256 = "49b3b71e4428585f75294a83702d259f442a8fcdb2351864c6dcaa3f7e29b3aa"
 observed_unix_seconds = 1785531426

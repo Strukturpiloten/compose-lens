@@ -1,3 +1,4 @@
+---
 name: document-interpolation
 x-future: "future-${FUTURE:-enabled}"
 services:

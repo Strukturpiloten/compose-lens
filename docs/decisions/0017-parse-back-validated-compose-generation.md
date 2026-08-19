@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-08-04
-- Additive amendments: 2026-08-05, 2026-08-06, 2026-08-07, 2026-08-15
+- Additive amendments: 2026-08-05, 2026-08-06, 2026-08-07, 2026-08-15, 2026-08-19
 
 ## Context
 
@@ -27,8 +27,9 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
    scoping.
 4. Generated mapping collections retain insertion order and reject duplicate names. Singleton
    fields reject replacement rather than silently selecting the last caller value.
-5. Strings are emitted through ComposeLens's private double-quoted YAML encoder. The parser
-   dependency remains private.
+5. Strings are emitted through ComposeLens's private minimal-safe YAML encoder. Plain spelling is
+   used only when parser validation and YAML 1.1 ambiguity checks prove that string identity is
+   retained. The parser dependency remains private.
 6. Syntax is selected per field rather than normalized globally. TCP/UDP ports use long syntax
    with string-typed `published` values; SCTP uses the platform-protocol-capable short form.
    `GeneratedSelinux` bind mounts use short syntax explicitly. Ambiguous short-form values fail
@@ -39,7 +40,7 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
    accessor and sensitive debug output is redacted.
 9. Generation is pure. It does not perform interpolation, merging, profile selection, default
    resolution, compatibility validation, file access, or provider execution.
-10. Generated service labels use ordered mapping syntax and explicit quoted string values. Empty
+10. Generated service labels use ordered mapping syntax and explicit YAML string values. Empty
     values and embedded `=` characters remain unambiguous, duplicate names are rejected, and
     caller-marked value sensitivity propagates to the generated document.
 11. Generated service environment files retain ordered short or long syntax. Long entries emit
@@ -77,7 +78,7 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
     parse-back fidelity; plugin, provider, runtime, default, and image semantics remain
     unvalidated.
 21. Generated application-owned volume definitions accept ordered unique `GeneratedLabel` mappings
-    exactly once, including an explicit empty map. Labels use explicit quoted string values,
+    exactly once, including an explicit empty map. Labels use explicit YAML string values,
     preserve sensitivity, and parse back through the existing volume label model. The shared
     `GeneratedResource::external` API remains the sole generated external-volume path. At authored
     and project-view boundaries, literal `external: true` plus any volume `labels` attribute emits
@@ -85,7 +86,7 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
     emit its existing independent diagnostic.
 22. Generated top-level configs and secrets begin with one file-backed definition each. Names and
     `file` values are required resolved single-line strings, names are unique within their native
-    namespaces, values are deterministically quoted and parse-back validated, and caller-marked
+    namespaces, values use deterministic minimal safe quoting and parse-back validation, and caller-marked
     file sensitivity redacts debug output. Content, environment, external lifecycle, drivers,
     labels, template drivers, file access, and provider/runtime semantics remain ungenerated.
 
@@ -93,7 +94,8 @@ Short and long Compose syntax are not universally equivalent. In particular, pre
 
 - BoxFerry and other consumers can generate Compose without maintaining their own YAML writer or
   depending on ComposeLens internals.
-- Canonical rendering remains unchanged for authored merged projects.
+- Canonical rendering remains a separate path for authored merged projects; both paths share the
+  marker-first minimal-safe YAML presentation defined by ADR 0024.
 - Parse-back validation catches construction/renderer drift, but does not replace provider-version
   compatibility evidence.
 - Adding further generated fields is an additive typed API change with exact golden and parse-back

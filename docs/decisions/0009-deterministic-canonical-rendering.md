@@ -23,9 +23,10 @@ same sensitivity boundary as the merge model and diagnostics.
 1. `render_canonical` consumes a `MergedProject` and an optional matching `ProfileSelection`. It
    performs no loading, interpolation, merging, path resolution, defaulting, compatibility
    validation, provider invocation, or runtime invocation.
-2. The canonical-v1 presentation is UTF-8 YAML with LF line endings, a final newline, two-space
-   indentation, no document marker, insertion order retained for mappings and sequences, and
-   JSON-compatible double quotes for every mapping key and string scalar.
+2. The original canonical-v1 presentation was UTF-8 YAML with LF line endings, a final newline,
+   two-space indentation, no document marker, insertion order retained for mappings and sequences,
+   and JSON-compatible double quotes for every mapping key and string scalar. ADR 0024 amends
+   this presentation contract with marker-first, parse-back-validated minimal quoting.
 3. YAML booleans render as lowercase `true` or `false`; null-like values render as `null`; numeric
    semantic spelling remains unchanged; empty mappings and sequences render inline as `{}` and
    `[]`.
@@ -51,12 +52,12 @@ same sensitivity boundary as the merge model and diagnostics.
   Podman installation.
 - Callers choose the processing stages whose results they want rendered; there are no hidden
   environment or filesystem reads.
-- Canonical output is intentionally noisier than hand-written Compose because all keys and strings
-  are quoted.
+- Canonical output uses familiar Compose spelling where it is demonstrably safe, while quoting
+  strings whose plain spelling would be ambiguous.
 - Comments, anchors, aliases, authored quoting, and original whitespace require the later
   preservation-editing path rather than canonical rendering.
-- A future configurable presentation API must preserve canonical-v1 behavior and cannot silently
-  change its semantic processing boundary.
+- A future configurable presentation API must preserve canonical-v2 behavior and cannot silently
+  change its semantic processing boundary. ADR 0024 records the intentional v1-to-v2 break.
 
 ## Alternatives considered
 

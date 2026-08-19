@@ -1,3 +1,4 @@
+---
 services:
   omitted:
     image: example.invalid/composelens/sysctls-omitted:1

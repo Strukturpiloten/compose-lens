@@ -1,3 +1,4 @@
+---
 services:
   omitted:
     image: example.invalid/composelens/pids-omitted:1

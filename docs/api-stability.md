@@ -1,19 +1,20 @@
 # API stability policy
 
-ComposeLens is pre-1.0, but its API is not an unbounded experiment. Version 0.2 establishes the
-current public release line for BoxFerry integration and independent consumers after consolidating
-the first source-aware APIs. This policy is recorded by
-[ADR 0019](decisions/0019-consolidated-0.2-public-api.md).
+ComposeLens is pre-1.0, but its API is not an unbounded experiment. Version 0.3 establishes the
+current public release line for BoxFerry integration and independent consumers. It retains the
+source-aware API consolidation from [ADR 0019](decisions/0019-consolidated-0.2-public-api.md) and
+adopts the canonical-v2 presentation from
+[ADR 0024](decisions/0024-safe-minimal-yaml-presentation.md).
 
-## The 0.2.x contract
+## The 0.3.x contract
 
-Within the 0.2.x line:
+Within the 0.3.x line:
 
 - patch releases preserve source compatibility for supported public entry points;
 - public APIs use ComposeLens-owned types, while `yaml-edit` remains private;
 - the module paths used by `tests/public_api.rs` remain available;
 - diagnostic code strings remain machine-readable contracts;
-- canonical-v1 default rendering remains deterministic for the same semantic input;
+- canonical-v2 default rendering remains deterministic for the same semantic input;
 - parsing, processing, validation, and rendering keep their documented side-effect boundaries; and
 - all supported public APIs compile on Rust 1.85.0 or newer.
 
@@ -239,11 +240,11 @@ unlimited or validated positive ASCII-decimal values; omission remains omission.
 Additive `ShmSize` getters retain exact scalar text, source span, YAML number/string provenance,
 documented lowercase units and amount spelling, ambiguous zero, deferred expressions, and distinct
 provider-dependent number/string states. Public shared-memory enums are non-exhaustive.
-`GeneratedShmSize` emits only a quoted canonical positive ASCII-integer amount with an explicit
+`GeneratedShmSize` emits only a canonical positive ASCII-integer amount with an explicit
 documented lowercase unit; omission remains omission and no provider default is injected.
 Additive `MemLimit` getters retain exact scalar text, span, YAML number/string provenance,
 documented lowercase units and amount spelling, lexical zero, deferred expressions, schema-only
-numbers, and provider-dependent strings. `GeneratedMemLimit` emits only a quoted canonical positive
+numbers, and provider-dependent strings. `GeneratedMemLimit` emits only a canonical positive
 ASCII-decimal amount with a distinct explicit unit; omission remains omission and no default,
 deploy reconciliation, runtime enforcement, host/cgroup inspection, or non-byte exact
 cross-format claim is introduced.
@@ -255,14 +256,14 @@ omission remains omission and service `tmpfs` stays distinct from volume type `t
 Additive `Sysctls`/`SysctlsForm` getters retain omission, explicit empty mapping/list forms,
 ordered mapping entries, exact scalar kinds and spelling, ordered list strings, duplicates, spans,
 sensitivity, and generic merge provenance. `ProjectSysctls` retains per-entry provenance and key
-locations. `GeneratedSysctls` emits only quoted resolved strings, rejects unsafe or exact-duplicate
+locations. `GeneratedSysctls` emits only resolved YAML strings, rejects unsafe or exact-duplicate
 input, and performs no namespace, privilege, runtime, or cross-format interpretation.
 Additive `ProjectUlimits`, ordered `ProjectUlimit`, `ProjectUlimitValue`, `ProjectUlimitRange`, and
 `ProjectUlimitScalar` getters retain omission, explicit empty/reset mappings, lowercase keys,
 single/range form, authored/effective scalar spelling and kind, nested recursive-merge provenance,
 sensitivity, replacement, and override. Existing authored `Ulimits` types and diagnostic codes
 remain available. `GeneratedUlimits`/`GeneratedUlimit` preserve order and explicit empty maps,
-emit only quoted `-1` or non-negative ASCII decimals, and reject duplicate or non-lowercase names,
+emit only YAML strings containing `-1` or non-negative ASCII decimals, and reject duplicate or non-lowercase names,
 missing range members, deferred/multiline/NUL values, and arbitrary schema strings such as `host`.
 Additive `Logging`, `LoggingOptions`, and `LoggingOptionValue` getters retain empty mappings,
 uninterpreted string drivers, ordered non-empty option keys, exact string/number/null scalar kinds,
@@ -286,7 +287,7 @@ explicit empty state, ordered mixed short/long forms, exact duplicates, raw CDI/
 short strings, required long string `source`, optional raw `target`/`permissions`, spans,
 extensions, unknown fields, sensitivity, and target-keyed merge provenance. `ProjectDevice` and
 `ProjectLongDevice` expose item and nested provenance. `GeneratedDevice`/`GeneratedLongDevice` and
-`GeneratedService::set_devices` emit safe resolved quoted strings, retain order and duplicates,
+`GeneratedService::set_devices` emit safe resolved YAML strings, retain order and duplicates,
 and parse-back validate without host-device, colon-triple, CDI, permissions, or runtime checks.
 Additive DNS types and getters cover `dns`, `dns_opt`, and `dns_search`, retaining
 authored form, ordering, duplicates, provenance, reset/override state, and sensitivity. Their

@@ -1,3 +1,4 @@
+---
 services:
   omitted:
     image: example.invalid/composelens/devices-omitted:1

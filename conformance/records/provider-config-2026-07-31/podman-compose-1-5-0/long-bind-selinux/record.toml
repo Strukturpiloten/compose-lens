@@ -7,7 +7,7 @@ execution = [
 ]
 fixture = "fixtures/conformance/long-bind-selinux"
 fixture_files = ["compose.yaml"]
-fixture_sha256 = "6a4bb4a63e6406ca74562b6d6ad03cd91b432f8c5172c2e33fb8f74041ef7df7"
+fixture_sha256 = "2309e338ee2295e2ebf336478e10bc83e9a3f7a27704efe14ac0965b805e1ddf"
 launcher_file = "podman-compose"
 launcher_sha256 = "20cf74bb29fa2dc974bcc757fe4d850255b2ff43a038ddc76d9f13cedfd6dae9"
 observed_unix_seconds = 1785531576

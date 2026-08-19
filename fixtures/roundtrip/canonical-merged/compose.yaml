@@ -1,3 +1,4 @@
+---
 name: canonical-demo
 x-note: "line\nvalue"
 services:

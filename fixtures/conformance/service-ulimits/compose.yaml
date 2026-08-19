@@ -1,3 +1,4 @@
+---
 services:
   omitted:
     image: example.invalid/composelens/ulimits-omitted:1

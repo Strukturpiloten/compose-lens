@@ -308,6 +308,7 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
         "markdownlint-cli2 --fix",
         "prettier --write",
         "prettier --check",
+        "check_yaml_document_markers",
         "tombi format --check --offline",
         "tombi lint --error-on-warnings --offline",
         "shfmt -w",
@@ -381,6 +382,33 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
             if !workflow.contains(required) {
                 return Err(format!("{workflow_name} is missing `{required}`"));
             }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn complete_yaml_documents_use_explicit_start_markers() -> Result<(), String> {
+    let root = repository_root();
+    let output = Command::new("git")
+        .args(["ls-files", "-z", "--", "*.yaml", "*.yml"])
+        .current_dir(&root)
+        .output()
+        .map_err(|error| format!("failed to list YAML documents: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git ls-files failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    for path in output.stdout.split(|byte| *byte == 0).filter(|path| !path.is_empty()) {
+        let path = Path::new(std::str::from_utf8(path).map_err(|error| error.to_string())?);
+        let contents = fs::read_to_string(root.join(path))
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        if contents.lines().next() != Some("---") {
+            return Err(format!("{} must start with `---`", path.display()));
         }
     }
 

@@ -27,6 +27,7 @@ use crate::merge::{MergedEntry, MergedProject, MergedScalar, MergedScalarKind, M
 use crate::profiles::ProfileSelection;
 use crate::resolution::{effective_span, selection_matches};
 use std::fmt;
+use yaml_edit::{ScalarStyle, ScalarType, ScalarValue, YamlFile};
 
 /// An unresolved alias cannot be represented in a standalone canonical document.
 pub const UNRENDERABLE_ALIAS: DiagnosticCode = DiagnosticCode::new("compose.render.unresolved-alias");
@@ -42,7 +43,7 @@ impl IndentWidth {
     /// The smallest supported indentation width.
     pub const MIN: u8 = 1;
 
-    /// The fixed width used by canonical-v1 output.
+    /// The fixed width used by canonical-v2 output.
     pub const CANONICAL: Self = Self(2);
 
     /// Creates a validated indentation width.
@@ -71,7 +72,7 @@ pub enum LineEnding {
 /// Presentation-only options for deterministic merged-project rendering.
 ///
 /// These options cannot interpolate, merge, select profiles, apply defaults, reorder mappings,
-/// or change retained Compose short/long forms. [`Self::default`] is the fixed canonical-v1 format.
+/// or change retained Compose short/long forms. [`Self::default`] is the fixed canonical-v2 format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CanonicalFormatting {
     indent_width: IndentWidth,
@@ -139,7 +140,7 @@ impl Default for CanonicalFormatting {
         Self {
             indent_width: IndentWidth::CANONICAL,
             line_ending: LineEnding::Lf,
-            document_marker: false,
+            document_marker: true,
             final_newline: true,
         }
     }
@@ -223,7 +224,7 @@ pub fn render_canonical(project: &MergedProject, selection: Option<&ProfileSelec
 /// Renders a merged project with explicit presentation-only formatting choices.
 ///
 /// Semantic processing remains identical to [`render_canonical`]. The default formatting value
-/// produces byte-identical canonical-v1 output.
+/// produces byte-identical canonical-v2 output.
 #[must_use]
 pub fn render_canonical_with_formatting(
     project: &MergedProject,
@@ -316,6 +317,20 @@ impl Renderer {
     fn write_sequence_item(&mut self, value: &MergedValue, indent: usize) {
         self.write_indent(indent);
         self.output.push('-');
+        self.sensitive |= value.is_sensitive();
+        let core = self.write_tag_prefixes(value);
+        if let MergedValueKind::Mapping(entries) = core.kind() {
+            if let Some((first, remaining)) = entries.split_first() {
+                self.output.push(' ');
+                write_quoted(&mut self.output, first.key());
+                self.output.push(':');
+                self.write_after_indicator(first.value(), indent + (self.indent_width() * 2));
+                for entry in remaining {
+                    self.write_entry(entry, indent + self.indent_width());
+                }
+                return;
+            }
+        }
         self.write_after_indicator(value, indent + self.indent_width());
     }
 
@@ -465,7 +480,113 @@ fn valid_tag(tag: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'!' | b'_' | b'-' | b'.' | b':' | b'/'))
 }
 
+/// Writes a YAML string with the least quoting needed to keep it a string.
+///
+/// A plain candidate must round-trip through the private YAML parser as one complete plain string.
+/// YAML 1.1's boolean and null spellings are additionally quoted even though the parser uses newer
+/// scalar rules: generated Compose must remain a string when read by older YAML consumers.
 fn write_quoted(output: &mut String, value: &str) {
+    if plain_string_safe(value) {
+        output.push_str(value);
+        return;
+    }
+
+    write_double_quoted(output, value);
+}
+
+fn plain_string_safe(value: &str) -> bool {
+    if value.is_empty() || value.trim() != value || value.contains(['\n', '\r']) || yaml_1_1_ambiguous_string(value) {
+        return false;
+    }
+
+    let parse = YamlFile::parse(value);
+    if !parse.ok() {
+        return false;
+    }
+    let file = parse.tree();
+    let Some(document) = file.document() else {
+        return false;
+    };
+    let Some(scalar) = document.as_scalar() else {
+        return false;
+    };
+    let range = scalar.byte_range();
+    range.start == 0
+        && range.end as usize == value.len()
+        && ScalarValue::from_scalar(&scalar).style() == ScalarStyle::Plain
+        && ScalarValue::from_scalar(&scalar).scalar_type() == ScalarType::String
+}
+
+fn yaml_1_1_ambiguous_string(value: &str) -> bool {
+    matches!(
+        value,
+        "y" | "Y"
+            | "yes"
+            | "Yes"
+            | "YES"
+            | "n"
+            | "N"
+            | "no"
+            | "No"
+            | "NO"
+            | "true"
+            | "True"
+            | "TRUE"
+            | "false"
+            | "False"
+            | "FALSE"
+            | "on"
+            | "On"
+            | "ON"
+            | "off"
+            | "Off"
+            | "OFF"
+            | "null"
+            | "Null"
+            | "NULL"
+            | "~"
+    ) || yaml_1_1_sexagesimal(value)
+        || yaml_1_1_special_float(value)
+        || yaml_1_1_timestamp(value)
+}
+
+fn yaml_1_1_sexagesimal(value: &str) -> bool {
+    let mut components = value.split(':');
+    let Some(first) = components.next() else {
+        return false;
+    };
+    if components.clone().next().is_none() || first.is_empty() || !first.bytes().all(|byte| byte.is_ascii_digit()) {
+        return false;
+    }
+    components.all(|component| !component.is_empty() && component.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+fn yaml_1_1_special_float(value: &str) -> bool {
+    matches!(value.to_ascii_lowercase().as_str(), ".inf" | "+.inf" | "-.inf" | ".nan")
+}
+
+fn yaml_1_1_timestamp(value: &str) -> bool {
+    let date_end = value.find(['T', 't', ' ']).unwrap_or(value.len());
+    let date = &value[..date_end];
+    let mut components = date.split('-');
+    let (Some(year), Some(month), Some(day), None) = (
+        components.next(),
+        components.next(),
+        components.next(),
+        components.next(),
+    ) else {
+        return false;
+    };
+
+    year.len() == 4
+        && (1..=2).contains(&month.len())
+        && (1..=2).contains(&day.len())
+        && year.bytes().all(|byte| byte.is_ascii_digit())
+        && month.bytes().all(|byte| byte.is_ascii_digit())
+        && day.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn write_double_quoted(output: &mut String, value: &str) {
     output.push('"');
     for character in value.chars() {
         match character {

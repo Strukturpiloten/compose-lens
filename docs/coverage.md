@@ -208,7 +208,7 @@ multi-file merging remains visible to consumers.
 Service labels now expose both source-aware authored forms and a normalized-by-key effective view.
 Each effective entry keeps mapping/list syntax and complete merge provenance. Key-only list labels
 remain distinguishable while exposing their documented empty-string value. The generated-document
-API emits ordered quoted mappings and rejects duplicate names.
+API emits ordered minimally quoted mappings and rejects duplicate names.
 
 Service annotations cover authored mapping/list syntax, keyed effective merging, and safe generated
 maps. Key-only ambiguity remains diagnosed, and provider/runtime behavior is not claimed.
@@ -278,15 +278,15 @@ Service `shm_size` now travels through the same three boundaries independently f
 `build.shm_size`, IPC or pod grouping, resource limits, and runtime inspection. Authored values
 retain exact scalar text, YAML number/string provenance, documented lowercase units plus
 unconstrained amount spelling, ambiguous zero, deferred expressions, and distinct
-provider-dependent number/string states. Generated output accepts only a quoted canonical positive
-ASCII-integer amount with an explicit documented lowercase unit. Omission remains omitted; no
+provider-dependent number/string states. Generated output accepts only a canonical positive
+ASCII-integer amount with an explicit documented lowercase unit as a YAML string. Omission remains omitted; no
 Podman 64 MiB default or provider normalization is injected. Provider-config rows remain planned,
 and no runtime allocation or `/dev/shm` claim is made.
 
 Service `mem_limit` now travels through all three boundaries independently from reservation, swap,
 deploy resource memory, and `shm_size`. Exact scalar text/kind, documented lowercase units, zero,
 deferred, schema-number, and provider-dependent string forms retain source and merge evidence.
-Generated output requires a quoted positive arbitrary-precision ASCII decimal plus a documented
+Generated output requires a positive arbitrary-precision ASCII decimal plus a documented
 unit. Only `b` values are candidates for exact cross-format handling. Six provider rows remain
 planned and make no host, cgroup, runtime, default, normalization, or enforcement claim.
 
@@ -302,7 +302,7 @@ Service `sysctls` now travels through the same three boundaries with mapping/lis
 Omission, explicit empty collections, ordered mapping keys, exact scalar kinds and spelling,
 ordered list items, duplicate evidence, spans, interpolation sensitivity, and complete merge
 provenance remain visible. Generic merge combines mappings by exact key and appends lists without
-silent deduplication. Generated mappings and lists emit resolved quoted strings only. Planned
+silent deduplication. Generated mappings and lists emit resolved YAML strings only. Planned
 provider rows ask config-retention questions only; no namespace, kernel, privilege, runtime
 application, or cross-format equivalence claim is made.
 

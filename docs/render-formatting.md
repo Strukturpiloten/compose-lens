@@ -1,16 +1,16 @@
 # Render formatting
 
 ComposeLens separates merged-project semantics from YAML presentation. `render_canonical` always
-uses the fixed canonical-v1 format. `render_canonical_with_formatting` accepts explicit
+uses the fixed canonical-v2 format. `render_canonical_with_formatting` accepts explicit
 presentation-only choices while producing the same YAML data model.
 
 ## Available choices
 
-| Option               | Canonical-v1 default | Supported values                   |
+| Option               | Canonical-v2 default | Supported values                   |
 | -------------------- | -------------------- | ---------------------------------- |
 | Indentation width    | two spaces           | any positive `u8` number of spaces |
 | Line ending          | LF                   | LF or CRLF                         |
-| YAML document marker | omitted              | emit or omit `---`                 |
+| YAML document marker | emitted              | emit or omit `---`                 |
 | Final line ending    | emitted              | emit or omit                       |
 
 ```rust
@@ -44,15 +44,16 @@ Formatting cannot:
 - validate provider/runtime compatibility; or
 - invoke Docker, Podman, or another process.
 
-String and key quoting stays deterministic because changing scalar representation requires YAML
-type-safety rules, not aesthetic preference alone. Mapping and sequence order remains the order of
-the merged semantic model.
+String and key quoting is deterministic and minimal: ComposeLens emits a plain scalar only after
+it parses back as one plain YAML string. Ambiguous YAML 1.1 boolean/null, sexagesimal, special
+floating-point, date, and timestamp spellings remain quoted.
+Mapping and sequence order remains the order of the merged semantic model.
 
 ## Canonical versus customized output
 
-Only the default is named `compose-lens-canonical-v1` for exact fixture comparison. Customized
+The default is named `compose-lens-canonical-v2` for exact fixture comparison. Customized
 output remains deterministic for the same project, selection, and formatting value, and it must
-parse to the same semantic model. Use canonical-v1 when stable shared bytes are more important than
+parse to the same semantic model. Use canonical-v2 when stable shared bytes are more important than
 repository-specific presentation.
 
 Formatting options do not apply to preservation-oriented edits. Those edits retain all authored

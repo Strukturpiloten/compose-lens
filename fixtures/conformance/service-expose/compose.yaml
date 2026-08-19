@@ -1,3 +1,4 @@
+---
 services:
   omitted:
     image: example.invalid/composelens/expose-omitted:1

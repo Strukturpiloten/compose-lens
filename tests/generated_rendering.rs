@@ -1,6 +1,8 @@
 //! Deterministic generated-document construction and parse-back validation.
 
 use compose_lens::{
+    loader::{DocumentInput, DocumentOrigin, LoadedProject},
+    merge::merge_project,
     model::{
         AnnotationsForm, BooleanValue, Command, ComposeScalar, DnsForm, DnsSearchForm, Entrypoint, Environment,
         EnvironmentFile, EnvironmentFileFormatKind, ExtraHosts, HostnameKind, Labels, MemLimitKind, MemLimitScalarKind,
@@ -18,10 +20,81 @@ use compose_lens::{
         GeneratedResource, GeneratedRestartPolicy, GeneratedSecretFileDefinition, GeneratedSelinux, GeneratedService,
         GeneratedServiceRuntimeField, GeneratedShmSize, GeneratedString, GeneratedSysctl, GeneratedSysctls,
         GeneratedTmpfs, GeneratedUlimit, GeneratedUlimitValue, GeneratedUlimits, GeneratedVolumeDefinition,
-        GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, GenerationError,
+        GeneratedVolumeDriverOption, GeneratedVolumeDriverOptionValue, GenerationError, render_canonical,
     },
     source::SourceId,
 };
+
+macro_rules! assert_generated_text {
+    ($generated:expr, $expected:expr $(,)?) => {
+        assert_eq!(
+            $generated.text(),
+            canonical_expected($expected).expect("generated-output expectation must parse canonically")
+        )
+    };
+}
+
+// The exhaustive expectations describe generated semantics. Canonicalizing them keeps the tests
+// focused on field order and values, while the direct byte tests below protect presentation.
+macro_rules! assert_eq {
+    ($generated:ident . text(), $expected:expr $(,)?) => {
+        assert_generated_text!($generated, $expected)
+    };
+    ($($arguments:tt)*) => {
+        ::core::assert_eq!($($arguments)*)
+    };
+}
+
+fn canonical_expected(expected: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(99_001),
+        DocumentOrigin::new("expected.yaml", "generated-rendering"),
+        expected,
+    )])?;
+    let merge = merge_project(&loaded, None);
+    let project = merge.project().ok_or("expected generated document must merge")?;
+    Ok(render_canonical(project, None).into_output())
+}
+
+#[test]
+fn generated_documents_start_with_a_marker_and_quote_only_ambiguous_strings() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut service = GeneratedService::new("web")?;
+    service.set_container_name(plain("web-runtime")?)?;
+    service.set_image(plain("example.invalid/web:1")?)?;
+    service.set_restart(GeneratedRestartPolicy::No)?;
+    service.add_label(GeneratedLabel::new("yes", plain("yes")?)?)?;
+    service.add_label(GeneratedLabel::new("version", plain("1")?)?)?;
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.set_name("route-matrix")?;
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(99_000))?;
+
+    ::core::assert_eq!(
+        generated.text(),
+        concat!(
+            "---\n",
+            "name: route-matrix\n",
+            "services:\n",
+            "  web:\n",
+            "    container_name: web-runtime\n",
+            "    image: example.invalid/web:1\n",
+            "    labels:\n",
+            "      \"yes\": \"yes\"\n",
+            "      version: \"1\"\n",
+            "    restart: \"no\"\n",
+        )
+    );
+    assert!(
+        generated
+            .document()
+            .services()
+            .iter()
+            .any(|service| service.name().value() == "web")
+    );
+    Ok(())
+}
 
 #[test]
 fn generates_network_definition_boolean_omission_combinations_with_drivers_and_parse_back()
@@ -740,7 +813,7 @@ fn generated_annotations_reject_duplicates_deferred_and_malformed_values() -> Re
 }
 
 #[test]
-fn generates_quoted_unique_expose_items_empty_state_sensitivity_and_parse_back()
+fn generates_string_typed_unique_expose_items_empty_state_sensitivity_and_parse_back()
 -> Result<(), Box<dyn std::error::Error>> {
     use compose_lens::model::{ExposeItemKind, ExposeScalarKind};
 
@@ -1090,7 +1163,7 @@ fn generates_repeatable_unmask_candidates_without_normalizing_payloads() -> Resu
             SecurityOptionKind::Unmask { paths } if paths == expected
         ));
     }
-    assert!(generated.text().contains("      - \"unmask=/proc/*\"\n"));
+    assert!(generated.text().contains("      - unmask=/proc/*\n"));
     Ok(())
 }
 
@@ -1403,7 +1476,7 @@ fn rejects_unsafe_or_duplicate_generated_dns_options() -> Result<(), Box<dyn std
 }
 
 #[test]
-fn generates_ordered_ulimits_as_quoted_single_range_and_empty_forms_with_parse_back()
+fn generates_ordered_ulimits_as_string_typed_single_range_and_empty_forms_with_parse_back()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut omitted = GeneratedService::new("omitted")?;
     omitted.set_image(plain("example.invalid/omitted:1")?)?;
@@ -1536,8 +1609,8 @@ fn rejects_unsafe_duplicate_or_incomplete_generated_ulimits() -> Result<(), Box<
 }
 
 #[test]
-fn generates_sysctls_forms_as_safe_quoted_strings_with_parse_back_and_redaction()
--> Result<(), Box<dyn std::error::Error>> {
+fn generates_sysctls_forms_as_safe_yaml_strings_with_parse_back_and_redaction() -> Result<(), Box<dyn std::error::Error>>
+{
     let mut omitted = GeneratedService::new("omitted")?;
     omitted.set_image(plain("example.invalid/omitted:1")?)?;
 
@@ -2660,8 +2733,8 @@ fn generates_documented_pull_policies_with_exact_interval_spelling_and_redaction
     assert!(!debug.contains("01h30m"));
     let generated = project.build(SourceId::new(710))?;
     assert!(generated.is_sensitive());
-    assert!(generated.text().contains("    pull_policy: \"if_not_present\"\n"));
-    assert!(generated.text().contains("    pull_policy: \"every_1w2d3h4m5s\"\n"));
+    assert!(generated.text().contains("    pull_policy: if_not_present\n"));
+    assert!(generated.text().contains("    pull_policy: every_1w2d3h4m5s\n"));
     assert!(
         generated
             .document()
@@ -2798,7 +2871,7 @@ fn rejects_zero_or_non_integral_generated_pids_limits_and_duplicates() -> Result
 }
 
 #[test]
-fn generates_only_quoted_canonical_positive_explicit_shm_sizes_and_parses_back_exact_parts()
+fn generates_only_string_typed_canonical_positive_explicit_shm_sizes_and_parses_back_exact_parts()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut omitted = GeneratedService::new("omitted")?;
     omitted.set_image(plain("example.invalid/omitted:1")?)?;
@@ -2866,7 +2939,7 @@ fn supports_every_documented_shm_unit_and_rejects_unsafe_amount_spellings() -> R
         project.add_service(service)?;
         let generated = project.build(SourceId::new(713))?;
         assert!(generated.text().contains(&format!(
-            "    shm_size: \"18446744073709551616000000000000000000000000000000{suffix}\"\n"
+            "    shm_size: 18446744073709551616000000000000000000000000000000{suffix}\n"
         )));
     }
 
@@ -2899,7 +2972,8 @@ fn supports_every_documented_shm_unit_and_rejects_unsafe_amount_spellings() -> R
 }
 
 #[test]
-fn generates_only_quoted_positive_mem_limits_and_parses_back_exact_parts() -> Result<(), Box<dyn std::error::Error>> {
+fn generates_only_string_typed_positive_mem_limits_and_parses_back_exact_parts()
+-> Result<(), Box<dyn std::error::Error>> {
     let mut omitted = GeneratedService::new("omitted")?;
     omitted.set_image(plain("example.invalid/omitted:1")?)?;
     let mut limited = GeneratedService::new("limited")?;
@@ -2967,7 +3041,7 @@ fn supports_every_documented_mem_unit_and_rejects_unsafe_amount_spellings() -> R
             project
                 .build(SourceId::new(717))?
                 .text()
-                .contains(&format!("    mem_limit: \"64{suffix}\"\n"))
+                .contains(&format!("    mem_limit: 64{suffix}\n"))
         );
     }
     for invalid in ["", "0", "00", "01", "-1", "+1", "1.0", "1e3", " 1", "1 ", "${LIMIT}"] {
@@ -3464,8 +3538,8 @@ fn generates_all_raw_service_runtime_fields_and_parses_them_back() -> Result<(),
         Some(MemswapLimitKind::Positive { .. })
     ));
     assert!(generated.text().contains("cpu_rt_runtime: 500\n"));
-    assert!(generated.text().contains("cpu_rt_runtime: \"500us\"\n"));
-    assert!(generated.text().contains("gpus: \"all\"\n"));
+    assert!(generated.text().contains("cpu_rt_runtime: 500us\n"));
+    assert!(generated.text().contains("gpus: all\n"));
     Ok(())
 }
 

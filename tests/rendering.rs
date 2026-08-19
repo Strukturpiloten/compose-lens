@@ -51,12 +51,96 @@ fn canonical_output_is_stable_across_parse_merge_render() -> Result<(), Box<dyn 
 }
 
 #[test]
-fn default_formatting_is_byte_identical_to_canonical_v1() -> Result<(), Box<dyn std::error::Error>> {
+fn default_formatting_is_byte_identical_to_canonical_v2() -> Result<(), Box<dyn std::error::Error>> {
     let project = canonical_project()?;
     let canonical = render_canonical(&project, None);
     let formatted = render_canonical_with_formatting(&project, None, &CanonicalFormatting::default());
 
+    assert!(canonical.output().starts_with("---\n"));
     assert_eq!(formatted, canonical);
+    Ok(())
+}
+
+#[test]
+fn canonical_rendering_uses_minimal_safe_string_quoting_and_preserves_every_string_on_parse_back()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  web:\n",
+        "    image: example.invalid/web:1\n",
+        "    environment:\n",
+        "      plain: plain-value\n",
+        "      image: example.invalid/web:1\n",
+        "      \"yes\": \"yes\"\n",
+        "      \"no\": \"no\"\n",
+        "      \"on\": \"on\"\n",
+        "      \"off\": \"off\"\n",
+        "      \"true\": \"true\"\n",
+        "      \"false\": \"false\"\n",
+        "      \"null\": \"null\"\n",
+        "      \"~\": \"~\"\n",
+        "      number: \"007\"\n",
+        "      indicator: \"-not-a-list-item\"\n",
+        "      comment: \"value # remains text\"\n",
+        "      sexagesimal: \"1:20\"\n",
+        "      date: \"2026-08-19\"\n",
+        "      timestamp: \"2026-08-19T12:34:56Z\"\n",
+        "      infinity: \".inf\"\n",
+        "      nan: \".NaN\"\n",
+    );
+    let project = one_file_project(source, 289)?;
+    let rendered = render_canonical(&project, None);
+
+    assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
+    assert!(rendered.output().starts_with("---\nservices:\n  web:\n"));
+    assert!(rendered.output().contains("image: example.invalid/web:1\n"));
+    assert!(rendered.output().contains("plain: plain-value\n"));
+    for value in [
+        "yes",
+        "no",
+        "on",
+        "off",
+        "true",
+        "false",
+        "null",
+        "~",
+        "007",
+        "value # remains text",
+        "1:20",
+        "2026-08-19",
+        "2026-08-19T12:34:56Z",
+        ".inf",
+        ".NaN",
+    ] {
+        assert!(
+            rendered.output().contains(&format!("\"{value}\"")),
+            "unsafe YAML string was not quoted: {value:?}\n{}",
+            rendered.output()
+        );
+    }
+
+    let parsed = SyntaxDocument::parse(SourceId::new(290), rendered.output())?;
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    let reloaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(291),
+        DocumentOrigin::new("rendered.yaml", "workspace/project"),
+        rendered.output(),
+    )])?;
+    let remerged = merge_project(&reloaded, None);
+    let reproject = remerged.project().ok_or("remerged project expected")?;
+    assert_eq!(render_canonical(reproject, None).output(), rendered.output());
+    Ok(())
+}
+
+#[test]
+fn canonical_document_marker_can_be_explicitly_disabled() -> Result<(), Box<dyn std::error::Error>> {
+    let project = one_file_project("services:\n  app:\n    image: example/app:1\n", 292)?;
+    let formatting = CanonicalFormatting::default().with_document_marker(false);
+    let rendered = render_canonical_with_formatting(&project, None, &formatting);
+
+    assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
+    assert!(!rendered.output().starts_with("---"));
+    assert_eq!(rendered.output(), "services:\n  app:\n    image: example/app:1\n");
     Ok(())
 }
 
@@ -71,7 +155,7 @@ fn formatting_options_change_presentation_without_changing_semantics() -> Result
         .with_document_marker(true)
         .with_final_newline(false);
     let formatted = render_canonical_with_formatting(&project, None, &formatting);
-    let expected = "---\r\n\"services\":\r\n    \"app\":\r\n        \"image\": \"example/app:1\"\r\n        \"command\":\r\n            - \"serve\"\r\n            - \"--port=80\"";
+    let expected = "---\r\nservices:\r\n    app:\r\n        image: example/app:1\r\n        command:\r\n            - serve\r\n            - \"--port=80\"";
 
     assert!(formatted.is_valid(), "{:#?}", formatted.diagnostics());
     assert_eq!(formatting.indent_width(), indent);
@@ -111,9 +195,9 @@ fn renders_only_services_in_an_explicit_profile_selection() -> Result<(), Box<dy
     let selected = render_canonical(&project, Some(&selection));
 
     assert!(selected.is_valid(), "{:#?}", selected.diagnostics());
-    assert!(selected.output().contains("\"app\":"));
-    assert!(!selected.output().contains("\"debug\":"));
-    assert!(selected.output().contains("\"networks\":"));
+    assert!(selected.output().contains("  app:"));
+    assert!(!selected.output().contains("  debug:"));
+    assert!(selected.output().contains("networks:"));
     Ok(())
 }
 
@@ -141,7 +225,7 @@ fn unresolved_aliases_produce_valid_recovery_yaml_and_an_error() -> Result<(), B
     let rendered = render_canonical(&project, None);
 
     assert!(!rendered.is_valid());
-    assert_eq!(rendered.output(), "\"services\":\n  \"app\":\n    \"image\": null\n");
+    assert_eq!(rendered.output(), "---\nservices:\n  app:\n    image: null\n");
     assert!(
         rendered
             .diagnostics()
@@ -193,8 +277,8 @@ fn canonical_rendering_preserves_cpu_count_scalar_spelling() -> Result<(), Box<d
     )?;
     let rendered = render_canonical(&project, None);
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
-    assert!(rendered.output().contains("\"cpu_count\": \"0xCA_FE\""));
-    assert!(rendered.output().contains("\"cpu_count\": \"007\""));
+    assert!(rendered.output().contains("cpu_count: 0xCA_FE"));
+    assert!(rendered.output().contains("cpu_count: \"007\""));
     Ok(())
 }
 
@@ -206,13 +290,9 @@ fn canonical_rendering_preserves_cpu_percent_scalar_spelling() -> Result<(), Box
     )?;
     let rendered = render_canonical(&project, None);
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
+    assert!(rendered.output().contains("cpu_percent: 0x64"), "{}", rendered.output());
     assert!(
-        rendered.output().contains("\"cpu_percent\": 0x64"),
-        "{}",
-        rendered.output()
-    );
-    assert!(
-        rendered.output().contains("\"cpu_percent\": \"101\""),
+        rendered.output().contains("cpu_percent: \"101\""),
         "{}",
         rendered.output()
     );
@@ -227,8 +307,8 @@ fn canonical_rendering_preserves_cpu_period_scalar_spelling() -> Result<(), Box<
     )?;
     let rendered = render_canonical(&project, None);
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
-    assert!(rendered.output().contains("\"cpu_period\": 1e6"));
-    assert!(rendered.output().contains("\"cpu_period\": \"1000\""));
+    assert!(rendered.output().contains("cpu_period: 1e6"));
+    assert!(rendered.output().contains("cpu_period: \"1000\""));
     Ok(())
 }
 
@@ -240,8 +320,8 @@ fn canonical_rendering_preserves_cpu_quota_scalar_spelling() -> Result<(), Box<d
     )?;
     let rendered = render_canonical(&project, None);
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
-    assert!(rendered.output().contains("\"cpu_quota\": 1e6"));
-    assert!(rendered.output().contains("\"cpu_quota\": \"1000\""));
+    assert!(rendered.output().contains("cpu_quota: 1e6"));
+    assert!(rendered.output().contains("cpu_quota: \"1000\""));
     Ok(())
 }
 
@@ -253,8 +333,8 @@ fn canonical_rendering_preserves_cpu_rt_period_scalar_spelling() -> Result<(), B
     )?;
     let rendered = render_canonical(&project, None);
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
-    assert!(rendered.output().contains("\"cpu_rt_period\": 1e6"));
-    assert!(rendered.output().contains("\"cpu_rt_period\": \"1m30s\""));
+    assert!(rendered.output().contains("cpu_rt_period: 1e6"));
+    assert!(rendered.output().contains("cpu_rt_period: 1m30s"));
     Ok(())
 }
 

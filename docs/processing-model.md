@@ -486,7 +486,7 @@ rejected before compatibility discovery.
 
 ### Render
 
-`render_canonical` emits the fixed `compose-lens-canonical-v1` YAML form from a merged project. A
+`render_canonical` emits the fixed `compose-lens-canonical-v2` YAML form from a merged project. A
 matching optional profile selection filters inactive services while retaining top-level resources.
 The result contains output, structured diagnostics, validity, and sensitivity state. Safe retained
 YAML tags survive; invalid tags are diagnosed and dropped; unresolved aliases are diagnosed and
@@ -513,7 +513,7 @@ and [ADR 0010](decisions/0010-atomic-span-based-preservation-edits.md).
 `render_canonical_with_formatting` uses the same merged project and optional selection as canonical
 rendering, plus explicit `CanonicalFormatting`. The only choices are a positive space-indentation
 width, LF or CRLF, document-marker emission, and final-line-ending emission. Default formatting is
-byte-identical canonical-v1. Formatting does not alter ordering, quoting safety, Compose syntax
+byte-identical canonical-v2. Formatting does not alter ordering, quoting safety, Compose syntax
 forms, diagnostics, or sensitivity. See the [formatting guide](render-formatting.md) and
 [ADR 0011](decisions/0011-presentation-only-render-formatting.md).
 
