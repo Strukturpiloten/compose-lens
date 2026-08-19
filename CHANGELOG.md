@@ -6,6 +6,12 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/Strukturpiloten/compose-lens/compare/v0.2.0...v0.3.0) - 2026-08-19
+
+### Added
+
+- [**breaking**] emit marker-first minimally quoted YAML ([#66](https://github.com/Strukturpiloten/compose-lens/pull/66))
+
 ### Changed
 
 - Automates version and changelog preparation with release-plz, makes this changelog the sole
