@@ -7,7 +7,7 @@ execution = [
 ]
 fixture = "fixtures/conformance/unknown-field"
 fixture_files = ["compose.yaml"]
-fixture_sha256 = "fba0dbf8a1189539c4283986ef90cdbb2e2f1630bb9f7eb19321cbdab87d2013"
+fixture_sha256 = "554a0396f6b79cc6641bb75746b408c78dd602a000f521a718ec36c1dd97c2d4"
 launcher_file = "podman-compose"
 launcher_sha256 = "20cf74bb29fa2dc974bcc757fe4d850255b2ff43a038ddc76d9f13cedfd6dae9"
 observed_unix_seconds = 1785531589

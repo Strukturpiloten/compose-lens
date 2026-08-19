@@ -49,6 +49,8 @@ Third-party parsing dependencies require deliberate review. Record choices that 
 - Add conformance and regression fixtures with every parsing or resolution behavior change.
 - Store source, license, implementation version, and environment metadata for external fixtures.
 - Update documentation and compatibility claims with behavior changes.
+- Start every repository-owned complete YAML document with `---`; marker-free YAML belongs only in
+  explicit parser test data.
 - Keep release notes and changelog entries concise: summarize user-visible feature families and
   link to canonical technical documentation instead of repeating model, fixture, and test details.
   Follow `docs/releasing.md`.

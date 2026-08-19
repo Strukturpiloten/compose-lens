@@ -7,7 +7,7 @@ execution = [
 ]
 fixture = "fixtures/conformance/image-tag-and-digest"
 fixture_files = ["compose.yaml"]
-fixture_sha256 = "9df228157be9f7f1d786e8f7227947742c3112741f45081cebefdb32bad5954f"
+fixture_sha256 = "9ba3e94fd5c3246ce3cbfc319333a41bf20a9f1ed9adb53180d6711b538dc9af"
 launcher_file = "podman-compose"
 launcher_sha256 = "20cf74bb29fa2dc974bcc757fe4d850255b2ff43a038ddc76d9f13cedfd6dae9"
 observed_unix_seconds = 1785531568

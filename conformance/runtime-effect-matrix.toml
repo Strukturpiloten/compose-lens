@@ -232,14 +232,14 @@ status = "planned"
 id = "short-bind-selinux-effect"
 fixture = "fixtures/conformance/runtime-selinux-short"
 files = ["compose.yaml"]
-fixture_sha256 = "1b3ce3208a147262b2383ee929619b2b4ed410496dcc16fa0c477c904b17d6d0"
+fixture_sha256 = "eeb70fd7097795333b44c6b301448516229ab2d0ae898aad028b33f5f4ffca5f"
 observation = "Capture the host label before provider create, after create, and after cleanup."
 
 [[probes]]
 id = "long-bind-selinux-effect"
 fixture = "fixtures/conformance/runtime-selinux-long"
 files = ["compose.yaml"]
-fixture_sha256 = "b8f0d81b2e4e334e621d51f260bd9d2d42137749960b86d282e6f5d2070ee12a"
+fixture_sha256 = "3fba04b30487daa711a254471f03c7085253ecec94feb3d12fb2199e3615e232"
 observation = "Capture the host label before provider create, after create, and after cleanup."
 
 [[runs]]

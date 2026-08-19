@@ -1,3 +1,4 @@
+---
 x-common: &common
   restart: unless-stopped
 services:

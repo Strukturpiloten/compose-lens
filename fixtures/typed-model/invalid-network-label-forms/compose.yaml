@@ -1,3 +1,4 @@
+---
 networks:
   scalar:
     labels: com.example.invalid=value

@@ -238,7 +238,7 @@ generated API because it has no native Quadlet/Podman network-create counterpart
 the non-representable diagnostic.
 
 Generated config and secret definitions accept one unique resolved single-line name plus one
-required resolved single-line `file` value. Their deterministic quoted mappings parse back through
+required resolved single-line `file` value. Their deterministic minimally quoted mappings parse back through
 the native model and propagate caller-marked file sensitivity. Content, environment, external
 lifecycle, drivers, labels, template drivers, and file access remain deliberately outside this
 minimal generated subset.

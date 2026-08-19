@@ -34,5 +34,6 @@
 | [0021](0021-include-composition-with-explicit-conflicts.md)  | accepted   | Opt-in include composition with explicit local-wins conflicts                             |
 | [0022](0022-caller-owned-include-project-directory-plans.md) | accepted   | Opt-in caller-owned include project-directory plans                                       |
 | [0023](0023-include-config-secret-path-resolution.md)        | accepted   | Include-aware lexical selected service, config, and secret path resolution                |
+| [0024](0024-safe-minimal-yaml-presentation.md)               | accepted   | Marker-first YAML with parse-back-validated minimal string quoting                        |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

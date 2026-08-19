@@ -1,3 +1,4 @@
+---
 services:
   scalar:
     image: example.invalid/scalar:1

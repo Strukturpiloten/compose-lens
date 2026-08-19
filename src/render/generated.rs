@@ -347,7 +347,7 @@ pub enum GeneratedPidsLimit {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedShmSize {
-    /// Emit one quoted amount and documented lowercase unit.
+    /// Emit one string amount and documented lowercase unit.
     Explicit {
         /// Canonical positive ASCII-integer amount without leading zeros.
         amount: GeneratedString,
@@ -360,7 +360,7 @@ pub enum GeneratedShmSize {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedMemLimit {
-    /// Emit one quoted amount and documented lowercase unit.
+    /// Emit one string amount and documented lowercase unit.
     Explicit {
         /// Canonical positive ASCII-integer amount without leading zeros.
         amount: GeneratedString,
@@ -373,9 +373,9 @@ pub enum GeneratedMemLimit {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedTmpfs {
-    /// Emit one quoted scalar item.
+    /// Emit one YAML string scalar item.
     Scalar(GeneratedString),
-    /// Emit one quoted ordered list, including an explicit empty list.
+    /// Emit one ordered YAML string list, including an explicit empty list.
     List(Vec<GeneratedString>),
 }
 
@@ -383,9 +383,9 @@ pub enum GeneratedTmpfs {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedDns {
-    /// Emit one quoted raw DNS server string.
+    /// Emit one raw DNS server string.
     Scalar(GeneratedString),
-    /// Emit one quoted ordered list, including an explicit empty list.
+    /// Emit one ordered YAML string list, including an explicit empty list.
     List(Vec<GeneratedString>),
 }
 
@@ -393,9 +393,9 @@ pub enum GeneratedDns {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedDnsSearch {
-    /// Emit one quoted raw DNS search-domain string.
+    /// Emit one raw DNS search-domain string.
     Scalar(GeneratedString),
-    /// Emit one quoted ordered list, including an explicit empty list.
+    /// Emit one ordered YAML string list, including an explicit empty list.
     List(Vec<GeneratedString>),
 }
 
@@ -463,7 +463,7 @@ impl GeneratedLongDevice {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedDevice {
-    /// Emit one exact quoted raw short item.
+    /// Emit one exact raw YAML string short item.
     Short(GeneratedString),
     /// Emit one ordered long mapping.
     Long(GeneratedLongDevice),
@@ -473,7 +473,7 @@ pub enum GeneratedDevice {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedLoggingOptionValue {
-    /// Emit one quoted YAML string.
+    /// Emit one YAML string with minimal safe quoting.
     String(GeneratedString),
     /// Emit one validated unquoted YAML number with exact spelling retained.
     Number(GeneratedString),
@@ -577,7 +577,7 @@ impl GeneratedLogging {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedNetworkDriverOptionValue {
-    /// Emit one quoted YAML string.
+    /// Emit one YAML string with minimal safe quoting.
     String(GeneratedString),
     /// Emit one validated unquoted YAML number with exact spelling retained.
     Number(GeneratedString),
@@ -632,7 +632,7 @@ impl GeneratedNetworkDriverOption {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratedVolumeDriverOptionValue {
-    /// Emit one quoted YAML string.
+    /// Emit one YAML string with minimal safe quoting.
     String(GeneratedString),
     /// Emit one validated unquoted YAML number with exact spelling retained.
     Number(GeneratedString),
@@ -1044,7 +1044,7 @@ impl GeneratedSysctl {
         &self.name
     }
 
-    /// Returns the exact quoted-string value through its sensitivity boundary.
+    /// Returns the exact string value through its sensitivity boundary.
     #[must_use]
     pub const fn value(&self) -> &GeneratedString {
         &self.value
@@ -1791,7 +1791,7 @@ impl GeneratedResource {
 pub enum GeneratedCpuRtRuntime {
     /// An unquoted integer microsecond scalar.
     Microseconds(GeneratedString),
-    /// A quoted Compose duration string.
+    /// A Compose duration string.
     Duration(GeneratedString),
 }
 
@@ -1804,7 +1804,7 @@ impl GeneratedCpuRtRuntime {
 }
 
 /// Raw service resource and namespace fields selected for deterministic generated output.
-/// String-bearing variants are emitted quoted so caller-selected spelling remains a YAML string;
+/// String-bearing variants use minimal safe quoting so caller-selected spelling remains a YAML string;
 /// `cpu_rt_runtime` explicitly selects either an integer microsecond scalar or a duration string.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -2431,8 +2431,9 @@ impl GeneratedService {
 
     /// Sets the complete ordered service `expose` sequence exactly once.
     ///
-    /// An empty vector remains explicit. Every output item is quoted, so number and string YAML
-    /// identities are never silently equated. Omitted protocol and explicit `/tcp` remain distinct.
+    /// An empty vector remains explicit. Every output item remains a YAML string, so number and
+    /// string identities are never silently equated. Omitted protocol and explicit `/tcp` remain
+    /// distinct.
     ///
     /// # Errors
     ///
@@ -3196,7 +3197,7 @@ impl fmt::Debug for GeneratedComposeDocument {
 }
 
 fn render_document(project: &ComposeDocumentBuilder) -> String {
-    let mut output = String::new();
+    let mut output = String::from("---\n");
     if let Some(name) = &project.name {
         output.push_str("name: ");
         write_quoted(&mut output, name);

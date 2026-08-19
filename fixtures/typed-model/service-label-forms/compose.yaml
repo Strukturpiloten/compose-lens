@@ -1,3 +1,4 @@
+---
 services:
   mapping:
     image: example.invalid/mapping:1

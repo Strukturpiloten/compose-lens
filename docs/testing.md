@@ -99,16 +99,16 @@ resolved uppercase and digit-leading RFC-1123 hostnames plus empty, deferred, no
 and invalid-label rejection in generated output,
 unlimited and arbitrary-precision positive PID limits plus rejection of zero, signs, fractions,
 exponents, expressions, and arbitrary strings in generated output,
-quoted positive canonical shared-memory sizes with every documented lowercase unit plus rejection
+positive canonical shared-memory size strings with every documented lowercase unit plus rejection
 of zero, leading zeros, signs, fractions, exponents, uppercase/IEC units, whitespace, expressions,
 and bare numbers,
-quoted positive canonical memory limits with every documented lowercase unit plus rejection of
+positive canonical memory-limit strings with every documented lowercase unit plus rejection of
 zero, leading zeros, signs, fractions, exponents, whitespace, and expressions,
 service `tmpfs` omission/scalar/list/empty forms, colon-delimited documented and raw options,
 ordering, exact duplicates, sensitivity, malformed-item rejection, and exact typed parse-back,
-service `sysctls` omission/map/list/empty forms, ordered unique map names, quoted string values,
+service `sysctls` omission/map/list/empty forms, ordered unique map names, YAML string values,
 ordered exact-unique list strings, unsafe/deferred rejection, sensitivity, and typed parse-back,
-service `ulimits` omission/empty/single/range forms, ordered unique lowercase names, quoted
+service `ulimits` omission/empty/single/range forms, ordered unique lowercase names, string-typed
 non-negative decimal or `-1` values, missing-member and unsafe-value rejection, sensitivity, and
 typed parse-back,
 service `logging` omission/empty/configured/malformed authored forms, recursive option merge,
@@ -138,7 +138,7 @@ untouched quoting stay byte-identical. Failure tests cover foreign sources, key 
 targets, overlaps, block scalars, invalid numbers, atomic rollback, successful reparsing, and
 sensitive replacement redaction.
 
-Formatting tests prove that default options remain byte-identical canonical-v1, custom indentation
+Formatting tests prove that default options remain byte-identical canonical-v2, custom indentation
 and line-ending output is exact, zero-width indentation is unrepresentable, document/final markers
 are explicit, and customized output reparses and merges to the same canonical semantic bytes.
 

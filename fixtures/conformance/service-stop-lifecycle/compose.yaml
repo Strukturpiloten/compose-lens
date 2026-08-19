@@ -1,3 +1,4 @@
+---
 services:
   named:
     image: example.invalid/composelens/named:1

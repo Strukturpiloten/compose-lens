@@ -24,7 +24,8 @@ ComposeLens will publish one library crate with a supported pre-1.0 `0.1.x` API 
   release-note migration guidance.
 - Public interfaces use ComposeLens-owned types. Parser dependencies remain private.
 - Processing stages remain explicit and side-effect boundaries remain part of the contract.
-- Diagnostic code strings and canonical-v1 default rendering are versioned behavioral contracts.
+- Diagnostic code strings and canonical rendering are versioned behavioral contracts. ADR 0024
+  records the intentional canonical-v1-to-v2 break.
 - Future-growth compatibility enums are non-exhaustive before the first release.
 - A consumer-facing integration test compiles and executes the supported end-to-end library path.
 - Release archives include source, tests, fixtures, retained conformance evidence, and project

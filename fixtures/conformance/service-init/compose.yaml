@@ -1,3 +1,4 @@
+---
 services:
   omitted:
     image: example.invalid/composelens/init-omitted:1

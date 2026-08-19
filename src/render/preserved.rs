@@ -1,6 +1,6 @@
 //! Atomic preservation-oriented edits over exact YAML value-scalar spans.
 
-use super::write_quoted;
+use super::write_double_quoted;
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::source::SourceSpan;
 use crate::syntax::SyntaxDocument;
@@ -380,6 +380,6 @@ fn scalar_has_type(value: &str, expected: &[ScalarType]) -> bool {
 
 fn double_quoted(value: &str) -> String {
     let mut output = String::new();
-    write_quoted(&mut output, value);
+    write_double_quoted(&mut output, value);
     output
 }

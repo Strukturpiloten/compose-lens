@@ -1,3 +1,4 @@
+---
 name: composelens-conformance
 x-authored-extension: retained
 services:
@@ -15,4 +16,3 @@ services:
           create_host_path: false
           selinux: Z
           future_bind_option: retained
-

@@ -83,189 +83,189 @@ purpose = "Measure the current stable podman-compose release at the matrix revie
 id = "implementation-sensitive-config"
 fixture = "fixtures/conformance/implementation-sensitive-config"
 files = ["compose.yaml", "compose.override.yaml"]
-fixture_sha256 = "a1b623234cf49a7f7dea0153224ff0e6efa8c40f221d71d13141c2686d33b5a8"
+fixture_sha256 = "1c0805a42a190eef067275604b3c63452ffae7a7fdc02dc45bed22692120e791"
 purpose = "Observe config handling for tag-plus-digest images, both SELinux bind forms, !reset, !override, extensions, and unknown fields."
 
 [[probes]]
 id = "image-tag-and-digest"
 fixture = "fixtures/conformance/image-tag-and-digest"
 files = ["compose.yaml"]
-fixture_sha256 = "9df228157be9f7f1d786e8f7227947742c3112741f45081cebefdb32bad5954f"
+fixture_sha256 = "9ba3e94fd5c3246ce3cbfc319333a41bf20a9f1ed9adb53180d6711b538dc9af"
 purpose = "Measure tag-plus-digest image parsing and rendering without another feature masking the result."
 
 [[probes]]
 id = "short-bind-selinux"
 fixture = "fixtures/conformance/short-bind-selinux"
 files = ["compose.yaml"]
-fixture_sha256 = "d188daadfe5279011c8d5e6ce46de89b46effe2994faf3b921d0f6978066f016"
+fixture_sha256 = "57543f65ff5ba0dacec47356d827f9ef8dee7f37d1cc6726112861b534353928"
 purpose = "Measure short bind-mount SELinux option handling independently."
 
 [[probes]]
 id = "long-bind-selinux"
 fixture = "fixtures/conformance/long-bind-selinux"
 files = ["compose.yaml"]
-fixture_sha256 = "6a4bb4a63e6406ca74562b6d6ad03cd91b432f8c5172c2e33fb8f74041ef7df7"
+fixture_sha256 = "2309e338ee2295e2ebf336478e10bc83e9a3f7a27704efe14ac0965b805e1ddf"
 purpose = "Measure long bind.selinux handling independently."
 
 [[probes]]
 id = "reset-tag"
 fixture = "fixtures/conformance/reset-tag"
 files = ["compose.yaml", "compose.override.yaml"]
-fixture_sha256 = "08ba353851044f900021773cce056557b620174f078aaf24de8056a18d7502a1"
+fixture_sha256 = "23d82593ea763f9f9c06813afbf8622b50496aa4a09597c0096733660524fcfe"
 purpose = "Measure the reset tag independently across a base and override file."
 
 [[probes]]
 id = "override-tag"
 fixture = "fixtures/conformance/override-tag"
 files = ["compose.yaml", "compose.override.yaml"]
-fixture_sha256 = "6a11f73376e3ef36ac7534175df774b3ad07c4e7f89e018d567fd68f8fd51ee3"
+fixture_sha256 = "8903c21a43e379598bb13b4c6f00154a9eaae9f3afb416a8134b260be1af23a0"
 purpose = "Measure the override tag independently across a base and override file."
 
 [[probes]]
 id = "extension-fields"
 fixture = "fixtures/conformance/extension-fields"
 files = ["compose.yaml"]
-fixture_sha256 = "d30be1a776c486ea73390ce87611a66597b46d92d06d2efb50a5f643bcaa3bbc"
+fixture_sha256 = "e83fb50af537b99f4a9554c914f927efa083d7041fcd5104028e8bf677eff985"
 purpose = "Measure top-level and service extension-field handling independently."
 
 [[probes]]
 id = "unknown-field"
 fixture = "fixtures/conformance/unknown-field"
 files = ["compose.yaml"]
-fixture_sha256 = "fba0dbf8a1189539c4283986ef90cdbb2e2f1630bb9f7eb19321cbdab87d2013"
+fixture_sha256 = "554a0396f6b79cc6641bb75746b408c78dd602a000f521a718ec36c1dd97c2d4"
 purpose = "Measure rejection or retention of one unknown service field independently."
 
 [[probes]]
 id = "service-init"
 fixture = "fixtures/conformance/service-init"
 files = ["compose.yaml"]
-fixture_sha256 = "25a2581a178737d9f1356024531ad05fc5c2c5db88cb20887d7f2d21276311a3"
+fixture_sha256 = "7b363506f5e005069b1899713ab2674d01a5388c3bd3466f7c00a5a8daad5480"
 purpose = "Measure whether provider config distinguishes omitted init from explicit true and false without claiming runtime behavior."
 
 [[probes]]
 id = "service-stop-lifecycle"
 fixture = "fixtures/conformance/service-stop-lifecycle"
 files = ["compose.yaml"]
-fixture_sha256 = "6c947f195fee675fff2ec742ea7933f00b25196ebcb47a9d82866e7f3cb2bab3"
+fixture_sha256 = "7d685447ee52651b8a940987ada4ed976c129fa98211511c8352c60458050370"
 purpose = "Measure provider config retention of named/numeric stop signals and composite, zero, and fractional stop grace periods without claiming runtime equivalence."
 
 [[probes]]
 id = "service-pull-policy"
 fixture = "fixtures/conformance/service-pull-policy"
 files = ["compose.yaml"]
-fixture_sha256 = "ff4673cc54b30a04a1013991533333a504f0a21531fe739703a276ea5fa578e7"
+fixture_sha256 = "f0faed6d6c265ec305a56ca5412a424a87a06d8cc7fff594f5f9039e6fd9d5f3"
 purpose = "Measure provider config handling of documented, aliased, composite integer interval, schema-valid zero interval, and schema-only pull-policy spellings without claiming runtime behavior or cross-provider equivalence."
 
 [[probes]]
 id = "service-hostname"
 fixture = "fixtures/conformance/service-hostname"
 files = ["compose.yaml"]
-fixture_sha256 = "2d25d810c45614822ff12a11b5a5d21ef6fad2668d5154f19e48748a8cea3666"
+fixture_sha256 = "016902e03588ca650f3f9c6eae0b316168b2f311929f434521b09f7bdc953933"
 purpose = "Measure provider config handling of omitted, uppercase, digit-leading, and multi-label service hostnames without claiming runtime name-resolution behavior."
 
 [[probes]]
 id = "service-pids-limit"
 fixture = "fixtures/conformance/service-pids-limit"
 files = ["compose.yaml"]
-fixture_sha256 = "9bcba06c358729a003a1ec1323b3e0c853424a8503ce1c2c1aa618d69185c362"
+fixture_sha256 = "007fdb3c0c3316ac3dbe14222bd93333f3a5e143ccf46ec1ffb1f4c342d9331c"
 purpose = "Measure provider config handling of omitted, unlimited, positive integral, arbitrary-precision, ambiguous zero, fractional, and arbitrary-string PID limits without claiming runtime or cgroup behavior."
 
 [[probes]]
 id = "service-shm-size"
 fixture = "fixtures/conformance/service-shm-size"
 files = ["compose.yaml"]
-fixture_sha256 = "ccce70b309cee39a33e9b4c7a33efd1603a682650e67778faff546b720e4b795"
+fixture_sha256 = "edc20bdd38561924d33c07b6823fd8c6a48d78f2204c1afcf8baf18e9840cbec"
 purpose = "Measure provider config handling of omitted, documented-unit, explicit-byte, leading-zero, numeric, fractional, bare-string, zero, uppercase, and IEC service shared-memory sizes without claiming defaults, normalization, or runtime allocation behavior."
 
 [[probes]]
 id = "service-mem-limit"
 fixture = "fixtures/conformance/service-mem-limit"
 files = ["compose.yaml"]
-fixture_sha256 = "74fe1dcfa4c44608f49424128f117fe151e14ce2de3494c4dbc772315fd7f5b5"
+fixture_sha256 = "b33b88d1acbaf35a5490e4c07b192602c0ecc31fe1c552ecd1ff695c4e4ed9ea"
 purpose = "Measure provider config handling of omitted, documented-unit, explicit-byte, leading-zero, numeric, fractional, bare-string, zero, uppercase, and IEC service memory limits without claiming defaults, normalization, runtime enforcement, host or cgroup behavior, or cross-provider equivalence."
 
 [[probes]]
 id = "service-tmpfs"
 fixture = "fixtures/conformance/service-tmpfs"
 files = ["compose.yaml"]
-fixture_sha256 = "711275d4dc868e6011561a28f43373607ebb922e8512c562d5deef85b950f2d0"
+fixture_sha256 = "32e9f3014640f682b92188adb8bdd74d6718bf9a48ab67990ce5703341d9bf7c"
 purpose = "Measure provider config handling of omitted, scalar, explicitly empty list, ordered duplicates, colon-delimited documented assignments, and raw provider-specific service-level tmpfs options without claiming runtime mount behavior."
 
 [[probes]]
 id = "service-dns"
 fixture = "fixtures/conformance/service-dns"
 files = ["compose.yaml"]
-fixture_sha256 = "3de83a71503dd3e73fa83b78c44926cce4b24335d30840444eed8202d0f92947"
+fixture_sha256 = "82983adc71cab62be2b35427cee15121d180313bdc045e8089e8a8cc935990e9"
 purpose = "Measure provider config handling of omitted, scalar, explicitly empty list, ordered duplicate, hostname-like, IPv4-like, and IPv6-like raw service dns strings without claiming resolver, network, rootless, runtime, or cross-provider behavior."
 
 [[probes]]
 id = "service-dns-options"
 fixture = "fixtures/conformance/service-dns-options"
 files = ["compose.yaml"]
-fixture_sha256 = "62a8274a66643cc086e0ee25ea3d62002e917781fe127fd142f8d4dc9fb72170"
+fixture_sha256 = "8b5666edc08815af8da764d50fbce930c45b1862f34e58796897cb620f39d6b9"
 purpose = "Measure provider config handling of omitted, explicitly empty, ordered, and exact-duplicate raw service dns_opt strings without claiming option grammar, resolver, runtime, or cross-provider behavior."
 
 [[probes]]
 id = "service-dns-search"
 fixture = "fixtures/conformance/service-dns-search"
 files = ["compose.yaml"]
-fixture_sha256 = "ebfce45f650f08ad75c6519dc045477a86700cd6fa2c374b1cc45bf418b23711"
+fixture_sha256 = "cf6546ebf754c69f531ca9b8a52afe575badb0331bb6820bb0018523f6867f90"
 purpose = "Measure provider config handling of omitted, scalar, dot, explicitly empty list, ordered, and exact-duplicate raw service dns_search strings without claiming domain grammar, resolver, dot semantics, runtime, or cross-provider behavior."
 
 [[probes]]
 id = "service-expose"
 fixture = "fixtures/conformance/service-expose"
 files = ["compose.yaml"]
-fixture_sha256 = "ec729b4c7c1ef3acc3c686e75e15ef189fb9014d165322e0232fddf6486f993f"
+fixture_sha256 = "aa5701c5c19c031f05dbc1099958329afa16e61463c24b15c7324a1aa18f77be"
 purpose = "Measure provider config handling of omitted, explicitly empty, YAML number/string identity, decimal range, explicit protocol, SCTP, leading-zero, and duplicate service expose items without claiming protocol defaults, runtime port publication, firewall behavior, or cross-format equivalence."
 
 [[probes]]
 id = "service-security-options"
 fixture = "fixtures/conformance/service-security-options"
 files = ["compose.yaml"]
-fixture_sha256 = "d069752690ba08eee72f9c0bd7b0e75bf82ecd16855feb24815e6fe757f6284f"
+fixture_sha256 = "c76c8995f0f8f7e951ab2ded4fbcbacc08936598155b6efac7b71027a39b1cdb"
 purpose = "Measure provider config handling of omitted, explicitly empty, raw, duplicate, exact AppArmor, seccomp, no-new-privileges, SELinux label-disable/filetype/level/nested/type, and repeatable mask/unmask candidates plus separator, case, empty, relative, mixed-ALL, extended, delimiter, and whitespace near misses without claiming profile/path existence or validity, JSON validity, MLS/MCS or SELinux type validity, provider portability, runtime enforcement, filesystem access, or cross-format equivalence."
 
 [[probes]]
 id = "service-annotations"
 fixture = "fixtures/conformance/service-annotations"
 files = ["compose.yaml"]
-fixture_sha256 = "c6569983317e5214f21c0ba85361e0a57bba09453aeb62d6acf2d537bad47735"
+fixture_sha256 = "2d71118b6d741c24f317791d1b709e414eef7a2769464f74b45a4cc63f3fcfb1"
 purpose = "Measure provider config handling of omitted, explicitly empty, mapping/list, scalar-kind, key-only, embedded-equals, and duplicate service annotations without claiming runtime metadata propagation, target semantics, or cross-format equivalence."
 
 [[probes]]
 id = "service-sysctls"
 fixture = "fixtures/conformance/service-sysctls"
 files = ["compose.yaml"]
-fixture_sha256 = "ec20f1c534e69eb6e044ed90546dc56a3eb1efe2e581b7d6b709ca4bc4fa654b"
+fixture_sha256 = "ff7ebfd1251ec242f3117e97318cd61aca41d86c608d97293c915d4db5538dd7"
 purpose = "Measure provider config handling of omitted, mapping/list, explicit empty, scalar-kind, and duplicate-list service sysctls without claiming runtime application, namespace validity, privilege, or cross-provider equivalence."
 
 [[probes]]
 id = "service-ulimits"
 fixture = "fixtures/conformance/service-ulimits"
 files = ["compose.yaml"]
-fixture_sha256 = "38b0f93e272b3cba69a34c689718bf479e15e474ad8b2b480983168116742584"
+fixture_sha256 = "e9e0187e95eceebb5f286e0c2b4be8562fc9ecba1ab8b6553e2e1539d54ed7a0"
 purpose = "Measure provider config handling of omitted, explicit empty, integer/string scalar, unlimited, and soft/hard range service ulimits without claiming runtime enforcement, defaults, resource accounting, or cross-provider equivalence."
 
 [[probes]]
 id = "service-cap-add"
 fixture = "fixtures/conformance/service-cap-add"
 files = ["compose.yaml"]
-fixture_sha256 = "a236c137167cf353a525d7af1f1420e60b6abbe06fc1d5f91228d054d01f1901"
+fixture_sha256 = "343f4a9aef138f57826d10d5e9e87d3cf731489e32dfdc312c2a140c9aeb048a"
 purpose = "Measure provider config handling of omitted, explicitly empty, ordered, exact-case, and independently coexisting service cap_add sequences without claiming runtime capability behavior."
 
 [[probes]]
 id = "service-cap-drop"
 fixture = "fixtures/conformance/service-cap-drop"
 files = ["compose.yaml"]
-fixture_sha256 = "d93f9b072b7e0c9ceaf32d9f9b72f9049afa85d7ab946257005358f2803cde4c"
+fixture_sha256 = "742ed412745149e2284a6111786541b656a3b61bf221074176ca15ea9f3c648e"
 purpose = "Measure provider config handling of omitted, explicitly empty, ordered, and exact-case service cap_drop sequences without claiming runtime capability behavior."
 
 [[probes]]
 id = "service-devices"
 fixture = "fixtures/conformance/service-devices"
 files = ["compose.yaml"]
-fixture_sha256 = "0302e312f553e4d0c49574a0a4148d17b79f4fe38523baea2cb3b79a7091972f"
+fixture_sha256 = "3543cd48b64a7b5caf36253bbdbb92f776945e07c9d25fc3caaef6292ff2446a"
 purpose = "Measure provider config handling of omitted, explicitly empty, ordered duplicate path forms, CDI-like selectors, and mixed short/long service devices without claiming host existence, permission enforcement, CDI validity, or runtime access."
 
 [[runs]]

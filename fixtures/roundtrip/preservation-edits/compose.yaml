@@ -1,3 +1,4 @@
+---
 # This header and all unrelated bytes must survive.
 name: 'preservation-demo'
 services:

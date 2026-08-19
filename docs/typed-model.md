@@ -394,7 +394,7 @@ Raw `user` values are authoritative. User/group helpers recognize names, numeric
 components, and deferred interpolation without resolving accounts. The split ignores colons inside
 `${VAR:-default}`, avoiding a common false decomposition. `ulimits` recognizes authored `-1` as an
 explicit unlimited value in both scalar and soft/hard forms. Its generated boundary deliberately
-narrows output to quoted `-1` or non-negative ASCII decimals and never emits `host`, arbitrary
+narrows output to YAML strings containing `-1` or non-negative ASCII decimals and never emits `host`, arbitrary
 schema strings, or provider defaults.
 
 `service_healthy`, `service_started`, and `service_completed_successfully` dependency conditions

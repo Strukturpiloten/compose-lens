@@ -10,7 +10,7 @@ fixture_files = [
     "compose.yaml",
     "compose.override.yaml",
 ]
-fixture_sha256 = "a1b623234cf49a7f7dea0153224ff0e6efa8c40f221d71d13141c2686d33b5a8"
+fixture_sha256 = "1c0805a42a190eef067275604b3c63452ffae7a7fdc02dc45bed22692120e791"
 launcher_file = "podman-compose"
 launcher_sha256 = "d703089cf5933a807711f5b17cee752128f2bf61539553813565ef411c560292"
 observed_unix_seconds = 1785531263

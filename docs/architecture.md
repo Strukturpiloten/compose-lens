@@ -208,9 +208,10 @@ The renderer has two deliberately separate paths:
 - preservation-oriented editing from a syntax document, which is implemented for exact value
   scalars.
 
-The implemented canonical-v1 renderer retains merged mapping and sequence order plus effective
-Compose short/long forms. It uses fixed two-space indentation and double-quoted keys and string
-scalars. An optional matching profile selection removes inactive services without removing
+The implemented canonical-v2 renderer retains merged mapping and sequence order plus effective
+Compose short/long forms. It uses fixed two-space indentation, an explicit document marker, and
+minimal parser-validated quoting for keys and string scalars. An optional matching profile
+selection removes inactive services without removing
 top-level resources. Rendering never performs another processing stage, and it does not claim
 byte parity with `docker compose config`. Unresolved aliases and invalid retained tags produce
 structured recovery diagnostics. Sensitive output is available explicitly but redacted from
@@ -224,25 +225,25 @@ boundary. Sensitive replacement values are redacted from debug output and diagno
 records the [preservation-edit contract](decisions/0010-atomic-span-based-preservation-edits.md).
 
 `CanonicalFormatting` changes only indentation width, explicit LF/CRLF line endings, document-marker
-emission, and final-line-ending emission. Its default remains byte-identical canonical-v1. It
+emission, and final-line-ending emission. Its default remains byte-identical canonical-v2. It
 cannot reorder data, normalize Compose forms, or activate any processing stage. ADR 0011 records
 the [presentation-only formatting boundary](decisions/0011-presentation-only-render-formatting.md).
 
 Generated rendering owns typed construction for documents without authored source provenance. It
-uses the same private quoted-string encoder, retains insertion order, selects short or long syntax
+uses the same private safe-string encoder, retains insertion order, selects short or long syntax
 per field, and reparses every successful result through the syntax and typed-document layers.
 Sensitive generated values redact the complete result from `Debug`. It does not construct a fake
 merged project or run compatibility validation. ADR 0017 records the
 [generated-document boundary](decisions/0017-parse-back-validated-compose-generation.md).
 
-Generated service labels use ordered mapping syntax with explicit quoted string values. This keeps
-empty values and values containing `=` unambiguous, rejects duplicate names, and propagates
-caller-marked value sensitivity to the complete generated document.
+Generated service labels use ordered mapping syntax with explicit YAML string values. Minimal safe
+quoting keeps ambiguous values strings, rejects duplicate names, and propagates caller-marked value
+sensitivity to the complete generated document.
 Generated service annotations use ordered mapping syntax and distinguish omission from an explicit
-empty mapping. Only unique resolved non-empty names with explicit resolved quoted string values
+empty mapping. Only unique resolved non-empty names with explicit resolved string values
 are accepted; deferred, multiline, key-only, null, and malformed construction cannot succeed.
 Generated service security options distinguish omission from one complete configured sequence,
-including empty. Resolved non-empty single-line strings are quoted in order, exact duplicates are
+including empty. Resolved non-empty single-line strings retain their order, exact duplicates are
 retained, including exact duplicate seccomp, `label:disable`, `label:filetype:<type>`,
 `label:level:<level>`, `label:nested`, `label:type:<type>`, `mask=<paths>`, and valid `unmask=<paths>` strings. No option, profile, JSON,
 SELinux type, provider, runtime, or target-format normalization is applied.
@@ -254,11 +255,11 @@ a configured vector, including empty. They preserve exact case and order, reject
 exact-duplicate items, quote every non-empty item, and apply no capability whitelist or target
 normalization.
 Generated service devices distinguish omission from an explicit empty vector and retain mixed
-short/long order and duplicates. Every value is a quoted resolved single-line string; long source
+short/long order and duplicates. Every value is a resolved single-line YAML string; long source
 is required. Generation does not inspect host devices, parse short colon triples, validate CDI or
 permissions, or claim runtime access.
 Generated service DNS values retain caller-selected scalar/list form, ordered duplicates, and
-explicit empty lists. Non-empty resolved single-line strings are quoted and parse-back validated
+explicit empty lists. Non-empty resolved single-line strings are parse-back validated
 without enforcing an IP/DNS grammar or performing resolver or network access.
 Generated stop signals remain unconstrained raw strings because Compose defines no normative
 signal-token grammar; quoted empty strings are retained as distinct from null. Generated stop
@@ -269,7 +270,7 @@ retain arbitrary-precision positive ASCII-decimal spelling. Zero, signs, fractio
 expressions, and arbitrary strings cannot enter successful generated output.
 Generated shared-memory sizes use a non-exhaustive Compose-owned enum plus an explicit documented
 lowercase unit. Only canonical positive ASCII-integer amounts can be emitted, and the complete
-value is always quoted. Omission, zero, leading zeros, signs, fractions, exponents, whitespace,
+value always remains a YAML string. Omission, zero, leading zeros, signs, fractions, exponents, whitespace,
 expressions, bare numbers, uppercase units, and IEC units cannot enter successful generated output.
 No provider default, normalization, or runtime allocation is inferred.
 Generated service `tmpfs` retains caller-selected scalar or list form, including explicit empty
@@ -277,11 +278,11 @@ lists, exact duplicates, and well-shaped raw target options. Values use `<path>[
 documented option assignments are `mode`, `uid`, and `gid`, while other raw options remain
 provider-dependent evidence rather than being normalized or rejected.
 Generated service `sysctls` retains caller-selected mapping or list form, including explicit empty
-collections. Mapping names are unique and every map value/list item is emitted as a quoted resolved
+collections. Mapping names are unique and every map value/list item is emitted as a resolved YAML
 string; multiline, NUL-bearing, deferred, and exact-duplicate forms are rejected without applying
 namespace, privilege, kernel, or target-runtime rules.
 Generated service `ulimits` retains ordered single and required soft/hard forms plus an explicit
-empty map. Lowercase names are unique and uninterpolated. Values are quoted resolved `-1` or
+empty map. Lowercase names are unique and uninterpolated. Values are resolved YAML strings containing `-1` or
 non-negative ASCII decimals; missing members, multiline, NUL-bearing, deferred, and arbitrary
 schema strings are rejected without injecting provider defaults or claiming runtime enforcement.
 Generated service `logging` requires one explicit string driver and an ordered unique non-empty-key
@@ -300,7 +301,7 @@ including explicit empty maps, deterministic parse-back output, and sensitivity 
 the shared external-volume lifecycle API. Literal external volumes that also retain labels receive
 a distinct source-aware diagnostic; driver and label violations remain independent.
 Generated top-level config and secret file definitions accept one unique resolved single-line name
-and one required resolved single-line file value. They render deterministic quoted mappings and
+and one required resolved single-line file value. They render deterministic mappings and
 parse back through the native model; sensitivity is caller-marked and redacts debug output. Content,
 environment, external lifecycle, drivers, labels, template drivers, filesystem access, and runtime
 behavior remain outside this deliberately narrow generated subset.
@@ -348,5 +349,5 @@ environment variables, and writes an unreviewed result to a caller-selected new 
 ComposeLens publishes one library crate. The supported 0.2.x surface follows the layer boundaries
 above and exposes only ComposeLens-owned types; parser dependencies remain private. Patch releases
 preserve the documented consumer path, diagnostic code strings, side-effect boundaries, and
-canonical-v1 defaults. ADR 0019 defines the
+canonical-v2 defaults. ADR 0019 defines the
 [versioned public API and release contract](decisions/0019-consolidated-0.2-public-api.md).

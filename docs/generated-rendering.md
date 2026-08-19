@@ -38,12 +38,12 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
   state, raw CDI-like strings, exact duplicates, and long source/target/permissions;
 - raw service DNS scalar/list form, including explicit empty lists and exact duplicates;
 - unlimited or positive integral service PID limits;
-- quoted positive canonical service shared-memory sizes with explicit documented lowercase units;
-- quoted positive canonical service memory limits with explicit documented lowercase units;
+- positive canonical service shared-memory size strings with explicit documented lowercase units;
+- positive canonical service memory-limit strings with explicit documented lowercase units;
 - scalar/list service-level temporary filesystems, including explicit empty lists and raw options;
-- mapping/list service sysctls, including explicit empty collections and ordered quoted strings;
+- mapping/list service sysctls, including explicit empty collections and ordered strings;
 - service logging with an explicit uninterpreted string driver and ordered string/number/null options;
-- ordered service ulimits with quoted single or required soft/hard values and explicit empty maps;
+- ordered service ulimits with string-typed single or required soft/hard values and explicit empty maps;
 - service-level `no`, `always`, `on-failure[:max-retries]`, and `unless-stopped` restart policies;
 - documented service image pull policies, including exact custom interval spelling;
 - independent raw stop signals and raw-preserving Compose stop grace periods;
@@ -59,7 +59,7 @@ the bytes through ComposeLens's loss-aware syntax and typed-document model. A su
 
 `GeneratedConfigFileDefinition` and `GeneratedSecretFileDefinition` add the intentionally small
 file-backed resource subset. Each accepts one unique, resolved single-line name and one required,
-resolved single-line `GeneratedString` file spelling. The builder renders deterministic quoted
+resolved single-line `GeneratedString` file spelling. The builder renders deterministic
 mapping syntax, rejects duplicates independently in the config and secret namespaces, and
 parse-back validates the result. A sensitive file value redacts generated debug output. These APIs
 do not read files or represent content, environment, external lifecycle, drivers, labels, template
@@ -69,11 +69,12 @@ Generated collections retain insertion order and reject duplicate names where Co
 syntax would otherwise overwrite intent. Singleton service fields reject a second assignment.
 
 `GeneratedService::set_annotations` distinguishes omission from an explicit empty map and accepts
-only unique resolved names with explicit string values. Output is quoted, sensitivity propagates,
+only unique resolved names with explicit string values. Output uses minimal safe quoting, sensitivity propagates,
 and the native annotation model must parse it back successfully.
 
-Strings are always double-quoted by the private renderer, so YAML scalar inference cannot change
-their type.
+The private renderer uses the least quoting that keeps a value a string. A plain candidate must
+parse back as exactly one plain string; YAML 1.1 boolean/null, sexagesimal, special floating-point,
+date, and timestamp spellings remain double-quoted. Native booleans, numbers, and nulls remain typed.
 
 The generated raw service-runtime fields (`domainname`, `isolation`, `mac_address`, and `uts`) are
 single-line resolved strings only. They do not validate DNS, MAC, namespace, platform, provider,
@@ -83,8 +84,8 @@ authored/effective data because generation would imply an unsupported allocation
 
 `GeneratedService::set_cap_add` and `GeneratedService::set_cap_drop` configure their complete
 vectors independently and exactly once. Not calling a setter omits its field; an empty vector emits
-the corresponding `[]`. Non-empty items retain order and exact case and render as quoted sequence
-strings. Empty strings, NUL, carriage return, line feed, and exact case-sensitive duplicates are
+the corresponding `[]`. Non-empty items retain order and exact case and render as YAML strings.
+Empty strings, NUL, carriage return, line feed, and exact case-sensitive duplicates are
 rejected. Case variants and other single-line schema strings, including strings containing spaces,
 remain accepted. Generation does not invent a capability whitelist, lowercase values, apply
 target/runtime policy, or reconcile additions with drops.
@@ -92,20 +93,22 @@ target/runtime policy, or reconcile additions with drops.
 `GeneratedService::set_devices` configures the complete device vector exactly once. Not calling it
 omits the field; an empty vector emits `devices: []`. `GeneratedDevice` retains mixed short/long
 order and exact duplicates, and `GeneratedLongDevice` requires `source` while optionally retaining
-raw `target` and `permissions`. All emitted values are quoted resolved single-line strings; NUL,
+raw `target` and `permissions`. All emitted values are resolved single-line YAML strings; NUL,
 line breaks, dollar-bearing deferred output, empty short items, and empty long sources are rejected.
 Parse-back must recover the same ordered forms. Generation does not inspect host devices, split
 colon triples, validate CDI or permission letters, infer GPU behavior, or claim runtime access.
 
 `GeneratedRestartPolicy` cannot represent deferred or provider-specific values because generated
 documents require a reviewed semantic choice. `GeneratedService::set_restart` rejects a second
-assignment instead of overwriting the first policy. The renderer quotes every policy, including
-`no`, and the parse-back model must recover the same policy family and retry count.
+assignment instead of overwriting the first policy. The renderer keeps every policy a YAML string;
+the ambiguous value `no` therefore remains quoted. The parse-back model must recover the same
+policy family and retry count.
 
 `GeneratedHostname` is non-exhaustive and currently represents a resolved `GeneratedString`.
 `GeneratedService::set_hostname` rejects empty values, every dollar-bearing expression, non-ASCII
 text, overlong names or labels, empty labels, underscores, leading/trailing hyphens, and trailing
-dots. Uppercase and digit-leading labels are accepted. Successful output is quoted and must parse
+dots. Uppercase and digit-leading labels are accepted. Successful output uses safe YAML string
+spelling and must parse
 back to the exact resolved value. Leaving the setter unused omits the field; generation does not
 invent a hostname or couple it to `container_name`.
 
@@ -122,14 +125,14 @@ typed documented unit from `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb`. The amount m
 `[1-9][0-9]*`; this rejects zero, leading zeros, signs, fractions, exponents, whitespace,
 expressions, and non-ASCII digits without fixed-width parsing. Because the unit is mandatory and
 typed, successful output cannot be a bare number or use uppercase or IEC units. The renderer
-always quotes the combined value, and parse-back must recover the exact amount, unit, YAML string
+keeps the combined value a YAML string, and parse-back must recover the exact amount, unit, YAML string
 category. Caller-marked sensitivity still propagates to the generated document. Leaving the setter
 unused omits `shm_size`; generation does not inject
 Podman's 64 MiB default, normalize a provider-dependent value, inspect `/dev/shm`, or encode IPC,
 pod-grouping, cross-format, CPU, or memory policy.
 
 `GeneratedMemLimit` is a distinct non-exhaustive service-memory type with its own `MemLimitUnit`.
-It emits only a quoted positive `[1-9][0-9]*` amount plus `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb`,
+It emits only a positive `[1-9][0-9]*` amount plus `b`, `k`, `kb`, `m`, `mb`, `g`, or `gb` as a YAML string,
 rejects duplicate assignment and unsafe values, and requires native parse-back to recover the exact
 parts. Omission remains omission. Generation does not normalize units, infer deploy consistency or
 defaults, inspect a host/cgroup, enforce runtime policy, or conflate memory with shared memory,
@@ -152,26 +155,26 @@ resolved, non-empty, and physical-line safe; no resolver grammar is applied.
 optional `tcp` or `udp` suffix. It does not infer a default protocol or runtime publication.
 
 `set_security_options` preserves one complete ordered raw sequence, including exact duplicates.
-Safe resolved values are quoted and parsed back without option, profile, SELinux, path, provider,
+Safe resolved values remain YAML strings and are parsed back without option, profile, SELinux, path, provider,
 runtime, or target-format normalization.
 
 `GeneratedSysctls` is non-exhaustive and preserves the selected ordered mapping or list form,
 including explicit empty collections. `GeneratedSysctl` accepts one unique non-empty resolved map
 name and one `GeneratedString` value; list items must also be resolved single-line strings and exact
-duplicates are rejected. The renderer quotes mapping names, mapping values, and list items, so
+duplicates are rejected. The renderer applies minimal safe quoting to mapping names, mapping values, and list items, so
 `true`, `1`, and `null` remain strings on parse-back. Generation rejects NUL, multiline, and
 dollar-bearing deferred forms but deliberately applies no sysctl namespace, privilege, host-kernel,
 provider, runtime, or cross-format policy.
 
 `GeneratedUlimits` preserves caller order and explicit empty mappings. Each `GeneratedUlimit`
-uses either one scalar or a range with both `soft` and `hard`; all values render as quoted strings.
+uses either one scalar or a range with both `soft` and `hard`; all values render as YAML strings.
 Names must match lowercase ASCII `[a-z]+`, remain unique, and never interpolate. Values must be a
 resolved non-negative ASCII decimal or `-1`; missing range members, multiline, NUL-bearing,
 dollar-bearing, provider-specific strings, and `host` are rejected. Generation injects no default,
 normalizes no provider value, and makes no runtime enforcement or host-resource claim.
 
-`GeneratedLogging` always emits one explicit quoted driver plus `options`, including an explicit
-empty map. Option keys are non-empty and unique; values select quoted string, validated unquoted
+`GeneratedLogging` always emits one explicit string driver plus `options`, including an explicit
+empty map. Option keys are non-empty and unique; values select a YAML string, validated unquoted
 YAML number, or explicit null. Ordering and sensitivity are retained. No driver vocabulary,
 defaults, option meanings, provider behavior, or runtime behavior are inferred.
 
@@ -209,7 +212,7 @@ opaque `driver`, ordered unique `driver_opts`, literal `enable_ipv6` and `intern
 ordered unique string-valued `labels`;
 `GeneratedResource` remains the basic/external network and volume API. Each boolean preserves
 omission versus explicit `false` or `true`; no default is injected. Driver option values explicitly
-select quoted string or validated unquoted number YAML shape, so text such as `"2"` is never
+select a YAML string or validated unquoted number YAML shape, so text such as `"2"` is never
 conflated with numeric `2`. Empty options remain explicit when selected. Definitions are
 application-owned because Compose external networks may only configure `name`; use
 `GeneratedResource::external` for that compatible path. Generation does not validate driver,
@@ -228,7 +231,7 @@ validation.
 
 `GeneratedVolumeDefinition` uses the same set-once ordered mapping contract for volume `labels`
 through `GeneratedLabel`. Omission remains distinct from `labels: {}`, duplicate names fail before
-rendering, and explicit string values are quoted deterministically before parse-back validation.
+rendering, and explicit string values use deterministic minimal safe quoting before parse-back validation.
 One sensitive label value redacts generated debug output. The compatible
 `GeneratedResource::external` path remains the sole external-volume lifecycle API. Authored literal
 `external: true` with any labels attribute, including `{}` or `[]`, retains the labels and emits
@@ -239,7 +242,7 @@ driver-configuration diagnostic.
 
 The builder does not treat Compose short and long forms as universally interchangeable. TCP/UDP
 ports, ordinary binds, named volumes, and anonymous volumes use explicit long syntax. Long-form
-`published` values are quoted strings as required by the Compose specification. SCTP ports use
+`published` values remain YAML strings as required by the Compose specification. SCTP ports use
 short syntax because that form permits platform-specific protocols while the long form defines
 only TCP and UDP. An SCTP host address therefore requires an explicit published port so its short
 form remains unambiguous. A bind carrying
@@ -248,12 +251,12 @@ form remains unambiguous. A bind carrying
 source or target that would make this selected short form ambiguous; it does not discard the
 relabel request or silently switch forms.
 
-Environment and `extra_hosts` use quoted sequence short forms. That preserves insertion order and
+Environment and `extra_hosts` use YAML string sequence short forms. That preserves insertion order and
 allows repeated effective environment names without constructing a duplicate-key YAML mapping.
 Environment files retain the caller-selected form: `GeneratedEnvironmentFile::short` emits a
-quoted path item, while `GeneratedEnvironmentFile::long` emits a mapping with only the explicitly
+path string item, while `GeneratedEnvironmentFile::long` emits a mapping with only the explicitly
 selected `required` and `format: raw` options. Neither constructor reads or resolves its path.
-Labels use quoted mapping syntax because label names must be unique and explicit mapping values
+Labels use mapping syntax because label names must be unique and explicit string values
 represent empty strings and embedded `=` characters without short-form ambiguity.
 
 ## Sensitivity and explicit output access

@@ -1,3 +1,4 @@
+---
 services:
   probe:
     image: ${COMPOSE_LENS_RUNTIME_IMAGE:?supply a preloaded digest-pinned image}
