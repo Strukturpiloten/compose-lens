@@ -168,7 +168,9 @@ Callers may stop at any appropriate level. Parsing a document must not implicitl
 
 ## Documentation
 
-- [Published Rust API documentation](https://docs.rs/compose-lens/latest/compose_lens/)
+- [ComposeLens user documentation](https://boxferry.dev/docs/libraries/compose-lens/)
+- [Published Rust API documentation](https://boxferry.dev/docs/api/compose-lens/)
+- [Public documentation sources](docs/public/index.md)
 - [Documentation index](docs/README.md)
 - [Software architecture](docs/architecture.md)
 - [Target project structure](docs/project-structure.md)
