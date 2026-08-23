@@ -1,46 +1,30 @@
 # ComposeLens documentation
 
-This directory defines ComposeLens's public intent and internal architecture.
+Start with the [public ComposeLens guide](public/index.md) when using the library. The generated
+[Rust API](https://docs.rs/compose-lens) is the source of truth for individual types and methods.
 
-## Start here
+## Design
 
-- [Architecture](architecture.md) — layers, dependency direction, and invariants
-- [Project structure](project-structure.md) — intended crate and module organization
-- [Processing model](processing-model.md) — explicit document and project stages
-- [Preservation-oriented editing](preservation-editing.md) — atomic scalar edits, style behavior, diagnostics, and limits
-- [Render formatting](render-formatting.md) — indentation, line endings, document markers, and the semantic boundary
-- [Generated documents](generated-rendering.md) — typed construction, syntax-form selection, parse-back validation, and redaction
-- [Phase 2 typed model](typed-model.md) — implemented field boundary, fidelity rules, and diagnostics
-- [Native coverage](coverage.md) — syntax, document-model, and merged-project field coverage
-- [Roadmap and exact specification gaps](roadmap.md) — all current untyped keys and promotion order
-- [Quality plan](quality-plan.md) — pragmatic priorities, test expectations, and investment limits
-- [Testing strategy](testing.md) — parser, resolver, conformance, and round-trip tests
-- [Development environment](development-environment.md) — reproducible VS Code tooling and update policy
-- [Compose implementation conformance](conformance.md) — exact matrices, evidence lifecycle, and open runtime work
-- [Real-world fixture corpus](real-world-corpus.md) — admission, licensing, sanitization, and covered projects
-- [Fixture format](fixture-format.md) — shared metadata, provenance, and secrets contract
-- [YAML representation evaluation](research/yaml-representation.md) — versioned parser prototype evidence
-- [Compose syntax-fidelity evidence](research/compose-syntax-fidelity.md) — why short and long forms remain distinct
-- [Compose interpolation evidence](research/compose-interpolation.md) — operators, ordering, providers, and redaction
-- [Compose merge evidence](research/compose-merge.md) — ordering, field-specific rules, tags, and path bases
-- [Post-merge processing evidence](research/compose-post-merge-processing.md) — profiles, paths, references, and defaults
-- [Compatibility-profile evidence](research/compose-compatibility-profiles.md) — providers, runtimes, versions, and initial rules
-- [Provider-config conformance results](research/provider-config-conformance-2026-07-31.md) — 48 exact reviewed observations
-- [Podlet and compose_spec_rs regression review](research/podlet-compose-spec-rs-regressions-2026-08-01.md) — upstream user cases, existing coverage, and post-0.1 candidates
-- [Canonical-rendering evidence](research/compose-canonical-rendering.md) — fixed output, explicit processing boundary, recovery, and redaction
-- [Dependency and license policy](dependency-policy.md) — dependency selection, allowed sources, and license checks
-- [API stability policy](api-stability.md) — pre-1.0 compatibility and public dependency boundaries
-- [Release process](releasing.md) — automated release PRs and protected trusted publication
+- [Architecture](architecture.md) — ownership, layers, dependencies, and side-effect boundaries
+- [Processing model](processing-model.md) — explicit stages from source text to project views
+- [Rendering](rendering.md) — canonical output, generated documents, and preservation edits
+- [API stability](api-stability.md) — the supported pre-1.0 release contract
+- [Native coverage](coverage.md) — what “typed”, “generated”, and “compatible” mean
+
+## Maintain
+
+- [Testing](testing.md) — test layers, complete checks, and behavioral expectations
+- [Development environment](development-environment.md) — supported tools and focused commands
+- [Dependency policy](dependency-policy.md) — sources, licenses, and representation dependencies
+- [Release process](releasing.md) — release-plz preparation and protected publication
+- [Fixture policy](../fixtures/README.md) — manifests, licensing, secrets, and real-world corpus
+- [Conformance evidence](../conformance/README.md) — versioned provider observations
+
+## Evidence and history
+
+- [Research index](research/README.md) — versioned technical evidence behind decisions
+- [Architecture decisions](decisions/README.md) — durable accepted and superseded decisions
 - [Changelog](../CHANGELOG.md) — release-facing behavior changes
-- [Implementation plan](implementation-plan.md) — synchronized cross-repository tasks T1–T8
-- [Architecture decisions](decisions/README.md) — durable design choices
 
-## Documentation rules
-
-- Clearly distinguish Compose Specification requirements from observed implementation behavior.
-- Attach authoritative links, implementation versions, and test evidence to compatibility claims.
-- Document whether an operation is pure, reads files, consumes environment values, or invokes another process.
-- Update processing-stage documentation whenever ordering or default behavior changes.
-- Use ADRs for decisions affecting representation, public APIs, loss preservation, or compatibility policy.
-
-Coding agents must also follow the repository-root `AGENTS.md`.
+Live work belongs in GitHub issues and the BoxFerry product roadmap. This repository does not keep a
+second cross-repository implementation plan or a completed-task archive.

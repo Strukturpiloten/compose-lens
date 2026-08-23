@@ -20,4 +20,4 @@ ComposeLens does not start containers, contact a container runtime, read process
 - [Compatibility](compatibility/) separates syntax support from implementation evidence.
 - [Rust API](https://boxferry.dev/docs/api/compose-lens/) lists every public item.
 
-Add the library with `compose-lens = "0.3"`. Rust 1.85.0 or newer is required.
+Add the latest compatible release with `cargo add compose-lens`. Rust 1.85.0 or newer is required.

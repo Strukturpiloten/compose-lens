@@ -1,30 +1,53 @@
 # Compose implementation conformance
 
-This directory owns repository-side probes of released Compose implementations. It does not add
-runtime access to the `compose-lens` library.
+This directory owns versioned evidence from released Compose providers and container runtimes. The
+public `compose-lens` library remains pure and never invokes them.
+
+Accepting syntax, producing provider configuration, and observing a runtime effect are different
+claims. A release is a candidate for measurement, not proof of support.
 
 ## Contents
 
-- `provider-config-matrix.toml` selects exact provider releases, checksum-pinned artifacts, and authored probes.
-- `runtime-effect-matrix.toml` defines exact planned provider/runtime/privilege contexts and fail-closed isolation.
-- `records/` contains reviewed observations produced by the ignored conformance test.
-- the referenced inputs remain normal versioned fixtures under `fixtures/conformance/`.
+- `provider-config-matrix.toml` defines exact provider artifacts and authored configuration probes.
+- `runtime-effect-matrix.toml` defines exact provider/runtime/privilege contexts and fail-closed
+  isolation requirements.
+- `records/` contains reviewed observations from explicitly invoked capture tests.
+- Inputs stay under `fixtures/conformance/` and follow the common fixture contract.
 
-Matrix entries have one of two states:
+Each matrix entry is either:
 
-- `planned` means the exact combination should be measured and makes no support claim;
-- `observed` means a reviewed record is retained in this repository and linked from the entry.
+- `planned` — a reproducible question that makes no support claim; or
+- `observed` — a reviewed record linked from the exact matrix entry.
 
-There is deliberately no `latest` state or version alias. Moving release candidates are reviewed
-in [the conformance guide](../docs/conformance.md), then entered here as exact versions.
+The provider matrix retains 48 reviewed records. Additional provider rows and every current runtime
+effect row remain planned. The matrix files, not prose release lists, are the source of truth for
+exact versions and status.
 
-## Running one provider-config probe
+## Evidence lifecycle
 
-The runner is an ignored Rust integration test so ordinary builds never invoke Docker Compose,
-`podman-compose`, Docker Engine, or Podman. It accepts only an absolute launcher path and clears the
-inherited environment before invoking it.
+```text
+exact matrix entry -> isolated invocation -> unreviewed capture
+                                              |
+                                              v
+                                  reviewed retained record
+                                              |
+                                              v
+                               scoped compatibility evidence
+```
 
-```shell
+A successful `config` command proves only the recorded provider output. It does not prove that a
+container runtime applied the requested behavior. Runtime effects require their own rootless or
+rootful context, host features, image identity, cleanup, and resource audit.
+
+Ordinary tests validate matrix structure, exact fixture hashes, reviewed-record links, and fail-closed
+runtime policy. They do not execute a provider or runtime.
+
+## Capture one provider observation
+
+The ignored provider runner requires an exact matrix target, probe, launcher, checksum, platform,
+restricted path, and new absolute result directory:
+
+```console
 COMPOSE_LENS_CONFORMANCE_TARGET=docker-compose-5-3-1 \
 COMPOSE_LENS_CONFORMANCE_PROBE=implementation-sensitive-config \
 COMPOSE_LENS_CONFORMANCE_LAUNCHER=/absolute/path/to/docker-compose \
@@ -35,21 +58,41 @@ COMPOSE_LENS_CONFORMANCE_RESULT_DIRECTORY=/absolute/new/result-directory \
 cargo test --locked --test conformance -- --ignored --exact run_selected_provider_config_probe
 ```
 
-The matrix owns the immutable artifact URL and published SHA-256. The caller supplies the actual
-launcher's SHA-256, which the runner verifies before execution; this may differ from the artifact
-hash for an installed Python wheel. Fixture bytes are checked against the matrix hash, and runner
-version output is checked exactly against the matrix version before the probe runs. The new result directory
-receives metadata plus unmodified stdout and stderr files. A non-zero probe exit is an observation
-and is recorded instead of being converted into a test failure.
+The runner verifies fixture bytes, the caller-supplied launcher hash, and exact version output. It
+uses a cleared environment and isolated home, config, cache, and runtime directories. A non-zero
+probe exit is retained as an observation rather than converted into a harness failure.
 
-Do not commit a generated result directly. Review its command, provider identity, artifact source
-and checksum, launcher checksum, execution dependencies, platform assumptions, output, fixture
-hash, and absence of sensitive data. Deterministic replacement of local acquisition and repository
-roots must be declared in the record. Then
-copy it into a stable record directory, change the matching matrix run to `observed`, and add the
-record path. Compatibility rules may cite it only after that review.
+The matrix records immutable artifact URLs and published checksums. The actual launcher checksum may
+differ when an artifact is installed or unpacked; both identities remain explicit.
 
-The Phase 5 provider matrix contains 48 reviewed records. Each dated target/probe directory owns
-one `record.toml` plus raw and normalized output evidence. The runtime-effect matrix remains
-planned because it requires an enforcing SELinux host and exact external runtime installations;
-its policy test performs no runtime operation.
+## Review a capture
+
+Do not commit generated output directly. Review:
+
+1. target, probe, arguments, exact version, artifact source, and both checksums;
+2. fixture identity and bytes;
+3. platform, execution dependencies, working directory, and controlled environment;
+4. raw stdout, stderr, and exit state;
+5. deterministic normalization of local acquisition roots only; and
+6. absence of credentials, tokens, private names, personal paths, and other sensitive data.
+
+Copy an accepted result into a stable `records/` directory, change only the matching matrix run to
+`observed`, and link its record path. A compatibility rule may cite it only after the feature outcome
+and version scope are reviewed separately.
+
+Record-specific retention and redaction rules are in [`records/README.md`](records/README.md).
+
+## Runtime evidence
+
+Runtime rows remain planned unless every declared precondition can be enforced. A valid run may
+require rootless or rootful isolation, SELinux state, a new workspace, a caller-supplied preloaded
+digest-pinned image, disabled registry/network access, unconditional teardown, and a post-cleanup
+resource audit.
+
+If the host cannot meet a requirement, do not run the row and do not weaken it. An unsupported host
+is not evidence for or against a Compose feature.
+
+Versioned interpretation behind the initial provider records is retained in
+[`docs/research/provider-config-conformance-2026-07-31.md`](../docs/research/provider-config-conformance-2026-07-31.md).
+[ADR 0012](../docs/decisions/0012-repository-conformance-harness.md) defines the repository-side
+evidence boundary.
