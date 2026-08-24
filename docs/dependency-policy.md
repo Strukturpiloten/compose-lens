@@ -1,56 +1,49 @@
 # Dependency and license policy
 
-Dependencies are design decisions, not incidental implementation details. Prefer the standard library and focused crates with active maintenance, a clear security history, and APIs that do not force ComposeLens to give up source fidelity or explicit processing stages.
+Dependencies are design decisions. Prefer the standard library and focused, maintained crates whose
+APIs preserve ComposeLens's source fidelity and explicit processing boundaries.
 
-## Baseline rules
+## Cargo rules
 
-- Use explicit, compatible Cargo version requirements by default; wildcard requirements are denied.
-- Use an exact pin only for a documented compatibility or representation reason.
-- Use crates.io releases by default. Unapproved registries and Git dependencies are denied.
-- Keep default features only when they are understood and useful.
-- Avoid overlapping crates that solve the same problem without a documented reason.
-- Record dependencies that constrain YAML representation, round trips, source locations, or public APIs in an ADR.
-- Commit `Cargo.lock` and use locked dependency resolution in CI.
+- Use compatible crates.io requirements by default; wildcard requirements are denied.
+- Use an exact pin only for a documented representation or compatibility reason.
+- Keep default features only when reviewed and useful.
+- Avoid overlapping crates without a clear responsibility difference.
+- Commit `Cargo.lock` and use locked resolution in CI and releases.
+- Record a dependency that constrains YAML representation, round trips, source locations, or public
+  APIs in an ADR.
 
-## License allowlist
+Unapproved registries and Git dependencies are denied. An exception must be narrowly versioned,
+explained in `deny.toml`, and justified in the introducing change; lasting architectural or
+distribution exceptions require an ADR.
 
-`deny.toml` is the machine-readable source of truth. The initial allowlist is deliberately narrow: Apache-2.0, Apache-2.0 with LLVM exception, BSD-2-Clause, BSD-3-Clause, ISC, MIT, MPL-2.0, Unicode-3.0, Unicode-DFS-2016, and Zlib.
+## Licenses and advisories
 
-The allowlist records licenses that Strukturpiloten has accepted as policy, not only licenses in
-the current dependency graph. Consequently, `unused-allowed-license` is set to `allow`; an
-unlisted license still fails the audit and requires explicit review.
+`deny.toml` is the machine-readable source of truth for accepted licenses, advisories, bans,
+duplicates, and sources. An allowlisted license records project policy even when no current dependency
+uses it. Adding a license requires review of its distribution obligations; this policy is not legal
+advice.
 
-Adding a license is a compatibility and distribution decision. Review its obligations before changing the allowlist. This policy records project intent and is not legal advice.
+Do not silence an advisory, source, duplicate, or license finding merely to make CI pass. Run:
 
-## Exceptions
+```console
+cargo deny check
+```
 
-Do not silence an advisory, allow a Git source, clarify a license, or skip a duplicate merely to make CI pass. An exception must be narrowly versioned, include a reason in `deny.toml`, and be explained in the change that introduces it. Use an ADR when the exception has lasting architectural or distribution consequences.
+## Repository tooling
 
-## Automation
+GitHub Actions, release preparation, the Rust toolchain, Dev Container assets, Node tools, and native
+file tools are supply-chain dependencies even though they are not shipped in the Rust graph. Their
+exact versions, action SHAs, lockfiles, and checksums live in executable configuration rather than
+this guide.
 
-Release preparation uses release-plz Action 0.5.131 at immutable commit
-`2eb1d8bcb770b4c48ccfaad919734b38b51958c9`, release-plz CLI 0.3.160, and SHA-pinned GitHub App
-token Action 3.2.0. These are repository-only workflow dependencies. The configuration disables
-publication, tags, and GitHub releases; the existing protected workflow retains those
-responsibilities. Renovate's GitHub Actions manager tracks the Action SHA and release comment, and
-a custom workflow-tool manager tracks the release-plz CLI input. Review the Action, CLI,
-least-privilege App token inputs, and preparation-only policy together.
+Renovate proposes supported updates. Repository policy verifies immutable action pins, integrity
+metadata, single version sources, and locked tooling. Every update still needs the same review and
+complete gate as a hand-authored dependency change.
 
-Run `cargo deny check` after installing `cargo-deny`. CI checks advisories, licenses, bans, and
-sources. Renovate proposes Cargo, npm development-tool, lockfile, Rust toolchain, Dev Container,
-GitHub Actions, directly pinned workflow-tool, checksum-pinned file-tool, base-image, GitHub CLI,
-and documented Dev Container CLI updates. Updates still require the same tests and review as
-human-authored dependency changes.
+## YAML representation
 
-Repository-only file quality uses tools outside the published Rust dependency graph:
-markdownlint-cli2 and Prettier for Markdown, Prettier for JSON and YAML, Tombi for TOML, shfmt and
-ShellCheck for shell, and Hadolint for Dockerfiles. `package-lock.json` fixes the complete Node
-tool graph, while `scripts/install-file-tools.sh` pins native Linux release assets and SHA-256
-checksums. The Dev Container provides them, and CI plus release validation run the same
-`scripts/check-files.sh --check` boundary. These tools do not affect the library package or MSRV.
-The release-plz-owned root `CHANGELOG.md` remains Markdownlint-checked and release-structure-
-validated but is the sole Markdown file excluded from Prettier through `.prettierignore`.
-
-## Current representation dependency
-
-`yaml-edit` 0.2.3 is pinned exactly with default features disabled. This keeps its optional binary/base64 support out of the dependency graph. The dependency and alternatives are reviewed in [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md) and the [YAML representation evaluation](research/yaml-representation.md). No `yaml-edit` type may appear in the public API.
+`yaml-edit` 0.2.3 is pinned exactly with default features disabled. It remains private and no
+`yaml-edit` type may appear in the public API. The decision and alternatives are recorded in
+[ADR 0002](decisions/0002-loss-aware-yaml-syntax.md) and the
+[YAML representation evaluation](research/yaml-representation.md).

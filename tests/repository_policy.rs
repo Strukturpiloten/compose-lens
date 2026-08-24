@@ -264,26 +264,19 @@ fn issue_to_pr_workflow_requires_the_complete_local_gate() -> Result<(), String>
             &[
                 "## GitHub issue-to-PR workflow",
                 "Run `./scripts/check-all.sh`",
-                "is a hard gate against commit, push, and pull-request",
-                "ready-for-review pull request",
-                "primary Sol agent runs this workflow",
-                "high reasoning effort",
-                "Terra subagents",
-                "never execute the Git or GitHub",
-                "remains Sol's responsibility",
+                "failed or incomplete full gate blocks commits, pushes, and pull-request",
+                "ready pull request",
+                "primary Sol agent owns Git and GitHub writes",
+                "Subagents never commit, push, publish, tag, release, or create pull requests",
             ][..],
         ),
         (
             "docs/development-environment.md",
             &[
-                "## Issue-to-PR contribution workflow",
+                "## Complete validation",
                 "./scripts/check-all.sh",
-                "All steps must pass before the change is committed, pushed, or submitted",
-                "ready-for-review pull request",
-                "primary Sol agent uses high reasoning effort",
-                "Terra agents",
-                "never perform Git or GitHub writes",
-                "Sol's final responsibility",
+                "invalidates the result",
+                "issue-to-PR sequence and ownership rules are canonical",
             ][..],
         ),
     ] {
@@ -953,7 +946,7 @@ fn validate_release_plz_changelog(config: &toml::Value) -> Result<(), String> {
 
     let releasing = read_repository_file("docs/releasing.md")?;
     for required in [
-        "classification contract",
+        "## Release classification",
         "`feat`, `fix`, `perf`, `refactor`, or `revert`",
         "`docs`, `test`, `ci`, `build`, `style`, or `chore`",
     ] {
@@ -1167,7 +1160,7 @@ fn read_repository_file(path: &str) -> Result<String, String> {
 }
 
 #[test]
-fn public_documentation_is_bounded_and_website_owned() -> Result<(), String> {
+fn public_documentation_is_source_owned_and_website_published() -> Result<(), String> {
     const PAGES: &[(&str, &[&str])] = &[
         ("docs/public/index.md", &["directly", "Rust API"]),
         ("docs/public/model/index.md", &["Typed document", "side effects"]),
@@ -1191,7 +1184,7 @@ fn public_documentation_is_bounded_and_website_owned() -> Result<(), String> {
     let expected = PAGES.iter().map(|(path, _)| root.join(path)).collect::<BTreeSet<_>>();
     if actual != expected {
         return Err(format!(
-            "docs/public must contain exactly the website-owned page inventory; expected {expected:#?}, found {actual:#?}"
+            "docs/public must contain exactly the source-owned, website-published page inventory; expected {expected:#?}, found {actual:#?}"
         ));
     }
 
@@ -1221,6 +1214,126 @@ fn public_documentation_is_bounded_and_website_owned() -> Result<(), String> {
         }
     }
 
+    Ok(())
+}
+
+#[test]
+fn maintained_documentation_is_bounded_current_and_nonduplicative() -> Result<(), String> {
+    const ROOT_GUIDES: &[&str] = &[
+        "docs/README.md",
+        "docs/api-stability.md",
+        "docs/architecture.md",
+        "docs/coverage.md",
+        "docs/dependency-policy.md",
+        "docs/development-environment.md",
+        "docs/processing-model.md",
+        "docs/releasing.md",
+        "docs/rendering.md",
+        "docs/testing.md",
+    ];
+    const NARRATIVE_DOCUMENTS: &[&str] = &[
+        "README.md",
+        "AGENTS.md",
+        "docs/README.md",
+        "docs/api-stability.md",
+        "docs/architecture.md",
+        "docs/coverage.md",
+        "docs/dependency-policy.md",
+        "docs/development-environment.md",
+        "docs/processing-model.md",
+        "docs/releasing.md",
+        "docs/rendering.md",
+        "docs/testing.md",
+        "docs/research/README.md",
+        "conformance/README.md",
+        "fixtures/README.md",
+        "tests/README.md",
+    ];
+    const OBSOLETE_DOCUMENTS: &[&str] = &[
+        "docs/conformance.md",
+        "docs/fixture-format.md",
+        "docs/generated-rendering.md",
+        "docs/implementation-plan.md",
+        "docs/preservation-editing.md",
+        "docs/project-structure.md",
+        "docs/quality-plan.md",
+        "docs/real-world-corpus.md",
+        "docs/render-formatting.md",
+        "docs/roadmap.md",
+        "docs/typed-model.md",
+    ];
+
+    let root = repository_root();
+    let actual_root_guides = fs::read_dir(root.join("docs"))
+        .map_err(|error| format!("failed to read docs: {error}"))?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.is_file() && path.extension().is_some_and(|extension| extension == "md"))
+        .collect::<BTreeSet<_>>();
+    let expected_root_guides = ROOT_GUIDES.iter().map(|path| root.join(path)).collect::<BTreeSet<_>>();
+    if actual_root_guides != expected_root_guides {
+        return Err(format!(
+            "docs must contain exactly the maintained narrative guide inventory; expected {expected_root_guides:#?}, found {actual_root_guides:#?}"
+        ));
+    }
+
+    for path in OBSOLETE_DOCUMENTS {
+        if root.join(path).exists() {
+            return Err(format!(
+                "{path} is an obsolete duplicate ledger; keep its canonical replacement instead"
+            ));
+        }
+    }
+
+    for path in NARRATIVE_DOCUMENTS {
+        validate_maintained_narrative(path)?;
+    }
+
+    let mut components = env!("CARGO_PKG_VERSION").split('.');
+    let major = components
+        .next()
+        .ok_or_else(|| "package version has no major component".to_owned())?;
+    let minor = components
+        .next()
+        .ok_or_else(|| "package version has no minor component".to_owned())?;
+    let release_line = format!("{major}.{minor}.x");
+    for path in ["docs/api-stability.md", "tests/README.md"] {
+        let document = read_repository_file(path)?;
+        if !document.contains(&release_line) {
+            return Err(format!("{path} must identify the current {release_line} release line"));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_maintained_narrative(path: &str) -> Result<(), String> {
+    let document = read_repository_file(path)?;
+    if document.lines().filter(|line| line.starts_with("# ")).count() != 1 {
+        return Err(format!("{path} must contain exactly one level-one heading"));
+    }
+    if document.lines().count() > 220 {
+        return Err(format!("{path} exceeds the 220-line maintained-guide limit"));
+    }
+    let word_limit = if path == "README.md" { 900 } else { 1_500 };
+    let words = document.split_whitespace().count();
+    if words > word_limit {
+        return Err(format!(
+            "{path} contains {words} words and exceeds its {word_limit}-word limit"
+        ));
+    }
+    for paragraph in document.split("\n\n") {
+        let paragraph_words = paragraph.split_whitespace().count();
+        if paragraph_words > 180 {
+            return Err(format!(
+                "{path} contains a {paragraph_words}-word paragraph or list block; split or link it"
+            ));
+        }
+    }
+    for stale_phrase in ["Phase 2 typed", "supported 0.2.x", "0.2 consumer contract", "post-0.1"] {
+        if document.contains(stale_phrase) {
+            return Err(format!("{path} contains stale contract wording `{stale_phrase}`"));
+        }
+    }
     Ok(())
 }
 

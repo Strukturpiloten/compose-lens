@@ -8,7 +8,7 @@ Use `validation::validate_compatibility` with an explicit `CompatibilityProfile`
 
 Compatibility rules may be based on specification text, exact provider output, or reviewed runtime observations. Each claim stays scoped to the implementation, version, command, fixture, and environment that produced the evidence. Accepting or rendering syntax does not prove runtime behavior.
 
-The maintained matrices and their review state live in the repository's [conformance documentation](https://github.com/Strukturpiloten/compose-lens/blob/main/docs/conformance.md). Ordinary tests use retained fixtures and do not contact Docker, Podman, or a network service.
+The maintained matrices and their review state live in the repository's [conformance documentation](https://github.com/Strukturpiloten/compose-lens/blob/main/conformance/README.md). Ordinary tests use retained fixtures and do not contact Docker, Podman, or a network service.
 
 ## Choose a validation mode
 

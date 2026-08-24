@@ -16,7 +16,7 @@ Use the generated-document API when creating Compose from typed ComposeLens valu
 
 ## Processing that needs caller input
 
-- Pass an `interpolation::Environment` implementation to interpolate. `MapEnvironment` is useful when the application has already authorized values.
+- Pass an `interpolation::EnvironmentProvider` implementation to interpolate. `MapEnvironment` is useful when the application has already authorized values.
 - Supply ordered `loader::DocumentInput` values and origins for multi-file loading.
 - Implement the include loader and path-resolution traits if includes or referenced files may be accessed.
 - Pass a `profiles::ProfileRequest` when profile selection is wanted.

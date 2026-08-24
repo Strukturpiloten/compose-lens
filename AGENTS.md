@@ -2,65 +2,69 @@
 
 This file applies to the entire ComposeLens repository.
 
-## Read before changing code
+## Read before changing the repository
 
-Read these documents in order:
+Always read:
 
 1. `README.md`
-2. `docs/implementation-plan.md`
-3. `docs/architecture.md`
-4. `docs/project-structure.md`
-5. `docs/processing-model.md`
-6. `docs/testing.md`
-7. `docs/dependency-policy.md`
-8. `docs/api-stability.md`
-9. `docs/decisions/README.md` and all accepted ADRs
+2. `docs/architecture.md`
+3. `docs/decisions/README.md`
 
-Architectural changes require documentation and an ADR update in the same change.
+Then read only the material relevant to the change:
+
+| Work                                                | Read                                                             |
+| --------------------------------------------------- | ---------------------------------------------------------------- |
+| Loading, interpolation, merge, profiles, resolution | `docs/processing-model.md` and linked ADRs                       |
+| Canonical output, generated documents, source edits | `docs/rendering.md` and linked ADRs                              |
+| Native coverage or public API                       | `docs/coverage.md`, `docs/api-stability.md`                      |
+| Tests, fixtures, provider evidence                  | `docs/testing.md`, `fixtures/README.md`, `conformance/README.md` |
+| Dependencies or releases                            | `docs/dependency-policy.md`, `docs/releasing.md`                 |
+| Development environment                             | `docs/development-environment.md`                                |
+
+Read an accepted ADR when a change touches its decision. Architectural changes require an ADR or an
+explicit amendment or superseding decision in the same change. Do not reread every historical ADR
+for an unrelated documentation or maintenance edit.
 
 ## Scope
 
-ComposeLens owns native Compose syntax, native Compose models, project loading, merging, profile selection, interpolation, validation profiles, rendering, source locations, and diagnostics.
-
-ComposeLens does not own cross-format conversion, runtime inspection, Quadlet, Kubernetes deployment policy, or BoxFerry's application model. It must not depend on BoxFerry.
+ComposeLens owns native Compose syntax, models, project loading, merging, profile selection,
+interpolation, validation profiles, rendering, source locations, and diagnostics. It does not own
+cross-format conversion, runtime inspection, Quadlet, Kubernetes deployment policy, or BoxFerry's
+neutral application model. ComposeLens must not depend on BoxFerry.
 
 ## Origin policy
 
-ComposeLens is implemented from scratch. Do not copy or mechanically translate source code from `compose_spec_rs`, Docker Compose, Podman Compose, Podlet, or another parser. Specifications, public documentation, and observable behavior may inform independent implementation. Differential fixtures must record the implementation, version, command, environment inputs, and expected result.
+ComposeLens is implemented from scratch. Do not copy or mechanically translate source from
+`compose_spec_rs`, Docker Compose, Podman Compose, Podlet, or another parser. Specifications,
+public documentation, and versioned observable behavior may inform an independent implementation.
 
-Third-party parsing dependencies require deliberate review. Record choices that constrain the document model or round-trip behavior in an ADR.
+Differential evidence must record the implementation, version, command, inputs, environment, and
+expected result. Third-party parsing dependencies require deliberate review and an ADR when they
+constrain round-trip behavior or the public model.
 
 ## Non-negotiable behavior
 
-- Parsing never reads process environment variables unless a caller explicitly requests interpolation through an environment provider.
+- Parsing never reads process environment variables unless a caller explicitly supplies a provider.
 - Unknown fields and `x-*` extensions are not silently discarded.
-- Preserve original scalar text when it carries meaning that a normalized value would lose.
-- Image references accepted by supported real implementations must not be rejected solely by unrelated OCI normalization rules.
-- Duplicate, merged, and overridden values retain enough provenance for diagnostics.
-- Invalid user input returns structured errors and never panics.
-- Rendering is deterministic for the same document and options.
-- Secrets and interpolated values are redacted in diagnostics by default.
-
-## Development rules
-
-- Keep syntax representation, typed model, project processing, and validation as distinct modules.
-- Do not make the typed model depend on BoxFerry types.
-- Make processing stages explicit; avoid a single convenience function that hides file access, merging, interpolation, validation, and normalization.
-- Add conformance and regression fixtures with every parsing or resolution behavior change.
-- Store source, license, implementation version, and environment metadata for external fixtures.
-- Update documentation and compatibility claims with behavior changes.
-- Start every repository-owned complete YAML document with `---`; marker-free YAML belongs only in
+- Preserve scalar spelling and field-specific short or long forms when normalization could lose
+  meaning.
+- Preserve enough source and provenance for actionable diagnostics and safe conversion decisions.
+- Keep provider/runtime compatibility claims versioned and evidence-backed.
+- Treat user input as fallible; malformed input must not panic the process.
+- Do not invoke providers, runtimes, networks, or generated commands from the library.
+- Redact sensitive values from diagnostics, snapshots, logs, and `Debug` output by default.
+- Start repository-owned complete YAML documents with `---`; marker-free YAML is allowed only as
   explicit parser test data.
-- Keep release notes and changelog entries concise: summarize user-visible feature families and
-  link to canonical technical documentation instead of repeating model, fixture, and test details.
-  Follow `docs/releasing.md`.
-- Pin every GitHub Action to its full commit SHA and append its exact release tag as a comment. Verify new pins upstream; Renovate must preserve and update both values.
+- Pin every GitHub Action to a full commit SHA and append its exact release tag comment.
+- Keep release notes concise and link to canonical technical documentation instead of duplicating
+  field and test inventories.
 
 ## Canonical development commands
 
-The crate uses Rust 2024, supports Rust 1.85.0 and newer, and pins the normal development toolchain in `rust-toolchain.toml`.
+The crate uses Rust 2024, supports Rust 1.85.0 and newer, and pins the normal development toolchain
+in `rust-toolchain.toml`.
 
-```shell
+```console
 ./scripts/check-all.sh
 ./scripts/check-files.sh --check
 cargo fmt --all -- --check
@@ -80,58 +84,40 @@ cargo test --locked --test public_api
 cargo package --locked
 ```
 
-The `ci-*` aliases in `.cargo/config.toml` use locked resolution and all workspace features and targets where applicable. Conformance, property, and fuzz commands must be added here when their harnesses are introduced.
-
-The ordinary conformance tests validate repository policy and never invoke a provider or runtime.
-The explicitly ignored evidence-capture command and its required isolation inputs are documented in
-`conformance/README.md`.
+The `ci-*` aliases use locked resolution and all workspace features and targets where applicable.
+Do not weaken checks or lints to accommodate a change. Provider capture remains explicit and ignored
+by ordinary tests; its isolation and inputs are documented in `conformance/README.md`.
 
 ## GitHub issue-to-PR workflow
 
-When the user authorizes creating an issue, branch, commit, push, and pull request, follow this
-sequence:
+When the user authorizes the full Git workflow:
 
-1. Inspect `git status` and the complete diff. Identify the exact pull-request scope and preserve
-   unrelated changes.
-2. Search for an existing issue, then create a focused GitHub issue when no duplicate exists.
-3. Fetch `origin/main`, verify local `main` is synchronized, and create
-   `TheRealBecks/issue<NUMBER>` from it.
+1. Inspect `git status` and the complete diff; preserve unrelated work.
+2. Search for a duplicate issue, then create one focused issue if needed.
+3. Fetch `origin/main`, synchronize local `main`, and branch as
+   `TheRealBecks/issue<NUMBER>`.
 4. Complete and review the change without staging unrelated files.
-5. Run `./scripts/check-all.sh` from the repository root. Do not commit, push, or create the pull
-   request unless every step passes. Any source, test, configuration, or documentation change made
-   after the successful run invalidates it and requires the complete task to run again.
-6. Stage only explicit in-scope paths, run `git diff --cached --check`, review the staged diff, and
-   create one intentional commit.
-7. Push the issue branch and open a ready-for-review pull request containing `Closes #<NUMBER>`.
-   Use a `feat`, `fix`, `perf`, `refactor`, or `revert` Conventional Commit title only for
-   release-worthy code; classify documentation, tests, CI, build tooling, formatting, and other
-   maintenance as `docs`, `test`, `ci`, `build`, `style`, or `chore` so release-plz ignores it.
-8. Read the pull request back from GitHub and report its issue, branch, commit, validation result,
-   URL, and current check state.
+5. Run `./scripts/check-all.sh`. Every step must pass. Any source, test, configuration, or
+   documentation edit after a successful run invalidates the gate and requires another full run.
+6. Stage only explicit in-scope paths, run `git diff --cached --check`, and review the staged diff.
+7. Create one intentional commit, push, and open a ready pull request containing
+   `Closes #<NUMBER>`.
+8. Read the pull request back and report the issue, branch, commit, validation, URL, and checks.
 
-The issue may be created before local validation so failed work remains traceable, but a failed or
-incomplete `./scripts/check-all.sh` run is a hard gate against commit, push, and pull-request
+Use `feat`, `fix`, `perf`, `refactor`, or `revert` only for release-worthy code changes. Use
+`docs`, `test`, `ci`, `build`, `style`, or `chore` for documentation and maintenance so
+release-plz ignores them. A failed or incomplete full gate blocks commits, pushes, and pull-request
 creation.
 
-The primary Sol agent runs this workflow with high reasoning effort. Sol owns the issue and branch,
-final integration and diff review, complete local gate, explicit staging, commit, push, pull-request
-creation, and GitHub readback. Terra subagents may perform bounded research, implementation,
-read-only review, or non-mutating verification assigned by Sol, but never execute the Git or GitHub
-write steps. Because `./scripts/check-all.sh` formats repository files, its mandatory final run
-remains Sol's responsibility and is not replaced by read-only Terra verification.
+The primary Sol agent owns Git and GitHub writes, final integration, full validation, staging, and
+readback. Subagents never commit, push, publish, tag, release, or create pull requests.
 
 ## Multi-agent coordination
 
-- Delegate only concrete, bounded tasks with an independently verifiable result.
-- Never run two source-writing agents in this repository checkout concurrently.
-- Agents may write concurrently in separate repository checkouts only after the public contract is
-  defined by the primary agent.
-- Specification research and review agents remain read-only.
-- Run a verifier only after this repository's writing agent has finished.
-- Verification agents report failures but do not modify source, tests, configuration, or
-  documentation.
-- The primary agent reviews every diff and owns architectural and cross-repository API decisions.
-- Subagents never commit, push, publish crates, create tags, or create releases.
-- Prefer subagents for specification research, focused implementation, review, test execution, and
-  log analysis when those tasks would otherwise pollute the primary thread or can proceed
-  independently.
+- Delegate only concrete, bounded work with an independently verifiable result.
+- Never run two source-writing agents in the same checkout concurrently.
+- Agents may write concurrently only in separate checkouts with an agreed public contract.
+- Research and review agents stay read-only.
+- Run a repository verifier only after writing is complete; verifiers report failures but do not
+  modify files.
+- The primary agent owns architectural and cross-repository API decisions.
