@@ -6,6 +6,13 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Changed
+
+- Replace repeated field, API, test, and milestone ledgers with bounded task-oriented guides that
+  link to canonical schema and test evidence, and consolidate rendering, fixture, and conformance
+  maintenance guidance
+  ([#72](https://github.com/Strukturpiloten/compose-lens/pull/72)).
+
 ## [0.3.0](https://github.com/Strukturpiloten/compose-lens/compare/v0.2.0...v0.3.0) - 2026-08-19
 
 ### Added
