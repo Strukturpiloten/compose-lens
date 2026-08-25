@@ -46,6 +46,11 @@ with a maintenance title will not be published automatically; choose its title d
 publication. Keep entries concise and link to canonical topic documentation rather than copying
 models, fixtures, or test inventories.
 
+Record user-visible changes in the single `Unreleased` section. Ordinary product pull requests
+must not create a future numbered section, set its date, or bump the crate version. release-plz
+owns those three operations so generated commit notes and reviewed notes become one release
+section instead of duplicate `Added`, `Changed`, or `Fixed` headings.
+
 release-plz owns generated layout, and `.prettierignore` excludes only the changelog from Prettier.
 Markdownlint and release-structure validation still apply.
 

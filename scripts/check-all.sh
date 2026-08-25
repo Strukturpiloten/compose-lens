@@ -10,7 +10,7 @@ cd -- "${repository_root}"
 
 current_step="preflight"
 step=0
-readonly total_steps=24
+readonly total_steps=26
 
 fail() {
   printf 'ComposeLens local validation failed: %s\n' "$1" >&2
@@ -139,6 +139,8 @@ run_step "Run licensed real-world fixture tests" cargo test --locked --test real
 run_step "Check the public API contract" cargo test --locked --test public_api
 run_step "Check generated rendering" cargo test --locked --test generated_rendering
 run_step "Verify the release package" cargo package --locked --allow-dirty
+run_step "Test release metadata policy" bash scripts/test-release-metadata.sh
+run_step "Check release metadata and changelog" bash scripts/check-release-metadata.sh
 run_step "Clean coverage artifacts" env CARGO_TARGET_DIR="${coverage_target_dir}" \
   cargo llvm-cov clean --locked
 run_step "Enforce coverage ratchets" env CARGO_TARGET_DIR="${coverage_target_dir}" \
