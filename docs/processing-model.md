@@ -94,6 +94,11 @@ Resolution also stays explicit:
 - default resolution asks a `DefaultProvider` and records each decision; and
 - none of these operations opens a path or queries image or runtime metadata.
 
+Environment and secret payload resolution is another explicit operation. It requires caller-owned
+providers, preserves empty versus unset state and source evidence, and never grants parsing, merging,
+or rendering ambient filesystem or process-environment access. See
+[Environment and secret values](environment-and-secrets.md).
+
 ## Compatibility
 
 Syntax acceptance and runtime support are separate claims. `validate_compatibility` uses an explicit

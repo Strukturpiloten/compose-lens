@@ -6,8 +6,16 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Added
+
+- Add caller-authorized environment-file and secret-value resolution with source-aware empty/unset
+  states and redacted protected payloads ([#70](https://github.com/Strukturpiloten/compose-lens/issues/70)).
+
 ### Changed
 
+- Sort generated service environment entries by key while retaining duplicate relative order;
+  authored and canonical ordering remains unchanged
+  ([#70](https://github.com/Strukturpiloten/compose-lens/issues/70)).
 - Replace repeated field, API, test, and milestone ledgers with bounded task-oriented guides that
   link to canonical schema and test evidence, and consolidate rendering, fixture, and conformance
   maintenance guidance

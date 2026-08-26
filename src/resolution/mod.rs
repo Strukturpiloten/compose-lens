@@ -1,12 +1,21 @@
 //! Explicit project paths, references, and default decisions.
 
 mod defaults;
+mod environment;
 mod paths;
 mod references;
 
 pub use defaults::{
     AppliedDefault, ComposeDefaults, ContainerPlatform, DefaultKind, DefaultLocation, DefaultProvider, DefaultRequest,
     DefaultResolution, DefaultValue, NoDefaults, resolve_defaults,
+};
+pub use environment::{
+    ENVIRONMENT_FILE_DENIED, ENVIRONMENT_FILE_INVALID_ENTRY, ENVIRONMENT_FILE_UNAVAILABLE, EnvironmentFileContent,
+    EnvironmentFileLoadError, EnvironmentFileMode, EnvironmentFileProvider, EnvironmentFileRequest,
+    ResolvedEnvironmentEntry, ResolvedEnvironmentOrigin, ResolvedEnvironmentValue, ResolvedSecret,
+    SECRET_SOURCE_UNRESOLVED, SECRET_VALUE_DENIED, SECRET_VALUE_UNAVAILABLE, SecretProvider, SecretRequest,
+    SecretResolution, SecretResolveError, SecretSource, SecretValue, ServiceEnvironmentResolution,
+    resolve_project_secrets, resolve_service_environment,
 };
 pub use paths::{
     HOME_DIRECTORY_REQUIRED, HostPathKind, INCLUDE_RESOURCE_PATH_BASE_UNAVAILABLE, INCLUDE_RESOURCE_PATH_PLAN_MISMATCH,

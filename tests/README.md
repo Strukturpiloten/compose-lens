@@ -17,6 +17,7 @@ helpers live in `support/` and never become public library API.
 | `runtime_conformance`       | Planned runtime contexts and fail-closed isolation policy                          |
 | `real_world`                | Licensed project regressions                                                       |
 | `public_api`                | External-consumer contract for the current 0.3.x release line                      |
+| `environment_resolution`    | Caller-authorized environment/secret values, precedence, states, redaction         |
 
 Introduce a suite only with implemented behavior, fixtures when needed, and meaningful assertions.
 Do not add an empty test binary to reserve a name. The test strategy is in
