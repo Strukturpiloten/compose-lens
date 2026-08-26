@@ -4,6 +4,7 @@ use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::source::{SourceId, SourceSpan};
 use crate::syntax::SyntaxDocument;
 use std::collections::BTreeMap;
+use std::fmt;
 
 /// An unset direct substitution was replaced according to the configured policy.
 pub const UNSET_VARIABLE: DiagnosticCode = DiagnosticCode::new("compose.interpolation.unset-variable");
@@ -18,10 +19,20 @@ pub const INVALID_EXPRESSION: DiagnosticCode = DiagnosticCode::new("compose.inte
 pub const NESTING_LIMIT: DiagnosticCode = DiagnosticCode::new("compose.interpolation.nesting-limit");
 
 /// One value supplied by an explicit interpolation environment.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct EnvironmentValue {
     value: String,
     sensitive: bool,
+}
+
+impl fmt::Debug for EnvironmentValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("EnvironmentValue")
+            .field("value", &if self.sensitive { "<redacted>" } else { &self.value })
+            .field("sensitive", &self.sensitive)
+            .finish()
+    }
 }
 
 impl EnvironmentValue {
@@ -176,11 +187,22 @@ impl Default for InterpolationOptions {
 }
 
 /// A source-aware scalar supplied to the interpolation kernel.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct InterpolationInput<'a> {
     value: &'a str,
     span: SourceSpan,
     sensitive: bool,
+}
+
+impl fmt::Debug for InterpolationInput<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("InterpolationInput")
+            .field("value", &if self.sensitive { "<redacted>" } else { self.value })
+            .field("span", &self.span)
+            .field("sensitive", &self.sensitive)
+            .finish()
+    }
 }
 
 impl<'a> InterpolationInput<'a> {
@@ -299,7 +321,7 @@ impl Substitution {
 }
 
 /// A recoverable, non-destructive interpolation result.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct InterpolationResult {
     original: String,
     resolved: String,
@@ -307,6 +329,25 @@ pub struct InterpolationResult {
     sensitive: bool,
     substitutions: Vec<Substitution>,
     diagnostics: Vec<Diagnostic>,
+}
+
+impl fmt::Debug for InterpolationResult {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = formatter.debug_struct("InterpolationResult");
+        if self.sensitive {
+            debug.field("original", &"<redacted>").field("resolved", &"<redacted>");
+        } else {
+            debug
+                .field("original", &self.original)
+                .field("resolved", &self.resolved);
+        }
+        debug
+            .field("span", &self.span)
+            .field("sensitive", &self.sensitive)
+            .field("substitutions", &self.substitutions)
+            .field("diagnostics", &self.diagnostics)
+            .finish()
+    }
 }
 
 /// A non-destructive interpolation overlay for one syntax document.

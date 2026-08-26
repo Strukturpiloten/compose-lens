@@ -3714,7 +3714,9 @@ fn render_environment(output: &mut String, environment: &[GeneratedEnvironment])
         return;
     }
     output.push_str("    environment:\n");
-    for variable in environment {
+    let mut variables: Vec<_> = environment.iter().collect();
+    variables.sort_by(|left, right| left.name.cmp(&right.name));
+    for variable in variables {
         output.push_str("      - ");
         let value = variable.value.as_ref().map_or_else(
             || variable.name.clone(),

@@ -7,6 +7,7 @@ Start with the [public ComposeLens guide](public/index.md) when using the librar
 
 - [Architecture](architecture.md) — ownership, layers, dependencies, and side-effect boundaries
 - [Processing model](processing-model.md) — explicit stages from source text to project views
+- [Environment and secrets](environment-and-secrets.md) — deferred values, explicit providers, redaction
 - [Rendering](rendering.md) — canonical output, generated documents, and preservation edits
 - [API stability](api-stability.md) — the supported pre-1.0 release contract
 - [Native coverage](coverage.md) — what “typed”, “generated”, and “compatible” mean

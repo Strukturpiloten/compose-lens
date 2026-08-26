@@ -56,6 +56,10 @@ The current generated surface is documented by Rustdoc and executable tests in
 `tests/generated_rendering.rs`. [ADR 0017](decisions/0017-parse-back-validated-compose-generation.md)
 defines the construction boundary.
 
+Generated service environment entries render in lexical key order. Sorting is stable for equal
+keys, so duplicate list-form entries keep their relative last-value behavior. This generated-output
+rule does not change canonical rendering, which retains effective authored order.
+
 ## Preservation edits
 
 `render::apply_preservation_edits` atomically replaces existing YAML value scalars at exact

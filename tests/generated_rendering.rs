@@ -97,6 +97,27 @@ fn generated_documents_start_with_a_marker_and_quote_only_ambiguous_strings() ->
 }
 
 #[test]
+fn generated_environment_is_sorted_by_key_without_reordering_duplicate_values() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut service = GeneratedService::new("app")?;
+    service.add_environment(GeneratedEnvironment::literal("Z_LAST", plain("first")?)?);
+    service.add_environment(GeneratedEnvironment::literal("A_FIRST", plain("value")?)?);
+    service.add_environment(GeneratedEnvironment::literal("Z_LAST", plain("last")?)?);
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(99_003))?;
+
+    assert!(generated.text().contains(concat!(
+        "    environment:\n",
+        "      - A_FIRST=value\n",
+        "      - Z_LAST=first\n",
+        "      - Z_LAST=last\n",
+    )));
+    Ok(())
+}
+
+#[test]
 fn generates_network_definition_boolean_omission_combinations_with_drivers_and_parse_back()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut configured = GeneratedNetworkDefinition::application("configured")?;
@@ -2654,8 +2675,8 @@ fn expected_document() -> &'static str {
         "      - \"--foreground\"\n",
         "    init: true\n",
         "    environment:\n",
-        "      - \"MODE=production-secret\"\n",
         "      - \"FROM_HOST\"\n",
+        "      - \"MODE=production-secret\"\n",
         "      - \"MODE=last-wins\"\n",
         "    labels:\n",
         "      \"com.example.purpose\": \"runtime=migration\"\n",

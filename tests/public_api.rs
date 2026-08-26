@@ -4078,6 +4078,59 @@ fn plans_synthetic_project_directories_through_the_public_resolver_contract() ->
 }
 
 #[test]
+fn exposes_caller_authorized_environment_and_secret_resolution_contracts() -> Result<(), Box<dyn std::error::Error>> {
+    struct Files;
+    impl compose_lens::resolution::EnvironmentFileProvider for Files {
+        fn load(
+            &self,
+            request: &compose_lens::resolution::EnvironmentFileRequest<'_>,
+        ) -> Result<
+            Option<compose_lens::resolution::EnvironmentFileContent>,
+            compose_lens::resolution::EnvironmentFileLoadError,
+        > {
+            assert_eq!(request.path(), "app.env");
+            Ok(Some(compose_lens::resolution::EnvironmentFileContent::plain(
+                "FROM_FILE=value\n",
+            )))
+        }
+    }
+    struct Secrets;
+    impl compose_lens::resolution::SecretProvider for Secrets {
+        fn resolve(
+            &self,
+            request: &compose_lens::resolution::SecretRequest,
+        ) -> Result<Option<compose_lens::resolution::SecretValue>, compose_lens::resolution::SecretResolveError>
+        {
+            assert!(matches!(
+                request.source(),
+                compose_lens::resolution::SecretSource::File(_)
+            ));
+            Ok(Some(compose_lens::resolution::SecretValue::new("protected")))
+        }
+    }
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(15_019),
+        DocumentOrigin::new("compose.yaml", "synthetic"),
+        "---\nservices:\n  app:\n    env_file: [app.env]\nsecrets:\n  token:\n    file: token.txt\n",
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("project view expected")?;
+    let service = view.service("app").ok_or("service expected")?;
+    let environment = compose_lens::resolution::resolve_service_environment(
+        service,
+        &compose_lens::interpolation::EmptyEnvironment,
+        &Files,
+    );
+    assert_eq!(environment.entries()[0].name(), "FROM_FILE");
+    let secrets = compose_lens::resolution::resolve_project_secrets(view, &Secrets);
+    assert_eq!(secrets.secrets()[0].request().name(), "token");
+    assert!(!format!("{secrets:?}").contains("protected"));
+    Ok(())
+}
+
+#[test]
 fn exposes_generated_top_level_file_definition_contracts() -> Result<(), Box<dyn std::error::Error>> {
     let config = GeneratedConfigFileDefinition::new("configuration", GeneratedString::plain("app.yaml")?)?;
     let secret = GeneratedSecretFileDefinition::new("credential", GeneratedString::sensitive("secret.txt")?)?;
