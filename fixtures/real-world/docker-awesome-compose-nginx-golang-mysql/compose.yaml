@@ -12,7 +12,7 @@ services:
 
   db:
     # We use a mariadb image which supports both amd64 & arm64 architecture
-    image: mariadb:10-focal
+    image: mariadb:10-focal@sha256:07e06f2e7ae9dfc63707a83130a62e00167c827f08fcac7a9aa33f4b6dc34e0e
     # If you really want to use MySQL, uncomment the following line
     #image: mysql:8
     command: '--default-authentication-plugin=mysql_native_password'
@@ -33,7 +33,7 @@ services:
       - 3306
 
   proxy:
-    image: nginx
+    image: nginx@sha256:b34848eff6db786b6b1282d3a9c3fd0b5563dfb6d261df4923378b419e0d24f0
     volumes:
       - type: bind
         source: ./proxy/nginx.conf
