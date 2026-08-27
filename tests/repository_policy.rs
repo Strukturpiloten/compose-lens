@@ -73,16 +73,25 @@ fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
 
 #[test]
 fn coverage_ratchet_runs_in_ci_and_release() -> Result<(), String> {
-    const INSTALL: &str = "cargo install --locked --version 0.8.7 cargo-llvm-cov";
     const CLEAN: &str = "cargo llvm-cov clean --locked";
     const COMMAND: &str = "cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only\n          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89";
+
+    let dockerfile = read_repository_file(".devcontainer/Dockerfile")?;
+    let expected_version = pinned_cargo_llvm_cov_version(&dockerfile, ".devcontainer/Dockerfile")?;
 
     for workflow_name in ["ci.yml", "release.yml"] {
         let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
         let workflow = fs::read_to_string(&workflow_path)
             .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
 
-        for required in ["rustup component add llvm-tools-preview", INSTALL, CLEAN, COMMAND] {
+        let workflow_version = pinned_cargo_llvm_cov_version(&workflow, workflow_name)?;
+        if workflow_version != expected_version {
+            return Err(format!(
+                "{workflow_name} pins cargo-llvm-cov {workflow_version}, but the Dev Container pins {expected_version}"
+            ));
+        }
+
+        for required in ["rustup component add llvm-tools-preview", CLEAN, COMMAND] {
             if workflow.matches(required).count() != 1 {
                 return Err(format!(
                     "{workflow_name} must contain one pinned ComposeLens coverage guard `{required}`"
@@ -92,6 +101,43 @@ fn coverage_ratchet_runs_in_ci_and_release() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn pinned_cargo_llvm_cov_version(document: &str, source: &str) -> Result<String, String> {
+    const WORKFLOW_PREFIX: &str = "run: cargo install --locked --version ";
+    const WORKFLOW_SUFFIX: &str = " cargo-llvm-cov";
+    const DEVCONTAINER_PREFIX: &str = "ARG CARGO_LLVM_COV_VERSION=";
+
+    let versions = document
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            line.strip_prefix(WORKFLOW_PREFIX)
+                .and_then(|value| value.strip_suffix(WORKFLOW_SUFFIX))
+                .or_else(|| line.strip_prefix(DEVCONTAINER_PREFIX))
+        })
+        .collect::<Vec<_>>();
+
+    if versions.len() != 1 {
+        return Err(format!(
+            "{source} must contain exactly one cargo-llvm-cov version pin, found {}",
+            versions.len()
+        ));
+    }
+
+    let version = versions[0];
+    let components = version.split('.').collect::<Vec<_>>();
+    if components.len() != 3
+        || components
+            .iter()
+            .any(|component| component.is_empty() || !component.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return Err(format!(
+            "{source} must pin cargo-llvm-cov to an exact major.minor.patch version, found `{version}`"
+        ));
+    }
+
+    Ok(version.to_owned())
 }
 
 #[test]

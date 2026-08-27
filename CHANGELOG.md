@@ -28,6 +28,7 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ### Fixed
 
+- Make the coverage-tool policy compare Renovate-managed exact pins across CI, release, and the Dev Container instead of hard-coding a version in the test ([#88](https://github.com/Strukturpiloten/compose-lens/issues/88)).
 - Ignore dependency-looking fixture data during Renovate scans, require dashboard approval for
   checksum-pinned file-tool updates, and update Tombi with reviewed Linux checksums
   ([#84](https://github.com/Strukturpiloten/compose-lens/issues/84)).
