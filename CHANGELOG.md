@@ -13,6 +13,9 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ### Changed
 
+- Promote curated `Unreleased` notes under a blank-line-safe release-plz version heading instead
+  of generating duplicate changelog groups ([#79](https://github.com/Strukturpiloten/compose-lens/issues/79)).
+
 - Sort generated service environment entries by key while retaining duplicate relative order;
   authored and canonical ordering remains unchanged
   ([#70](https://github.com/Strukturpiloten/compose-lens/issues/70)).
