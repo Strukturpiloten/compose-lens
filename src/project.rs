@@ -12538,7 +12538,7 @@ impl EmptyStringExt for String {
 
 /// Returns a canonical arbitrary-precision decimal without floating-point conversion.
 fn normalize_decimal(value: &str) -> Option<String> {
-    let (whole, fraction) = value.split_once('.').map_or((value, ""), |parts| parts);
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
     if whole.is_empty()
         || (value.contains('.') && fraction.is_empty())
         || !whole.bytes().all(|byte| byte.is_ascii_digit())
