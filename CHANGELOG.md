@@ -6,6 +6,8 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.0...v0.3.1) - 2026-08-27
+
 ### Added
 
 - Add caller-authorized environment-file and secret-value resolution with source-aware empty/unset
