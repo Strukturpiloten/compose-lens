@@ -3465,7 +3465,7 @@ fn generated_runtime_field_safe(field: &GeneratedServiceRuntimeField) -> bool {
 }
 
 fn normalize_generated_decimal(value: &str) -> Option<()> {
-    let (whole, fraction) = value.split_once('.').map_or((value, ""), |parts| parts);
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
     let valid_shape = if value.contains('.') {
         !whole.is_empty() && !fraction.is_empty()
     } else {
