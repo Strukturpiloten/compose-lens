@@ -67,7 +67,8 @@ Repository-specific instructions for coding agents are in [AGENTS.md](AGENTS.md)
 
 ## Open source
 
-ComposeLens is maintained by [Martin “Becks” Beckert](https://github.com/TheRealBecks) through
+ComposeLens is an independent, from-scratch implementation maintained by
+[Martin “Becks” Beckert](https://github.com/TheRealBecks) through
 [Strukturpiloten OHG](https://www.strukturpiloten.de/) and released under the
 [Mozilla Public License 2.0](LICENSE). Contributions and real-world Compose compatibility reports
 are welcome.
