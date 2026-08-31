@@ -3,7 +3,7 @@ name = "compose-lens"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Loss-aware parsing, processing, validation, and rendering of Compose projects"
+description = "Source-aware Rust library for parsing, processing, validating, editing, and rendering Docker Compose"
 documentation = "https://docs.rs/compose-lens"
 readme = "README.md"
 homepage.workspace = true
@@ -49,7 +49,7 @@ members = ["."]
 version = "0.3.1"
 edition = "2024"
 rust-version = "1.85.0"
-homepage = "https://www.strukturpiloten.de/"
+homepage = "https://boxferry.dev/docs/libraries/compose-lens/"
 repository = "https://github.com/Strukturpiloten/compose-lens"
 license = "MPL-2.0"
 
