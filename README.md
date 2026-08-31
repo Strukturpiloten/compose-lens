@@ -1,8 +1,13 @@
 # ComposeLens
 
-ComposeLens is a Rust library for reading, inspecting, processing, editing, and rendering Compose
-documents. It keeps authored syntax separate from processed project meaning, so callers choose when
-interpolation, merging, profile selection, path handling, or compatibility validation happens.
+ComposeLens is an open-source Rust library for parsing, inspecting, processing, editing, and
+rendering Docker Compose files. It keeps authored YAML separate from processed project meaning, so
+callers choose when interpolation, merging, profile selection, path handling, or compatibility
+validation happens.
+
+[Guides](https://boxferry.dev/docs/libraries/compose-lens/) ·
+[Rust API](https://docs.rs/compose-lens) · [crates.io](https://crates.io/crates/compose-lens) ·
+[Source code](https://github.com/Strukturpiloten/compose-lens)
 
 ## Why use it
 
@@ -60,8 +65,9 @@ question, and every stage keeps diagnostics and source evidence available.
 
 Repository-specific instructions for coding agents are in [AGENTS.md](AGENTS.md).
 
-## Stewardship and license
+## Open source
 
 ComposeLens is maintained by [Martin “Becks” Beckert](https://github.com/TheRealBecks) through
-[Strukturpiloten OHG](https://www.strukturpiloten.de/). It is licensed under
-[MPL-2.0](LICENSE).
+[Strukturpiloten OHG](https://www.strukturpiloten.de/) and released under the
+[Mozilla Public License 2.0](LICENSE). Contributions and real-world Compose compatibility reports
+are welcome.

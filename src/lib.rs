@@ -1,4 +1,4 @@
-//! Loss-aware parsing, processing, validation, and rendering of Compose projects.
+//! Source-aware parsing, processing, validation, editing, and rendering of Docker Compose projects.
 
 pub mod diagnostic;
 pub mod interpolation;
