@@ -479,6 +479,7 @@ rustc-ice-*.txt
 ##############################
 # Project specific additions
 
+.codegraph/
 *.profraw
 *.profdata
 !docs/releases/
