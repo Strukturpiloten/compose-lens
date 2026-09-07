@@ -312,7 +312,7 @@ fn issue_to_pr_workflow_requires_the_complete_local_gate() -> Result<(), String>
                 "Run `./scripts/check-all.sh`",
                 "failed or incomplete full gate blocks commits, pushes, and pull-request",
                 "ready pull request",
-                "primary Sol agent owns Git and GitHub writes",
+                "primary agent owns Git and GitHub writes",
                 "Subagents never commit, push, publish, tag, release, or create pull requests",
             ][..],
         ),
@@ -1413,4 +1413,65 @@ fn walk_markdown_files(root: &Path) -> Result<BTreeSet<PathBuf>, String> {
         }
     }
     Ok(files)
+}
+
+#[test]
+fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
+    let root = repository_root();
+    let config = fs::read_to_string(root.join(".codex/config.toml"))?;
+    for required in [
+        "model = \"gpt-6-astra\"",
+        "model_reasoning_effort = \"high\"",
+        "max_concurrent_threads_per_session = 3",
+        "default_subagent_model = \"gpt-5.6-terra\"",
+        "default_subagent_reasoning_effort = \"medium\"",
+    ] {
+        assert!(config.contains(required), "missing agent default: {required}");
+    }
+    for (role, model, effort, sandbox) in [
+        ("implementation-worker", "gpt-5.6-terra", "high", "workspace-write"),
+        ("specification-researcher", "gpt-5.6-terra", "high", "read-only"),
+        ("reviewer", "gpt-5.6-sol", "high", "read-only"),
+        ("verifier", "gpt-5.6-terra", "medium", "workspace-write"),
+    ] {
+        let text = fs::read_to_string(root.join(format!(".codex/agents/{role}.toml")))?;
+        for (key, value) in [
+            ("model", model),
+            ("model_reasoning_effort", effort),
+            ("sandbox_mode", sandbox),
+        ] {
+            assert!(
+                text.contains(&format!("{key} = \"{value}\"")),
+                "{role}: incorrect {key}"
+            );
+        }
+    }
+    let reviewer = fs::read_to_string(root.join(".codex/agents/reviewer.toml"))?;
+    assert!(reviewer.contains("original user requirements"));
+    assert!(reviewer.contains("independent expected results"));
+    let verifier = fs::read_to_string(root.join(".codex/agents/verifier.toml"))?;
+    assert!(verifier.contains("./scripts/check-all.sh --check"));
+    assert!(verifier.contains("never run the default formatting gate"));
+    let instructions = fs::read_to_string(root.join("AGENTS.md"))?;
+    assert!(!instructions.contains("Sol") && !instructions.contains("Terra") && !instructions.contains("Astra"));
+    Ok(())
+}
+
+// The full shell gate targets the Linux Dev Container, not the macOS portability lane.
+// Keep configuration assertions above platform-independent.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_gate_modes_and_failure_propagation_are_correct() -> Result<(), Box<dyn std::error::Error>> {
+    let root = repository_root();
+    let result = Command::new("bash")
+        .arg("scripts/test-check-all.sh")
+        .current_dir(root)
+        .output()?;
+    assert!(
+        result.status.success(),
+        "gate mode regression failed:\n{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    Ok(())
 }
