@@ -82,3 +82,17 @@ The default container does not mount Docker or Podman sockets, run systemd, or r
 mode. Provider and runtime observations require explicit environments and commands defined in
 [`conformance/README.md`](../conformance/README.md). Do not widen every editor session's trust boundary
 to run an optional evidence capture.
+
+## Agent-assisted verification
+
+Repository model defaults and role overrides live in [`.codex/`](../.codex/); permissions and
+workflow ownership remain defined in [`AGENTS.md`](../AGENTS.md). Reload or start a new trusted
+project session after updating configuration; an explicit session override can take precedence.
+
+Use `./scripts/check-all.sh --check` to run the complete gate without formatting repository-owned
+files. The default command (or `--fix`) still formats first. Both modes run the same validation;
+ignored caches and build artifacts may change. Verifiers report failures without fixing files,
+and the primary agent owns the final complete gate and any explicitly authorized merge.
+
+The shell-runner regression tests target the Linux Dev Container gate. Agent-configuration checks
+remain platform-independent; the macOS portability lane does not require Linux validation tools.

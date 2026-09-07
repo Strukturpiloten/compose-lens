@@ -6,6 +6,12 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Changed
+
+- Standardize repository-local agent roles and model-independent workflow ownership; add
+  non-formatting full verification and regression tests
+  ([#111](https://github.com/Strukturpiloten/compose-lens/issues/111)).
+
 ## [0.3.1](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.0...v0.3.1) - 2026-08-27
 
 ### Added
