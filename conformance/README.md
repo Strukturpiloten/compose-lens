@@ -42,6 +42,30 @@ rootful context, host features, image identity, cleanup, and resource audit.
 Ordinary tests validate matrix structure, exact fixture hashes, reviewed-record links, and fail-closed
 runtime policy. They do not execute a provider or runtime.
 
+## Real-application evidence
+
+[`application-evidence.toml`](application-evidence.toml) is a bounded index for the Nextcloud and
+Forgejo application contracts. It records the exact Docker Compose artifact used for external
+configuration observations and an explicit runtime matrix. An `observed` row must link a reviewed
+record; a `planned` row must provide a reason and must not imply a result.
+
+The provider record documents an isolated `config`-only invocation with explicit input files,
+environment file, project name, project directory, empty inherited environment, private temporary
+directories, and a deliberately absent daemon socket. It records output hashes and assertions but
+does not retain raw output or claim runtime behavior. `runtime-invoked = false` is part of that
+boundary.
+
+Runtime records are externally supplied observations from the pinned BoxFerry workflow revision.
+They identify the workflow job, provider artifact, runtime image or version, root mode, fixture
+hashes, assertions, and limitations. An observed record is admissible only with successful cleanup
+and resource audit plus an explicit privacy review. SELinux, Docker Engine, rootful, or rootless
+coverage that was not observed remains unclaimed.
+
+`cargo ci-application` validates the offline application semantics, evidence index, and retained
+records. It never repeats the external provider or runtime executions.
+[ADR 0026](../docs/decisions/0026-independent-real-application-conformance.md) defines this
+application-level boundary.
+
 ## Capture one provider observation
 
 The ignored provider runner requires an exact matrix target, probe, launcher, checksum, platform,

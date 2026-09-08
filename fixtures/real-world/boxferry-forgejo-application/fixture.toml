@@ -1,0 +1,39 @@
+schema = 1
+id = "boxferry-forgejo-application"
+suite = "real-world"
+description = "Pins the reviewed native Compose subset used by BoxFerry's Forgejo migration application."
+secrets_reviewed = true
+files = [
+  "scenario.compose.yaml",
+  "interpolation.env",
+  "provider.compose.yaml",
+  "provider-peer.compose.yaml",
+  "processing.base.yaml",
+  "processing.override.yaml",
+  "service.base.env",
+  "service.raw.env",
+  "expected.generated.yaml",
+  "UPSTREAM_LICENSE",
+]
+
+[provenance]
+source = "external"
+url = "https://github.com/Strukturpiloten/boxferry/tree/68e08b9a86bcb9ced34e8d831563e732176275a1/fixtures"
+revision = "68e08b9a86bcb9ced34e8d831563e732176275a1"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "BoxFerry files were copied byte-for-byte and renamed; processing.*.yaml and service.*.env are ComposeLens-authored MPL-2.0 test overlays."
+
+[environment]
+description = "Tests distinguish explicit interpolation input from caller-authorized service env-file content; no process environment, filesystem discovery, provider, image, or runtime is accessed."
+
+[expectations]
+summary = "Independent assertions cover Forgejo and PostgreSQL meaning, env-file precedence, empty and unset values, quoting and dollars, anchors, reset and override merge, profiles, sensitive paths, external boundaries, canonical rendering, and generated parse-back."
+
+[extensions.application]
+source-repository = "https://github.com/Strukturpiloten/boxferry"
+scenario-compose-sha256 = "20f199e9d46d163bd4f3b8b6c3022e816b7f1542b7c59329ef5628fd1eb188f6"
+interpolation-sha256 = "5de63b3ad5bafb6535ff49806a1ef737e25d3b32ee81257dcfb236db035cb4ce"
+provider-compose-sha256 = "2d7e81eeefc7060812900791db0a3a9fef08b748779f8697fef12f0cced4d5be"
+provider-peer-compose-sha256 = "14a22ea3ab8f4941b2611c2a983a349cd69f8a141cce239cc4dbaa8469bca6c8"
+evidence = "Provider output and runtime observations remain separate conformance records and are not inferred from these files."

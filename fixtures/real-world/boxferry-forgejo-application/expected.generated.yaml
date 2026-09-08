@@ -1,0 +1,30 @@
+---
+name: forgejo-generated
+services:
+  forgejo:
+    image: codeberg.org/forgejo/forgejo@sha256:214f4ae63ee78be1e445e58573c88dc7215e72091210852e0df94eaac1a25685
+    environment:
+      - FORGEJO__database__HOST=db:5432
+      - FORGEJO__database__PASSWD=compose-lens-public-generated-canary
+    ports:
+      - target: 3000
+        published: "13000"
+        host_ip: 127.0.0.1
+        protocol: tcp
+      - target: 2222
+        published: "12222"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: forgejo-data
+        target: /var/lib/gitea
+    networks:
+      backend: {}
+      edge: {}
+networks:
+  backend: {}
+  edge:
+    external: true
+volumes:
+  forgejo-data: {}

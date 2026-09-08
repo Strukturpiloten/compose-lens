@@ -14,6 +14,13 @@
 *.sln.docstates
 *.env
 !fixtures/real-world/strukturpiloten-typo3-postgresql/environment.env
+!conformance/records/application-2026-09-08/provider-config/forgejo-processing.env
+!conformance/records/application-2026-09-08/provider-config/forgejo-provider.env
+!conformance/records/application-2026-09-08/provider-config/nextcloud-provider.env
+!fixtures/real-world/boxferry-forgejo-application/interpolation.env
+!fixtures/real-world/boxferry-forgejo-application/service.base.env
+!fixtures/real-world/boxferry-forgejo-application/service.raw.env
+!fixtures/real-world/boxferry-nextcloud-application/interpolation.env
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

@@ -1,0 +1,12 @@
+---
+services:
+  forgejo:
+    environment:
+      INLINE_PRECEDENCE: final-inline
+    ports: !override
+      - "127.0.0.1:13000:3000"
+      - "127.0.0.1:12222:2222"
+
+  maintenance:
+    environment: !reset {}
+    command: !override ["/bin/sh", "-ceu", "printf '$$final'"]

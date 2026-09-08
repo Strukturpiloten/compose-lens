@@ -1,0 +1,28 @@
+---
+x-application-labels: &application-labels
+  io.compose-lens.application: forgejo
+
+services:
+  forgejo:
+    labels: *application-labels
+    env_file:
+      - ./service.base.env
+      - path: ./service.raw.env
+        required: false
+        format: raw
+    environment:
+      INLINE_PRECEDENCE: base-inline
+      INLINE_EMPTY: ""
+      FROM_CALLER:
+      LITERAL_DOLLARS: "$$not-expanded"
+    volumes:
+      - ${BF_FORGEJO_CONFIG_ROOT:?required}/app.ini:/etc/gitea/app.ini:ro
+
+  maintenance:
+    image: codeberg.org/forgejo/forgejo@sha256:214f4ae63ee78be1e445e58573c88dc7215e72091210852e0df94eaac1a25685
+    labels: *application-labels
+    profiles: [maintenance]
+    environment:
+      RESET_ME: original
+    command: ["/bin/sh", "-ceu", "printf '$$ready'"]
+    networks: [backend]

@@ -5,6 +5,7 @@ use compose_lens::syntax::{SyntaxDocument, YAML_UNCLOSED_FLOW_SEQUENCE};
 use compose_lens::{
     loader::{DocumentInput, DocumentOrigin, LoadedProject},
     merge::{MergedScalar, MergedValue, merge_project},
+    model::ComposeDocument,
 };
 
 const LOSSLESS_COMPOSE: &str = include_str!("../fixtures/syntax/lossless-compose/compose.yaml");
@@ -123,6 +124,89 @@ fn accepts_a_blank_line_before_an_indented_mapping_value() -> Result<(), Box<dyn
             .and_then(|document| document.service("app"))
             .is_some()
     );
+    Ok(())
+}
+
+#[test]
+fn preserves_unquoted_required_interpolation_as_a_typed_scalar() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "---\nservices:\n  app:\n    image: ${IMAGE:?}\n";
+    let source_id = SourceId::new(25);
+    let parsed = SyntaxDocument::parse(source_id, source)?;
+    let typed = ComposeDocument::parse(parsed.document());
+    let image = typed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::image)
+        .ok_or("image expected")?;
+    let expected = "${IMAGE:?}";
+    let start = source.find(expected).ok_or("image offset expected")?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert!(typed.is_valid(), "{:#?}", typed.diagnostics());
+    assert_eq!(image.value().raw(), expected);
+    assert_eq!(image.span().source_id(), source_id);
+    assert_eq!(image.span().range(), start..start + expected.len());
+    assert_eq!(parsed.document().text(image.span()), Some(expected));
+    assert_eq!(parsed.document().render_preserved(), source);
+    Ok(())
+}
+
+#[test]
+fn preserves_embedded_nested_interpolation_and_trailing_scalar_text() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "---\nservices:\n  app:\n    image: registry.invalid/app:${TAG:-${FALLBACK:?}}-debug\n";
+    let source_id = SourceId::new(26);
+    let parsed = SyntaxDocument::parse(source_id, source)?;
+    let typed = ComposeDocument::parse(parsed.document());
+    let image = typed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::image)
+        .ok_or("image expected")?;
+    let expected = "registry.invalid/app:${TAG:-${FALLBACK:?}}-debug";
+    let start = source.find(expected).ok_or("image offset expected")?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert!(typed.is_valid(), "{:#?}", typed.diagnostics());
+    assert_eq!(image.value().raw(), expected);
+    assert_eq!(image.span().source_id(), source_id);
+    assert_eq!(image.span().range(), start..start + expected.len());
+    assert_eq!(parsed.document().text(image.span()), Some(expected));
+    assert_eq!(parsed.document().render_preserved(), source);
+    Ok(())
+}
+
+#[test]
+fn preserves_unbalanced_interpolation_closer_without_truncating_authored_bytes()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = "---\nservices:\n  app:\n    image: registry.invalid/app:${TAG:?}}\n    command: [still, present]\n  later:\n    image: registry.invalid/later:1\n";
+    let source_id = SourceId::new(27);
+    let parsed = SyntaxDocument::parse(source_id, source)?;
+    let typed = ComposeDocument::parse(parsed.document());
+    let image = typed
+        .document()
+        .and_then(|document| document.service("app"))
+        .and_then(compose_lens::model::Service::image)
+        .ok_or("image expected")?;
+    let expected = "registry.invalid/app:${TAG:?}}";
+    let start = source.find(expected).ok_or("image offset expected")?;
+
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert!(typed.is_valid(), "{:#?}", typed.diagnostics());
+    assert_eq!(image.value().raw(), expected);
+    assert_eq!(image.span().source_id(), source_id);
+    assert_eq!(image.span().range(), start..start + expected.len());
+    assert_eq!(parsed.document().text(image.span()), Some(expected));
+    assert_eq!(
+        typed
+            .document()
+            .and_then(|document| document.service("later"))
+            .and_then(compose_lens::model::Service::image)
+            .map(|image| image.value().raw()),
+        Some("registry.invalid/later:1")
+    );
+    assert_eq!(parsed.document().source_span().range(), 0..source.len());
+    assert_eq!(parsed.document().source_text(), source);
+    assert_eq!(parsed.document().render_preserved(), source);
     Ok(())
 }
 

@@ -1,0 +1,51 @@
+name: compose-lens-audit-forgejo-processing
+services:
+  forgejo:
+    environment:
+      EMPTY_FILE: ""
+      ESCAPED_DOLLAR: $${BF_FORGEJO_DB_PASSWORD}
+      FROM_CALLER: from-explicit-env-file
+      FROM_FILE: from-base
+      INLINE_EMPTY: ""
+      INLINE_PRECEDENCE: final-inline
+      LITERAL_DOLLARS: $$not-expanded
+      QUOTED: 'quoted # value'
+      RAW_VALUE: '$${BF_FORGEJO_DB_PASSWORD} # literal'
+    labels:
+      io.compose-lens.application: forgejo
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 3000
+        published: "13000"
+        protocol: tcp
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 2222
+        published: "12222"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ${CAPTURE_ROOT}/nonexistent/binds/forgejo/app.ini
+        target: /etc/gitea/app.ini
+        read_only: true
+        bind: {}
+  maintenance:
+    profiles:
+      - maintenance
+    command:
+      - /bin/sh
+      - -ceu
+      - printf '$$final'
+    image: codeberg.org/forgejo/forgejo@sha256:214f4ae63ee78be1e445e58573c88dc7215e72091210852e0df94eaac1a25685
+    labels:
+      io.compose-lens.application: forgejo
+    networks:
+      backend: null
+networks:
+  default:
+    name: compose-lens-audit-forgejo-processing_default
+x-application-labels:
+  io.compose-lens.application: forgejo

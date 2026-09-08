@@ -1,0 +1,42 @@
+schema = 1
+kind = "runtime-effect"
+reviewed-at = "2026-09-08"
+state = "observed"
+source-repository = "https://github.com/Strukturpiloten/boxferry"
+source-head = "1f4ab7ef5d31b6940fc4b296d1e2eac2650cf180"
+source-merge = "68e08b9a86bcb9ced34e8d831563e732176275a1"
+workflow-run = "https://github.com/Strukturpiloten/boxferry/actions/runs/34277164885"
+job = "https://github.com/Strukturpiloten/boxferry/actions/runs/34277164885/job/102233131510"
+job-name = "Forgejo application / Podman 6.1 Arch rootful and rootless"
+job-started-at = "2026-09-08T20:51:32Z"
+job-completed-at = "2026-09-08T20:54:21Z"
+provider-version = "5.5.0"
+provider-sha256 = "c57ab918abd5b05ca7e7d0f275875dd1330a695074f309dc9eab1b49efafcd4b"
+cleanup = "passed"
+resource-audit = "passed"
+privacy-reviewed = true
+fixture-scenario-sha256 = "20f199e9d46d163bd4f3b8b6c3022e816b7f1542b7c59329ef5628fd1eb188f6"
+fixture-interpolation-sha256 = "5de63b3ad5bafb6535ff49806a1ef737e25d3b32ee81257dcfb236db035cb4ce"
+fixture-provider-sha256 = "2d7e81eeefc7060812900791db0a3a9fef08b748779f8697fef12f0cced4d5be"
+fixture-peer-sha256 = "14a22ea3ab8f4941b2611c2a983a349cd69f8a141cce239cc4dbaa8469bca6c8"
+assertions = [
+  "HTTP and SSH operations plus named-volume persistence after recreation passed",
+  "the application and unrelated peer remained separate projects on one external edge",
+  "exact, label, all-selection, and collision-refusal checks passed",
+  "protected canaries were absent from retained reports",
+]
+unobserved = ["SELinux enforcement", "Docker Engine behavior"]
+
+[[context]]
+id = "podman-arch-rootful"
+runtime-version = "6.1.0-1"
+runtime-image = "ghcr.io/strukturpiloten/podman-arch-rootful:v1.0.0@sha256:2b352f802035f1667f0bdb4f2f25715b97fd65f70d281b025049dc10e7d7d451"
+root-mode = "rootful"
+architecture = "amd64"
+
+[[context]]
+id = "podman-6.1-rootless"
+runtime-version = "6.1.0"
+runtime-image = "ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.0@sha256:dd00fadfff6e732728643df565a5db50f6d36dc3ec2d7f23a1fe87e905e08b5e"
+root-mode = "rootless"
+architecture = "amd64"
