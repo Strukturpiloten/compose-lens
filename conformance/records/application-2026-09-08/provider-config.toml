@@ -1,0 +1,349 @@
+schema = 2
+kind = "provider-config"
+captured-at = "2026-09-08"
+provider-id = "docker-compose-5-5-0"
+provider-version = "5.5.0"
+artifact-url = "https://github.com/docker/compose/releases/download/v5.5.0/docker-compose-linux-x86_64"
+artifact-sha256 = "c57ab918abd5b05ca7e7d0f275875dd1330a695074f309dc9eab1b49efafcd4b"
+version-command = "${CAPTURE_ROOT}/docker-compose-linux-x86_64 version --short"
+version-output = "5.5.0"
+runtime-invoked = false
+network-access-after-download = false
+isolated-environment = true
+privacy-reviewed = true
+normalized-output-retained = true
+normalization-token = "${CAPTURE_ROOT}"
+normalization-rule = "Replace every exact UTF-8 byte sequence naming the absolute capture root with the literal ${CAPTURE_ROOT}; do not change any other byte, whitespace, quoting, or newline; hash the resulting bytes with SHA-256."
+project-directory-policy = "Every invocation passes an absolute --project-directory beneath the isolated capture root. Every Compose and environment input path is absolute. The process working directory is therefore not an input."
+credential-review = "Retained values are public test-only canaries already present in reviewed fixtures or explicit evidence env files. No actual credential, token, private hostname, user path, or identifying value is retained."
+process-environment = [
+  "PATH=/usr/bin:/bin",
+  "HOME=${CAPTURE_ROOT}/home",
+  "XDG_CONFIG_HOME=${CAPTURE_ROOT}/xdg/config",
+  "XDG_CACHE_HOME=${CAPTURE_ROOT}/xdg/cache",
+  "XDG_RUNTIME_DIR=${CAPTURE_ROOT}/xdg/runtime",
+  "DOCKER_CONFIG=${CAPTURE_ROOT}/docker",
+  "TMPDIR=${CAPTURE_ROOT}/tmp",
+  "COMPOSE_DISABLE_ENV_FILE=1",
+  "DOCKER_HOST=unix://${CAPTURE_ROOT}/nonexistent/docker.sock",
+]
+
+[[result]]
+id = "forgejo-provider-application"
+fixture-id = "boxferry-forgejo-application"
+fixture-revision = "68e08b9a86bcb9ced34e8d831563e732176275a1"
+project-name = "compose-lens-audit-forgejo-provider"
+project-directory = "${CAPTURE_ROOT}/inputs/forgejo"
+env-file = "${CAPTURE_ROOT}/inputs/forgejo/provider.env"
+env-file-raw-sha256 = "0ca800dd4db0bd6ca1998a17d297a48a7870dd8ec068d469ad5b6ce095d8a447"
+env-file-record = "conformance/records/application-2026-09-08/provider-config/forgejo-provider.env"
+env-file-sha256 = "0ca800dd4db0bd6ca1998a17d297a48a7870dd8ec068d469ad5b6ce095d8a447"
+argv = [
+  "${CAPTURE_ROOT}/docker-compose-linux-x86_64",
+  "--project-name",
+  "compose-lens-audit-forgejo-provider",
+  "--project-directory",
+  "${CAPTURE_ROOT}/inputs/forgejo",
+  "--env-file",
+  "${CAPTURE_ROOT}/inputs/forgejo/provider.env",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/forgejo/provider.compose.yaml",
+  "config",
+  "--format",
+  "yaml",
+]
+exit-code = 0
+raw-stdout-sha256 = "554d41065498a1b72fb89ce3b774eba04ffb7d7ce3fdbb2166d19b2137f56e8b"
+stdout-state = "retained"
+stdout-record = "conformance/records/application-2026-09-08/provider-config/forgejo-provider-application.stdout.txt"
+stdout-sha256 = "554d41065498a1b72fb89ce3b774eba04ffb7d7ce3fdbb2166d19b2137f56e8b"
+raw-stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+stderr-state = "empty"
+stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+assertions = [
+  "services db and forgejo only",
+  "backend internal and edge external networks",
+  "healthy database dependency",
+  "two loopback publications",
+  "digest-pinned images with pull_policy never",
+]
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-forgejo-application/provider.compose.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/provider.compose.yaml"
+sha256 = "2d7e81eeefc7060812900791db0a3a9fef08b748779f8697fef12f0cced4d5be"
+
+[[result]]
+id = "forgejo-provider-peer"
+fixture-id = "boxferry-forgejo-application"
+fixture-revision = "68e08b9a86bcb9ced34e8d831563e732176275a1"
+project-name = "compose-lens-audit-forgejo-peer"
+project-directory = "${CAPTURE_ROOT}/inputs/forgejo"
+env-file = "${CAPTURE_ROOT}/inputs/forgejo/provider.env"
+env-file-raw-sha256 = "0ca800dd4db0bd6ca1998a17d297a48a7870dd8ec068d469ad5b6ce095d8a447"
+env-file-record = "conformance/records/application-2026-09-08/provider-config/forgejo-provider.env"
+env-file-sha256 = "0ca800dd4db0bd6ca1998a17d297a48a7870dd8ec068d469ad5b6ce095d8a447"
+argv = [
+  "${CAPTURE_ROOT}/docker-compose-linux-x86_64",
+  "--project-name",
+  "compose-lens-audit-forgejo-peer",
+  "--project-directory",
+  "${CAPTURE_ROOT}/inputs/forgejo",
+  "--env-file",
+  "${CAPTURE_ROOT}/inputs/forgejo/provider.env",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/forgejo/provider-peer.compose.yaml",
+  "config",
+  "--format",
+  "yaml",
+]
+exit-code = 0
+raw-stdout-sha256 = "c1517373d29178f3e5266bb4ffae91d29fec6a1119f72ec3c0b1f1ec204c1be6"
+stdout-state = "retained"
+stdout-record = "conformance/records/application-2026-09-08/provider-config/forgejo-provider-peer.stdout.txt"
+stdout-sha256 = "c1517373d29178f3e5266bb4ffae91d29fec6a1119f72ec3c0b1f1ec204c1be6"
+raw-stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+stderr-state = "empty"
+stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+assertions = [
+  "peer service only",
+  "edge network remains external",
+  "peer remains a separate Compose project",
+]
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-forgejo-application/provider-peer.compose.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/provider-peer.compose.yaml"
+sha256 = "14a22ea3ab8f4941b2611c2a983a349cd69f8a141cce239cc4dbaa8469bca6c8"
+
+[[result]]
+id = "nextcloud-provider"
+fixture-id = "boxferry-nextcloud-application"
+fixture-revision = "18716257362932e7520d5aed68412ac7c8492e6d"
+project-name = "compose-lens-audit-nextcloud-provider"
+project-directory = "${CAPTURE_ROOT}/inputs/nextcloud"
+env-file = "${CAPTURE_ROOT}/inputs/nextcloud/provider.env"
+env-file-raw-sha256 = "f088a7ca0267825897f7c7a1b378e79c6a66deafea3094e5ae475bdac73713c7"
+env-file-record = "conformance/records/application-2026-09-08/provider-config/nextcloud-provider.env"
+env-file-sha256 = "7f39051db7ebb7cce51f3ae063efd576afccbd33cb2f1f09b07363bc1417d883"
+argv = [
+  "${CAPTURE_ROOT}/docker-compose-linux-x86_64",
+  "--project-name",
+  "compose-lens-audit-nextcloud-provider",
+  "--project-directory",
+  "${CAPTURE_ROOT}/inputs/nextcloud",
+  "--env-file",
+  "${CAPTURE_ROOT}/inputs/nextcloud/provider.env",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/nextcloud/provider.compose.yaml",
+  "config",
+  "--format",
+  "yaml",
+]
+exit-code = 0
+raw-stdout-sha256 = "4e3bc9672271125f314294987929cb1f7ea05bd40e0cd219caeaaf6e692487a2"
+stdout-state = "retained"
+stdout-record = "conformance/records/application-2026-09-08/provider-config/nextcloud-provider.stdout.txt"
+stdout-sha256 = "4fd7a603131d8cbd64a8015975117c59876146546df1aef9e674a5cd1a5ec84e"
+raw-stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+stderr-state = "empty"
+stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+assertions = [
+  "eight services",
+  "backend internal and edge external networks",
+  "three named volumes",
+  "dependency healthcheck graph resolved",
+  "three deliberately nonexistent bind sources normalized",
+]
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-nextcloud-application/provider.compose.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/nextcloud/provider.compose.yaml"
+sha256 = "ca714ddfe9b64620faf47c714db6be2907f7ec6428529c3e041bfd123bdd4761"
+
+[[result]]
+id = "nextcloud-scenario-merge"
+fixture-id = "boxferry-nextcloud-application"
+fixture-revision = "18716257362932e7520d5aed68412ac7c8492e6d"
+project-name = "compose-lens-audit-nextcloud-scenario"
+project-directory = "${CAPTURE_ROOT}/inputs/nextcloud"
+env-file = "${CAPTURE_ROOT}/inputs/nextcloud/interpolation.env"
+env-file-raw-sha256 = "b9e1182df0d7aee94a3b3758b27501649d0aa6a1ee2b52683f81baf3ddc95eac"
+env-file-record = "fixtures/real-world/boxferry-nextcloud-application/interpolation.env"
+env-file-sha256 = "b9e1182df0d7aee94a3b3758b27501649d0aa6a1ee2b52683f81baf3ddc95eac"
+argv = [
+  "${CAPTURE_ROOT}/docker-compose-linux-x86_64",
+  "--project-name",
+  "compose-lens-audit-nextcloud-scenario",
+  "--project-directory",
+  "${CAPTURE_ROOT}/inputs/nextcloud",
+  "--env-file",
+  "${CAPTURE_ROOT}/inputs/nextcloud/interpolation.env",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/nextcloud/scenario.compose.yaml",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/nextcloud/scenario.acceptance.yaml",
+  "config",
+  "--format",
+  "yaml",
+]
+exit-code = 0
+raw-stdout-sha256 = "762f8a0f46096ac627861d0f8b70f23f4c6c4e47fb5a96f06227cfaf710afe02"
+stdout-state = "retained"
+stdout-record = "conformance/records/application-2026-09-08/provider-config/nextcloud-scenario-merge.stdout.txt"
+stdout-sha256 = "762f8a0f46096ac627861d0f8b70f23f4c6c4e47fb5a96f06227cfaf710afe02"
+raw-stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+stderr-state = "empty"
+stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+assertions = [
+  "eight services after two-file merge",
+  "acceptance dependency healthcheck overrides applied",
+  "configuration did not access bind sources",
+]
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-nextcloud-application/scenario.compose.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/nextcloud/scenario.compose.yaml"
+sha256 = "9ed20c06a3b2b340833e5f660e47725593b84540f3b473009bffe7f69df6536f"
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-nextcloud-application/scenario.acceptance.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/nextcloud/scenario.acceptance.yaml"
+sha256 = "79dc3dc478b710a9545a010a7e0f1338628c2c352e446dcfaef039238ea6447d"
+
+[[result]]
+id = "forgejo-processing-all-profiles"
+fixture-id = "boxferry-forgejo-application"
+fixture-revision = "68e08b9a86bcb9ced34e8d831563e732176275a1"
+project-name = "compose-lens-audit-forgejo-processing"
+project-directory = "${CAPTURE_ROOT}/inputs/forgejo"
+env-file = "${CAPTURE_ROOT}/inputs/forgejo/processing.env"
+env-file-raw-sha256 = "0e36c24c27e00fa7eff987de958a8e0e906e5bea634dd3e13f6fdef9e5cf11b3"
+env-file-record = "conformance/records/application-2026-09-08/provider-config/forgejo-processing.env"
+env-file-sha256 = "956f790d4fdceef213e0884ab62e2b5c93c7def94048de4875dac4ddc76ff0ed"
+argv = [
+  "${CAPTURE_ROOT}/docker-compose-linux-x86_64",
+  "--project-name",
+  "compose-lens-audit-forgejo-processing",
+  "--project-directory",
+  "${CAPTURE_ROOT}/inputs/forgejo",
+  "--env-file",
+  "${CAPTURE_ROOT}/inputs/forgejo/processing.env",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/forgejo/processing.base.yaml",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/forgejo/processing.override.yaml",
+  "--profile",
+  "*",
+  "config",
+  "--no-consistency",
+  "--format",
+  "yaml",
+]
+exit-code = 0
+raw-stdout-sha256 = "21e4373a4c2a6b0fd51f8201bf24e2cfac810638cbb830c316f2f524dc71c44d"
+stdout-state = "retained"
+stdout-record = "conformance/records/application-2026-09-08/provider-config/forgejo-processing-all-profiles.stdout.txt"
+stdout-sha256 = "a8f2c04c007e289940c9be1fb00afe24dcea84983cc0c158513ad6d36aee476d"
+raw-stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+stderr-state = "empty"
+stderr-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+assertions = [
+  "env-file values precede inline environment",
+  "empty and unset states remain distinct",
+  "raw env-file value remains literal",
+  "ports use override semantics",
+  "maintenance environment reset and command override applied",
+]
+
+[[result.input]]
+path = "conformance/records/application-2026-09-08/provider-config/forgejo-processing-base.captured.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/processing.base.yaml"
+sha256 = "4340d31393f28eb3aab757ed86216300ac02aea592172867777d89619fcff186"
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-forgejo-application/processing.override.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/processing.override.yaml"
+sha256 = "fae15187ed3ea0f0ef30d02a215d9b3ef9456d5393b38ccd2129cbe25b1339cf"
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-forgejo-application/service.base.env"
+role = "referenced-env-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/service.base.env"
+sha256 = "98c8dcf95709f8e8f467d9c636bbd54cfb194c512507923f52f019133edbdcf3"
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-forgejo-application/service.raw.env"
+role = "referenced-env-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/service.raw.env"
+sha256 = "a2660a11d9d32be5f3909d4814732693eb82534dc30ecc2ce1f922feaf39137d"
+
+[[result]]
+id = "forgejo-processing-standard-consistency"
+fixture-id = "boxferry-forgejo-application"
+fixture-revision = "68e08b9a86bcb9ced34e8d831563e732176275a1"
+project-name = "compose-lens-audit-forgejo-processing"
+project-directory = "${CAPTURE_ROOT}/inputs/forgejo"
+env-file = "${CAPTURE_ROOT}/inputs/forgejo/processing.env"
+env-file-raw-sha256 = "0e36c24c27e00fa7eff987de958a8e0e906e5bea634dd3e13f6fdef9e5cf11b3"
+env-file-record = "conformance/records/application-2026-09-08/provider-config/forgejo-processing.env"
+env-file-sha256 = "956f790d4fdceef213e0884ab62e2b5c93c7def94048de4875dac4ddc76ff0ed"
+argv = [
+  "${CAPTURE_ROOT}/docker-compose-linux-x86_64",
+  "--project-name",
+  "compose-lens-audit-forgejo-processing",
+  "--project-directory",
+  "${CAPTURE_ROOT}/inputs/forgejo",
+  "--env-file",
+  "${CAPTURE_ROOT}/inputs/forgejo/processing.env",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/forgejo/processing.base.yaml",
+  "-f",
+  "${CAPTURE_ROOT}/inputs/forgejo/processing.override.yaml",
+  "config",
+  "--format",
+  "yaml",
+]
+exit-code = 1
+raw-stdout-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+stdout-state = "empty"
+stdout-sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+raw-stderr-sha256 = "e7530b36e31f16fed848473ba957023bdc3adb41bc5654270a05e10598cda68c"
+stderr-state = "retained"
+stderr-record = "conformance/records/application-2026-09-08/provider-config/forgejo-processing-standard-consistency.stderr.txt"
+stderr-sha256 = "e7530b36e31f16fed848473ba957023bdc3adb41bc5654270a05e10598cda68c"
+assertions = ["provider rejected the intentionally image-less authored processing service"]
+
+[[result.input]]
+path = "conformance/records/application-2026-09-08/provider-config/forgejo-processing-base.captured.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/processing.base.yaml"
+sha256 = "4340d31393f28eb3aab757ed86216300ac02aea592172867777d89619fcff186"
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-forgejo-application/processing.override.yaml"
+role = "compose-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/processing.override.yaml"
+sha256 = "fae15187ed3ea0f0ef30d02a215d9b3ef9456d5393b38ccd2129cbe25b1339cf"
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-forgejo-application/service.base.env"
+role = "referenced-env-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/service.base.env"
+sha256 = "98c8dcf95709f8e8f467d9c636bbd54cfb194c512507923f52f019133edbdcf3"
+
+[[result.input]]
+path = "fixtures/real-world/boxferry-forgejo-application/service.raw.env"
+role = "referenced-env-file"
+capture-path = "${CAPTURE_ROOT}/inputs/forgejo/service.raw.env"
+sha256 = "a2660a11d9d32be5f3909d4814732693eb82534dc30ecc2ce1f922feaf39137d"
+
+[limitations]
+statement = "These observations prove provider parsing, interpolation, merge, and normalized config output only. No create, up, pull, daemon socket, image, container, network, volume, port, or application operation was invoked."

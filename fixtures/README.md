@@ -92,6 +92,36 @@ and license are `CC0-1.0`; exact hashes are in the manifest.
 It protects a distinct project shape with images, builds, health dependencies, a secret grant, a
 named volume, a long read-only bind mount, reference validation, and canonical reparsing.
 
+### `boxferry-nextcloud-application`
+
+Selected native Compose definitions from BoxFerry revision
+`18716257362932e7520d5aed68412ac7c8492e6d` are copied byte-for-byte under MPL-2.0 terms. The
+manifest records exact hashes for the scenario, acceptance overlay, explicit interpolation input,
+and provider definition.
+
+Independent assertions protect the eight-service application graph, required interpolation,
+selected acceptance-overlay merge results, a dependency condition, long-form mounts, reference
+validity, and sensitive-value redaction. The fixture is processed offline; its provider definition
+is data, not authority to invoke a provider or runtime.
+
+### `boxferry-forgejo-application`
+
+Selected definitions from BoxFerry merge revision
+`68e08b9a86bcb9ced34e8d831563e732176275a1` are retained with exact hashes and MPL-2.0 provenance.
+Independent assertions over the imported scenario protect its two-service graph, required
+interpolation, fixed port publications, named-volume mounts, internal backend, external edge, valid
+references, and sensitive-value redaction. The imported provider application and peer stay
+separate projects connected by the same explicitly named external network; provider assertions
+also cover inherited anchor/alias labels, healthcheck and peer commands, mounts, and network
+semantics. ComposeLens-authored processing inputs exercise `env_file`, interpolation, inline
+precedence, empty and unset values, `!reset`, `!override`, profile selection, and provenance. A
+reviewed generated document supplies exact-byte and parse-back expectations.
+
+Application semantics belong to `cargo ci-application`. Versioned external provider and runtime
+observations belong to
+[`conformance/application-evidence.toml`](../conformance/application-evidence.toml) and do not
+replace the independent offline assertions.
+
 ## Updating an imported fixture
 
 1. Generate from a clean checkout at a full commit revision.

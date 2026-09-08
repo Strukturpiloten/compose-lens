@@ -545,6 +545,7 @@ fn mask_block_plain_commas(
     let mut first_token = true;
     let mut plain_started = false;
     let mut eligible_plain_value = false;
+    let mut interpolation_depth = 0u32;
     let mut changed = false;
 
     while index < bytes.len() {
@@ -638,6 +639,18 @@ fn mask_block_plain_commas(
         }
 
         if eligible_plain_value && plain_started && byte == b',' {
+            compatible[offset + index] = b'_';
+            changed = true;
+        }
+
+        // yaml-edit treats `}` as a plain-scalar terminator, while Compose permits
+        // unquoted `${NAME}` expressions. Mask only balanced interpolation closers
+        // in the private same-length parser input; source extraction restores the
+        // authored brace and therefore preserves exact diagnostics and rendering.
+        if eligible_plain_value && byte == b'$' && bytes.get(index + 1) == Some(&b'{') {
+            interpolation_depth = interpolation_depth.saturating_add(1);
+        } else if eligible_plain_value && plain_started && byte == b'}' && interpolation_depth > 0 {
+            interpolation_depth -= 1;
             compatible[offset + index] = b'_';
             changed = true;
         }

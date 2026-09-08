@@ -6,11 +6,23 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Added
+
+- Add independently asserted Nextcloud and Forgejo application-conformance contracts with
+  immutable fixtures and versioned provider/runtime evidence
+  ([#110](https://github.com/Strukturpiloten/compose-lens/issues/110)).
+
 ### Changed
 
 - Standardize repository-local agent roles and model-independent workflow ownership; add
   non-formatting full verification and regression tests
   ([#111](https://github.com/Strukturpiloten/compose-lens/issues/111)).
+
+### Fixed
+
+- Preserve complete unquoted Compose interpolation expressions, including nested forms, through
+  syntax parsing, typed scalar spans, and authored rendering
+  ([#110](https://github.com/Strukturpiloten/compose-lens/issues/110)).
 
 ## [0.3.1](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.0...v0.3.1) - 2026-08-27
 

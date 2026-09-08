@@ -1,0 +1,50 @@
+schema = 1
+reviewed-at = "2026-09-08"
+scope = "Selected real-application provider configuration and externally supplied runtime observations."
+
+[provider]
+id = "docker-compose-5-5-0"
+version = "5.5.0"
+release-url = "https://github.com/docker/compose/releases/tag/v5.5.0"
+artifact-url = "https://github.com/docker/compose/releases/download/v5.5.0/docker-compose-linux-x86_64"
+artifact-sha256 = "c57ab918abd5b05ca7e7d0f275875dd1330a695074f309dc9eab1b49efafcd4b"
+record = "conformance/records/application-2026-09-08/provider-config.toml"
+
+[[runtime]]
+id = "nextcloud-podman-6-1-rootless"
+application = "nextcloud"
+state = "observed"
+provider = "docker-compose-5-5-0"
+runtime-version = "6.1.0"
+root-mode = "rootless"
+record = "conformance/records/application-2026-09-08/nextcloud-runtime.toml"
+record-context = "podman-6.1-rootless"
+
+[[runtime]]
+id = "nextcloud-podman-arch-rootful"
+application = "nextcloud"
+state = "planned"
+provider = "docker-compose-5-5-0"
+runtime-version = "6.1.0-1"
+root-mode = "rootful"
+reason = "The shared application harness did not execute this context."
+
+[[runtime]]
+id = "forgejo-podman-arch-rootful"
+application = "forgejo"
+state = "observed"
+provider = "docker-compose-5-5-0"
+runtime-version = "6.1.0-1"
+root-mode = "rootful"
+record = "conformance/records/application-2026-09-08/forgejo-runtime.toml"
+record-context = "podman-arch-rootful"
+
+[[runtime]]
+id = "forgejo-podman-6-1-rootless"
+application = "forgejo"
+state = "observed"
+provider = "docker-compose-5-5-0"
+runtime-version = "6.1.0"
+root-mode = "rootless"
+record = "conformance/records/application-2026-09-08/forgejo-runtime.toml"
+record-context = "podman-6.1-rootless"

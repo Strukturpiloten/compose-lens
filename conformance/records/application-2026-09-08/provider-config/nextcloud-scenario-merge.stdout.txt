@@ -1,0 +1,215 @@
+name: compose-lens-audit-nextcloud-scenario
+services:
+  app:
+    depends_on:
+      init:
+        condition: service_started
+        required: true
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PASSWORD: boxferry-test-db-password-not-secret
+      REDIS_HOST: cache
+      REDIS_PASSWORD: boxferry-test-cache-password-not-secret
+    healthcheck:
+      test:
+        - CMD
+        - /usr/local/bin/nextcloud-health
+      timeout: 3s
+      interval: 10s
+      retries: 12
+    image: docker.io/library/nextcloud@sha256:611669115cccef3f96aa8eb47bd07c4d57452d894ebcfc1d81f5e8ce368e7d2d
+    networks:
+      backend: null
+    restart: always
+    volumes:
+      - type: volume
+        source: nextcloud-data
+        target: /var/www/html
+        volume: {}
+  cache:
+    environment:
+      BOXFERRY_REDIS_TEST_PASSWORD: boxferry-test-cache-password-not-secret
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      timeout: 3s
+      interval: 10s
+      retries: 12
+    image: docker.io/library/redis@sha256:987c376c727652f99625c7d205a1cba3cb2c53b92b0b62aade2bd48ee1593232
+    networks:
+      backend: null
+    restart: always
+    volumes:
+      - type: volume
+        source: redis-data
+        target: /data
+        volume: {}
+  cron:
+    command:
+      - /cron.sh
+    depends_on:
+      app:
+        condition: service_started
+        required: true
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PASSWORD: boxferry-test-db-password-not-secret
+      REDIS_HOST: cache
+      REDIS_PASSWORD: boxferry-test-cache-password-not-secret
+    image: docker.io/library/nextcloud@sha256:611669115cccef3f96aa8eb47bd07c4d57452d894ebcfc1d81f5e8ce368e7d2d
+    networks:
+      backend: null
+    restart: always
+    volumes:
+      - type: volume
+        source: nextcloud-data
+        target: /var/www/html
+        volume: {}
+  db:
+    environment:
+      POSTGRES_DB: nextcloud_test
+      POSTGRES_PASSWORD: boxferry-test-db-password-not-secret
+      POSTGRES_USER: nextcloud_test
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - -U
+        - nextcloud_test
+      timeout: 3s
+      interval: 10s
+      retries: 12
+    image: docker.io/library/postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    networks:
+      backend: null
+    restart: always
+    volumes:
+      - type: volume
+        source: db-data
+        target: /var/lib/postgresql/data
+        volume: {}
+  edge-proxy:
+    depends_on:
+      frontend:
+        condition: service_started
+        required: true
+      second-app:
+        condition: service_started
+        required: true
+    environment:
+      BOXFERRY_EDGE_TEST_TOKEN: boxferry-test-edge-token-not-secret
+    healthcheck:
+      test:
+        - CMD
+        - nginx
+        - -t
+      timeout: 3s
+      interval: 10s
+      retries: 12
+    image: docker.io/library/nginx@sha256:42a516af16b852e33b7682d5ef8acbd5d13fe08fecadc7ed98605ba5e3b26ab8
+    networks:
+      edge: null
+    ports:
+      - mode: ingress
+        host_ip: 127.0.0.1
+        target: 8443
+        published: "18443"
+        protocol: tcp
+    restart: always
+    volumes:
+      - type: bind
+        source: /srv/boxferry-fixture/nextcloud-application/edge-proxy.conf
+        target: /etc/nginx/conf.d/edge.conf
+        read_only: true
+        bind:
+          selinux: Z
+  frontend:
+    depends_on:
+      app:
+        condition: service_started
+        required: true
+    healthcheck:
+      test:
+        - CMD
+        - nginx
+        - -t
+      timeout: 3s
+      interval: 10s
+      retries: 12
+    image: docker.io/library/nginx@sha256:42a516af16b852e33b7682d5ef8acbd5d13fe08fecadc7ed98605ba5e3b26ab8
+    networks:
+      backend: null
+      edge: null
+    restart: always
+    volumes:
+      - type: volume
+        source: nextcloud-data
+        target: /var/www/html
+        read_only: true
+        volume: {}
+      - type: bind
+        source: /srv/boxferry-fixture/nextcloud-application/frontend.conf
+        target: /etc/nginx/conf.d/nextcloud.conf
+        read_only: true
+        bind:
+          selinux: Z
+  init:
+    command:
+      - /opt/boxferry/init-nextcloud
+      - --non-interactive
+    depends_on:
+      cache:
+        condition: service_started
+        required: true
+      db:
+        condition: service_started
+        required: true
+    environment:
+      NEXTCLOUD_ADMIN_PASSWORD: boxferry-test-admin-password-not-secret
+      NEXTCLOUD_ADMIN_USER: boxferry-test-admin
+      POSTGRES_HOST: db
+      POSTGRES_PASSWORD: boxferry-test-db-password-not-secret
+      REDIS_HOST: cache
+      REDIS_PASSWORD: boxferry-test-cache-password-not-secret
+    image: docker.io/library/nextcloud@sha256:611669115cccef3f96aa8eb47bd07c4d57452d894ebcfc1d81f5e8ce368e7d2d
+    networks:
+      backend: null
+    restart: 'no'
+    volumes:
+      - type: volume
+        source: nextcloud-data
+        target: /var/www/html
+        volume: {}
+      - type: bind
+        source: /srv/boxferry-fixture/nextcloud-application/nextcloud.config.php
+        target: /opt/boxferry/config.php
+        read_only: true
+        bind:
+          selinux: Z
+  second-app:
+    healthcheck:
+      test:
+        - CMD
+        - /bin/true
+      timeout: 3s
+      interval: 10s
+      retries: 12
+    image: docker.io/library/alpine@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+    networks:
+      edge: null
+    restart: always
+networks:
+  backend:
+    name: compose-lens-audit-nextcloud-scenario_backend
+    internal: true
+  edge:
+    name: compose-lens-audit-nextcloud-scenario_edge
+volumes:
+  db-data:
+    name: compose-lens-audit-nextcloud-scenario_db-data
+  nextcloud-data:
+    name: compose-lens-audit-nextcloud-scenario_nextcloud-data
+  redis-data:
+    name: compose-lens-audit-nextcloud-scenario_redis-data

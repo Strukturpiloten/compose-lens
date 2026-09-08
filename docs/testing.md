@@ -18,6 +18,7 @@ alarms, not substitutes for meaningful assertions.
 | Real-world corpus     | Interactions from licensed deployment examples                                     |
 | Public API            | External-consumer compilation and supported behavior                               |
 | Repository policy     | Supply chain, fixtures, documentation, schema, and workflow invariants             |
+| Application contracts | Independent real-application semantics and retained evidence                       |
 
 Executable integration-test entry points and their focused responsibilities are indexed in
 [`tests/README.md`](../tests/README.md). Do not copy every case into narrative documentation; test
@@ -62,6 +63,7 @@ cargo test --locked --test processing
 cargo test --locked --test generated_rendering
 cargo test --locked --test public_api
 cargo test --locked --test real_world
+cargo ci-application
 ./scripts/check-files.sh --check
 ```
 
@@ -78,6 +80,21 @@ committed.
 The complete contract and real-world admission policy are in
 [`fixtures/README.md`](../fixtures/README.md). Tests never read the process environment, access
 referenced paths, contact registries, or start a runtime merely because a fixture mentions them.
+
+## Real-application contracts
+
+`cargo ci-application` runs the deterministic offline contracts in
+`tests/application_conformance.rs`. Nextcloud and Forgejo inputs are pinned to immutable BoxFerry
+revisions, but their expected native Compose meaning is asserted independently through ComposeLens
+public APIs. The suite covers interactions across explicit interpolation, ordered loading, merge
+tags and provenance, environment-file precedence and value states, profile and reference
+processing, project boundaries, redaction, and generated-document parse-back.
+
+These tests do not establish runtime compatibility and do not depend on BoxFerry code. Provider
+configuration and externally supplied runtime observations are separately versioned under
+[`conformance/`](../conformance/README.md). The local complete gate, pull-request CI, and release
+workflow invoke the application suite explicitly so a skipped or empty contract cannot silently
+reduce application coverage.
 
 ## Provider and runtime evidence
 

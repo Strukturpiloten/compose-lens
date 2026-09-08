@@ -1,0 +1,34 @@
+schema = 1
+id = "boxferry-nextcloud-application"
+suite = "real-world"
+description = "Pins the reviewed native Compose subset used by BoxFerry's Nextcloud migration application."
+secrets_reviewed = true
+files = [
+  "scenario.compose.yaml",
+  "scenario.acceptance.yaml",
+  "interpolation.env",
+  "provider.compose.yaml",
+  "UPSTREAM_LICENSE",
+]
+
+[provenance]
+source = "external"
+url = "https://github.com/Strukturpiloten/boxferry/tree/18716257362932e7520d5aed68412ac7c8492e6d/fixtures"
+revision = "18716257362932e7520d5aed68412ac7c8492e6d"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "Files copied byte-for-byte; paths renamed to distinguish offline scenario and live-provider definitions."
+
+[environment]
+description = "Tests supply reviewed interpolation values and origins explicitly; no process environment, provider, image, or runtime is accessed."
+
+[expectations]
+summary = "Independent assertions cover Nextcloud and PostgreSQL meaning, anchors, required interpolation, dollar escaping, dependencies, mounts, paths, profiles, references, redaction, canonical rendering, and generated parse-back."
+
+[extensions.application]
+source-repository = "https://github.com/Strukturpiloten/boxferry"
+scenario-compose-sha256 = "9ed20c06a3b2b340833e5f660e47725593b84540f3b473009bffe7f69df6536f"
+scenario-acceptance-sha256 = "79dc3dc478b710a9545a010a7e0f1338628c2c352e446dcfaef039238ea6447d"
+interpolation-sha256 = "b9e1182df0d7aee94a3b3758b27501649d0aa6a1ee2b52683f81baf3ddc95eac"
+provider-compose-sha256 = "ca714ddfe9b64620faf47c714db6be2907f7ec6428529c3e041bfd123bdd4761"
+evidence = "Provider output and runtime observations remain separate conformance records and are not inferred from these files."

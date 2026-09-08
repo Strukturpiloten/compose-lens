@@ -18,6 +18,12 @@ helpers live in `support/` and never become public library API.
 | `real_world`                | Licensed project regressions                                                       |
 | `public_api`                | External-consumer contract for the current 0.3.x release line                      |
 | `environment_resolution`    | Caller-authorized environment/secret values, precedence, states, redaction         |
+| `application_conformance`   | Independent real-application semantics and retained evidence                       |
+
+`application_conformance` owns independent Nextcloud and Forgejo application contracts across
+loading, interpolation, merging, profiles, references, environment files, generation, retained
+provider/runtime evidence, and privacy boundaries. Run it with `cargo ci-application`; it remains
+offline and does not invoke BoxFerry, a provider, or a runtime.
 
 Introduce a suite only with implemented behavior, fixtures when needed, and meaningful assertions.
 Do not add an empty test binary to reserve a name. The test strategy is in

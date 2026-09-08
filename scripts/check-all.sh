@@ -10,7 +10,7 @@ cd -- "${repository_root}"
 
 current_step="preflight"
 step=0
-readonly total_steps=26
+readonly total_steps=27
 
 fail() {
   printf 'ComposeLens local validation failed: %s\n' "$1" >&2
@@ -152,6 +152,7 @@ run_step "Build documentation with warnings denied" env RUSTDOCFLAGS="-D warning
 run_step "Check provider conformance contracts" cargo test --locked --test conformance
 run_step "Check runtime conformance contracts" cargo test --locked --test runtime_conformance
 run_step "Run licensed real-world fixture tests" cargo test --locked --test real_world
+run_step "Check real-application conformance contracts" cargo ci-application
 run_step "Check the public API contract" cargo test --locked --test public_api
 run_step "Check generated rendering" cargo test --locked --test generated_rendering
 run_step "Verify the release package" cargo package --locked --allow-dirty

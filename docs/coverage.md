@@ -33,6 +33,20 @@ The exact public types are documented in Rustdoc. Executable behavior is covered
 `tests/typed_model.rs`, `tests/processing.rs`, `tests/generated_rendering.rs`, and
 `tests/public_api.rs`; this document does not duplicate their field lists.
 
+## Application-level coverage
+
+The bounded Nextcloud and Forgejo contracts in `tests/application_conformance.rs` demonstrate that
+multiple existing native capabilities work together for reviewed application shapes. Their
+expectations are semantic assertions over ComposeLens APIs, not snapshots accepted merely because
+a downstream consumer produced them. They do not expand the field inventory or imply support for
+every value in either upstream application.
+
+`cargo ci-application` also validates the fixture revisions, hashes, licenses, generated
+parse-back contract, and versioned external evidence. Provider configuration and runtime effects
+remain separate claims: an observed row applies only to the exact recorded implementation,
+version, root mode, inputs, and reviewed limitations. See
+[ADR 0026](decisions/0026-independent-real-application-conformance.md).
+
 ## Compatibility evidence
 
 Compose Specification acceptance, provider configuration output, and runtime effects are separate

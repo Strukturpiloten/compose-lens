@@ -94,6 +94,8 @@ jobs:
         run: cargo ci-clippy
       - name: Run tests
         run: cargo ci-test
+      - name: Check real-application conformance contracts
+        run: cargo ci-application
       - name: Run documentation tests
         run: cargo ci-doctest
       - name: Build documentation

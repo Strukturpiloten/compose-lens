@@ -1,0 +1,22 @@
+name: compose-lens-audit-forgejo-peer
+services:
+  peer:
+    command:
+      - sleep 3600
+    container_name: compose-lens-audit-peer-app
+    entrypoint:
+      - /bin/sh
+      - -ceu
+    image: docker.io/alpine/git:v2.54.0@sha256:6f3b5029566da8e90b24945933dcd806be866b64b1e706f51828bf84faccf21b
+    labels:
+      io.boxferry.application: compose-lens-audit-peer
+      io.boxferry.live-run: issue110-config-only
+    networks:
+      edge:
+        aliases:
+          - peer
+    pull_policy: never
+networks:
+  edge:
+    name: compose-lens-audit-shared-edge
+    external: true

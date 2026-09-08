@@ -2,6 +2,24 @@
 
 mod support;
 
+#[path = "support/application_policy.rs"]
+mod application_policy;
+
+#[test]
+fn imported_application_fixtures_are_exact_and_independent() -> Result<(), String> {
+    application_policy::validate_application_fixtures()
+}
+
+#[test]
+fn application_evidence_is_reviewed_bounded_and_linked() -> Result<(), String> {
+    application_policy::validate_application_evidence()
+}
+
+#[test]
+fn application_contract_is_independent_and_runs_in_every_complete_gate() -> Result<(), String> {
+    application_policy::validate_application_independence_and_gates()
+}
+
 use std::{
     collections::BTreeSet,
     fs,

@@ -36,5 +36,6 @@
 | [0023](0023-include-config-secret-path-resolution.md)           | accepted   | Include-aware lexical selected service, config, and secret path resolution                |
 | [0024](0024-safe-minimal-yaml-presentation.md)                  | accepted   | Marker-first YAML with parse-back-validated minimal string quoting                        |
 | [0025](0025-caller-authorized-environment-secret-resolution.md) | accepted   | Caller-authorized environment and secret resolution with redaction                        |
+| [0026](0026-independent-real-application-conformance.md)        | accepted   | Independent real-application semantics and versioned external evidence                    |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

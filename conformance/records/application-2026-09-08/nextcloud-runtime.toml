@@ -1,0 +1,40 @@
+schema = 1
+kind = "runtime-effect"
+reviewed-at = "2026-09-08"
+state = "observed"
+source-repository = "https://github.com/Strukturpiloten/boxferry"
+source-head = "1f4ab7ef5d31b6940fc4b296d1e2eac2650cf180"
+source-merge = "68e08b9a86bcb9ced34e8d831563e732176275a1"
+workflow-run = "https://github.com/Strukturpiloten/boxferry/actions/runs/34277164885"
+job = "https://github.com/Strukturpiloten/boxferry/actions/runs/34277164885/job/102233131457"
+job-name = "Nextcloud application / podman-6.1-rootless"
+job-started-at = "2026-09-08T20:51:32Z"
+job-completed-at = "2026-09-08T20:54:17Z"
+provider-version = "5.5.0"
+provider-sha256 = "c57ab918abd5b05ca7e7d0f275875dd1330a695074f309dc9eab1b49efafcd4b"
+runtime-version = "6.1.0"
+runtime-image = "ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.0@sha256:dd00fadfff6e732728643df565a5db50f6d36dc3ec2d7f23a1fe87e905e08b5e"
+root-mode = "rootless"
+architecture = "amd64"
+selinux = "unobserved"
+cleanup = "passed"
+resource-audit = "passed"
+privacy-reviewed = true
+fixture-scenario-sha256 = "9ed20c06a3b2b340833e5f660e47725593b84540f3b473009bffe7f69df6536f"
+fixture-acceptance-sha256 = "79dc3dc478b710a9545a010a7e0f1338628c2c352e446dcfaef039238ea6447d"
+fixture-interpolation-sha256 = "b9e1182df0d7aee94a3b3758b27501649d0aa6a1ee2b52683f81baf3ddc95eac"
+fixture-provider-sha256 = "ca714ddfe9b64620faf47c714db6be2907f7ec6428529c3e041bfd123bdd4761"
+assertions = [
+  "HTTPS bootstrap, login, upload, WebDAV retrieval, and content verification passed",
+  "the internal-only database was unreachable from the unrelated edge client",
+  "named-volume data survived application recreation",
+  "protected canaries were absent from retained reports",
+]
+unobserved = ["SELinux enforcement", "Docker Engine behavior"]
+
+[[context]]
+id = "podman-6.1-rootless"
+runtime-version = "6.1.0"
+runtime-image = "ghcr.io/strukturpiloten/podman-6.1-rootless:v6.1.0@sha256:dd00fadfff6e732728643df565a5db50f6d36dc3ec2d7f23a1fe87e905e08b5e"
+root-mode = "rootless"
+architecture = "amd64"
