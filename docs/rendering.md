@@ -60,6 +60,10 @@ Generated service environment entries render in lexical key order. Sorting is st
 keys, so duplicate list-form entries keep their relative last-value behavior. This generated-output
 rule does not change canonical rendering, which retains effective authored order.
 
+Generated service-network aliases retain insertion order. Callers with protected alias values use
+the generated-string alias boundary so the complete generated document is marked sensitive and
+`Debug` output remains redacted without changing the emitted YAML.
+
 ## Preservation edits
 
 `render::apply_preservation_edits` atomically replaces existing YAML value scalars at exact

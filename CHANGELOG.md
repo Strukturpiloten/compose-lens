@@ -20,6 +20,8 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ### Fixed
 
+- Preserve generated service-network alias sensitivity through document-level redaction without
+  changing deterministic YAML output ([#120](https://github.com/Strukturpiloten/compose-lens/issues/120)).
 - Preserve complete unquoted Compose interpolation expressions, including nested forms, through
   syntax parsing, typed scalar spans, and authored rendering
   ([#110](https://github.com/Strukturpiloten/compose-lens/issues/110)).
