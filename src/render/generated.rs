@@ -1634,10 +1634,11 @@ impl GeneratedMount {
 }
 
 /// One generated service network attachment and its ordered aliases.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct GeneratedNetworkAttachment {
     name: String,
     aliases: Vec<String>,
+    alias_sensitivities: Vec<bool>,
     ipv4_address: Option<GeneratedString>,
     ipv6_address: Option<GeneratedString>,
 }
@@ -1652,6 +1653,7 @@ impl GeneratedNetworkAttachment {
         Ok(Self {
             name: required("network name", name.into())?,
             aliases: Vec::new(),
+            alias_sensitivities: Vec::new(),
             ipv4_address: None,
             ipv6_address: None,
         })
@@ -1663,7 +1665,23 @@ impl GeneratedNetworkAttachment {
     ///
     /// Rejects an empty or NUL-bearing alias.
     pub fn add_alias(&mut self, alias: impl Into<String>) -> Result<(), GenerationError> {
-        self.aliases.push(required("network alias", alias.into())?);
+        self.add_alias_with_sensitivity(alias.into(), false)
+    }
+
+    /// Adds one ordered alias through the generated-string sensitivity boundary.
+    ///
+    /// # Errors
+    ///
+    /// Rejects an empty alias. NUL-bearing values are rejected while constructing
+    /// [`GeneratedString`].
+    pub fn add_alias_value(&mut self, alias: &GeneratedString) -> Result<(), GenerationError> {
+        let sensitive = alias.is_sensitive();
+        self.add_alias_with_sensitivity(alias.expose().to_owned(), sensitive)
+    }
+
+    fn add_alias_with_sensitivity(&mut self, alias: String, sensitive: bool) -> Result<(), GenerationError> {
+        self.aliases.push(required("network alias", alias)?);
+        self.alias_sensitivities.push(sensitive);
         Ok(())
     }
 
@@ -1701,6 +1719,12 @@ impl GeneratedNetworkAttachment {
         &self.aliases
     }
 
+    /// Returns per-alias sensitivity flags in the same order as [`Self::aliases`].
+    #[must_use]
+    pub fn alias_sensitivities(&self) -> &[bool] {
+        &self.alias_sensitivities
+    }
+
     /// Returns the optional raw per-attachment IPv4 address.
     #[must_use]
     pub const fn ipv4_address(&self) -> Option<&GeneratedString> {
@@ -1714,8 +1738,33 @@ impl GeneratedNetworkAttachment {
     }
 
     fn is_sensitive(&self) -> bool {
-        self.ipv4_address.as_ref().is_some_and(GeneratedString::is_sensitive)
+        self.alias_sensitivities.iter().copied().any(std::convert::identity)
+            || self.ipv4_address.as_ref().is_some_and(GeneratedString::is_sensitive)
             || self.ipv6_address.as_ref().is_some_and(GeneratedString::is_sensitive)
+    }
+}
+
+impl fmt::Debug for GeneratedNetworkAttachment {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let aliases = self
+            .aliases
+            .iter()
+            .enumerate()
+            .map(|(index, alias)| {
+                if self.alias_sensitivities.get(index).copied().unwrap_or(false) {
+                    "<redacted>"
+                } else {
+                    alias.as_str()
+                }
+            })
+            .collect::<Vec<_>>();
+        formatter
+            .debug_struct("GeneratedNetworkAttachment")
+            .field("name", &self.name)
+            .field("aliases", &aliases)
+            .field("ipv4_address", &self.ipv4_address)
+            .field("ipv6_address", &self.ipv6_address)
+            .finish()
     }
 }
 

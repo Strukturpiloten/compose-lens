@@ -590,6 +590,46 @@ fn generates_network_attachment_address_omission_combinations_with_aliases_and_p
 }
 
 #[test]
+fn network_attachment_aliases_preserve_sensitivity_and_redact_debug() -> Result<(), Box<dyn std::error::Error>> {
+    let protected_alias = "private-network-alias";
+    let mut attachment = GeneratedNetworkAttachment::new("frontend")?;
+    attachment.add_alias("public-api")?;
+    attachment.add_alias_value(&GeneratedString::sensitive(protected_alias)?)?;
+
+    assert_eq!(attachment.aliases(), ["public-api", protected_alias]);
+    assert_eq!(attachment.alias_sensitivities(), [false, true]);
+    let debug = format!("{attachment:?}");
+    assert!(debug.contains("public-api"));
+    assert!(!debug.contains(protected_alias));
+    assert!(debug.contains("<redacted>"));
+
+    assert_eq!(
+        attachment.add_alias_value(&GeneratedString::sensitive("")?),
+        Err(GenerationError::EmptyValue("network alias"))
+    );
+
+    let mut service = GeneratedService::new("app")?;
+    service.add_network(attachment)?;
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(81_601))?;
+
+    assert!(generated.is_sensitive());
+    assert!(generated.text().contains(protected_alias));
+    assert!(!format!("{generated:?}").contains(protected_alias));
+    let parsed = generated_network(&generated, "app")?;
+    assert_eq!(
+        parsed
+            .aliases()
+            .iter()
+            .map(|alias| alias.value().as_str())
+            .collect::<Vec<_>>(),
+        ["public-api", protected_alias]
+    );
+    Ok(())
+}
+
+#[test]
 fn network_attachment_addresses_keep_generated_string_safety_redaction_and_duplicate_rules()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut attachment = GeneratedNetworkAttachment::new("frontend")?;

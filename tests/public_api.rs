@@ -3223,8 +3223,11 @@ fn supported_generated_document_boundary_is_parse_back_validated() -> Result<(),
 fn generated_network_attachment_addresses_are_additive_public_contract() -> Result<(), Box<dyn std::error::Error>> {
     let mut attachment = GeneratedNetworkAttachment::new("frontend")?;
     attachment.add_alias("app")?;
+    attachment.add_alias_value(&GeneratedString::sensitive("private-app")?)?;
     attachment.set_ipv4_address(GeneratedString::plain("192.0.2.40")?)?;
     attachment.set_ipv6_address(GeneratedString::plain("2001:db8::40")?)?;
+    assert_eq!(attachment.aliases(), ["app", "private-app"]);
+    assert_eq!(attachment.alias_sensitivities(), [false, true]);
     assert_eq!(
         attachment.ipv4_address().map(GeneratedString::expose),
         Some("192.0.2.40")
@@ -3239,12 +3242,15 @@ fn generated_network_attachment_addresses_are_additive_public_contract() -> Resu
     let mut builder = ComposeDocumentBuilder::new();
     builder.add_service(service)?;
     let generated = builder.build(SourceId::new(818))?;
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("private-app"));
     assert!(matches!(
         generated.document().service("app").and_then(compose_lens::model::Service::networks),
         Some(compose_lens::model::ServiceNetworks::Long { networks, .. })
             if networks.first().is_some_and(|network| {
-                network.ipv4_address().is_some_and(|value| value.value() == "192.0.2.40")
-                    && network.ipv6_address().is_some_and(|value| value.value() == "2001:db8::40")
+                network.aliases().iter().map(|alias| alias.value().as_str()).eq(["app", "private-app"])
+                && network.ipv4_address().is_some_and(|value| value.value() == "192.0.2.40")
+                && network.ipv6_address().is_some_and(|value| value.value() == "2001:db8::40")
             })
     ));
     Ok(())
