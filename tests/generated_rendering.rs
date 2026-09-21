@@ -2625,7 +2625,10 @@ fn complete_project() -> Result<ComposeDocumentBuilder, Box<dyn std::error::Erro
         GeneratedString::sensitive("/usr/bin/env")?,
         plain("php")?,
     ]))?;
-    service.set_command(GeneratedCommand::Exec(vec![plain("server")?, plain("--foreground")?]))?;
+    service.set_command(GeneratedCommand::Exec(vec![
+        plain("server")?,
+        plain("--foreground=true")?,
+    ]))?;
     service.set_init(true)?;
     service.add_environment(GeneratedEnvironment::literal(
         "MODE",
@@ -2712,7 +2715,7 @@ fn expected_document() -> &'static str {
         "      - \"php\"\n",
         "    command:\n",
         "      - \"server\"\n",
-        "      - \"--foreground\"\n",
+        "      - \"--foreground=true\"\n",
         "    init: true\n",
         "    environment:\n",
         "      - \"FROM_HOST\"\n",
