@@ -349,6 +349,10 @@ fn unparsed_input_offset(parse: &Parse<YamlFile>, source: &str) -> Option<usize>
                 .map(|node| u32::from(node.text_range().end()) as usize)
         })
         .unwrap_or_default();
+    unparsed_input_offset_after_document_end(document_end, source)
+}
+
+fn unparsed_input_offset_after_document_end(document_end: usize, source: &str) -> Option<usize> {
     source
         .as_bytes()
         .get(document_end..)
@@ -1004,9 +1008,11 @@ fn collect_scalar(source_id: SourceId, source: &str, scalar: &Scalar, values: &m
 
 #[cfg(test)]
 mod tests {
-    use super::{MergeSyntaxScalar, MergeSyntaxValue, SyntaxDocument, parser_compatible_source, unparsed_input_offset};
+    use super::{
+        MergeSyntaxScalar, MergeSyntaxValue, SyntaxDocument, parser_compatible_source,
+        unparsed_input_offset_after_document_end,
+    };
     use crate::source::SourceId;
-    use yaml_edit::YamlFile;
 
     fn assert_send_and_sync<T: Send + Sync>() {}
 
@@ -1026,12 +1032,26 @@ mod tests {
     }
 
     #[test]
-    fn complete_root_guard_detects_the_private_backends_raw_comma_omission() {
-        let source = "services:\n  app:\n    volumes:\n      - ./data:/data:Z,ro\n  later:\n    image: later\n";
-        let backend = YamlFile::parse(source);
+    fn complete_root_guard_rejects_non_whitespace_after_the_backend_root() {
+        let source = "services:\n  app:\n    image: example.invalid/app\n";
+        let document_end = "services:".len();
 
-        assert!(backend.positioned_errors().is_empty());
-        assert!(unparsed_input_offset(&backend, source).is_some());
+        assert_eq!(
+            unparsed_input_offset_after_document_end(document_end, source),
+            Some(document_end)
+        );
+        assert_eq!(unparsed_input_offset_after_document_end(source.len(), source), None);
+    }
+
+    #[test]
+    fn comma_bearing_short_volumes_are_complete_and_preserved() -> Result<(), Box<dyn std::error::Error>> {
+        let source = "services:\n  app:\n    volumes:\n      - ./data:/data:Z,ro\n  later:\n    image: later\n";
+
+        let parsed = SyntaxDocument::parse(SourceId::new(2), source)?;
+
+        assert!(parsed.is_valid());
+        assert_eq!(parsed.document().render_preserved(), source);
+        Ok(())
     }
 
     #[test]
