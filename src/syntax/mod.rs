@@ -753,6 +753,9 @@ fn extract_merge_value(
     aliases: &mut Vec<String>,
 ) -> MergeSyntaxValue {
     match node {
+        YamlNode::Scalar(scalar) if scalar.byte_range().is_empty() => {
+            MergeSyntaxValue::Empty(position_span(source_id, scalar.byte_range()))
+        }
         YamlNode::Scalar(scalar) => MergeSyntaxValue::Scalar(extract_merge_scalar(source_id, source, &scalar)),
         YamlNode::Mapping(mapping) => extract_merge_mapping(source_id, source, &mapping, registry, aliases),
         YamlNode::Sequence(sequence) => {

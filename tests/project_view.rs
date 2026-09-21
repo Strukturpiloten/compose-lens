@@ -3996,6 +3996,55 @@ fn retains_network_label_interpolation_and_generic_merge_operations() -> Result<
 }
 
 #[test]
+fn distinguishes_implicit_nulls_from_empty_strings_in_project_resources() -> Result<(), Box<dyn std::error::Error>> {
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(826),
+        DocumentOrigin::new("compose.yaml", "workspace/project"),
+        concat!(
+            "---\nservices:\n  app:\n    image: example.invalid/app:1\n",
+            "networks:\n  implicit:\n  explicit: null\n  invalid: \"\"\n",
+            "volumes:\n  implicit:\n  explicit: null\n  invalid: \"\"\n",
+            "configs:\n  implicit:\n  explicit: null\n  invalid: \"\"\n",
+            "secrets:\n  implicit:\n  explicit: null\n  invalid: \"\"\n",
+        ),
+    )])?;
+    let merged = merge_project(&loaded, None);
+    let result = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    let view = result.view().ok_or("partial project view expected")?;
+
+    assert!(!result.is_valid());
+    assert_eq!(
+        result
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code() == PROJECT_EXPECTED_FORM)
+            .count(),
+        4
+    );
+    for names in [
+        view.networks()
+            .iter()
+            .map(|resource| resource.name().value())
+            .collect::<Vec<_>>(),
+        view.volumes()
+            .iter()
+            .map(|resource| resource.name().value())
+            .collect::<Vec<_>>(),
+        view.configs()
+            .iter()
+            .map(|resource| resource.name().value())
+            .collect::<Vec<_>>(),
+        view.secrets()
+            .iter()
+            .map(|resource| resource.name().value())
+            .collect::<Vec<_>>(),
+    ] {
+        assert_eq!(names, ["implicit", "explicit"]);
+    }
+    Ok(())
+}
+
+#[test]
 fn retains_volume_label_interpolation_and_generic_merge_operations() -> Result<(), Box<dyn std::error::Error>> {
     let loaded = LoadedProject::load([
         DocumentInput::new(
