@@ -272,6 +272,20 @@ fn action_reference(line: &str) -> Option<&str> {
         .map(str::trim)
 }
 
+pub(crate) fn has_exactly_one_immutable_versioned_action(document: &str, expected_action: &str) -> bool {
+    let mut matching_references = document.lines().filter_map(action_reference).filter(|reference| {
+        reference
+            .split_once('#')
+            .and_then(|(action_and_sha, _)| action_and_sha.trim().rsplit_once('@'))
+            .is_some_and(|(action, _)| action == expected_action)
+    });
+    let Some(reference) = matching_references.next() else {
+        return false;
+    };
+
+    matching_references.next().is_none() && is_immutable_versioned_action(reference)
+}
+
 fn is_immutable_versioned_action(reference: &str) -> bool {
     let Some((action_and_sha, version)) = reference.split_once('#') else {
         return false;
@@ -317,7 +331,7 @@ fn finish(errors: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_immutable_versioned_action;
+    use super::{has_exactly_one_immutable_versioned_action, is_immutable_versioned_action};
 
     #[test]
     fn accepts_a_full_sha_with_an_exact_version() {
@@ -332,5 +346,52 @@ mod tests {
     #[test]
     fn rejects_a_mutable_tag() {
         assert!(!is_immutable_versioned_action("actions/checkout@v7.0.1"));
+    }
+
+    #[test]
+    fn finds_a_named_action_with_any_well_formed_immutable_pin() {
+        let document = "uses: release-plz/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v0.5.999\n";
+
+        assert!(has_exactly_one_immutable_versioned_action(
+            document,
+            "release-plz/action"
+        ));
+        assert!(!has_exactly_one_immutable_versioned_action(
+            document,
+            "actions/create-github-app-token"
+        ));
+    }
+
+    #[test]
+    fn rejects_missing_version_comments_and_malformed_named_pins() {
+        for reference in [
+            "uses: release-plz/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "uses: release-plz/action@v0.5.999 # v0.5.999",
+            "uses: release-plz/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v0.5.999",
+        ] {
+            assert!(!has_exactly_one_immutable_versioned_action(
+                reference,
+                "release-plz/action"
+            ));
+        }
+    }
+
+    #[test]
+    fn rejects_wrong_identity_and_duplicate_named_actions() {
+        let wrong_identity =
+            "uses: example.invalid/release-plz-action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v0.5.999\n";
+        assert!(!has_exactly_one_immutable_versioned_action(
+            wrong_identity,
+            "release-plz/action"
+        ));
+
+        let duplicate = concat!(
+            "uses: release-plz/action@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v0.5.999\n",
+            "uses: release-plz/action@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # v0.5.998\n",
+        );
+        assert!(!has_exactly_one_immutable_versioned_action(
+            duplicate,
+            "release-plz/action"
+        ));
     }
 }
