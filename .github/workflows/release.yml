@@ -3,6 +3,12 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      validation_only:
+        description: Validate the exact candidate without tags, releases, attestations, or publication.
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -11,9 +17,83 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  provider-config-conformance:
+    name: Validate observed provider configuration evidence
+    if: github.repository == 'Strukturpiloten/compose-lens'
+    uses: ./.github/workflows/provider-conformance.yml
+    permissions:
+      contents: read
+    with:
+      candidate_sha: ${{ github.sha }}
+
+  deterministic-validation:
+    name: Validate release candidate
+    if: github.repository == 'Strukturpiloten/compose-lens'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  release-metadata-validation:
+    name: Validate release metadata
+    if: github.repository == 'Strukturpiloten/compose-lens'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require the default branch and valid release metadata
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/heads/${DEFAULT_BRANCH}"
+          bash scripts/check-release-metadata.sh
+
+  release-gate:
+    name: Release validation gate
+    if: always()
+    needs: [provider-config-conformance, deterministic-validation, release-metadata-validation]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every release prerequisite to succeed
+        shell: bash
+        env:
+          PROVIDER_RESULT: ${{ needs.provider-config-conformance.result }}
+          DETERMINISTIC_RESULT: ${{ needs.deterministic-validation.result }}
+          METADATA_RESULT: ${{ needs.release-metadata-validation.result }}
+        run: |
+          set -euo pipefail
+          results=(
+            "Provider configuration conformance|${PROVIDER_RESULT}"
+            "Complete deterministic CI|${DETERMINISTIC_RESULT}"
+            "Release metadata|${METADATA_RESULT}"
+          )
+          failed=0
+          for result in "${results[@]}"; do
+            name="${result%%|*}"
+            status="${result#*|}"
+            printf 'Release prerequisite %s: %s\n' "${name}" "${status}"
+            if [[ "${status}" != success ]]; then
+              echo "::error title=Release prerequisite did not succeed::${name} concluded ${status}."
+              failed=1
+            fi
+          done
+          (( failed == 0 ))
+
   release:
     name: Publish ComposeLens
-    if: github.repository == 'Strukturpiloten/compose-lens'
+    if: >-
+      github.repository == 'Strukturpiloten/compose-lens' &&
+      inputs.validation_only != true &&
+      needs.release-gate.result == 'success'
+    needs: release-gate
     environment: release
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -28,28 +108,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Install configured Rust toolchain
         run: rustup show active-toolchain
-
-      - name: Install pinned Node.js toolchain
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          # renovate: datasource=node-version depName=node
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install locked Node file-quality tools
-        run: |
-          npm ci --ignore-scripts
-          printf '%s\n' "${GITHUB_WORKSPACE}/node_modules/.bin" >> "${GITHUB_PATH}"
-      - name: Install checksum-pinned native file-quality tools
-        run: sudo bash scripts/install-file-tools.sh /usr/local/bin
-      - name: Check non-Rust file formatting and lint
-        run: bash scripts/check-files.sh --check
 
       - name: Derive and validate release metadata
         id: metadata
@@ -83,66 +147,6 @@ jobs:
             printf 'notes=%s\n' "${notes}"
             printf 'crate=%s\n' "${crate}"
           } >> "${GITHUB_OUTPUT}"
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Check all targets
-        run: cargo ci-check
-      - name: Check repository policies
-        run: cargo ci-policy
-      - name: Run Clippy
-        run: cargo ci-clippy
-      - name: Run tests
-        run: cargo ci-test
-      - name: Check real-application conformance contracts
-        run: cargo ci-application
-      - name: Run documentation tests
-        run: cargo ci-doctest
-      - name: Build documentation
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo ci-doc
-      - name: Install LLVM coverage tools
-        run: rustup component add llvm-tools-preview
-      - name: Install pinned cargo-llvm-cov
-        # renovate: datasource=crate depName=cargo-llvm-cov
-        run: cargo install --locked --version 0.9.0 cargo-llvm-cov
-      - name: Clean coverage artifacts
-        run: cargo llvm-cov clean --locked
-      - name: Measure and enforce coarse coverage ratchet
-        run: >-
-          cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only
-          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
-      - name: Read the workspace MSRV
-        id: msrv
-        shell: bash
-        run: |
-          msrv="$(
-            cargo metadata --locked --no-deps --format-version 1 |
-              jq -er '[.packages[].rust_version] | unique | if length == 1 and .[0] != null then .[0] else error("workspace packages must declare one common rust-version") end'
-          )"
-          printf 'version=%s\n' "${msrv}" >> "${GITHUB_OUTPUT}"
-      - name: Install minimum supported Rust
-        env:
-          RUST_MSRV: ${{ steps.msrv.outputs.version }}
-        run: rustup toolchain install "${RUST_MSRV}" --profile minimal
-      - name: Check all targets with the MSRV
-        env:
-          RUST_MSRV: ${{ steps.msrv.outputs.version }}
-        run: cargo "+${RUST_MSRV}" ci-check
-      - name: Check repository policies with the MSRV
-        env:
-          RUST_MSRV: ${{ steps.msrv.outputs.version }}
-        run: cargo "+${RUST_MSRV}" ci-policy
-      - name: Audit dependencies, licenses, bans, and sources
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
-        with:
-          command: check
-          arguments: --all-features
-      - name: Check public API compatibility
-        uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
-        with:
-          package: compose-lens
 
       - name: Check crates.io publication state
         id: registry

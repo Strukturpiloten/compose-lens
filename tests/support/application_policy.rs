@@ -122,7 +122,6 @@ pub(crate) fn validate_application_independence_and_gates() -> Result<(), String
     for (path, required) in [
         ("scripts/check-all.sh", "cargo ci-application"),
         (".github/workflows/ci.yml", "run: cargo ci-application"),
-        (".github/workflows/release.yml", "run: cargo ci-application"),
     ] {
         let source = read_repository_file(path)?;
         let count = source.matches(required).count();
@@ -131,6 +130,14 @@ pub(crate) fn validate_application_independence_and_gates() -> Result<(), String
                 "{path} must contain exactly one explicit application gate `{required}`, found {count}"
             ));
         }
+    }
+
+    let release = read_repository_file(".github/workflows/release.yml")?;
+    if release.matches("uses: ./.github/workflows/ci.yml").count() != 1 {
+        return Err("Release must invoke the complete reusable CI workflow exactly once".to_owned());
+    }
+    if release.contains("run: cargo ci-application") {
+        return Err("Release must not duplicate the application gate from reusable CI".to_owned());
     }
 
     Ok(())

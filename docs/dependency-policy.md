@@ -41,12 +41,25 @@ Renovate proposes supported updates. Repository policy verifies immutable action
 metadata, single version sources, and locked tooling. Every update still needs the same review and
 complete gate as a hand-authored dependency change.
 
+Provider-conformance artifact URLs, checksums, and observed-record versions are immutable evidence:
+they are not routine Renovate updates. Renovate surfaces the matrix-declared Python runtime and
+bootstrap pins for manual provenance and checksum review with automerge disabled. The reusable runner
+selects that runtime and rejects a podman-compose row unless `python3` reports the exact declared
+version. A moving provider-discovery candidate belongs in a new reviewed matrix target, never a
+rewrite of a retained boundary observation.
+
 Renovate's three-day minimum release age governs direct dependency updates. Renovate cannot prove
 the age of versions selected while regenerating a lock file, so lock-file maintenance has a
 rule-local zero-day Renovate override and may auto-merge only when the shared, fail-closed
 lockfile-release-age guard proves every newly introduced registry release is at least 72 hours old
-and the required aggregate PR gate succeeds. Its immutable revision has one Renovate owner. Dev
-Container and checksum-pinned tool updates remain manual.
+and the required aggregate PR gate succeeds.
+
+Fixed GitHub-hosted `ubuntu-*`, `macos-*`, and `windows-*` runner labels have one
+`github-runners` regex owner across every workflow. Runner upgrades stay grouped with automerge
+disabled because their preinstalled tools and operating-system changes affect release evidence.
+
+Every immutable revision has one Renovate owner. Dev Container and checksum-pinned tool updates
+remain manual.
 
 ## YAML representation
 

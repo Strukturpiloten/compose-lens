@@ -23,6 +23,15 @@ The provider matrix retains 48 reviewed records. Additional provider rows and ev
 effect row remain planned. The matrix files, not prose release lists, are the source of truth for
 exact versions and status.
 
+The reusable **Provider configuration conformance** workflow runs weekly, on manual dispatch, and
+as a Release prerequisite. It runs only the 48 reviewed `observed` provider-configuration rows
+(eight for each of six pinned providers). Every fresh version/probe status, exit code, stdout, and
+stderr must match its separately reviewed record, including expected-failure rows. Comparison
+normalizes only the reviewed repository, acquisition, Python standard-library, and site-package
+path placeholders; provider text, ordering, scalar spelling, and diagnostics remain exact.
+Current-run captures are diagnostic evidence, not a deployment or runtime-effect claim; planned
+and runtime-effect rows are never selected.
+
 ## Evidence lifecycle
 
 ```text

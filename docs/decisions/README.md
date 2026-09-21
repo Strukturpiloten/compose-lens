@@ -38,4 +38,6 @@
 | [0025](0025-caller-authorized-environment-secret-resolution.md) | accepted   | Caller-authorized environment and secret resolution with redaction                        |
 | [0026](0026-independent-real-application-conformance.md)        | accepted   | Independent real-application semantics and versioned external evidence                    |
 
+| [0027](0027-release-provider-configuration-evidence.md) | accepted | Release-gated observed provider-configuration evidence |
+
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

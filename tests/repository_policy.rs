@@ -49,7 +49,8 @@ fn ci_runs_once_per_pull_request_update_and_on_main_pushes() -> Result<(), Strin
     let workflow_path = repository_root().join(".github/workflows/ci.yml");
     let workflow = fs::read_to_string(&workflow_path)
         .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
-    let expected = "on:\n  push:\n    branches:\n      - main\n  pull_request:\n  workflow_dispatch:\n";
+    let expected =
+        "on:\n  push:\n    branches:\n      - main\n  pull_request:\n  workflow_dispatch:\n  workflow_call:\n";
     if !workflow.contains(expected) {
         return Err(
             "CI must run for main pushes, pull requests, and manual dispatch without duplicate feature-branch push runs"
@@ -57,6 +58,118 @@ fn ci_runs_once_per_pull_request_update_and_on_main_pushes() -> Result<(), Strin
         );
     }
 
+    Ok(())
+}
+
+#[test]
+fn release_requires_reusable_complete_and_bounded_native_validation() -> Result<(), String> {
+    let release = read_repository_file(".github/workflows/release.yml")?;
+
+    for required in [
+        "validation_only:",
+        "default: false",
+        "uses: ./.github/workflows/ci.yml",
+        "uses: ./.github/workflows/provider-conformance.yml",
+        "provider-config-conformance:\n    name: Validate observed provider configuration evidence\n    if: github.repository == 'Strukturpiloten/compose-lens'\n    uses: ./.github/workflows/provider-conformance.yml\n    permissions:\n      contents: read",
+        "needs: [provider-config-conformance, deterministic-validation, release-metadata-validation]",
+        "needs: release-gate",
+        "inputs.validation_only != true",
+        "needs.release-gate.result == 'success'",
+        "artifact-metadata: write",
+        "attestations: write",
+        "contents: write",
+        "id-token: write",
+    ] {
+        if !release.contains(required) {
+            return Err(format!("release workflow is missing fail-closed contract `{required}`"));
+        }
+    }
+    for required in [
+        "  release-gate:\n    name: Release validation gate\n    if: always()",
+        "PROVIDER_RESULT: ${{ needs.provider-config-conformance.result }}",
+        "DETERMINISTIC_RESULT: ${{ needs.deterministic-validation.result }}",
+        "METADATA_RESULT: ${{ needs.release-metadata-validation.result }}",
+        "if [[ \"${status}\" != success ]]; then",
+        "release-metadata-validation:\n    name: Validate release metadata",
+        "bash scripts/check-release-metadata.sh",
+    ] {
+        if !release.contains(required) {
+            return Err(format!("release gate is missing fail-closed contract `{required}`"));
+        }
+    }
+    for forbidden in [
+        "- name: Install pinned Node.js toolchain",
+        "- name: Install locked Node file-quality tools",
+        "- name: Install checksum-pinned native file-quality tools",
+        "- name: Check non-Rust file formatting and lint",
+        "- name: Run Clippy",
+        "- name: Run tests",
+    ] {
+        let publication = release
+            .split_once("  release:\n")
+            .map_or(release.as_str(), |(_, publication)| publication);
+        if publication.contains(forbidden) {
+            return Err(format!("credentialed publication job must not repeat `{forbidden}`"));
+        }
+    }
+
+    validate_provider_conformance_contract()
+}
+
+fn validate_provider_conformance_contract() -> Result<(), String> {
+    let native = read_repository_file(".github/workflows/provider-conformance.yml")?;
+    let runner = read_repository_file("scripts/run-observed-provider-config.sh")?;
+    let provider_matrix = read_repository_file("conformance/provider-config-matrix.toml")?;
+
+    for required in [
+        "workflow_call:",
+        "workflow_dispatch:",
+        "cron: \"23 4 * * 1\"",
+        "ref: ${{ inputs.candidate_sha || github.sha }}",
+        "test \"${actual}\" = \"${CANDIDATE_SHA}\"",
+        "name: provider-config-${{ github.run_id }}-${{ matrix.target }}",
+        "overwrite: true",
+        "if: always()",
+        "docker-compose-2-24-3",
+        "docker-compose-2-24-4",
+        "docker-compose-2-40-3",
+        "docker-compose-5-3-1",
+        "podman-compose-1-3-0",
+        "podman-compose-1-5-0",
+        "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0",
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
+        "python-version: 3.13.14",
+        "runs-on: ${{ matrix.runner }}",
+        "COMPOSE_LENS_CONFORMANCE_RUNNER_LABEL: ${{ matrix.runner }}",
+        "# renovate: datasource=github-runners\n        runner:\n          - ubuntu-24.04",
+    ] {
+        if !native.contains(required) {
+            return Err(format!("native conformance workflow is missing `{required}`"));
+        }
+    }
+    for required in [
+        "run[\"status\"] == \"observed\"",
+        "len(probes) != 8",
+        "and run[\"status\"] == \"planned\"",
+        "COMPOSE_LENS_CONFORMANCE_RESULT_DIRECTORY",
+        "actual_python_runtime=",
+        "does not match matrix",
+        "bootstrap requirements must carry one lowercase SHA-256 hash",
+        "--require-hashes",
+        "requirements.txt",
+        "COMPOSE_LENS_CONFORMANCE_RUNNER_LABEL:?workflow must provide the provider conformance runner label",
+        "github-actions-${conformance_runner_label/./-}_provider-config-only_runtime-not-invoked",
+    ] {
+        if !runner.contains(required) {
+            return Err(format!("provider runner is missing bounded-evidence rule `{required}`"));
+        }
+    }
+    if native.contains("runtime-effect-matrix") || runner.contains("runtime-effect-matrix") {
+        return Err("release native validation must not execute runtime-effect rows".to_owned());
+    }
+    if provider_matrix.matches("\"--dry-run\"").count() != 4 {
+        return Err("both podman-compose targets must keep dry-run version and config boundaries".to_owned());
+    }
     Ok(())
 }
 
@@ -70,20 +183,19 @@ fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
     const ACTION: &str = "obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9";
     const CONFIGURATION: &str = "package: compose-lens";
 
-    for workflow_name in ["ci.yml", "release.yml"] {
-        let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
-        let workflow = fs::read_to_string(&workflow_path)
-            .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
+    let workflow_name = "ci.yml";
+    let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
+    let workflow = fs::read_to_string(&workflow_path)
+        .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
 
-        let configured_action = format!("uses: {ACTION}\n        with:\n          {CONFIGURATION}");
-        if workflow.matches(ACTION).count() != 1
-            || workflow.matches(&configured_action).count() != 1
-            || workflow.contains("release-type:")
-        {
-            return Err(format!(
-                "{workflow_name} must contain one version-derived cargo-semver-checks action for compose-lens"
-            ));
-        }
+    let configured_action = format!("uses: {ACTION}\n        with:\n          {CONFIGURATION}");
+    if workflow.matches(ACTION).count() != 1
+        || workflow.matches(&configured_action).count() != 1
+        || workflow.contains("release-type:")
+    {
+        return Err(format!(
+            "{workflow_name} must contain one version-derived cargo-semver-checks action for compose-lens"
+        ));
     }
 
     Ok(())
@@ -97,7 +209,7 @@ fn coverage_ratchet_runs_in_ci_and_release() -> Result<(), String> {
     let dockerfile = read_repository_file(".devcontainer/Dockerfile")?;
     let expected_version = pinned_cargo_llvm_cov_version(&dockerfile, ".devcontainer/Dockerfile")?;
 
-    for workflow_name in ["ci.yml", "release.yml"] {
+    for workflow_name in ["ci.yml"] {
         let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
         let workflow = fs::read_to_string(&workflow_path)
             .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
@@ -237,16 +349,14 @@ fn ci_workflow_enforces_portability_and_an_actionable_pr_gate() -> Result<(), St
 }
 
 #[test]
-fn release_workflow_rechecks_the_msrv() -> Result<(), String> {
+fn release_workflow_reuses_ci_for_the_msrv() -> Result<(), String> {
     let workflow = read_repository_file(".github/workflows/release.yml")?;
     for required in [
-        "- name: Read the workspace MSRV",
-        "rustup toolchain install \"${RUST_MSRV}\" --profile minimal",
-        "cargo \"+${RUST_MSRV}\" ci-check",
-        "cargo \"+${RUST_MSRV}\" ci-policy",
+        "needs: [provider-config-conformance, deterministic-validation, release-metadata-validation]",
+        "uses: ./.github/workflows/ci.yml",
     ] {
         if !workflow.contains(required) {
-            return Err(format!("release workflow is missing MSRV guard `{required}`"));
+            return Err(format!("release workflow is missing reusable CI guard `{required}`"));
         }
     }
     Ok(())
@@ -453,7 +563,7 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
         }
     }
 
-    for workflow_name in ["ci.yml", "release.yml"] {
+    for workflow_name in ["ci.yml"] {
         let workflow = read_repository_file(&format!(".github/workflows/{workflow_name}"))?;
         for required in [
             "npm ci --ignore-scripts",
@@ -1096,6 +1206,12 @@ fn renovate_tracks_every_directly_pinned_development_tool() -> Result<(), String
         "Update directly pinned workflow tool versions",
         "Update the documented Dev Container CLI",
         "Update the GitHub CLI installed in the Dev Container",
+        "Signal manual review for provider-conformance Python bootstrap pins",
+        "sha256=(?<currentDigest>[a-f0-9]{64})",
+        "Track the reviewed Python bootstrap runtime across the provider matrix and runner",
+        "Track fixed GitHub-hosted runner environments",
+        "Require provenance and checksum review for provider-conformance bootstrap pins",
+        "Review GitHub-hosted runner environment upgrades manually",
         r#""matchManagers": ["cargo"]"#,
         r#""matchManagers": ["npm"]"#,
         r#""matchManagers": ["github-actions"]"#,
@@ -1115,11 +1231,11 @@ fn renovate_tracks_every_directly_pinned_development_tool() -> Result<(), String
         }
     }
 
-    if renovate.matches(r#""automerge": false"#).count() != 2 {
-        return Err("Renovate must keep Dev Container features and checksum-pinned tools manual".to_owned());
+    if renovate.matches(r#""automerge": false"#).count() != 4 {
+        return Err("Renovate must keep Dev Container features, checksum tools, provider bootstrap pins, and hosted runners manual".to_owned());
     }
 
-    for workflow_name in ["ci.yml", "release.yml"] {
+    for workflow_name in ["ci.yml"] {
         let workflow = read_repository_file(&format!(".github/workflows/{workflow_name}"))?;
         for required in [
             "renovate: datasource=crate depName=cargo-llvm-cov",
