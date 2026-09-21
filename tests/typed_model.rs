@@ -6082,6 +6082,84 @@ fn types_top_level_configs_and_secrets() -> Result<(), Box<dyn std::error::Error
 }
 
 #[test]
+fn treats_implicit_null_resource_definitions_as_empty_definitions() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(51),
+        concat!(
+            "---\nservices:\n  app:\n    image: example.invalid/app:1\n",
+            "networks:\n  implicit:\n  explicit: null\n",
+            "volumes:\n  implicit:\n  explicit: null\n",
+            "configs:\n  implicit:\n  explicit: null\n",
+            "secrets:\n  implicit:\n  explicit: null\n",
+        ),
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document was not recovered")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(document.networks().len(), 2);
+    assert_eq!(document.volumes().len(), 2);
+    assert_eq!(document.configs().len(), 2);
+    assert_eq!(document.secrets().len(), 2);
+    for names in [
+        document
+            .networks()
+            .iter()
+            .map(|value| value.name().value().as_str())
+            .collect::<Vec<_>>(),
+        document
+            .volumes()
+            .iter()
+            .map(|value| value.name().value().as_str())
+            .collect::<Vec<_>>(),
+        document
+            .configs()
+            .iter()
+            .map(|value| value.name().value().as_str())
+            .collect::<Vec<_>>(),
+        document
+            .secrets()
+            .iter()
+            .map(|value| value.name().value().as_str())
+            .collect::<Vec<_>>(),
+    ] {
+        assert_eq!(names, ["implicit", "explicit"]);
+    }
+    Ok(())
+}
+
+#[test]
+fn rejects_explicit_empty_strings_as_resource_definitions() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(52),
+        concat!(
+            "---\nservices:\n  app:\n    image: example.invalid/app:1\n",
+            "networks:\n  invalid: \"\"\n",
+            "volumes:\n  invalid: \"\"\n",
+            "configs:\n  invalid: \"\"\n",
+            "secrets:\n  invalid: \"\"\n",
+        ),
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document was not recovered")?;
+    let resource_diagnostics = parsed
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.code() == RESOURCE_EXPECTED_FORM)
+        .count();
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(!parsed.is_valid());
+    assert_eq!(resource_diagnostics, 4);
+    assert!(document.networks().is_empty());
+    assert!(document.volumes().is_empty());
+    assert!(document.configs().is_empty());
+    assert!(document.secrets().is_empty());
+    Ok(())
+}
+
+#[test]
 fn invalid_phase_two_forms_return_partial_data_and_stable_diagnostics() -> Result<(), Box<dyn std::error::Error>> {
     let syntax = SyntaxDocument::parse(SourceId::new(53), INVALID_PHASE_TWO_FORMS)?;
     let parsed = ComposeDocument::parse(syntax.document());
