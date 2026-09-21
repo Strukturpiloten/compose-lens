@@ -96,6 +96,10 @@ configuration and externally supplied runtime observations are separately versio
 workflow invoke the application suite explicitly so a skipped or empty contract cannot silently
 reduce application coverage.
 
+Release validation invokes CI through its reusable workflow interface and a separate bounded native
+provider-configuration matrix. The native matrix records the candidate SHA, run, and worker task,
+executes only reviewed observed rows, and does not execute planned or runtime-effect work.
+
 ## Provider and runtime evidence
 
 Ordinary Cargo tests do not execute external Compose providers or runtimes. Matrices, capture

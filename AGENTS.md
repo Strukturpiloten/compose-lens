@@ -56,6 +56,8 @@ constrain round-trip behavior or the public model.
 - Start repository-owned complete YAML documents with `---`; marker-free YAML is allowed only as
   explicit parser test data.
 - Pin every GitHub Action to a full commit SHA and append its exact release tag comment.
+- Keep release validation unprivileged and reusable: validation-only dispatches must be unable to
+  reach publication, and native provider evidence must bind the exact candidate, run, and task.
 - Keep release notes concise and link to canonical technical documentation instead of duplicating
   field and test inventories.
 

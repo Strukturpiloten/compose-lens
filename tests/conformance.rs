@@ -59,6 +59,7 @@ struct Run {
 #[derive(Debug)]
 struct InvocationContext {
     launcher: PathBuf,
+    acquisition_root: PathBuf,
     launcher_sha256: String,
     platform: String,
     command_path: String,
@@ -174,15 +175,20 @@ fn run_selected_provider_config_probe() -> Result<(), Box<dyn Error>> {
         .get(&probe_id)
         .ok_or("selected probe is not in the matrix")?;
     let run_key = (target_id.clone(), probe_id.clone());
-    let _run = matrix
+    let run = matrix
         .runs
         .get(&run_key)
         .ok_or("selected target/probe run is not in the matrix")?;
+    let reviewed_record = run
+        .record
+        .as_deref()
+        .ok_or("release conformance may execute only an observed row with a reviewed record")?;
 
     let launcher = absolute_environment_path("COMPOSE_LENS_CONFORMANCE_LAUNCHER")?;
     if !launcher.is_file() {
         return Err("the conformance launcher must be an existing regular file".into());
     }
+    let acquisition_root = absolute_environment_path("COMPOSE_LENS_CONFORMANCE_ACQUISITION_ROOT")?;
     let result_directory = absolute_environment_path("COMPOSE_LENS_CONFORMANCE_RESULT_DIRECTORY")?;
     if result_directory.exists() {
         return Err("the conformance result directory must not already exist".into());
@@ -214,6 +220,7 @@ fn run_selected_provider_config_probe() -> Result<(), Box<dyn Error>> {
 
     let context = InvocationContext {
         launcher,
+        acquisition_root,
         launcher_sha256,
         platform,
         command_path,
@@ -245,6 +252,7 @@ fn run_selected_provider_config_probe() -> Result<(), Box<dyn Error>> {
         &probe_output,
     )?;
     fs::write(result_directory.join("record.toml"), toml::to_string_pretty(&record)?)?;
+    compare_fresh_result_to_reviewed(&root, reviewed_record, &context, &version_output, &probe_output)?;
     Ok(())
 }
 
@@ -694,6 +702,162 @@ fn fixture_sha256(directory: &Path, files: &[String]) -> Result<String, std::io:
         digest.update([0]);
     }
     Ok(format!("{:x}", digest.finalize()))
+}
+
+/// Compare a fresh capture with reviewed provider evidence.  The stored record is
+/// deliberately not regenerated here: it is an independent expectation, including
+/// expected provider failures, rather than an assertion manufactured from this run.
+fn compare_fresh_result_to_reviewed(
+    repository_root: &Path,
+    path: &str,
+    context: &InvocationContext,
+    version_output: &Output,
+    probe_output: &Output,
+) -> Result<(), Box<dyn Error>> {
+    let record_path = repository_root.join(path);
+    let text = fs::read_to_string(&record_path)?;
+    let record = text.parse::<Table>()?;
+    let directory = record_path.parent().ok_or("reviewed record path has no parent")?;
+
+    for (prefix, output) in [("version", version_output), ("probe", probe_output)] {
+        let success = record
+            .get(&format!("{prefix}_success"))
+            .and_then(Value::as_bool)
+            .ok_or_else(|| format!("reviewed record `{path}` is missing `{prefix}_success`"))?;
+        if success != output.status.success() {
+            return Err(format!("fresh {prefix} success does not match reviewed record `{path}`").into());
+        }
+
+        let expected_code = record.get(&format!("{prefix}_exit_code")).and_then(Value::as_integer);
+        let actual_code = output.status.code().map(i64::from);
+        if expected_code != actual_code {
+            return Err(format!("fresh {prefix} exit code does not match reviewed record `{path}`").into());
+        }
+    }
+
+    for (name, actual) in [
+        ("version.stdout", &version_output.stdout),
+        ("version.stderr", &version_output.stderr),
+        ("probe.stdout", &probe_output.stdout),
+        ("probe.stderr", &probe_output.stderr),
+    ] {
+        let expected = fs::read(directory.join(name))?;
+        if canonicalize_provider_output(&expected, repository_root, &context.acquisition_root)?
+            != canonicalize_provider_output(actual, repository_root, &context.acquisition_root)?
+        {
+            return Err(format!("fresh {name} does not match reviewed record `{path}`").into());
+        }
+    }
+    Ok(())
+}
+
+/// Normalize only review-admitted machine paths before comparing independent provider output.
+/// Provider text, ordering, scalar spelling, exit status, and diagnostics otherwise remain exact.
+fn canonicalize_provider_output(
+    output: &[u8],
+    repository_root: &Path,
+    acquisition_root: &Path,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let repository_root = repository_root.to_str().ok_or("repository root must be UTF-8")?;
+    let acquisition_root = acquisition_root
+        .to_str()
+        .ok_or("provider acquisition root must be UTF-8")?;
+    let normalized = std::str::from_utf8(output)?
+        .replace(repository_root, "<repository>")
+        .replace(acquisition_root, "<acquisition>");
+    let mut result = String::with_capacity(normalized.len());
+    for line in normalized.split_inclusive('\n') {
+        result.push_str(&canonicalize_traceback_path(line));
+    }
+    Ok(result.into_bytes())
+}
+
+fn canonicalize_traceback_path(line: &str) -> String {
+    let Some(path_start) = line.find("File \"").map(|index| index + 6) else {
+        return line.to_owned();
+    };
+    let Some(relative_end) = line[path_start..].find('"') else {
+        return line.to_owned();
+    };
+    let path_end = path_start + relative_end;
+    let path = &line[path_start..path_end];
+    let canonical_path = if path.starts_with("<acquisition>/") && path.contains("/site-packages/") {
+        let Some((prefix, suffix)) = path.split_once("/site-packages/") else {
+            return line.to_owned();
+        };
+        let Some(python_library) = prefix.rfind("/lib") else {
+            return line.to_owned();
+        };
+        format!("{}/<python-site-packages>/{}", &prefix[..python_library], suffix)
+    } else if let Some(suffix) = python_stdlib_suffix(path) {
+        format!("<python-stdlib>/{suffix}")
+    } else {
+        return line.to_owned();
+    };
+    format!("{}{}{}", &line[..path_start], canonical_path, &line[path_end..])
+}
+
+fn python_stdlib_suffix(path: &str) -> Option<&str> {
+    let python = path.rfind("/python")?;
+    let prefix = &path[..python];
+    let (python_directory, suffix) = path[python + 1..].split_once('/')?;
+    let version = python_directory.strip_prefix("python")?;
+    if !dotted_numeric_version(version, 2) {
+        return None;
+    }
+
+    let admitted_prefix = prefix == "/usr/lib"
+        || prefix == "/usr/lib64"
+        || prefix
+            .strip_prefix("/opt/hostedtoolcache/Python/")
+            .and_then(|value| value.strip_suffix("/x64/lib"))
+            .is_some_and(|version| dotted_numeric_version(version, 2));
+    admitted_prefix.then_some(suffix)
+}
+
+fn dotted_numeric_version(value: &str, minimum_components: usize) -> bool {
+    let components = value.split('.').collect::<Vec<_>>();
+    components.len() >= minimum_components
+        && components
+            .iter()
+            .all(|component| !component.is_empty() && component.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+#[test]
+fn fresh_provider_semantics_normalize_only_reviewed_machine_paths() -> Result<(), Box<dyn Error>> {
+    let repository = Path::new("/checkout/compose-lens");
+    let acquisition = Path::new("/tmp/provider-42");
+    let reviewed = b"validating <repository>/fixtures/conformance/compose.yaml\n  File \"<acquisition>/venv-1.3.0/lib64/python3.13/site-packages/podman_compose.py\", line 42\n  File \"/usr/lib64/python3.13/asyncio/runners.py\", line 196\nprovider diagnostic\n";
+    let fresh = b"validating /checkout/compose-lens/fixtures/conformance/compose.yaml\n  File \"/tmp/provider-42/venv-1.3.0/lib/python3.13/site-packages/podman_compose.py\", line 42\n  File \"/opt/hostedtoolcache/Python/3.13.14/x64/lib/python3.13/asyncio/runners.py\", line 196\nprovider diagnostic\n";
+    assert_eq!(
+        canonicalize_provider_output(reviewed, repository, acquisition)?,
+        canonicalize_provider_output(fresh, repository, acquisition)?
+    );
+
+    let wrong = std::str::from_utf8(fresh)?.replace("provider diagnostic", "different diagnostic");
+    assert_ne!(
+        canonicalize_provider_output(reviewed, repository, acquisition)?,
+        canonicalize_provider_output(wrong.as_bytes(), repository, acquisition)?
+    );
+    let unrecognized = b"  File \"/var/private/python-not-a-stdlib/secret.py\", line 1\n";
+    assert_eq!(
+        canonicalize_provider_output(unrecognized, repository, acquisition)?,
+        unrecognized
+    );
+    let libexec = b"  File \"/usr/libexec/python-not-a-stdlib/secret.py\", line 1\n";
+    assert_eq!(canonicalize_provider_output(libexec, repository, acquisition)?, libexec);
+    let python_near_prefix = b"  File \"/usr/lib/python-not-a-stdlib/secret.py\", line 1\n";
+    assert_eq!(
+        canonicalize_provider_output(python_near_prefix, repository, acquisition)?,
+        python_near_prefix
+    );
+    let hosted_near_prefix =
+        b"  File \"/opt/hostedtoolcache/Python/3.13.14/x64/lib/python-malicious/secret.py\", line 1\n";
+    assert_eq!(
+        canonicalize_provider_output(hosted_near_prefix, repository, acquisition)?,
+        hosted_near_prefix
+    );
+    Ok(())
 }
 
 fn validate_reviewed_record(

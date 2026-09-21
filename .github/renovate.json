@@ -71,6 +71,40 @@
     },
     {
       "customType": "regex",
+      "description": "Signal manual review for provider-conformance Python bootstrap pins",
+      "managerFilePatterns": ["/^conformance\\/provider-config-matrix\\.toml$/"],
+      "matchStrings": [
+        "(?<depName>python-dotenv)=(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+);sha256=(?<currentDigest>[a-f0-9]{64})",
+        "(?<depName>PyYAML)=(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+);sha256=(?<currentDigest>[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the reviewed Python bootstrap runtime across the provider matrix and runner",
+      "managerFilePatterns": [
+        "/^conformance\\/provider-config-matrix\\.toml$/",
+        "/^\\.github\\/workflows\\/provider-conformance\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=python-version depName=(?<depName>python)\\nexecution = \\[\\\"python=(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)",
+        "# renovate: datasource=python-version depName=(?<depName>python)\\n\\s+python-version: (?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "datasourceTemplate": "python-version"
+    },
+    {
+      "customType": "regex",
+      "description": "Track fixed GitHub-hosted runner environments",
+      "managerFilePatterns": ["/^\\.github/workflows/.*\\.ya?ml$/"],
+      "matchStrings": [
+        "(?:^|\\n)\\s*runs-on:\\s*(?<depName>ubuntu|macos|windows)-(?<currentValue>[0-9]+(?:\\.[0-9]+)?(?:-[a-z0-9]+)*)\\s*(?:\\n|$)",
+        "# renovate: datasource=github-runners\\n\\s+runner:\\n\\s+-\\s+(?<depName>ubuntu|macos|windows)-(?<currentValue>[0-9]+(?:\\.[0-9]+)?(?:-[a-z0-9]+)*)\\s*(?:\\n|$)"
+      ],
+      "datasourceTemplate": "github-runners"
+    },
+
+    {
+      "customType": "regex",
       "description": "Track the immutable Strukturpiloten shared-policy commit",
       "managerFilePatterns": ["/^\\.github/workflows/.*\\.ya?ml$/"],
       "matchStrings": [
@@ -119,6 +153,24 @@
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": false
+    },
+    {
+      "description": "Require provenance and checksum review for provider-conformance bootstrap pins",
+      "matchFileNames": ["conformance/provider-config-matrix.toml"],
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Do not refresh retained provider artifacts or records. Review bootstrap provenance, checksums, and the observed-row contract before accepting this signal."
+      ]
+    },
+    {
+      "description": "Review GitHub-hosted runner environment upgrades manually",
+      "matchDatasources": ["github-runners"],
+      "groupName": "GitHub-hosted runners",
+      "automerge": false,
+      "prBodyNotes": [
+        "Review the hosted image release notes and verify every workflow's operating-system environment before merging."
+      ]
     },
     {
       "description": "Do not delay BoxFerry and Lens releases",
