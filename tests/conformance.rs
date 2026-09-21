@@ -108,6 +108,58 @@ fn provider_config_matrix_is_exact_complete_and_reproducible() -> Result<(), Str
 }
 
 #[test]
+fn podman_1_3_rejection_locations_track_the_tagged_fixture_lines() -> Result<(), String> {
+    let root = repository_root();
+
+    for (probe, tag) in [
+        ("implementation-sensitive-config", "!reset"),
+        ("reset-tag", "!reset"),
+        ("override-tag", "!override"),
+    ] {
+        let fixture_path = root
+            .join("fixtures/conformance")
+            .join(probe)
+            .join("compose.override.yaml");
+        let fixture = fs::read_to_string(&fixture_path)
+            .map_err(|error| format!("failed to read {}: {error}", fixture_path.display()))?;
+        let tagged_lines = fixture
+            .lines()
+            .enumerate()
+            .filter_map(|(index, line)| line.find(tag).map(|column| (index + 1, column + 1)))
+            .collect::<Vec<_>>();
+        let [(line, column)] = tagged_lines.as_slice() else {
+            return Err(format!(
+                "fixture {} must contain exactly one `{tag}` location",
+                fixture_path.display()
+            ));
+        };
+
+        let stderr_path = root
+            .join("conformance/records/provider-config-2026-07-31/podman-compose-1-3-0")
+            .join(probe)
+            .join("probe.stderr");
+        let stderr = fs::read_to_string(&stderr_path)
+            .map_err(|error| format!("failed to read {}: {error}", stderr_path.display()))?;
+        let expected_error = format!("could not determine a constructor for the tag '{tag}'");
+        if !stderr.contains(&expected_error) {
+            return Err(format!(
+                "reviewed stderr {} must retain `{expected_error}`",
+                stderr_path.display()
+            ));
+        }
+        let expected_location = format!("  in \"compose.override.yaml\", line {line}, column {column}");
+        if stderr.lines().last() != Some(expected_location.as_str()) {
+            return Err(format!(
+                "reviewed stderr {} must end with fixture-derived location `{expected_location}`",
+                stderr_path.display()
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn security_options_probe_retains_exact_unmask_candidates_and_near_misses() -> Result<(), Box<dyn Error>> {
     let syntax = SyntaxDocument::parse(SourceId::new(739), SECURITY_OPTIONS_FIXTURE)?;
     let parsed = ComposeDocument::parse(syntax.document());

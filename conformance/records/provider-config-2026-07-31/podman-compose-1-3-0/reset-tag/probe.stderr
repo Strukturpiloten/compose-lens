@@ -46,4 +46,4 @@ Traceback (most recent call last):
             "could not determine a constructor for the tag %r" % node.tag,
             node.start_mark)
 yaml.constructor.ConstructorError: could not determine a constructor for the tag '!reset'
-  in "compose.override.yaml", line 3, column 18
+  in "compose.override.yaml", line 4, column 18
