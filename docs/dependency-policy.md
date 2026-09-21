@@ -41,6 +41,13 @@ Renovate proposes supported updates. Repository policy verifies immutable action
 metadata, single version sources, and locked tooling. Every update still needs the same review and
 complete gate as a hand-authored dependency change.
 
+Renovate's three-day minimum release age governs direct dependency updates. Renovate cannot prove
+the age of versions selected while regenerating a lock file, so lock-file maintenance has a
+rule-local zero-day Renovate override and may auto-merge only when the shared, fail-closed
+lockfile-release-age guard proves every newly introduced registry release is at least 72 hours old
+and the required aggregate PR gate succeeds. Its immutable revision has one Renovate owner. Dev
+Container and checksum-pinned tool updates remain manual.
+
 ## YAML representation
 
 `yaml-edit` is pinned exactly in `Cargo.toml` with default features disabled. It remains private and

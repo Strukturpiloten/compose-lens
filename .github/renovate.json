@@ -68,6 +68,15 @@
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "cli/cli"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the immutable Strukturpiloten shared-policy commit",
+      "managerFilePatterns": ["/^\\.github/workflows/.*\\.ya?ml$/"],
+      "matchStrings": [
+        "(?<indentation>[ \\t]*)# renovate: datasource=github-digest depName=(?<depName>Strukturpiloten/\\.github) currentValue=(?<currentValue>main)\\n[ \\t]*ref:\\s*(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "autoReplaceStringTemplate": "{{{indentation}}}# renovate: datasource=github-digest depName={{{depName}}} currentValue={{{newValue}}}\n{{{indentation}}}ref: {{{newDigest}}}"
     }
   ],
   "packageRules": [
@@ -99,6 +108,14 @@
     {
       "description": "Automerge tested non-major dependency updates",
       "matchUpdateTypes": ["minor", "patch", "pin", "digest", "pinDigest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false
+    },
+    {
+      "description": "Automerge green-gated lock-file maintenance",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "minimumReleaseAge": "0 days",
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": false
