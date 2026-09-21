@@ -45,8 +45,10 @@ Provider-conformance artifact URLs, checksums, and observed-record versions are 
 they are not routine Renovate updates. Renovate surfaces the matrix-declared Python runtime and
 bootstrap pins for manual provenance and checksum review with automerge disabled. The reusable runner
 selects that runtime and rejects a podman-compose row unless `python3` reports the exact declared
-version. A moving provider-discovery candidate belongs in a new reviewed matrix target, never a
-rewrite of a retained boundary observation.
+version. It preserves the immutable wheel URL basename and installs the verified local wheel through
+a hash-locked PEP 508 file reference; changing that bootstrap contract requires its offline install
+and wrong-hash regression to change together. A moving provider-discovery candidate belongs in a new
+reviewed matrix target, never a rewrite of a retained boundary observation.
 
 Renovate's three-day minimum release age governs direct dependency updates. Renovate cannot prove
 the age of versions selected while regenerating a lock file, so lock-file maintenance has a

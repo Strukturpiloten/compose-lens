@@ -35,6 +35,7 @@ tools=(
   node
   npm
   prettier
+  python3
   rustc
   rustfmt
   rustup

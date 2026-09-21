@@ -117,8 +117,11 @@ fn release_requires_reusable_complete_and_bounded_native_validation() -> Result<
 }
 
 fn validate_provider_conformance_contract() -> Result<(), String> {
+    let ci = read_repository_file(".github/workflows/ci.yml")?;
     let native = read_repository_file(".github/workflows/provider-conformance.yml")?;
     let runner = read_repository_file("scripts/run-observed-provider-config.sh")?;
+    let bootstrap = read_repository_file("scripts/provider-python-bootstrap.sh")?;
+    let complete_gate = read_repository_file("scripts/check-all.sh")?;
     let provider_matrix = read_repository_file("conformance/provider-config-matrix.toml")?;
 
     for required in [
@@ -157,12 +160,30 @@ fn validate_provider_conformance_contract() -> Result<(), String> {
         "bootstrap requirements must carry one lowercase SHA-256 hash",
         "--require-hashes",
         "requirements.txt",
+        "provider_artifact_filename \"${artifact_url}\"",
+        "hash_locked_local_wheel_requirement",
         "COMPOSE_LENS_CONFORMANCE_RUNNER_LABEL:?workflow must provide the provider conformance runner label",
         "github-actions-${conformance_runner_label/./-}_provider-config-only_runtime-not-invoked",
     ] {
         if !runner.contains(required) {
             return Err(format!("provider runner is missing bounded-evidence rule `{required}`"));
         }
+    }
+    for required in [
+        "url.scheme != \"https\"",
+        "pathlib.Path(sys.argv[1]).resolve(strict=True).as_uri()",
+        "*.whl",
+        "--hash=sha256:%s",
+    ] {
+        if !bootstrap.contains(required) {
+            return Err(format!("provider Python bootstrap is missing `{required}`"));
+        }
+    }
+    if !complete_gate.contains("bash scripts/test-provider-python-bootstrap.sh") {
+        return Err("complete gate must run the provider Python bootstrap regression".to_owned());
+    }
+    if !ci.contains("run: bash scripts/test-provider-python-bootstrap.sh") {
+        return Err("pull-request CI must run the provider Python bootstrap regression".to_owned());
     }
     if native.contains("runtime-effect-matrix") || runner.contains("runtime-effect-matrix") {
         return Err("release native validation must not execute runtime-effect rows".to_owned());

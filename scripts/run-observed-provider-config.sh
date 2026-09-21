@@ -6,6 +6,10 @@
 # container runtime.  The Rust harness supplies a cleared environment for every probe.
 set -euo pipefail
 
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=scripts/provider-python-bootstrap.sh
+source "${script_directory}/provider-python-bootstrap.sh"
+
 if [[ $# != 2 ]]; then
   echo "usage: $0 TARGET OUTPUT_DIRECTORY" >&2
   exit 64
@@ -76,7 +80,9 @@ scratch="$(mktemp -d)"
 cleanup() { rm -rf "${scratch}"; }
 trap cleanup EXIT
 mkdir -p "${output_directory}"
-artifact="${scratch}/provider-artifact"
+artifact_filename="$(provider_artifact_filename "${artifact_url}")"
+readonly artifact_filename
+artifact="${scratch}/${artifact_filename}"
 curl --fail --location --retry 3 --retry-all-errors --connect-timeout 15 --max-time 180 \
   --output "${artifact}" "${artifact_url}"
 printf '%s  %s\n' "${artifact_sha256}" "${artifact}" | sha256sum --check --status
@@ -97,7 +103,8 @@ case "${provider}" in
     venv="${scratch}/venv-${provider_version}"
     python3 -m venv "${venv}"
     requirements_file="${scratch}/requirements.txt"
-    printf '%s --hash=sha256:%s\n' "${artifact}" "${artifact_sha256}" > "${requirements_file}"
+    hash_locked_local_wheel_requirement \
+      "${provider}" "${artifact}" "${artifact_sha256}" > "${requirements_file}"
     for requirement in "${python_requirement_array[@]}"; do
       printf '%s\n' "${requirement/|/ }" >> "${requirements_file}"
     done
