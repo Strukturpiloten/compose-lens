@@ -495,7 +495,12 @@ fn write_quoted(output: &mut String, value: &str) {
 }
 
 fn plain_string_safe(value: &str) -> bool {
-    if value.is_empty() || value.trim() != value || value.contains(['\n', '\r']) || yaml_1_1_ambiguous_string(value) {
+    if value.is_empty()
+        || value.trim() != value
+        || value.contains(['\n', '\r'])
+        || value.starts_with("--")
+        || yaml_1_1_ambiguous_string(value)
+    {
         return false;
     }
 

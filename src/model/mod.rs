@@ -2341,7 +2341,7 @@ impl Parser {
         let mut unmodeled_fields = Vec::new();
         for node in sequence.values() {
             match node {
-                YamlNode::Scalar(scalar) if ScalarValue::from_scalar(&scalar).scalar_type() == ScalarType::String => {
+                YamlNode::Scalar(scalar) if scalar_type_for_value(&scalar) == ScalarType::String => {
                     items.push(IncludeItem::Short(Located::new(
                         scalar_string_from_source(&self.source, &scalar),
                         span_from_position(self.source_id, scalar.byte_range()),
@@ -2427,10 +2427,10 @@ impl Parser {
 
     fn is_strict_string_or_sequence(field: &ParsedField) -> bool {
         match field.value.as_ref() {
-            Some(YamlNode::Scalar(scalar)) => ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String,
+            Some(YamlNode::Scalar(scalar)) => scalar_type_for_value(scalar) == ScalarType::String,
             Some(YamlNode::Sequence(sequence)) => sequence.values().all(|item| {
                 item.as_scalar()
-                    .is_some_and(|scalar| ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String)
+                    .is_some_and(|scalar| scalar_type_for_value(scalar) == ScalarType::String)
             }),
             _ => false,
         }
@@ -2439,7 +2439,7 @@ impl Parser {
     fn parse_label_files(&mut self, field: &ParsedField) -> Option<LabelFiles> {
         let value = field.value.as_ref()?;
         if let Some(scalar) = value.as_scalar() {
-            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            if scalar_type_for_value(scalar) != ScalarType::String {
                 self.expected(
                     EXPECTED_SCALAR,
                     field,
@@ -2477,7 +2477,7 @@ impl Parser {
                 unmodeled_items.push(item_span);
                 continue;
             };
-            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            if scalar_type_for_value(scalar) != ScalarType::String {
                 self.unsupported_sequence_item(
                     EXPECTED_SCALAR,
                     &item,
@@ -2587,7 +2587,7 @@ impl Parser {
                         unmodeled_fields.push(field.reference());
                         continue;
                     };
-                    if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                    if scalar_type_for_value(scalar) != ScalarType::String {
                         self.unsupported_sequence_item(
                             EXPECTED_SCALAR,
                             &node,
@@ -2611,8 +2611,7 @@ impl Parser {
                     let mut binding = ServiceModelBinding::new(binding_field.name.clone(), binding_field.span);
                     match binding_field.value.as_ref() {
                         None => {}
-                        Some(YamlNode::Scalar(scalar))
-                            if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null => {}
+                        Some(YamlNode::Scalar(scalar)) if scalar_type_for_value(scalar) == ScalarType::Null => {}
                         Some(YamlNode::Mapping(value)) => {
                             let mut seen = BTreeMap::new();
                             for member in self.fields(value) {
@@ -3249,7 +3248,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer => BlkioScalar::YamlInteger(scalar_string_from_source(&self.source, scalar)),
             ScalarType::String => BlkioScalar::String(scalar_string_from_source(&self.source, scalar)),
             _ => {
@@ -3358,7 +3357,7 @@ impl Parser {
             self.expected(HOSTNAME_EXPECTED_STRING, field, "hostname must be a YAML string scalar");
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(HOSTNAME_EXPECTED_STRING, field, "hostname must be a YAML string scalar");
             return None;
         }
@@ -3405,7 +3404,7 @@ impl Parser {
                 );
                 continue;
             };
-            let scalar_type = ScalarValue::from_scalar(&scalar).scalar_type();
+            let scalar_type = scalar_type_for_value(&scalar);
             if !matches!(
                 scalar_type,
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
@@ -3460,7 +3459,7 @@ impl Parser {
                 );
                 continue;
             };
-            let scalar_type = ScalarValue::from_scalar(&scalar).scalar_type();
+            let scalar_type = scalar_type_for_value(&scalar);
             if !matches!(
                 scalar_type,
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
@@ -3508,7 +3507,7 @@ impl Parser {
             match node {
                 YamlNode::Scalar(scalar)
                     if matches!(
-                        ScalarValue::from_scalar(&scalar).scalar_type(),
+                        scalar_type_for_value(&scalar),
                         ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
                     ) =>
                 {
@@ -3572,7 +3571,7 @@ impl Parser {
             return None;
         };
         if !matches!(
-            ScalarValue::from_scalar(scalar).scalar_type(),
+            scalar_type_for_value(scalar),
             ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
         ) {
             self.expected(
@@ -3592,7 +3591,7 @@ impl Parser {
         let value = field.value.as_ref()?;
         if let Some(scalar) = value.as_scalar() {
             if !matches!(
-                ScalarValue::from_scalar(scalar).scalar_type(),
+                scalar_type_for_value(scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.expected(
@@ -3630,7 +3629,7 @@ impl Parser {
                 continue;
             };
             if !matches!(
-                ScalarValue::from_scalar(&scalar).scalar_type(),
+                scalar_type_for_value(&scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.unsupported_sequence_item(
@@ -3674,7 +3673,7 @@ impl Parser {
                 continue;
             };
             if !matches!(
-                ScalarValue::from_scalar(&scalar).scalar_type(),
+                scalar_type_for_value(&scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.unsupported_sequence_item(
@@ -3706,7 +3705,7 @@ impl Parser {
         let value = field.value.as_ref()?;
         if let Some(scalar) = value.as_scalar() {
             if !matches!(
-                ScalarValue::from_scalar(scalar).scalar_type(),
+                scalar_type_for_value(scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.expected(
@@ -3745,7 +3744,7 @@ impl Parser {
                 continue;
             };
             if !matches!(
-                ScalarValue::from_scalar(&scalar).scalar_type(),
+                scalar_type_for_value(&scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.unsupported_sequence_item(
@@ -3798,7 +3797,7 @@ impl Parser {
                 );
                 continue;
             };
-            let scalar_kind = match ScalarValue::from_scalar(&scalar).scalar_type() {
+            let scalar_kind = match scalar_type_for_value(&scalar) {
                 ScalarType::Integer | ScalarType::Float => ExposeScalarKind::Number,
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => ExposeScalarKind::String,
                 ScalarType::Null | ScalarType::Boolean => {
@@ -3893,7 +3892,7 @@ impl Parser {
                 continue;
             };
             if !matches!(
-                ScalarValue::from_scalar(&scalar).scalar_type(),
+                scalar_type_for_value(&scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.unsupported_sequence_item(
@@ -4015,7 +4014,7 @@ impl Parser {
         let value = field.value.as_ref()?;
         if let Some(scalar) = value.as_scalar() {
             if !matches!(
-                ScalarValue::from_scalar(scalar).scalar_type(),
+                scalar_type_for_value(scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.expected(
@@ -4052,7 +4051,7 @@ impl Parser {
                 continue;
             };
             if !matches!(
-                ScalarValue::from_scalar(&scalar).scalar_type(),
+                scalar_type_for_value(&scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.unsupported_sequence_item(
@@ -4148,7 +4147,7 @@ impl Parser {
                         continue;
                     };
                     if !matches!(
-                        ScalarValue::from_scalar(&scalar).scalar_type(),
+                        scalar_type_for_value(&scalar),
                         ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
                     ) {
                         self.unsupported_sequence_item(
@@ -4272,7 +4271,7 @@ impl Parser {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         }
@@ -4284,7 +4283,7 @@ impl Parser {
 
     fn parse_extends(&mut self, field: &ParsedField) -> Option<Extends> {
         match field.value.as_ref() {
-            Some(YamlNode::Scalar(scalar)) if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String => {
+            Some(YamlNode::Scalar(scalar)) if scalar_type_for_value(scalar) == ScalarType::String => {
                 Some(Extends::Short(Located::new(
                     scalar_string_from_source(&self.source, scalar),
                     span_from_position(self.source_id, scalar.byte_range()),
@@ -4345,7 +4344,7 @@ impl Parser {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         }
@@ -4706,7 +4705,7 @@ impl Parser {
 
     fn provider_option_scalar(&self, scalar: &Scalar) -> Option<Located<ComposeScalar>> {
         let scalar_value = ScalarValue::from_scalar(scalar);
-        let value = match scalar_value.scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::String => ComposeScalar::String(scalar_string_from_source(&self.source, scalar)),
             ScalarType::Integer | ScalarType::Float => {
                 ComposeScalar::Number(scalar_string_from_source(&self.source, scalar))
@@ -4730,7 +4729,7 @@ impl Parser {
             return None;
         };
         if !matches!(
-            ScalarValue::from_scalar(scalar).scalar_type(),
+            scalar_type_for_value(scalar),
             ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
         ) {
             self.expected(
@@ -4795,8 +4794,7 @@ impl Parser {
             return None;
         };
         let span = span_from_position(self.source_id, scalar.byte_range());
-        let scalar_value = ScalarValue::from_scalar(scalar);
-        let value = match scalar_value.scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Null => LoggingOptionValue::Null,
             ScalarType::Integer | ScalarType::Float => {
                 LoggingOptionValue::Number(scalar_string_from_source(&self.source, scalar))
@@ -4850,10 +4848,7 @@ impl Parser {
             );
             return None;
         };
-        if matches!(
-            ScalarValue::from_scalar(scalar).scalar_type(),
-            ScalarType::Boolean | ScalarType::Null
-        ) {
+        if matches!(scalar_type_for_value(scalar), ScalarType::Boolean | ScalarType::Null) {
             self.expected(
                 PIDS_LIMIT_EXPECTED_VALUE,
                 field,
@@ -4897,7 +4892,7 @@ impl Parser {
         let span = span_from_position(self.source_id, scalar.byte_range());
         let scalar_value = ScalarValue::from_scalar(scalar);
         let raw = scalar_string_from_source(&self.source, scalar);
-        let count = match scalar_value.scalar_type() {
+        let count = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float if CpuCount::yaml_integer_spelling(&raw) => {
                 CpuCount::yaml_integer(raw)
             }
@@ -4946,7 +4941,7 @@ impl Parser {
         let span = span_from_position(self.source_id, scalar.byte_range());
         let scalar_value = ScalarValue::from_scalar(scalar);
         let raw = scalar_string_from_source(&self.source, scalar);
-        let percent = match scalar_value.scalar_type() {
+        let percent = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float if CpuPercent::yaml_integer_spelling(&raw) => {
                 CpuPercent::yaml_integer(raw)
             }
@@ -4995,7 +4990,7 @@ impl Parser {
         let span = span_from_position(self.source_id, scalar.byte_range());
         let scalar_value = ScalarValue::from_scalar(scalar);
         let raw = scalar_string_from_source(&self.source, scalar);
-        let period = match scalar_value.scalar_type() {
+        let period = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => CpuPeriod::YamlNumber(raw),
             ScalarType::String
                 if scalar_value.style() == ScalarStyle::Plain
@@ -5029,7 +5024,7 @@ impl Parser {
         let span = span_from_position(self.source_id, scalar.byte_range());
         let scalar_value = ScalarValue::from_scalar(scalar);
         let raw = scalar_string_from_source(&self.source, scalar);
-        let quota = match scalar_value.scalar_type() {
+        let quota = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => CpuQuota::YamlNumber(raw),
             ScalarType::String
                 if scalar_value.style() == ScalarStyle::Plain
@@ -5063,7 +5058,7 @@ impl Parser {
         let span = span_from_position(self.source_id, scalar.byte_range());
         let scalar_value = ScalarValue::from_scalar(scalar);
         let raw = scalar_string_from_source(&self.source, scalar);
-        let period = match scalar_value.scalar_type() {
+        let period = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => CpuRtPeriod::YamlNumber(raw),
             ScalarType::String
                 if scalar_value.style() == ScalarStyle::Plain
@@ -5105,9 +5100,8 @@ impl Parser {
             return None;
         };
         let span = span_from_position(self.source_id, scalar.byte_range());
-        let scalar_value = ScalarValue::from_scalar(scalar);
         let raw = scalar_string_from_source(&self.source, scalar);
-        let runtime = match scalar_value.scalar_type() {
+        let runtime = match scalar_type_for_value(scalar) {
             ScalarType::Integer => CpuRtRuntime::parse_number(raw, true),
             ScalarType::Float => CpuRtRuntime::parse_number(raw, false),
             ScalarType::String => CpuRtRuntime::parse_string(raw),
@@ -5144,9 +5138,8 @@ impl Parser {
             return None;
         };
         let span = span_from_position(self.source_id, scalar.byte_range());
-        let value = ScalarValue::from_scalar(scalar);
         if matches!(
-            value.scalar_type(),
+            scalar_type_for_value(scalar),
             ScalarType::Boolean | ScalarType::Timestamp | ScalarType::Regex
         ) {
             self.expected(
@@ -5176,7 +5169,7 @@ impl Parser {
             return None;
         };
         let span = span_from_position(self.source_id, scalar.byte_range());
-        let kind = ScalarValue::from_scalar(scalar).scalar_type();
+        let kind = scalar_type_for_value(scalar);
         if matches!(kind, ScalarType::Boolean | ScalarType::Timestamp | ScalarType::Regex) {
             self.expected(EXPECTED_SCALAR, field, "cpus must be a decimal scalar");
             return None;
@@ -5204,7 +5197,7 @@ impl Parser {
             );
             return None;
         };
-        let scalar_kind = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let scalar_kind = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => ShmSizeScalarKind::Number,
             ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => ShmSizeScalarKind::String,
             ScalarType::Boolean | ScalarType::Null => {
@@ -5263,7 +5256,7 @@ impl Parser {
             );
             return None;
         };
-        let scalar_kind = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let scalar_kind = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => MemLimitScalarKind::Number,
             ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => MemLimitScalarKind::String,
             ScalarType::Boolean | ScalarType::Null => {
@@ -5293,7 +5286,7 @@ impl Parser {
             );
             return None;
         };
-        let scalar_kind = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let scalar_kind = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => MemswapLimitScalarKind::Number,
             ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => MemswapLimitScalarKind::String,
             ScalarType::Boolean | ScalarType::Null => {
@@ -5395,9 +5388,10 @@ impl Parser {
 
     fn parse_command(&mut self, field: &ParsedField) -> Option<Command> {
         match field.value.as_ref() {
+            None => Some(Command::Null(field.name.span)),
             Some(YamlNode::Scalar(scalar)) => {
                 let span = span_from_position(self.source_id, scalar.byte_range());
-                if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null {
+                if scalar_is_null(scalar) {
                     Some(Command::Null(span))
                 } else {
                     Some(Command::String(Located::new(
@@ -5429,9 +5423,10 @@ impl Parser {
 
     fn parse_entrypoint(&mut self, field: &ParsedField) -> Option<Entrypoint> {
         match field.value.as_ref() {
+            None => Some(Entrypoint::Null(field.name.span)),
             Some(YamlNode::Scalar(scalar)) => {
                 let span = span_from_position(self.source_id, scalar.byte_range());
-                if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null {
+                if scalar_is_null(scalar) {
                     Some(Entrypoint::Null(span))
                 } else {
                     Some(Entrypoint::String(Located::new(
@@ -6151,7 +6146,7 @@ impl Parser {
                         continue;
                     };
                     if !matches!(
-                        ScalarValue::from_scalar(&scalar).scalar_type(),
+                        scalar_type_for_value(&scalar),
                         ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
                     ) {
                         self.unsupported_sequence_item(
@@ -6208,7 +6203,7 @@ impl Parser {
         match field.value.as_ref() {
             Some(YamlNode::Scalar(scalar)) => {
                 if !matches!(
-                    ScalarValue::from_scalar(scalar).scalar_type(),
+                    scalar_type_for_value(scalar),
                     ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
                 ) {
                     self.expected(
@@ -6327,7 +6322,7 @@ impl Parser {
                         continue;
                     };
                     if !matches!(
-                        ScalarValue::from_scalar(&scalar).scalar_type(),
+                        scalar_type_for_value(&scalar),
                         ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
                     ) {
                         self.unsupported_sequence_item(
@@ -6381,7 +6376,7 @@ impl Parser {
                     };
                     let scalar_span = span_from_position(self.source_id, scalar.byte_range());
                     let scalar_value = ScalarValue::from_scalar(scalar);
-                    let value = match scalar_value.scalar_type() {
+                    let value = match scalar_type_for_value(scalar) {
                         ScalarType::Null => ComposeScalar::Null,
                         ScalarType::Boolean => ComposeScalar::Boolean(scalar_value.to_bool().unwrap_or(false)),
                         ScalarType::Integer | ScalarType::Float => {
@@ -6478,7 +6473,7 @@ impl Parser {
             );
             return;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(
                 EXPECTED_SCALAR,
                 field,
@@ -6511,7 +6506,7 @@ impl Parser {
             self.expected(EXPECTED_SCALAR, field, "deploy mode must be a YAML string scalar");
             return;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(EXPECTED_SCALAR, field, "deploy mode must be a YAML string scalar");
             return;
         }
@@ -6544,7 +6539,7 @@ impl Parser {
             );
             return;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => {
                 DeployReplicas::YamlNumber(scalar_string_from_source(&self.source, scalar))
             }
@@ -6592,12 +6587,13 @@ impl Parser {
             };
             let span = span_from_position(self.source_id, scalar.byte_range());
             match option.name.value().as_str() {
-                "condition" if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String => policy
-                    .set_condition(Located::new(
+                "condition" if scalar_type_for_value(scalar) == ScalarType::String => {
+                    policy.set_condition(Located::new(
                         DeployRestartCondition::parse(scalar_string_from_source(&self.source, scalar)),
                         span,
-                    )),
-                "delay" | "window" if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String => {
+                    ));
+                }
+                "delay" | "window" if scalar_type_for_value(scalar) == ScalarType::String => {
                     let value = Located::new(
                         DeployRestartDuration::new(scalar_string_from_source(&self.source, scalar)),
                         span,
@@ -6608,7 +6604,7 @@ impl Parser {
                         policy.set_window(value);
                     }
                 }
-                "max_attempts" => match ScalarValue::from_scalar(scalar).scalar_type() {
+                "max_attempts" => match scalar_type_for_value(scalar) {
                     ScalarType::Integer => policy.set_max_attempts(Located::new(
                         DeployRestartMaxAttempts::YamlNumber(scalar_string_from_source(&self.source, scalar)),
                         span,
@@ -6764,7 +6760,7 @@ impl Parser {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         }
@@ -6783,7 +6779,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer => {
                 DeployRollbackParallelism::YamlInteger(scalar_string_from_source(&self.source, scalar))
             }
@@ -6815,7 +6811,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => {
                 DeployRollbackMaxFailureRatio::YamlNumber(scalar_string_from_source(&self.source, scalar))
             }
@@ -6862,7 +6858,7 @@ impl Parser {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         }
@@ -6881,7 +6877,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer => {
                 DeployUpdateParallelism::YamlInteger(scalar_string_from_source(&self.source, scalar))
             }
@@ -6912,7 +6908,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => {
                 DeployUpdateMaxFailureRatio::YamlNumber(scalar_string_from_source(&self.source, scalar))
             }
@@ -7001,7 +6997,7 @@ impl Parser {
                 );
                 continue;
             };
-            if ScalarValue::from_scalar(&scalar).scalar_type() != ScalarType::String {
+            if scalar_type_for_value(&scalar) != ScalarType::String {
                 self.unsupported_sequence_item(
                     EXPECTED_SCALAR,
                     &YamlNode::Scalar(scalar),
@@ -7071,7 +7067,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer => {
                 DeployPlacementMaxReplicasPerNode::YamlInteger(scalar_string_from_source(&self.source, scalar))
             }
@@ -7102,7 +7098,7 @@ impl Parser {
             );
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(
                 EXPECTED_SCALAR,
                 field,
@@ -7232,7 +7228,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer => DeployResourcePids::YamlInteger(scalar_string_from_source(&self.source, scalar)),
             ScalarType::String => DeployResourcePids::String(scalar_string_from_source(&self.source, scalar)),
             _ => {
@@ -7263,7 +7259,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer | ScalarType::Float => {
                 DeployResourceCpus::YamlNumber(scalar_string_from_source(&self.source, scalar))
             }
@@ -7292,7 +7288,7 @@ impl Parser {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         }
@@ -7404,7 +7400,7 @@ impl Parser {
                             item.push_unknown(option.reference());
                             continue;
                         };
-                        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                        if scalar_type_for_value(scalar) != ScalarType::String {
                             self.expected(
                                 EXPECTED_SCALAR,
                                 &option,
@@ -7485,7 +7481,7 @@ impl Parser {
             );
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Integer => {
                 DeployReservationDeviceCount::YamlInteger(scalar_string_from_source(&self.source, scalar))
             }
@@ -7529,7 +7525,7 @@ impl Parser {
                 continue;
             };
             let item_span = span_from_position(self.source_id, scalar.byte_range());
-            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            if scalar_type_for_value(scalar) != ScalarType::String {
                 self.unsupported_sequence_item(
                     EXPECTED_SCALAR,
                     &YamlNode::Scalar(scalar.clone()),
@@ -7569,7 +7565,7 @@ impl Parser {
                         continue;
                     };
                     let span = span_from_position(self.source_id, scalar.byte_range());
-                    if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+                    if scalar_type_for_value(scalar) != ScalarType::String {
                         self.unsupported_sequence_item(EXPECTED_SCALAR, &YamlNode::Scalar(scalar.clone()), field.span,
                             "deploy resource reservation device options list entries must be strict YAML string scalars");
                         items.push(DeployReservationDeviceOptionItem::unmodeled(span));
@@ -7698,7 +7694,7 @@ impl Parser {
             self.expected(EXPECTED_SCALAR, field, message);
             return None;
         };
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Null => ComposeScalar::Null,
             ScalarType::Boolean => ComposeScalar::Boolean(ScalarValue::from_scalar(scalar).to_bool().unwrap_or(false)),
             ScalarType::Integer | ScalarType::Float => {
@@ -7742,7 +7738,7 @@ impl Parser {
                 continue;
             };
             let item_span = span_from_position(self.source_id, scalar.byte_range());
-            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            if scalar_type_for_value(scalar) != ScalarType::String {
                 self.unsupported_sequence_item(
                     EXPECTED_SCALAR,
                     &YamlNode::Scalar(scalar.clone()),
@@ -7795,7 +7791,7 @@ impl Parser {
                 name if name.starts_with("x-") => spec.push_extension(option.reference()),
                 "kind" => {
                     if let Some(scalar) = option.value.as_ref().and_then(YamlNode::as_scalar) {
-                        if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::String {
+                        if scalar_type_for_value(scalar) == ScalarType::String {
                             spec.set_kind(Located::new(
                                 scalar_string_from_source(&self.source, scalar),
                                 span_from_position(self.source_id, scalar.byte_range()),
@@ -7819,7 +7815,7 @@ impl Parser {
                 }
                 "value" => {
                     if let Some(scalar) = option.value.as_ref().and_then(YamlNode::as_scalar) {
-                        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+                        let value = match scalar_type_for_value(scalar) {
                             ScalarType::Integer | ScalarType::Float => Some(DeployDiscreteResourceValue::YamlNumber(
                                 scalar_string_from_source(&self.source, scalar),
                             )),
@@ -8823,6 +8819,14 @@ impl Parser {
             );
             return None;
         };
+        if value.as_scalar().is_some_and(scalar_is_null) {
+            self.expected(
+                EXPECTED_FIELD_FORM,
+                field,
+                format!("{kind} external must be a boolean or mapping"),
+            );
+            return None;
+        }
         let Some(mapping) = value.as_mapping() else {
             return self
                 .parse_boolean(field, &format!("{kind} external"))
@@ -8933,7 +8937,7 @@ impl Parser {
             self.expected(EXPECTED_SCALAR, field, format!("{description} must be a scalar"));
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null {
+        if scalar_is_null(scalar) {
             self.expected(
                 EXPECTED_SCALAR,
                 field,
@@ -8991,7 +8995,7 @@ impl Parser {
             );
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(
                 EXPECTED_SCALAR,
                 field,
@@ -9038,7 +9042,7 @@ impl Parser {
             );
             return None;
         };
-        if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+        if scalar_type_for_value(scalar) != ScalarType::String {
             self.expected(
                 BUILD_ISOLATION_EXPECTED_STRING,
                 field,
@@ -9088,7 +9092,7 @@ impl Parser {
         };
         let span = span_from_position(self.source_id, scalar.byte_range());
         let scalar_value = ScalarValue::from_scalar(scalar);
-        let value = match scalar_value.scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Boolean => BuildNoCache::Boolean(scalar_value.to_bool().unwrap_or(false)),
             ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
                 BuildNoCache::String(scalar_string_from_source(&self.source, scalar))
@@ -9106,7 +9110,7 @@ impl Parser {
     }
     fn parse_build_no_cache_filter(&mut self, field: &ParsedField) -> Option<BuildNoCacheFilter> {
         match field.value.as_ref() {
-            Some(YamlNode::Scalar(s)) if ScalarValue::from_scalar(s).scalar_type() == ScalarType::String => {
+            Some(YamlNode::Scalar(s)) if scalar_type_for_value(s) == ScalarType::String => {
                 Some(BuildNoCacheFilter::Scalar(Located::new(
                     scalar_string_from_source(&self.source, s),
                     span_from_position(self.source_id, s.byte_range()),
@@ -9165,7 +9169,7 @@ impl Parser {
         };
         let span = span_from_position(self.source_id, scalar.byte_range());
         let scalar_value = ScalarValue::from_scalar(scalar);
-        let value = match scalar_value.scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Boolean => BuildSbom::Boolean(scalar_value.to_bool().unwrap_or(false)),
             ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => {
                 BuildSbom::String(scalar_string_from_source(&self.source, scalar))
@@ -9185,7 +9189,7 @@ impl Parser {
     fn parse_build_provenance(&mut self, field: &ParsedField) -> Option<Located<BuildProvenance>> {
         let scalar = field.value.as_ref().and_then(YamlNode::as_scalar)?;
         let span = span_from_position(self.source_id, scalar.byte_range());
-        let value = match ScalarValue::from_scalar(scalar).scalar_type() {
+        let value = match scalar_type_for_value(scalar) {
             ScalarType::Boolean => {
                 BuildProvenance::Boolean(ScalarValue::from_scalar(scalar).to_bool().unwrap_or(false))
             }
@@ -9244,7 +9248,7 @@ impl Parser {
                 invalid.push(InvalidServiceStringItem::new(span));
                 continue;
             };
-            if ScalarValue::from_scalar(scalar).scalar_type() != ScalarType::String {
+            if scalar_type_for_value(scalar) != ScalarType::String {
                 self.unsupported_sequence_item(
                     EXPECTED_SCALAR,
                     &node,
@@ -9272,8 +9276,7 @@ impl Parser {
                 self.unsupported_sequence_item(EXPECTED_SCALAR, &node, fallback_span, &message);
                 continue;
             };
-            let scalar_value = ScalarValue::from_scalar(&scalar);
-            if scalar_value.scalar_type() == ScalarType::Null {
+            if scalar_is_null(&scalar) {
                 self.unsupported_sequence_item(EXPECTED_SCALAR, &YamlNode::Scalar(scalar), fallback_span, &message);
                 continue;
             }
@@ -9314,8 +9317,11 @@ impl Parser {
             return None;
         };
         let span = span_from_position(self.source_id, scalar.byte_range());
+        if scalar_is_null(scalar) {
+            return Some(Located::new(ComposeScalar::Null, span));
+        }
         let value = ScalarValue::from_scalar(scalar);
-        let typed = match value.scalar_type() {
+        let typed = match scalar_type_for_value(scalar) {
             ScalarType::Null => ComposeScalar::Null,
             ScalarType::Boolean => ComposeScalar::Boolean(value.to_bool().unwrap_or(false)),
             ScalarType::Integer | ScalarType::Float => {
@@ -9338,7 +9344,7 @@ impl Parser {
             self.expected(EXPECTED_FIELD_FORM, field, message);
             return None;
         };
-        let type_ = ScalarValue::from_scalar(node).scalar_type();
+        let type_ = scalar_type_for_value(node);
         if type_ != ScalarType::Integer && type_ != ScalarType::String {
             self.expected(EXPECTED_FIELD_FORM, field, message);
             return None;
@@ -9357,7 +9363,7 @@ impl Parser {
             return None;
         };
         if !matches!(
-            ScalarValue::from_scalar(node).scalar_type(),
+            scalar_type_for_value(node),
             ScalarType::String | ScalarType::Timestamp | ScalarType::Regex | ScalarType::Integer | ScalarType::Float
         ) {
             self.expected(EXPECTED_FIELD_FORM, field, message);
@@ -9373,7 +9379,7 @@ impl Parser {
     ) -> Option<Located<ComposeScalar>> {
         let message = message.into();
         let node = field.value.as_ref().and_then(YamlNode::as_scalar)?;
-        if ScalarValue::from_scalar(node).scalar_type() != ScalarType::Integer {
+        if scalar_type_for_value(node) != ScalarType::Integer {
             self.expected(EXPECTED_FIELD_FORM, field, message);
             return None;
         }
@@ -9417,7 +9423,7 @@ impl Parser {
                 continue;
             };
             if !matches!(
-                ScalarValue::from_scalar(&scalar).scalar_type(),
+                scalar_type_for_value(&scalar),
                 ScalarType::String | ScalarType::Timestamp | ScalarType::Regex
             ) {
                 self.unsupported_sequence_item(EXPECTED_SCALAR, &YamlNode::Scalar(scalar), fallback_span, &message);
@@ -9460,7 +9466,7 @@ impl Parser {
             };
             let item_span = span_from_position(self.source_id, scalar.byte_range());
             let scalar_value = ScalarValue::from_scalar(&scalar);
-            let value = match scalar_value.scalar_type() {
+            let value = match scalar_type_for_value(&scalar) {
                 ScalarType::Null => ComposeScalar::Null,
                 ScalarType::Boolean => ComposeScalar::Boolean(scalar_value.to_bool().unwrap_or(false)),
                 ScalarType::Integer | ScalarType::Float => {
@@ -9547,10 +9553,10 @@ impl Parser {
     }
 
     fn field_is_null(field: &ParsedField) -> bool {
-        field.value.as_ref().is_none_or(|node| {
-            node.as_scalar()
-                .is_some_and(|scalar| ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null)
-        })
+        field
+            .value
+            .as_ref()
+            .is_none_or(|node| node.as_scalar().is_some_and(scalar_is_null))
     }
 
     fn unsupported_sequence_item(
@@ -9785,6 +9791,18 @@ fn node_span(source_id: SourceId, node: &YamlNode) -> Option<SourceSpan> {
 
 fn span_from_position(source_id: SourceId, position: yaml_edit::TextPosition) -> SourceSpan {
     SourceSpan::from_valid_offsets(source_id, position.start as usize, position.end as usize)
+}
+
+fn scalar_is_null(scalar: &Scalar) -> bool {
+    scalar_type_for_value(scalar) == ScalarType::Null
+}
+
+fn scalar_type_for_value(scalar: &Scalar) -> ScalarType {
+    if scalar.byte_range().is_empty() {
+        ScalarType::Null
+    } else {
+        ScalarValue::from_scalar(scalar).scalar_type()
+    }
 }
 
 fn union(left: SourceSpan, right: SourceSpan) -> SourceSpan {

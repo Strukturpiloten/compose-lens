@@ -5486,6 +5486,94 @@ fn retains_image_command_and_environment_forms() -> Result<(), Box<dyn std::erro
 }
 
 #[test]
+fn normalizes_implicit_null_values_without_erasing_quoted_empty_strings() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app\n",
+        "    command:\n",
+        "    entrypoint:\n",
+        "    environment:\n",
+        "      implicit:\n",
+        "      explicit: null\n",
+        "      quoted: \"\"\n",
+        "    pids_limit:\n",
+        "  list:\n",
+        "    image: example.invalid/list\n",
+        "    command:\n",
+        "      -\n",
+        "volumes:\n",
+        "  data:\n",
+        "    driver_opts:\n",
+        "      implicit:\n",
+        "      explicit: null\n",
+        "      quoted: \"\"\n",
+        "networks:\n",
+        "  app:\n",
+        "    ipam:\n",
+        "      options:\n",
+        "        implicit:\n",
+        "        explicit: null\n",
+        "        quoted: \"\"\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(3101), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+    let app = document.service("app").ok_or("app service expected")?;
+
+    let Some(Environment::Map { entries, .. }) = app.environment() else {
+        return Err("environment mapping expected".into());
+    };
+    assert!(matches!(entries[0].value().value(), ComposeScalar::Null));
+    assert!(matches!(entries[1].value().value(), ComposeScalar::Null));
+    assert!(matches!(
+        entries[2].value().value(),
+        ComposeScalar::String(value) if value.is_empty()
+    ));
+    assert!(matches!(app.command(), Some(Command::Null(_))));
+    assert!(matches!(app.entrypoint(), Some(Entrypoint::Null(_))));
+    assert!(matches!(
+        document.service("list").and_then(compose_lens::model::Service::command),
+        Some(Command::List { values, .. }) if values.is_empty()
+    ));
+
+    let driver_options = document
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "data")
+        .ok_or("data volume expected")?
+        .driver_opts();
+    assert!(matches!(driver_options[0].value().value(), ComposeScalar::Null));
+    assert!(matches!(driver_options[1].value().value(), ComposeScalar::Null));
+    assert!(matches!(
+        driver_options[2].value().value(),
+        ComposeScalar::String(value) if value.is_empty()
+    ));
+
+    let ipam_options = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "app")
+        .and_then(compose_lens::model::NetworkDefinition::ipam)
+        .ok_or("network IPAM expected")?
+        .options();
+    assert!(matches!(ipam_options[0].value().value(), ComposeScalar::Null));
+    assert!(matches!(ipam_options[1].value().value(), ComposeScalar::Null));
+    assert!(matches!(
+        ipam_options[2].value().value(),
+        ComposeScalar::String(value) if value.is_empty()
+    ));
+    assert!(app.pids_limit().is_none());
+    assert!(
+        parsed
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| { diagnostic.code() == compose_lens::model::PIDS_LIMIT_EXPECTED_VALUE })
+    );
+    Ok(())
+}
+
+#[test]
 fn trailing_empty_value_does_not_absorb_parent_fields() -> Result<(), Box<dyn std::error::Error>> {
     let syntax = SyntaxDocument::parse(SourceId::new(42), TRAILING_EMPTY_VALUE)?;
     let parsed = ComposeDocument::parse(syntax.document());
@@ -6078,6 +6166,84 @@ fn types_top_level_configs_and_secrets() -> Result<(), Box<dyn std::error::Error
     );
     assert_eq!(document.secrets()[0].name().value(), "implicit");
     assert_eq!(document.secrets()[0].file(), None);
+    Ok(())
+}
+
+#[test]
+fn treats_implicit_null_resource_definitions_as_empty_definitions() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(51),
+        concat!(
+            "---\nservices:\n  app:\n    image: example.invalid/app:1\n",
+            "networks:\n  implicit:\n  explicit: null\n",
+            "volumes:\n  implicit:\n  explicit: null\n",
+            "configs:\n  implicit:\n  explicit: null\n",
+            "secrets:\n  implicit:\n  explicit: null\n",
+        ),
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document was not recovered")?;
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(parsed.is_valid(), "{:#?}", parsed.diagnostics());
+    assert_eq!(document.networks().len(), 2);
+    assert_eq!(document.volumes().len(), 2);
+    assert_eq!(document.configs().len(), 2);
+    assert_eq!(document.secrets().len(), 2);
+    for names in [
+        document
+            .networks()
+            .iter()
+            .map(|value| value.name().value().as_str())
+            .collect::<Vec<_>>(),
+        document
+            .volumes()
+            .iter()
+            .map(|value| value.name().value().as_str())
+            .collect::<Vec<_>>(),
+        document
+            .configs()
+            .iter()
+            .map(|value| value.name().value().as_str())
+            .collect::<Vec<_>>(),
+        document
+            .secrets()
+            .iter()
+            .map(|value| value.name().value().as_str())
+            .collect::<Vec<_>>(),
+    ] {
+        assert_eq!(names, ["implicit", "explicit"]);
+    }
+    Ok(())
+}
+
+#[test]
+fn rejects_explicit_empty_strings_as_resource_definitions() -> Result<(), Box<dyn std::error::Error>> {
+    let syntax = SyntaxDocument::parse(
+        SourceId::new(52),
+        concat!(
+            "---\nservices:\n  app:\n    image: example.invalid/app:1\n",
+            "networks:\n  invalid: \"\"\n",
+            "volumes:\n  invalid: \"\"\n",
+            "configs:\n  invalid: \"\"\n",
+            "secrets:\n  invalid: \"\"\n",
+        ),
+    )?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document was not recovered")?;
+    let resource_diagnostics = parsed
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| diagnostic.code() == RESOURCE_EXPECTED_FORM)
+        .count();
+
+    assert!(syntax.is_valid(), "{:#?}", syntax.diagnostics());
+    assert!(!parsed.is_valid());
+    assert_eq!(resource_diagnostics, 4);
+    assert!(document.networks().is_empty());
+    assert!(document.volumes().is_empty());
+    assert!(document.configs().is_empty());
+    assert!(document.secrets().is_empty());
     Ok(())
 }
 

@@ -24,6 +24,11 @@ before selecting an output path.
 - retained effective short or long Compose forms; and
 - parser-validated minimal quoting for string keys and values.
 
+The canonical-v2 byte contract keeps command-style strings beginning with `--` double-quoted even
+when the current private YAML parser accepts them as plain strings. Changing that bounded stability
+rule requires a new versioned canonical representation rather than a dependency-only update.
+Generated string fields reuse this stable quoted-string boundary.
+
 Ambiguous YAML boolean, null, numeric, date, timestamp, and other non-string spellings remain quoted.
 Native booleans, numbers, and null values retain their typed YAML form. Safe retained tags remain;
 unsafe tags and unresolved aliases produce diagnostics and a parseable recovery value.
