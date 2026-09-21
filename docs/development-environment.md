@@ -29,8 +29,8 @@ Run:
 
 The script formats repository-owned files before validating them. A successful run covers Rust and
 non-Rust formatting, workflow security, repository policy, all targets, Clippy, tests, Rustdoc,
-package contents, coverage ratchets, MSRV, dependency policy, offline links, and SemVer checks. Any
-later edit invalidates the result.
+package contents, the offline provider-bootstrap regression, coverage ratchets, MSRV, dependency
+policy, offline links, and SemVer checks. Any later edit invalidates the result.
 
 The issue-to-PR sequence and ownership rules are canonical in [`AGENTS.md`](../AGENTS.md). Human and
 agent contributors use the same complete gate.

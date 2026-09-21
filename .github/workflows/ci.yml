@@ -50,6 +50,8 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo ci-doc
+      - name: Test provider Python bootstrap
+        run: bash scripts/test-provider-python-bootstrap.sh
       - name: Verify release package
         run: cargo ci-package
 

@@ -32,6 +32,13 @@ path placeholders; provider text, ordering, scalar spelling, and diagnostics rem
 Current-run captures are diagnostic evidence, not a deployment or runtime-effect claim; planned
 and runtime-effect rows are never selected.
 
+For `podman-compose`, the runner downloads the reviewed wheel under its URL basename, verifies the
+matrix SHA-256, and installs it through a local PEP 508 `file://` reference with pip hash checking.
+Its two Python dependencies remain exact, hash-locked matrix entries. The bootstrap regression uses
+a synthetic local wheel and no package index; it proves that portable local paths install, the
+former extensionless download name is rejected, and a mismatched hash fails closed.
+Pull-request CI and the local complete gate both run that offline regression before release.
+
 ## Evidence lifecycle
 
 ```text
