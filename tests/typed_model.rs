@@ -5486,6 +5486,94 @@ fn retains_image_command_and_environment_forms() -> Result<(), Box<dyn std::erro
 }
 
 #[test]
+fn normalizes_implicit_null_values_without_erasing_quoted_empty_strings() -> Result<(), Box<dyn std::error::Error>> {
+    let source = concat!(
+        "services:\n",
+        "  app:\n",
+        "    image: example.invalid/app\n",
+        "    command:\n",
+        "    entrypoint:\n",
+        "    environment:\n",
+        "      implicit:\n",
+        "      explicit: null\n",
+        "      quoted: \"\"\n",
+        "    pids_limit:\n",
+        "  list:\n",
+        "    image: example.invalid/list\n",
+        "    command:\n",
+        "      -\n",
+        "volumes:\n",
+        "  data:\n",
+        "    driver_opts:\n",
+        "      implicit:\n",
+        "      explicit: null\n",
+        "      quoted: \"\"\n",
+        "networks:\n",
+        "  app:\n",
+        "    ipam:\n",
+        "      options:\n",
+        "        implicit:\n",
+        "        explicit: null\n",
+        "        quoted: \"\"\n",
+    );
+    let syntax = SyntaxDocument::parse(SourceId::new(3101), source)?;
+    let parsed = ComposeDocument::parse(syntax.document());
+    let document = parsed.document().ok_or("typed document expected")?;
+    let app = document.service("app").ok_or("app service expected")?;
+
+    let Some(Environment::Map { entries, .. }) = app.environment() else {
+        return Err("environment mapping expected".into());
+    };
+    assert!(matches!(entries[0].value().value(), ComposeScalar::Null));
+    assert!(matches!(entries[1].value().value(), ComposeScalar::Null));
+    assert!(matches!(
+        entries[2].value().value(),
+        ComposeScalar::String(value) if value.is_empty()
+    ));
+    assert!(matches!(app.command(), Some(Command::Null(_))));
+    assert!(matches!(app.entrypoint(), Some(Entrypoint::Null(_))));
+    assert!(matches!(
+        document.service("list").and_then(compose_lens::model::Service::command),
+        Some(Command::List { values, .. }) if values.is_empty()
+    ));
+
+    let driver_options = document
+        .volumes()
+        .iter()
+        .find(|volume| volume.name().value() == "data")
+        .ok_or("data volume expected")?
+        .driver_opts();
+    assert!(matches!(driver_options[0].value().value(), ComposeScalar::Null));
+    assert!(matches!(driver_options[1].value().value(), ComposeScalar::Null));
+    assert!(matches!(
+        driver_options[2].value().value(),
+        ComposeScalar::String(value) if value.is_empty()
+    ));
+
+    let ipam_options = document
+        .networks()
+        .iter()
+        .find(|network| network.name().value() == "app")
+        .and_then(compose_lens::model::NetworkDefinition::ipam)
+        .ok_or("network IPAM expected")?
+        .options();
+    assert!(matches!(ipam_options[0].value().value(), ComposeScalar::Null));
+    assert!(matches!(ipam_options[1].value().value(), ComposeScalar::Null));
+    assert!(matches!(
+        ipam_options[2].value().value(),
+        ComposeScalar::String(value) if value.is_empty()
+    ));
+    assert!(app.pids_limit().is_none());
+    assert!(
+        parsed
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| { diagnostic.code() == compose_lens::model::PIDS_LIMIT_EXPECTED_VALUE })
+    );
+    Ok(())
+}
+
+#[test]
 fn trailing_empty_value_does_not_absorb_parent_fields() -> Result<(), Box<dyn std::error::Error>> {
     let syntax = SyntaxDocument::parse(SourceId::new(42), TRAILING_EMPTY_VALUE)?;
     let parsed = ComposeDocument::parse(syntax.document());
