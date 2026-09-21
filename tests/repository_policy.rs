@@ -945,8 +945,6 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
         "command: release-pr",
         "renovate: datasource=crate depName=release-plz",
         "version: \"0.3.160\"",
-        "release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131",
-        "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0",
         "(.head.ref | startswith(\"release-plz-\"))",
         "actions/workflows/release.yml/dispatches",
         "actions: write",
@@ -967,6 +965,22 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
         if workflow.contains(forbidden) {
             return Err(format!("release-plz workflow must not contain `{forbidden}`"));
         }
+    }
+
+    for action in ["release-plz/action", "actions/create-github-app-token"] {
+        if !support::has_exactly_one_immutable_versioned_action(&workflow, action) {
+            return Err(format!(
+                "release-plz workflow must contain exactly one immutable versioned `{action}` action"
+            ));
+        }
+    }
+
+    if workflow
+        .matches("renovate: datasource=crate depName=release-plz")
+        .count()
+        != 1
+    {
+        return Err("release-plz action must have one canonical Renovate extraction marker".to_owned());
     }
 
     let release = read_repository_file(".github/workflows/release.yml")?;
