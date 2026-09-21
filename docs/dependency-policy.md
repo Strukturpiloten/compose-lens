@@ -43,7 +43,8 @@ complete gate as a hand-authored dependency change.
 
 ## YAML representation
 
-`yaml-edit` 0.2.3 is pinned exactly with default features disabled. It remains private and no
-`yaml-edit` type may appear in the public API. The decision and alternatives are recorded in
+`yaml-edit` is pinned exactly in `Cargo.toml` with default features disabled. It remains private and
+no `yaml-edit` type may appear in the public API. Renovate owns the reviewed version and lockfile
+update, while the compatibility contract remains version-independent. The decision and alternatives are recorded in
 [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md) and the
 [YAML representation evaluation](research/yaml-representation.md).
