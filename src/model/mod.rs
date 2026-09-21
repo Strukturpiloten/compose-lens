@@ -9548,8 +9548,9 @@ impl Parser {
 
     fn field_is_null(field: &ParsedField) -> bool {
         field.value.as_ref().is_none_or(|node| {
-            node.as_scalar()
-                .is_some_and(|scalar| ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null)
+            node.as_scalar().is_some_and(|scalar| {
+                scalar.byte_range().is_empty() || ScalarValue::from_scalar(scalar).scalar_type() == ScalarType::Null
+            })
         })
     }
 
