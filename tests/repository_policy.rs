@@ -1339,6 +1339,9 @@ fn validate_shared_policy_manager(renovate: &Value) -> Result<(), String> {
     {
         return Err("Renovate must own exactly one immutable shared workflow revision marker".to_owned());
     }
+    if managers[0]["datasourceTemplate"] != "github-digest" {
+        return Err("shared-policy Renovate manager must declare the github-digest datasource".to_owned());
+    }
     let pattern = managers[0]["matchStrings"][0]
         .as_str()
         .ok_or_else(|| "shared-policy Renovate manager must have one regex".to_owned())?;
