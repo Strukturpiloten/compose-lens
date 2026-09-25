@@ -63,8 +63,7 @@ constrain round-trip behavior or the public model.
 
 ## Canonical development commands
 
-The crate uses Rust 2024, supports Rust 1.85.0 and newer, and pins the normal development toolchain
-in `rust-toolchain.toml`.
+Rust 2024 supports Rust 1.85.0+; `rust-toolchain.toml` pins the normal toolchain.
 
 ```console
 ./scripts/check-all.sh
@@ -86,33 +85,28 @@ cargo test --locked --test public_api
 cargo package --locked
 ```
 
-The `ci-*` aliases use locked resolution and all workspace features and targets where applicable.
-Do not weaken checks or lints to accommodate a change. Provider capture remains explicit and ignored
-by ordinary tests; its isolation and inputs are documented in `conformance/README.md`.
+`ci-*` aliases use locked resolution and applicable workspace features/targets. Do not weaken
+checks or lints. Provider capture is explicit, ignored by ordinary tests, and documented in
+`conformance/README.md`.
 
 ## GitHub issue-to-PR workflow
 
-For task-related Git and GitHub work authorized below:
+For authorized task-related Git/GitHub work: inspect status and full diff; preserve unrelated work;
+search duplicates and create one focused issue when needed; fetch `origin/main`, synchronize
+`main`, and branch `TheRealBecks/issue<NUMBER>`; then complete and review the scoped change.
 
-1. Inspect `git status` and the complete diff; preserve unrelated work.
-2. Search for a duplicate issue, then create one focused issue if needed.
-3. Fetch `origin/main`, synchronize local `main`, and branch as
-   `TheRealBecks/issue<NUMBER>`.
-4. Complete and review the change without staging unrelated files.
-5. Run `./scripts/check-all.sh`. Every step must pass. Any source, test, configuration, or
-   documentation edit after a successful run invalidates the gate and requires another full run.
-6. Stage only explicit in-scope paths, run `git diff --cached --check`, and review the staged diff.
-7. Create one intentional commit, push, and open a ready pull request containing
-   `Closes #<NUMBER>`.
-8. Read the pull request back and report the issue, branch, commit, validation, URL, and checks.
+Run `./scripts/check-all.sh`; every step must pass. Any later source, test, configuration, or
+documentation edit invalidates the gate. Stage explicit in-scope paths, run `git diff --cached --check`,
+review the staged diff, make one intentional commit, push, and open a ready pull request with
+`Closes #<NUMBER>`. Read back and report issue, branch, commit, validation, URL, and checks.
 
 Use `feat`, `fix`, `perf`, `refactor`, or `revert` only for release-worthy code changes. Use
 `docs`, `test`, `ci`, `build`, `style`, or `chore` for documentation and maintenance so
-release-plz ignores them. A failed or incomplete full gate blocks commits, pushes, and pull-request
-creation.
+release-plz ignores them.
+A failed or incomplete full gate blocks commits, pushes, and pull-request creation.
 
-The primary agent owns Git and GitHub writes, final integration, full validation, staging, and
-readback. Subagents never commit, push, publish, tag, release, or create pull requests.
+The primary agent owns Git and GitHub writes.
+Subagents never commit, push, publish, tag, release, or create pull requests.
 
 ## Workspace scope and standing GitHub authorization
 
@@ -126,23 +120,24 @@ workspace repositories:
 - `Strukturpiloten/boxferry-website`
 - `Strukturpiloten/docker-lens`
 
-Do not work on or modify any repository outside this explicit allowlist, including its issues,
-pull requests, branches, settings, or workflows. An upstream documentation reference is not
-permission to operate on that upstream repository. A newly discovered checkout is not implicitly
-in scope.
+Do not work on or modify any repository outside this explicit allowlist, including issues, pull
+requests, branches, settings, or workflows. An upstream documentation reference is not permission
+to operate there. A newly discovered checkout is not implicitly in scope.
 
 For user-requested work within this scope, the primary agent may create issues, branches, commits,
 pushes, and pull requests and merge verified task-related pull requests without asking for renewed
-approval. This permission does not authorize unrelated backlog work, implementation of
-discussion-only proposals, or expansion of the requested product scope. A later user instruction
+approval. This permission does not authorize unrelated backlog work or implementation of
+discussion-only proposals. It does not expand the requested product scope. A later user instruction
 may narrow or revoke this permission.
 
-Immediately before merging, read back the exact head commit and verify that the pull request is
-ready, mergeable, independently reviewed, and has every required check successful. Use the normal
-merge method with an exact-head safeguard; never bypass branch protection or use an administrator
+Immediately before merging, read back the exact head commit and verify the pull request is
+ready, mergeable, independently reviewed, and has every required check successful. Use the normal merge
+method with an exact-head safeguard; never bypass branch protection or use an administrator
 override. Read back the merged state and merge commit, synchronize local `main` with `origin/main`,
 and remove the task's recorded worktrees and verified merged local branches while preserving
-unrelated work.
+unrelated work. Use `git worktree remove <recorded-path>`,
+`git branch --delete --force TheRealBecks/issue<NUMBER>`, and `git worktree prune --verbose`; read
+back `git worktree list --porcelain` and `git status --short --branch` with no stale registrations.
 
 This standing permission does not authorize releases, publication, deployment operations, or
 merging release/publication/deployment pull requests; those require a separate explicit request.
@@ -151,41 +146,51 @@ checkout and must not perform those writes.
 
 ## Multi-agent coordination
 
-- Delegate only concrete, bounded work with an independently verifiable result.
-- Never run two source-writing agents in the same checkout concurrently.
-- Agents may write concurrently only in separate checkouts with an agreed public contract.
-- Research and review agents stay read-only.
-- Run a repository verifier only after writing is complete; verifiers report failures but do not
-  modify files.
-- The primary agent owns architectural and cross-repository API decisions.
+- Delegate only concrete, bounded, independently verifiable work. Writers need separate checkouts
+  and an agreed public contract; never use two in one checkout. Research/review is read-only.
+- Run a verifier only after writing is complete; it reports failures without edits. The primary owns
+  architectural and cross-repository API decisions.
 
 ## Agent roles and verification
 
-Model defaults belong in [`.codex/config.toml`](.codex/config.toml); task-specific models and
-reasoning belong in [`.codex/agents/`](.codex/agents/). The primary manager always uses
-`gpt-6-astra` with `xhigh` reasoning. Implementation, specification research, and independent review
-use `gpt-6-sol` with `high` reasoning; check-only verification uses `gpt-6-luna` with `high`
-reasoning. Use Luna for bounded read-only exploration and Sol for difficult failure diagnosis.
-These model settings do not expand the workspace scope or grant additional permissions.
+Model defaults: [`.codex/config.toml`](.codex/config.toml); task settings:
+[`.codex/agents/`](.codex/agents/). The primary manager always uses `gpt-6-astra` with `xhigh` reasoning;
+implementation/research/review use `gpt-6-sol` with `high` reasoning; check-only verification uses
+`gpt-6-luna` with `high` reasoning. Use Luna for bounded read-only exploration and Sol for difficult
+failure diagnosis. Models do not expand scope or permissions.
 
-- Delegate bounded tasks when independent work can usefully proceed in parallel. Define the shared
-  contract and explicit repository, checkout, and file ownership before delegation.
-- Use up to nine concurrent subagents plus the primary manager, subject to the session's actual
-  runtime limit. Nine is a ceiling, not a target or nine distinct roles: several subagents may use
-  the same role for independent tasks. Do not create nested agents to evade the limit.
-- Never run two writers in one checkout. Use separate assigned repositories or worktrees for
-  concurrent implementation. Research and review remain read-only.
+- Before delegation, define contract, repository, checkout, and file ownership.
+  Use up to nine concurrent subagents plus the primary manager, subject to the runtime limit.
+  Nine is a ceiling, not a target or nine distinct roles. Do not create nested agents to evade the limit.
 - The reviewer checks the original requirements and independent expected results, not just agreement
   between the implementation and its tests.
-- After writing finishes, the verifier runs `./scripts/check-all.sh --check`. It reports failures
-  without formatting or editing tracked files; ignored build artifacts and caches are allowed.
-- Run at most one complete gate or heavy runtime suite at a time across this workspace. Agent
-  concurrency is not permission for competing builds. The primary owns integration, the final
-  complete gate, and every authorized Git or GitHub write.
+- After writing finishes, the verifier runs `./scripts/check-all.sh --check` without tracked-file edits;
+  ignored build artifacts/caches are allowed.
+  Run at most one complete gate or heavy runtime suite at a time across this workspace:
+  concurrency does not permit competing builds. The primary owns integration, the final gate, and
+  authorized Git/GitHub writes.
 
-The default `./scripts/check-all.sh` still formats before checking. `--check` runs the same
-complete gate without source formatting; it is not a reduced test tier. A later edit invalidates
-either result. Neither mode grants release, publication, or deployment authority.
+Default `./scripts/check-all.sh` formats; `--check` is the same gate without source formatting, not
+a reduced tier. A later edit invalidates either; neither grants release, publication, or deployment.
+
+## Cross-repository workflow and version policy
+
+- Align equivalent local/PR/main/release definitions across BoxFerry, ComposeLens, PodmanLens,
+  QuadletLens, DockerLens, and the website. Identify canonical definitions and all consumers;
+  coordinate updates, validate each consumer, and link justified differences/follow-ups.
+- Reuse shared scripts/actions/workflows; preserve native conformance and thresholds. BoxFerry
+  owns application suites; Lens products must not depend on it.
+- Added/changed software needs explicit versions and supported integrity records: image
+  version tags plus digests; Action/workflow full SHAs plus exact release-tag comments;
+  downloaded-tool versions plus verified checksums; package declarations plus lockfile integrity.
+  Document unavailable-integrity exceptions; never invent checksums or weaken reviewed pins.
+- Added/changed/moved/removed pins or definitions require same-change Renovate ownership,
+  paths/extraction, grouping, approvals, and regression review. Update configuration/consumers
+  together or document verified no-change evidence. Avoid duplicate managers; preserve historical
+  evidence and intentional fixtures. Follow `docs/dependency-policy.md`.
+- Preserve least privilege, exact-candidate evidence, failure propagation, budgets, privacy, and
+  cleanup. Follow `docs/releasing.md`; never claim planned automation is delivered. One passing
+  repository does not prove rollout completion. These rules grant no additional authority.
 
 ## Code discovery
 
@@ -193,12 +198,3 @@ For code discovery, use an available codebase-memory graph first; otherwise use 
 the repository already has a usable index. Do not create an index without user authorization.
 If neither graph is available or a query cannot answer the question, use `rg` and targeted reads.
 For string literals, configuration, scripts, and documentation, start with `rg` directly.
-
-## After an authorized merge
-
-Read back the merged state and exact merge commit, then synchronize the primary checkout with
-`origin/main`. Preserve unrelated files. Remove only the recorded task worktree with
-`git worktree remove <recorded-path>`, delete the verified merged local issue branch with
-`git branch --delete --force TheRealBecks/issue<NUMBER>`, and run
-`git worktree prune --verbose`. Read back `git worktree list --porcelain` and
-`git status --short --branch`; do not leave stale task worktree registrations.
