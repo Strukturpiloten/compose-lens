@@ -1756,19 +1756,19 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     let root = repository_root();
     let config = fs::read_to_string(root.join(".codex/config.toml"))?;
     for required in [
-        "model = \"gpt-5.6-sol\"",
+        "model = \"gpt-6-astra\"",
         "model_reasoning_effort = \"xhigh\"",
-        "max_concurrent_threads_per_session = 3",
-        "default_subagent_model = \"gpt-5.6-terra\"",
+        "max_concurrent_threads_per_session = 9",
+        "default_subagent_model = \"gpt-6-sol\"",
         "default_subagent_reasoning_effort = \"medium\"",
     ] {
         assert!(config.contains(required), "missing agent default: {required}");
     }
     for (role, model, effort, sandbox) in [
-        ("implementation-worker", "gpt-5.6-terra", "high", "workspace-write"),
-        ("specification-researcher", "gpt-5.6-terra", "high", "read-only"),
-        ("reviewer", "gpt-5.6-sol", "high", "read-only"),
-        ("verifier", "gpt-5.6-terra", "medium", "workspace-write"),
+        ("implementation-worker", "gpt-6-sol", "high", "workspace-write"),
+        ("specification-researcher", "gpt-6-sol", "high", "read-only"),
+        ("reviewer", "gpt-6-sol", "high", "read-only"),
+        ("verifier", "gpt-6-luna", "high", "workspace-write"),
     ] {
         let text = fs::read_to_string(root.join(format!(".codex/agents/{role}.toml")))?;
         for (key, value) in [
@@ -1788,8 +1788,77 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     let verifier = fs::read_to_string(root.join(".codex/agents/verifier.toml"))?;
     assert!(verifier.contains("./scripts/check-all.sh --check"));
     assert!(verifier.contains("never run the default formatting gate"));
+    assert!(verifier.contains("Escalate complex failure diagnosis to the primary agent"));
     let instructions = fs::read_to_string(root.join("AGENTS.md"))?;
-    assert!(!instructions.contains("Sol") && !instructions.contains("Terra") && !instructions.contains("Astra"));
+    for required in [
+        "`gpt-6-astra` with `xhigh` reasoning",
+        "use `gpt-6-sol` with `high` reasoning",
+        "`gpt-6-luna` with `high`",
+        "Use up to nine concurrent subagents plus the primary manager",
+        "Do not create nested agents to evade the limit",
+        "Run at most one complete gate or heavy runtime suite at a time",
+        "reviewer checks the original requirements and independent expected results",
+        "The primary owns integration, the final",
+    ] {
+        assert!(instructions.contains(required), "missing agent policy: {required}");
+    }
+    Ok(())
+}
+
+#[test]
+fn standing_git_authorization_is_scoped_and_safeguarded() -> Result<(), Box<dyn std::error::Error>> {
+    let instructions = fs::read_to_string(repository_root().join("AGENTS.md"))?;
+    let section = instructions
+        .split_once("## Workspace scope and standing GitHub authorization")
+        .ok_or("missing standing authorization section")?
+        .1
+        .split("\n## ")
+        .next()
+        .ok_or("empty standing authorization section")?;
+    let repositories: Vec<_> = section.lines().filter_map(|line| line.strip_prefix("- ")).collect();
+    assert_eq!(
+        repositories,
+        [
+            "`Strukturpiloten/boxferry`",
+            "`Strukturpiloten/compose-lens`",
+            "`Strukturpiloten/podman-lens`",
+            "`Strukturpiloten/quadlet-lens`",
+            "`Strukturpiloten/boxferry-website`",
+            "`Strukturpiloten/docker-lens`",
+        ]
+    );
+    for required in [
+        "standing authorization for task-related Git and GitHub work only in these",
+        "Do not work on or modify any repository outside this explicit allowlist",
+        "An upstream documentation reference is not",
+        "A newly discovered checkout is not implicitly",
+        "the primary agent may create issues, branches, commits",
+        "merge verified task-related pull requests without asking for renewed",
+        "does not authorize unrelated backlog work",
+        "discussion-only proposals",
+        "may narrow or revoke this permission",
+        "Immediately before merging, read back the exact head commit",
+        "ready, mergeable, independently reviewed, and has every required check successful",
+        "exact-head safeguard; never bypass branch protection",
+        "override. Read back the merged state and merge commit, synchronize local `main`",
+        "and remove the task's recorded worktrees and verified merged local branches",
+        "unrelated work",
+        "does not authorize releases, publication, deployment operations",
+        "merging release/publication/deployment pull requests",
+        "those require a separate explicit request",
+        "The primary agent owns all Git and GitHub writes",
+        "checkout and must not perform those writes",
+    ] {
+        assert!(
+            section.contains(required),
+            "missing authorization safeguard: {required}"
+        );
+    }
+    assert!(!instructions.contains("Merge only when the user explicitly authorizes"));
+    assert!(
+        !instructions
+            .contains("Authorization to run the Git workflow or perform GitHub writes does not authorize a merge")
+    );
     Ok(())
 }
 
