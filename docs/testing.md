@@ -67,7 +67,22 @@ cargo ci-application
 ./scripts/check-files.sh --check
 ```
 
-The full gate is the release and pull-request authority even when focused checks pass.
+The full gate remains mandatory before committing and publishing a pull request. PR CI uses a
+trusted-base, fail-closed change plan: only plain public prose can select the smaller repository
+file/link job plus the lockfile-age guard. Inline code, fenced or indented examples, non-public documentation,
+code, policy, unknown, or mixed changes select all jobs. There is no independent executable-guide
+suite, so those changes never use a reduced PR plan. Initial rollout against a base without the
+planner also runs all jobs. Main pushes, manual CI, and the reusable release CI always run all jobs
+for the exact tested commit. The stable `PR gate` accepts only planned skips and succeeds only when
+every selected job succeeds.
+
+The VS Code “Plan changed validation” task previews a local plan. “Validate changed files” runs
+it against staged, unstaged, untracked, and committed branch changes, checking that the local
+snapshot stays unchanged during validation. “Validate public prose only” rejects other profiles;
+“Validate full (check-only)” explicitly runs the complete gate. Worktree-local build artifacts are
+required to avoid stale path-bearing binaries from deleted worktrees. The complete gate rejects an
+external `CARGO_TARGET_DIR` and its mock regression covers worktree relocation. These are iteration aids;
+the complete pre-publication gate remains mandatory.
 
 ## Fixtures
 
@@ -92,9 +107,10 @@ processing, project boundaries, redaction, and generated-document parse-back.
 
 These tests do not establish runtime compatibility and do not depend on BoxFerry code. Provider
 configuration and externally supplied runtime observations are separately versioned under
-[`conformance/`](../conformance/README.md). The local complete gate, pull-request CI, and release
-workflow invoke the application suite explicitly so a skipped or empty contract cannot silently
-reduce application coverage.
+[`conformance/`](../conformance/README.md). The local complete gate, full pull-request CI plans,
+main CI, and release workflow invoke the application suite explicitly. A prose-only PR plan may
+skip the Rust application suite, but the complete pre-publication gate and the exact-candidate
+main/release gates prevent a skipped or empty contract from silently reducing release coverage.
 
 Release validation invokes CI through its reusable workflow interface and a separate bounded native
 provider-configuration matrix. The native matrix records the candidate SHA, run, and worker task,

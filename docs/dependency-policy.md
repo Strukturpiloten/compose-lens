@@ -56,7 +56,7 @@ rule-local zero-day Renovate override and may auto-merge only when the shared, f
 lockfile-release-age guard proves every newly introduced registry release is at least 72 hours old
 and the required aggregate PR gate succeeds.
 
-Fixed GitHub-hosted `ubuntu-*`, `macos-*`, and `windows-*` runner labels have one
+Fixed GitHub-hosted `ubuntu-*` runner labels have one
 `github-runners` regex owner across every workflow. Runner upgrades stay grouped with automerge
 disabled because their preinstalled tools and operating-system changes affect release evidence.
 
