@@ -1860,6 +1860,7 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
         "`gpt-6-sol` with `xhigh` reasoning",
         "use `gpt-6-sol` with `high` reasoning",
         "`gpt-6-luna` with `high`",
+        "reserve `gpt-6-astra` with `xhigh` reasoning for particularly difficult",
         "Use up to nine concurrent subagents plus the primary manager",
         "Do not create nested agents to evade the limit",
         "Run at most one complete gate or heavy runtime suite at a time",
