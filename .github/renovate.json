@@ -205,6 +205,17 @@
       "groupName": "Rust toolchain"
     },
     {
+      "description": "Review the exact Debian Bookworm Dev Container venv package",
+      "matchDatasources": ["repology"],
+      "matchPackageNames": ["debian_12/python3-venv"],
+      "versioning": "deb",
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Verify the candidate in the pinned Bookworm image's signed apt metadata for amd64 and arm64, rebuild the Dev Container, and run the pip-capable venv preflight and complete gate."
+      ]
+    },
+    {
       "description": "Require checksum review for downloaded file-quality tools",
       "matchFileNames": ["scripts/install-file-tools.sh"],
       "dependencyDashboardApproval": true,

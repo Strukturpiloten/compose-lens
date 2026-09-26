@@ -10,6 +10,14 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY --from=node_toolchain /usr/local/ /usr/local/
 
+# Bookworm apt verifies package hashes through its signed repository metadata.
+# renovate: datasource=repology depName=debian_12/python3-venv
+ARG PYTHON3_VENV_VERSION=3.11.2-1+b1
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends "python3-venv=${PYTHON3_VENV_VERSION}" \
+    && apt-get clean \
+    && rm -rf -- /var/lib/apt/lists/*
+
 # renovate: datasource=crate depName=cargo-deny
 ARG CARGO_DENY_VERSION=0.20.2
 # renovate: datasource=crate depName=cargo-llvm-cov

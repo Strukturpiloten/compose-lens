@@ -81,6 +81,12 @@ if ((${#missing_tools[@]} != 0)); then
   fail "missing required tool(s):${missing_list}. Use the ComposeLens Dev Container."
 fi
 
+# Provider-bootstrap tests need a pip-capable isolated Python environment.
+# Check it before rustup, Cargo, or other expensive validation work.
+if ! bash .devcontainer/verify-tools.sh --check-python-venv; then
+  fail "Python cannot create a pip-capable venv. Install python3-venv or rebuild the ComposeLens Dev Container."
+fi
+
 # Cargo test binaries embed absolute fixture paths. A shared external target
 # may retain stale paths after a worktree moves or is removed, so the complete
 # gate accepts only build artifacts owned by this worktree.

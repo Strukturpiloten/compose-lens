@@ -2,6 +2,31 @@
 
 set -euo pipefail
 
+check_python_venv() (
+  set -euo pipefail
+  venv_probe_root="$(mktemp -d "${TMPDIR:-/tmp}/composelens-venv-preflight.XXXXXX")"
+  trap 'rm -r -- "${venv_probe_root}"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  if ! python3 -m venv "${venv_probe_root}/venv" > /dev/null 2>&1 ||
+    ! "${venv_probe_root}/venv/bin/python" -I -m pip --version > /dev/null 2>&1; then
+    printf 'ComposeLens requires python3-venv with ensurepip and pip; rebuild the Dev Container.\n' >&2
+    exit 1
+  fi
+)
+
+if [[ "${1:-}" == "--check-python-venv" && "$#" -eq 1 ]]; then
+  check_python_venv
+  exit 0
+fi
+if (($# != 0)); then
+  printf 'Usage: %s [--check-python-venv]\n' "$0" >&2
+  exit 2
+fi
+
+check_python_venv
+
 for cargo_directory_name in CARGO_HOME CARGO_TARGET_DIR; do
   cargo_directory="${!cargo_directory_name:-}"
   if [[ -z "${cargo_directory}" ]]; then

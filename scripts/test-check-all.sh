@@ -70,13 +70,16 @@ status=0
 CHECK_ALL_TEST_REPOSITORY_ROOT="${test_root}/relocated" \
   CHECK_ALL_TEST_TARGET_DIR="${test_root}/repository/target" \
   run_gate relocated --check || status=$?
-[[ "${status}" == 2 && ! -s "${test_root}/relocated.commands" ]]
+[[ "${status}" == 2 ]]
+[[ "$(cat "${test_root}/relocated.commands")" == 'bash .devcontainer/verify-tools.sh --check-python-venv' ]]
 grep --fixed-strings --quiet -- 'CARGO_TARGET_DIR must be inside this worktree' \
   "${test_root}/relocated.output"
 
 diff -u "${test_root}/default.commands" "${test_root}/fix.commands"
 assert_contains fix "bash scripts/check-files.sh --fix"
 assert_contains check "bash scripts/check-files.sh --check"
+assert_contains check "bash .devcontainer/verify-tools.sh --check-python-venv"
+[[ "$(head -n 1 "${test_root}/check.commands")" == "bash .devcontainer/verify-tools.sh --check-python-venv" ]]
 if grep -q '^cargo fmt' "${test_root}/fix.commands"; then
   assert_contains fix "cargo fmt --all"
   assert_contains check "cargo fmt --all -- --check"
@@ -115,5 +118,43 @@ for mode in fix check; do
   run_gate failure "--${mode}" || status=$?
   [[ "${status}" == 17 ]]
   [[ "$(tail -n 1 "${test_root}/failure.commands")" == "actionlint" ]]
+done
+
+# Exercise the real early venv probe with controlled Python behavior. The mock
+# distinguishes missing ensurepip from a venv that exists but has no pip.
+mkdir -p "${test_root}/venv-bin" "${test_root}/venv-temp"
+cat > "${test_root}/venv-bin/python3" << 'MOCK_PYTHON'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$#" == 3 && "$1" == '-m' && "$2" == 'venv' ]] || exit 71
+if [[ "${PYTHON_VENV_TEST_MODE}" == 'missing' ]]; then
+  exit 72
+fi
+mkdir -p "$3/bin"
+cat > "$3/bin/python" <<'MOCK_VENV_PYTHON'
+#!/usr/bin/env bash
+[[ "$*" == '-I -m pip --version' && "${PYTHON_VENV_TEST_MODE}" == 'working' ]]
+MOCK_VENV_PYTHON
+chmod +x "$3/bin/python"
+MOCK_PYTHON
+chmod +x "${test_root}/venv-bin/python3"
+
+for mode in missing no_pip working; do
+  status=0
+  TMPDIR="${test_root}/venv-temp" \
+    PATH="${test_root}/venv-bin:${PATH}" \
+    PYTHON_VENV_TEST_MODE="${mode}" \
+    "${bash_executable}" "${script_directory}/../.devcontainer/verify-tools.sh" --check-python-venv \
+    > "${test_root}/venv-${mode}.output" 2>&1 || status=$?
+  if [[ "${mode}" == 'working' ]]; then
+    [[ "${status}" == 0 ]]
+  else
+    [[ "${status}" == 1 ]]
+    grep -Fq 'requires python3-venv with ensurepip and pip' "${test_root}/venv-${mode}.output"
+  fi
+  if compgen -G "${test_root}/venv-temp/composelens-venv-preflight.*" > /dev/null; then
+    printf 'The venv preflight left a temporary directory behind.\n' >&2
+    exit 1
+  fi
 done
 printf 'Complete gate mode regression tests passed.\n'

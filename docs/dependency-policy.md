@@ -61,7 +61,12 @@ Fixed GitHub-hosted `ubuntu-*` runner labels have one
 disabled because their preinstalled tools and operating-system changes affect release evidence.
 
 Every immutable revision has one Renovate owner. Dev Container and checksum-pinned tool updates
-remain manual.
+remain manual. The Dev Container's Bookworm `python3-venv` package has one exact Dockerfile version
+pin and one Renovate regex owner using Repology's Debian 12 package record. Renovate only proposes
+a candidate; manual review must verify that exact revision exists in the pinned image's signed apt
+indexes for amd64 and arm64 before accepting it. Apt's signed index and package hashes provide
+integrity for this distribution package; no separate guessed checksum is stored. The venv preflight
+in local validation and post-create verification detects images that lack `ensurepip` or pip.
 
 ## YAML representation
 
