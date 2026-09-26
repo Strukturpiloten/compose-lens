@@ -1229,6 +1229,7 @@ fn renovate_tracks_every_directly_pinned_development_tool() -> Result<(), String
     validate_renovate_lockfile_policy(&renovate_value)?;
     for required in [
         "Update versioned Dev Container tools",
+        "Review the exact Debian Bookworm Dev Container venv package",
         "Signal updates for checksum-pinned file-quality tools",
         "Update directly pinned workflow tool versions",
         "Update the documented Dev Container CLI",
@@ -1258,9 +1259,11 @@ fn renovate_tracks_every_directly_pinned_development_tool() -> Result<(), String
         }
     }
 
-    if renovate.matches(r#""automerge": false"#).count() != 4 {
-        return Err("Renovate must keep Dev Container features, checksum tools, provider bootstrap pins, and hosted runners manual".to_owned());
+    if renovate.matches(r#""automerge": false"#).count() != 5 {
+        return Err("Renovate must keep Dev Container features, Debian venv, checksum tools, provider bootstrap pins, and hosted runners manual".to_owned());
     }
+
+    validate_python_venv_renovate_policy(&renovate_value)?;
 
     for workflow_name in ["ci.yml"] {
         let workflow = read_repository_file(&format!(".github/workflows/{workflow_name}"))?;
@@ -1274,6 +1277,63 @@ fn renovate_tracks_every_directly_pinned_development_tool() -> Result<(), String
         }
     }
 
+    Ok(())
+}
+
+fn validate_python_venv_renovate_policy(renovate: &Value) -> Result<(), String> {
+    let dockerfile = read_repository_file(".devcontainer/Dockerfile")?;
+    let marker = "# renovate: datasource=repology depName=debian_12/python3-venv\nARG PYTHON3_VENV_VERSION=";
+    if dockerfile.matches(marker).count() != 1
+        || dockerfile.matches("ARG PYTHON3_VENV_VERSION=").count() != 1
+        || !dockerfile
+            .contains("apt-get install --yes --no-install-recommends \"python3-venv=${PYTHON3_VENV_VERSION}\"")
+    {
+        return Err("the Dev Container must install one exact Renovate-owned Bookworm python3-venv package".to_owned());
+    }
+    let owner = renovate["customManagers"]
+        .as_array()
+        .ok_or("Renovate customManagers must be an array")?
+        .iter()
+        .filter(|manager| {
+            manager["description"] == "Update versioned Dev Container tools"
+                && manager["managerFilePatterns"].as_array().is_some_and(|patterns| {
+                    patterns
+                        .iter()
+                        .any(|pattern| pattern == "/^\\.devcontainer/Dockerfile$/")
+                })
+                && manager["matchStrings"].as_array().is_some_and(|patterns| {
+                    patterns.iter().any(|pattern| {
+                        pattern.as_str().is_some_and(|pattern| {
+                            pattern.contains("datasource=(?<datasource>")
+                                && pattern.contains("ARG [A-Z0-9_]+_VERSION=(?<currentValue>")
+                        })
+                    })
+                })
+        })
+        .count();
+    let package_rule = renovate["packageRules"]
+        .as_array()
+        .ok_or("Renovate packageRules must be an array")?
+        .iter()
+        .filter(|rule| {
+            rule["description"] == "Review the exact Debian Bookworm Dev Container venv package"
+                && rule["matchDatasources"]
+                    .as_array()
+                    .is_some_and(|values| values.len() == 1 && values[0] == "repology")
+                && rule["matchPackageNames"]
+                    .as_array()
+                    .is_some_and(|values| values.len() == 1 && values[0] == "debian_12/python3-venv")
+                && rule["versioning"] == "deb"
+                && rule["automerge"] == false
+                && rule["dependencyDashboardApproval"] == true
+        })
+        .count();
+    if owner != 1 || package_rule != 1 {
+        return Err(
+            "the Bookworm python3-venv pin needs one Renovate extraction owner and one manual Debian package rule"
+                .to_owned(),
+        );
+    }
     Ok(())
 }
 
@@ -1870,6 +1930,24 @@ fn standing_git_authorization_is_scoped_and_safeguarded() -> Result<(), Box<dyn 
 
 // The full shell gate targets the Linux Dev Container.
 // Keep configuration assertions above platform-independent.
+#[test]
+fn ci_checks_python_venv_before_expensive_rust_validation() -> Result<(), String> {
+    let workflow = read_repository_file(".github/workflows/ci.yml")?;
+    let preflight = workflow
+        .find("run: bash .devcontainer/verify-tools.sh --check-python-venv")
+        .ok_or("CI must check a pip-capable Python venv")?;
+    let cargo_check = workflow
+        .find("run: cargo ci-check")
+        .ok_or("CI Rust quality must run cargo ci-check")?;
+    let bootstrap = workflow
+        .find("run: bash scripts/test-provider-python-bootstrap.sh")
+        .ok_or("CI must run the provider Python bootstrap regression")?;
+    if !(preflight < cargo_check && cargo_check < bootstrap) {
+        return Err("CI must check Python venv before expensive Rust validation and bootstrap".to_owned());
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn linux_gate_modes_and_failure_propagation_are_correct() -> Result<(), Box<dyn std::error::Error>> {

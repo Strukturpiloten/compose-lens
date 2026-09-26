@@ -19,6 +19,13 @@ by CI.
 CI and release workflows read versions from these files instead of maintaining another prose copy.
 Renovate proposes updates; every proposal receives ordinary review and validation.
 
+The Bookworm Dev Container installs an exact `python3-venv` package from Debian's signed apt
+repository. Apt verifies package checksums through signed repository metadata rather than a
+separate hand-written checksum. The Dockerfile pin is the single version source; Renovate tracks
+the Debian 12 package through Repology and requires manual candidate review. Debian's package
+metadata lists `3.11.2-1+b1` for both amd64 and arm64 at this pin. Review any candidate against
+the pinned image's apt indexes before changing it.
+
 ## Complete validation
 
 Run:
@@ -26,6 +33,11 @@ Run:
 ```console
 ./scripts/check-all.sh
 ```
+
+The gate first creates a temporary isolated Python venv and checks its own pip. This fails quickly
+with a Dev Container rebuild hint if `ensurepip` or `python3-venv` is missing. Dev Container
+post-create verification and CI's Rust quality job check the same contract before expensive steps.
+The probes remove their temporary directories on normal success, failure, and handled interruption.
 
 The script formats repository-owned files before validating them. A successful run covers Rust and
 non-Rust formatting, workflow security, repository policy, all targets, Clippy, tests, Rustdoc,
