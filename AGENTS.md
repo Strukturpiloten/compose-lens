@@ -160,7 +160,8 @@ Model defaults: [`.codex/config.toml`](.codex/config.toml); task settings:
 [`.codex/agents/`](.codex/agents/). The primary manager always uses `gpt-6-sol` with `xhigh` reasoning;
 implementation/research/review use `gpt-6-sol` with `high` reasoning; check-only verification uses
 `gpt-6-luna` with `high` reasoning. Use Luna for bounded read-only exploration and Sol for difficult
-failure diagnosis. Models do not expand scope or permissions.
+failure diagnosis; reserve `gpt-6-astra` with `xhigh` reasoning for particularly difficult
+architectural questions. Models do not expand scope or permissions.
 
 - Before delegation, define contract, repository, checkout, and file ownership.
   Use up to nine concurrent subagents plus the primary manager, subject to the runtime limit.
