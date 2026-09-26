@@ -93,6 +93,25 @@ class ValidationPlanTests(unittest.TestCase):
         head = self.commit("indented command")
         self.assertEqual(self.plan(self.base, head)["profile"], "executable-docs")
 
+    def test_tabs_after_one_to_three_spaces_are_executable_in_new_and_edited_docs(self) -> None:
+        for spaces in range(1, 4):
+            with self.subTest(spaces=spaces, change="new"):
+                path = f"docs/public/tab-new-{spaces}.md"
+                before = git(self.root, "rev-parse", "HEAD")
+                write(self.root, path, f"# Example\n\n{' ' * spaces}\tcargo test --locked\n")
+                head = self.commit("new indented example")
+                self.assertEqual(self.plan(before, head)["profile"], "executable-docs")
+
+            with self.subTest(spaces=spaces, change="edited"):
+                path = f"docs/public/tab-edited-{spaces}.md"
+                before = git(self.root, "rev-parse", "HEAD")
+                write(self.root, path, "# Example\n\nPlain prose.\n")
+                prose_head = self.commit("new plain prose")
+                self.assertEqual(self.plan(before, prose_head)["profile"], "prose")
+                write(self.root, path, f"# Example\n\n{' ' * spaces}\tcargo test --locked\n")
+                head = self.commit("edit to indented example")
+                self.assertEqual(self.plan(prose_head, head)["profile"], "executable-docs")
+
     def test_policy_rejects_executable_documentation_downgrades(self) -> None:
         policy = copy.deepcopy(POLICY)
         policy["profile_jobs"]["executable-docs"] = ["documentation"]
