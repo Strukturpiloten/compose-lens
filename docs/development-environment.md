@@ -33,7 +33,8 @@ package contents, the offline provider-bootstrap regression, coverage ratchets, 
 policy, offline links, and SemVer checks. Any later edit invalidates the result.
 
 The issue-to-PR sequence and ownership rules are canonical in [`AGENTS.md`](../AGENTS.md). Human and
-agent contributors use the same complete gate.
+agent contributors use the same complete gate. The local change-aware planner and VS Code tasks
+can shorten iteration on public prose, but do not replace the complete pre-publication run.
 
 ## Focused checks
 
@@ -88,7 +89,7 @@ to run an optional evidence capture.
 Repository model defaults and role overrides live in [`.codex/`](../.codex/); permissions and
 workflow ownership remain defined in [`AGENTS.md`](../AGENTS.md). Reload or start a new trusted
 project session after updating configuration; an explicit session override can take precedence.
-Keep any explicit primary-session override aligned with Astra/xhigh.
+Keep any explicit primary-session override aligned with Sol/xhigh.
 
 Use `./scripts/check-all.sh --check` to run the complete gate without formatting repository-owned
 files. The default command (or `--fix`) still formats first. Both modes run the same validation;
@@ -97,4 +98,5 @@ and the primary agent owns the final complete gate and merges covered by the sta
 authorization in [`AGENTS.md`](../AGENTS.md).
 
 The shell-runner regression tests target the Linux Dev Container gate. Agent-configuration checks
-remain platform-independent; the macOS portability lane does not require Linux validation tools.
+remain platform-independent. macOS client compatibility is intended but not verified by CI; the
+CI and release validation lanes are Linux-only.

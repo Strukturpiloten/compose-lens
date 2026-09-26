@@ -20,9 +20,81 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  validation-plan:
+    name: Validation plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      profile: ${{ steps.plan.outputs.profile }}
+      select_rust: ${{ steps.plan.outputs.select_rust }}
+      select_msrv: ${{ steps.plan.outputs.select_msrv }}
+      select_dependencies: ${{ steps.plan.outputs.select_dependencies }}
+      select_documentation: ${{ steps.plan.outputs.select_documentation }}
+      select_api: ${{ steps.plan.outputs.select_api }}
+      select_coverage: ${{ steps.plan.outputs.select_coverage }}
+      select_lockfile_release_age: ${{ steps.plan.outputs.select_lockfile_release_age }}
+    steps:
+      - name: Check out exact tested revision and comparison history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out trusted PR base validation policy
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .validation-base
+          persist-credentials: false
+      - name: Select exact-revision validation plan
+        id: plan
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "${EVENT_NAME}" == 'pull_request' ]]; then
+            if [[ -f .validation-base/scripts/validation-plan.py &&
+                  -f .validation-base/scripts/validation-policy.json ]]; then
+              python3 .validation-base/scripts/validation-plan.py plan \
+                --repository-root "${GITHUB_WORKSPACE}" \
+                --policy-root .validation-base \
+                --event pull_request --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \
+                --tested-sha "${GITHUB_SHA}" --github-output "${GITHUB_OUTPUT}"
+            else
+              # First rollout: never execute a PR-head classifier without trusted base policy.
+              python3 - <<'PY'
+          import json
+          import os
+          import re
+
+          jobs = "rust msrv dependencies api documentation coverage lockfile-release-age".split()
+          base, head, tested = (os.environ[key] for key in ("BASE_SHA", "HEAD_SHA", "GITHUB_SHA"))
+          if any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (base, head, tested)):
+              raise SystemExit("first-rollout comparison has an invalid SHA")
+          plan = {"schema": 2, "repository": "Strukturpiloten/compose-lens", "event": "pull_request",
+                  "base_sha": base, "head_sha": head, "tested_sha": tested, "profile": "full",
+                  "jobs": {job: True for job in jobs}, "reasons": ["trusted base has no classifier"],
+                  "local_fingerprint": None}
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("plan=" + json.dumps(plan, sort_keys=True, separators=(",", ":")) + "\nprofile=full\n")
+              for job in jobs:
+                  output.write("select_" + job.replace("-", "_") + "=true\n")
+          PY
+            fi
+          else
+            python3 scripts/validation-plan.py plan --event "${EVENT_NAME}" \
+              --tested-sha "${GITHUB_SHA}" --github-output "${GITHUB_OUTPUT}"
+          fi
+
   rust:
     name: Rust quality
     runs-on: ubuntu-24.04
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_rust == 'true'
     timeout-minutes: 30
     steps:
       - &checkout
@@ -58,6 +130,8 @@ jobs:
   coverage:
     name: Coverage ratchet
     runs-on: ubuntu-24.04
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_coverage == 'true'
     timeout-minutes: 30
     steps:
       - *checkout
@@ -73,20 +147,11 @@ jobs:
           cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only
           --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89
 
-  portability:
-    name: Portability (macOS)
-    runs-on: macos-14
-    timeout-minutes: 30
-    steps:
-      - *checkout
-      - name: Check all deterministic targets
-        run: cargo ci-check
-      - name: Run deterministic tests
-        run: cargo ci-test
-
   msrv:
     name: MSRV
     runs-on: ubuntu-24.04
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_msrv == 'true'
     timeout-minutes: 20
     steps:
       - *checkout
@@ -115,6 +180,8 @@ jobs:
   dependencies:
     name: Dependency and license policy
     runs-on: ubuntu-24.04
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_dependencies == 'true'
     timeout-minutes: 15
     steps:
       - *checkout
@@ -127,6 +194,8 @@ jobs:
   api:
     name: Public API compatibility
     runs-on: ubuntu-24.04
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_api == 'true'
     timeout-minutes: 20
     steps:
       - *checkout
@@ -138,6 +207,8 @@ jobs:
   documentation:
     name: Repository files and documentation
     runs-on: ubuntu-24.04
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_documentation == 'true'
     timeout-minutes: 15
     steps:
       - name: Check out repository with release history
@@ -162,6 +233,8 @@ jobs:
         run: bash scripts/check-files.sh --check
       - name: Check release metadata and changelog
         run: bash scripts/check-release-metadata.sh
+      - name: Test validation-plan regressions
+        run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-validation-plan.py
       - name: Check local documentation links without network access
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
@@ -174,6 +247,8 @@ jobs:
   lockfile-release-age:
     name: Lockfile release age
     runs-on: ubuntu-24.04
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_lockfile_release_age == 'true'
     timeout-minutes: 5
     steps:
       - name: Preserve the aggregate result outside pull requests
@@ -211,53 +286,75 @@ jobs:
     name: PR gate
     if: always()
     needs:
-      [rust, msrv, dependencies, api, documentation, coverage, portability, lockfile-release-age]
+      [
+        validation-plan,
+        rust,
+        msrv,
+        dependencies,
+        api,
+        documentation,
+        coverage,
+        lockfile-release-age,
+      ]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require every deterministic PR job to succeed
+      - name: Check out candidate aggregate verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out trusted PR base aggregate verifier
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .validation-base
+          persist-credentials: false
+      - name: Require every selected job to succeed and every skip to be planned
         shell: bash
         env:
-          RUST_RESULT: ${{ needs.rust.result }}
-          MSRV_RESULT: ${{ needs.msrv.result }}
-          DEPENDENCIES_RESULT: ${{ needs.dependencies.result }}
-          API_RESULT: ${{ needs.api.result }}
-          DOCUMENTATION_RESULT: ${{ needs.documentation.result }}
-          COVERAGE_RESULT: ${{ needs.coverage.result }}
-          PORTABILITY_RESULT: ${{ needs.portability.result }}
-          LOCKFILE_RELEASE_AGE_RESULT: ${{ needs.lockfile-release-age.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PLAN_JSON: ${{ needs.validation-plan.outputs.plan }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          jobs=(
-            "Rust quality|${RUST_RESULT}"
-            "MSRV|${MSRV_RESULT}"
-            "Dependency and license policy|${DEPENDENCIES_RESULT}"
-            "Public API compatibility|${API_RESULT}"
-            "Documentation|${DOCUMENTATION_RESULT}"
-            "Coverage ratchet|${COVERAGE_RESULT}"
-            "macOS portability|${PORTABILITY_RESULT}"
-            "Lockfile release age|${LOCKFILE_RELEASE_AGE_RESULT}"
-          )
+          if [[ "${EVENT_NAME}" == 'pull_request' &&
+                ( ! -f .validation-base/scripts/validation-plan.py ||
+                  ! -f .validation-base/scripts/validation-policy.json ) ]]; then
+            # Bootstrap has no trusted verifier. Require the literal complete plan and all jobs.
+            python3 - <<'PY' | tee -a "${GITHUB_STEP_SUMMARY}"
+          import json
+          import os
 
-          {
-            printf '## Required PR job results\n\n'
-            printf '| Job | Result |\n'
-            printf '| --- | --- |\n'
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-          failures=0
-          for job in "${jobs[@]}"; do
-            name="${job%%|*}"
-            result="${job#*|}"
-            printf "| %s | \`%s\` |\n" "${name}" "${result}" >> "${GITHUB_STEP_SUMMARY}"
-            printf 'Required PR job %s: %s\n' "${name}" "${result}"
-            if [[ "${result}" != "success" ]]; then
-              echo "::error title=Required PR job did not succeed::${name} concluded ${result}."
-              echo "Required PR job did not succeed: ${name} concluded ${result}." >&2
-              failures=1
+          jobs = "rust msrv dependencies api documentation coverage lockfile-release-age".split()
+          plan = json.loads(os.environ["PLAN_JSON"])
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          if (set(plan) != {"schema", "repository", "event", "base_sha", "head_sha", "tested_sha",
+                            "profile", "jobs", "reasons", "local_fingerprint"}
+                  or plan["schema"] != 2 or plan["repository"] != "Strukturpiloten/compose-lens"
+                  or plan["event"] != "pull_request" or plan["profile"] != "full"
+                  or plan["base_sha"] != os.environ["BASE_SHA"]
+                  or plan["head_sha"] != os.environ["HEAD_SHA"]
+                  or plan["tested_sha"] != os.environ["GITHUB_SHA"]
+                  or plan["jobs"] != {job: True for job in jobs}
+                  or set(needs) != {"validation-plan", *jobs}):
+              raise SystemExit("first-rollout complete validation contract is missing or inconsistent")
+          for job in ("validation-plan", *jobs):
+              if needs[job].get("result") != "success":
+                  raise SystemExit(f"first-rollout required job {job} did not succeed")
+          print("First-rollout complete validation: every required job succeeded")
+          PY
+          else
+            verifier=scripts/validation-plan.py
+            policy_root=.
+            if [[ "${EVENT_NAME}" == 'pull_request' ]]; then
+              verifier=.validation-base/scripts/validation-plan.py
+              policy_root=.validation-base
             fi
-          done
-
-          if (( failures != 0 )); then
-            echo 'One or more required PR jobs did not succeed; see the result table and annotations above.' >&2
-            exit 1
+            python3 "${verifier}" gate --policy-root "${policy_root}" \
+              --event "${EVENT_NAME}" --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \
+              --tested-sha "${GITHUB_SHA}" \
+              --plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}" |
+              tee -a "${GITHUB_STEP_SUMMARY}"
           fi

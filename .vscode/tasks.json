@@ -12,6 +12,34 @@
       }
     },
     {
+      "label": "ComposeLens: Plan changed validation",
+      "type": "process",
+      "command": "python3",
+      "args": ["${workspaceFolder}/scripts/validation-plan.py", "plan", "--event", "local"],
+      "problemMatcher": []
+    },
+    {
+      "label": "ComposeLens: Validate changed files",
+      "type": "process",
+      "command": "python3",
+      "args": ["${workspaceFolder}/scripts/validation-plan.py", "run-local"],
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "ComposeLens: Validate public prose only",
+      "type": "process",
+      "command": "python3",
+      "args": ["${workspaceFolder}/scripts/validation-plan.py", "run-local", "--docs-only"],
+      "problemMatcher": []
+    },
+    {
+      "label": "ComposeLens: Validate full (check-only)",
+      "type": "process",
+      "command": "python3",
+      "args": ["${workspaceFolder}/scripts/validation-plan.py", "run-local", "--full"],
+      "problemMatcher": "$rustc"
+    },
+    {
       "label": "ComposeLens: Format non-Rust files",
       "type": "process",
       "command": "${workspaceFolder}/scripts/check-files.sh",

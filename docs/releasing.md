@@ -23,7 +23,8 @@ Release first invokes the ordinary complete CI workflow and the reusable provide
 workflow for the exact candidate commit. `validation_only` runs those same prerequisites but cannot
 reach the publication job. All 48 retained `observed` provider rows must complete; planned and
 runtime-effect rows remain outside release validation and configuration evidence does not prove a
-runtime deployment.
+runtime deployment. The reusable CI selects all jobs for the exact release candidate even when
+its diff would qualify for a narrow pull-request plan.
 
 ## Routine release
 

@@ -103,7 +103,10 @@ review the staged diff, make one intentional commit, push, and open a ready pull
 Use `feat`, `fix`, `perf`, `refactor`, or `revert` only for release-worthy code changes. Use
 `docs`, `test`, `ci`, `build`, `style`, or `chore` for documentation and maintenance so
 release-plz ignores them.
-A failed or incomplete full gate blocks commits, pushes, and pull-request creation.
+A failed or incomplete full gate blocks commits, pushes, and pull-request creation. The local/PR
+change-aware planner is an iteration and CI optimization, not a waiver of this complete gate or
+the fresh exact-candidate release gate. Review every new narrow path against the trusted-base
+classifier and executable-documentation coverage before expanding the policy.
 
 The primary agent owns Git and GitHub writes.
 Subagents never commit, push, publish, tag, release, or create pull requests.
@@ -154,7 +157,7 @@ checkout and must not perform those writes.
 ## Agent roles and verification
 
 Model defaults: [`.codex/config.toml`](.codex/config.toml); task settings:
-[`.codex/agents/`](.codex/agents/). The primary manager always uses `gpt-6-astra` with `xhigh` reasoning;
+[`.codex/agents/`](.codex/agents/). The primary manager always uses `gpt-6-sol` with `xhigh` reasoning;
 implementation/research/review use `gpt-6-sol` with `high` reasoning; check-only verification uses
 `gpt-6-luna` with `high` reasoning. Use Luna for bounded read-only exploration and Sol for difficult
 failure diagnosis. Models do not expand scope or permissions.
