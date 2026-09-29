@@ -27,6 +27,8 @@ before selecting an output path.
 The canonical-v2 byte contract keeps command-style strings beginning with `--` double-quoted even
 when the current private YAML parser accepts them as plain strings. Changing that bounded stability
 rule requires a new versioned canonical representation rather than a dependency-only update.
+Strings containing a colon followed by a space or tab are quoted for portability across YAML
+readers; compact strings such as `abc:def` remain plain.
 Generated string fields reuse this stable quoted-string boundary.
 
 Ambiguous YAML boolean, null, numeric, date, timestamp, and other non-string spellings remain quoted.
