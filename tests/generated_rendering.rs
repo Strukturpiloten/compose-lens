@@ -97,6 +97,59 @@ fn generated_documents_start_with_a_marker_and_quote_only_ambiguous_strings() ->
 }
 
 #[test]
+fn generated_label_prose_quotes_yaml_mapping_separators_and_retains_string_types()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut service = GeneratedService::new("web")?;
+    service.set_image(plain("example.invalid/web:1")?)?;
+    service.add_label(GeneratedLabel::new("description", plain("system: scan")?)?)?;
+    service.add_label(GeneratedLabel::new("compact", plain("abc:def")?)?)?;
+    service.add_label(GeneratedLabel::new("tabbed", plain("system:\tscan")?)?)?;
+    service.add_label(GeneratedLabel::new(
+        "protected",
+        GeneratedString::sensitive("private: value")?,
+    )?)?;
+
+    let mut builder = ComposeDocumentBuilder::new();
+    builder.add_service(service)?;
+    let generated = builder.build(SourceId::new(99_002))?;
+    ::core::assert_eq!(
+        generated.text(),
+        concat!(
+            "---\n",
+            "services:\n",
+            "  web:\n",
+            "    image: example.invalid/web:1\n",
+            "    labels:\n",
+            "      description: \"system: scan\"\n",
+            "      compact: abc:def\n",
+            "      tabbed: \"system:\\tscan\"\n",
+            "      protected: \"private: value\"\n",
+        )
+    );
+    let labels = generated
+        .document()
+        .service("web")
+        .and_then(|service| service.labels())
+        .ok_or("generated labels expected")?;
+    let Labels::Map { entries, .. } = labels else {
+        return Err("generated labels should parse as a mapping".into());
+    };
+    for (entry, (name, value)) in entries.iter().zip([
+        ("description", "system: scan"),
+        ("compact", "abc:def"),
+        ("tabbed", "system:\tscan"),
+        ("protected", "private: value"),
+    ]) {
+        ::core::assert_eq!(entry.key().value(), name);
+        ::core::assert_eq!(entry.value().value(), &ComposeScalar::String(value.to_owned()));
+    }
+    ::core::assert_eq!(entries.len(), 4);
+    assert!(generated.is_sensitive());
+    assert!(!format!("{generated:?}").contains("private: value"));
+    Ok(())
+}
+
+#[test]
 fn generated_environment_is_sorted_by_key_without_reordering_duplicate_values() -> Result<(), Box<dyn std::error::Error>>
 {
     let mut service = GeneratedService::new("app")?;

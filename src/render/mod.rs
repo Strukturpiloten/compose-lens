@@ -499,6 +499,9 @@ fn plain_string_safe(value: &str) -> bool {
         || value.trim() != value
         || value.contains(['\n', '\r'])
         || value.starts_with("--")
+        // A colon followed by YAML separation whitespace can start a mapping value in other
+        // parsers, even when our private parser accepts the candidate as a plain scalar.
+        || value.as_bytes().windows(2).any(|pair| pair[0] == b':' && matches!(pair[1], b' ' | b'\t'))
         || yaml_1_1_ambiguous_string(value)
     {
         return false;

@@ -24,6 +24,8 @@ structure.
    candidate is one plain YAML string. Otherwise they use deterministic double quotes.
    Canonical-v2 also keeps command-style strings beginning with `--` double-quoted so a private
    parser update cannot silently change its exact-byte contract.
+   A colon followed by a space or tab is also quoted: another YAML reader may interpret that
+   separator as mapping syntax even when the private parser accepts the plain scalar.
 4. YAML 1.1 boolean and null spellings (y, yes, n, no, on, off, true, false, null, and ~, in their
    defined case variants) remain quoted even when the parser accepts them as strings.
    Sexagesimal-looking numbers, special floating-point spellings, dates, and timestamps remain

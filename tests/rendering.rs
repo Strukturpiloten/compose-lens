@@ -68,6 +68,9 @@ fn canonical_rendering_uses_minimal_safe_string_quoting_and_preserves_every_stri
         "services:\n",
         "  web:\n",
         "    image: example.invalid/web:1\n",
+        "    labels:\n",
+        "      description: \"system: scan\"\n",
+        "      compact: abc:def\n",
         "    environment:\n",
         "      plain: plain-value\n",
         "      image: example.invalid/web:1\n",
@@ -95,6 +98,8 @@ fn canonical_rendering_uses_minimal_safe_string_quoting_and_preserves_every_stri
     assert!(rendered.is_valid(), "{:#?}", rendered.diagnostics());
     assert!(rendered.output().starts_with("---\nservices:\n  web:\n"));
     assert!(rendered.output().contains("image: example.invalid/web:1\n"));
+    assert!(rendered.output().contains("description: \"system: scan\"\n"));
+    assert!(rendered.output().contains("compact: abc:def\n"));
     assert!(rendered.output().contains("plain: plain-value\n"));
     for value in [
         "yes",
