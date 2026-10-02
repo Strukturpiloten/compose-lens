@@ -45,8 +45,9 @@ syntax document -> typed document -> loaded project -> merged project
 The private YAML backend is an implementation detail. Public APIs expose only ComposeLens-owned
 syntax, source, diagnostic, and model types. [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md)
 defines that boundary, and
-[ADR 0015](decisions/0015-byte-preserving-yaml-backend-compatibility.md) records the narrowly
-constrained compatibility adapter used to retain valid authored bytes.
+[ADR 0028](decisions/0028-source-preserving-block-scalar-compatibility.md) records the narrowly
+constrained compatibility adapter and block-boundary guards used to retain valid authored bytes
+and scalar semantics.
 
 Short and long Compose syntax remains field-specific because equivalent-looking forms may carry
 different defaults or provider behavior. [ADR 0003](decisions/0003-preserve-compose-syntax-forms.md)

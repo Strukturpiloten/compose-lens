@@ -58,13 +58,30 @@ impl SyntaxDocument {
             });
         }
 
-        let parser_source = parser_compatible_source(&source);
+        let (parser_source, block_scalars) = parser_compatible_source(&source);
         let parse = YamlFile::parse(parser_source.as_deref().unwrap_or(&source));
         let mut diagnostics: Vec<_> = parse
             .positioned_errors()
             .iter()
             .map(|error| syntax_diagnostic(source_id, source.len(), error))
             .collect();
+        for block in &block_scalars {
+            if !block.valid {
+                diagnostics.push(block_scalar_diagnostic(
+                    source_id,
+                    source.len(),
+                    block.start,
+                    YAML_SYNTAX_ERROR,
+                ));
+            } else if !block_scalar_is_complete(&parse, &source, block) {
+                diagnostics.push(block_scalar_diagnostic(
+                    source_id,
+                    source.len(),
+                    block.start,
+                    YAML_UNPARSED_INPUT,
+                ));
+            }
+        }
         if diagnostics.is_empty() {
             if let Some(document_end) = unparsed_input_offset(&parse, &source) {
                 diagnostics.push(unparsed_input_diagnostic(source_id, source.len(), document_end));
@@ -362,42 +379,163 @@ fn unparsed_input_offset_after_document_end(document_end: usize, source: &str) -
 
 /// Produces a same-length input for private YAML backend limitations. It masks safe, non-colliding
 /// hyphens in anchor and alias names, leading option dashes, and commas in block-style plain
-/// scalars. Original source text remains authoritative for every exposed scalar and preservation
-/// operation.
-fn parser_compatible_source(source: &str) -> Option<String> {
+/// scalars, plus block-body quotes and explicit indentation. Authored block boundaries are checked
+/// independently. Original text remains authoritative for scalar meaning and preservation.
+fn parser_compatible_source(source: &str) -> (Option<String>, Vec<BlockScalarBoundary>) {
     let mut compatible = source.as_bytes().to_vec();
     let mut changed = mask_blank_lines_after_mapping_keys(source, &mut compatible);
     changed |= mask_non_colliding_anchor_hyphens(source, &mut compatible);
     let mut offset = 0;
-    let mut block_scalar_indent = None;
+    let mut blocks: Vec<BlockScalarBoundary> = Vec::new();
     let mut state = ParserCompatibilityState::default();
 
     for line in source.split_inclusive('\n') {
         let content = line.trim_end_matches(['\r', '\n']);
         let indent = content.bytes().take_while(|byte| *byte == b' ').count();
-        let blank = content[indent..].trim().is_empty();
+        let blank = content[indent..].is_empty();
 
-        if let Some(header_indent) = block_scalar_indent {
-            if blank || indent > header_indent {
+        if let Some(block) = blocks.last_mut().filter(|block| block.end == offset) {
+            if blank || indent > block.parent_indent {
+                if blank && block.content_indent.is_none() {
+                    block.leading_blank_indent = block.leading_blank_indent.max(indent);
+                } else if !blank {
+                    let required = *block.content_indent.get_or_insert(indent);
+                    block.valid &= indent >= required && block.leading_blank_indent <= required;
+                    if block.explicit_indent && indent > required {
+                        // The implicit private header must infer the explicit minimum even when
+                        // the first content line deliberately retains additional leading spaces.
+                        compatible[offset + required..offset + indent].fill(b'_');
+                        changed = true;
+                    }
+                }
+                // Quotes are content in YAML block scalars, but the backend lexer scans them as
+                // quoted strings before recognizing the block. Keep byte offsets while preventing
+                // that scan from consuming a dedented sibling. Decode the original scalar below.
+                for (index, byte) in content.bytes().enumerate() {
+                    if matches!(byte, b'\'' | b'"') {
+                        compatible[offset + index] = b'_';
+                        changed = true;
+                    }
+                }
+                block.end += line.len();
                 offset += line.len();
                 continue;
             }
-            block_scalar_indent = None;
         }
 
         let (line_changed, starts_block_scalar) = mask_block_plain_commas(content, offset, &mut compatible, &mut state);
         changed |= line_changed;
-        if starts_block_scalar {
-            block_scalar_indent = Some(indent);
+        if let Some(index) = starts_block_scalar {
+            let parent_indent = block_parent_indent(&content[..index]);
+            let header = &content[index..];
+            let token = header.split_ascii_whitespace().next().unwrap_or_default();
+            let mut digit = None;
+            let mut chomp = None;
+            let mut valid = true;
+            for byte in token.bytes().skip(1) {
+                match byte {
+                    b'1'..=b'9' if digit.is_none() => digit = Some(usize::from(byte - b'0')),
+                    b'+' | b'-' if chomp.is_none() => chomp = Some(byte),
+                    _ => valid = false,
+                }
+            }
+            valid &=
+                header[token.len()..].trim_start().is_empty() || header[token.len()..].trim_start().starts_with('#');
+            if digit.is_some() && valid {
+                // The backend interprets explicit indentation as an absolute column. Parse an
+                // implicit header instead; decode its authored semantics independently below.
+                compatible[offset + index + 1..offset + index + token.len()].fill(b' ');
+                if token.len() > 2 {
+                    compatible[offset + index + 2] = b'#';
+                }
+                changed = true;
+            }
+            blocks.push(BlockScalarBoundary {
+                start: offset + index,
+                end: offset + line.len(),
+                parent_indent,
+                content_indent: digit.map(|digit| parent_indent + digit),
+                explicit_indent: digit.is_some(),
+                leading_blank_indent: 0,
+                valid,
+            });
         }
         offset += line.len();
     }
 
     if changed {
-        String::from_utf8(compatible).ok()
+        (String::from_utf8(compatible).ok(), blocks)
     } else {
-        None
+        (None, blocks)
     }
+}
+
+#[derive(Debug)]
+struct BlockScalarBoundary {
+    start: usize,
+    end: usize,
+    parent_indent: usize,
+    content_indent: Option<usize>,
+    explicit_indent: bool,
+    leading_blank_indent: usize,
+    valid: bool,
+}
+
+fn block_parent_indent(prefix: &str) -> usize {
+    let indent = prefix.bytes().take_while(|byte| *byte == b' ').count();
+    let bytes = prefix.as_bytes();
+    let mut cursor = indent;
+    let mut sequence_indent = None;
+    while bytes.get(cursor) == Some(&b'-') && bytes.get(cursor + 1).is_some_and(u8::is_ascii_whitespace) {
+        sequence_indent = Some(cursor);
+        cursor += 1;
+        cursor += bytes[cursor..]
+            .iter()
+            .take_while(|byte| byte.is_ascii_whitespace())
+            .count();
+    }
+    // Anchor/tag properties belong to the scalar; they do not introduce a compact mapping.
+    while matches!(bytes.get(cursor), Some(b'&' | b'!')) {
+        cursor += bytes[cursor..]
+            .iter()
+            .take_while(|byte| !byte.is_ascii_whitespace())
+            .count();
+        cursor += bytes[cursor..]
+            .iter()
+            .take_while(|byte| byte.is_ascii_whitespace())
+            .count();
+    }
+    sequence_indent.map_or(indent, |base| if cursor == prefix.len() { base } else { cursor })
+}
+
+fn block_scalar_is_complete(parse: &Parse<YamlFile>, source: &str, block: &BlockScalarBoundary) -> bool {
+    parse.tree().documents().any(|document| {
+        document.as_node().is_some_and(|root| {
+            root.descendants().any(|node| {
+                let Some(YamlNode::Scalar(scalar)) = YamlNode::from_syntax(node) else {
+                    return false;
+                };
+                let range = scalar.byte_range();
+                range.start as usize == block.start
+                    && range.end as usize <= block.end
+                    && source[range.end as usize..block.end]
+                        .bytes()
+                        .all(|byte| byte.is_ascii_whitespace())
+            })
+        })
+    })
+}
+
+fn block_scalar_diagnostic(source_id: SourceId, source_len: usize, start: usize, code: DiagnosticCode) -> Diagnostic {
+    Diagnostic::new(
+        code,
+        Severity::Error,
+        "The YAML block scalar could not be interpreted safely.",
+    )
+    .with_label(DiagnosticLabel::primary(
+        SourceSpan::from_valid_offsets(source_id, start, source_len.min(start + 1)),
+        "Check the block scalar header and indentation.",
+    ))
 }
 
 fn mask_blank_lines_after_mapping_keys(source: &str, compatible: &mut [u8]) -> bool {
@@ -538,12 +676,16 @@ struct ParserCompatibilityState {
     escaped: bool,
 }
 
+fn block_sequence_indicator(bytes: &[u8], index: usize) -> bool {
+    bytes[index] == b'-' && bytes.get(index + 1).is_none_or(u8::is_ascii_whitespace)
+}
+
 fn mask_block_plain_commas(
     content: &str,
     offset: usize,
     compatible: &mut [u8],
     state: &mut ParserCompatibilityState,
-) -> (bool, bool) {
+) -> (bool, Option<usize>) {
     let bytes = content.as_bytes();
     let mut index = 0;
     let mut first_token = true;
@@ -614,7 +756,7 @@ fn mask_block_plain_commas(
             continue;
         }
 
-        if first_token && byte == b'-' && bytes.get(index + 1).is_none_or(u8::is_ascii_whitespace) {
+        if (first_token || (eligible_plain_value && !plain_started)) && block_sequence_indicator(bytes, index) {
             eligible_plain_value = true;
             plain_started = false;
             first_token = false;
@@ -631,7 +773,7 @@ fn mask_block_plain_commas(
         }
 
         if eligible_plain_value && !plain_started && matches!(byte, b'|' | b'>') {
-            return (changed, true);
+            return (changed, Some(index));
         }
 
         // yaml-edit currently treats the first dash in an unquoted `- --option` item as another
@@ -665,7 +807,7 @@ fn mask_block_plain_commas(
     }
 
     state.escaped = false;
-    (changed, false)
+    (changed, None)
 }
 
 pub(crate) fn scalar_raw_from_source(source: &str, scalar: &Scalar) -> String {
@@ -677,12 +819,86 @@ pub(crate) fn scalar_raw_from_source(source: &str, scalar: &Scalar) -> String {
 
 pub(crate) fn scalar_string_from_source(source: &str, scalar: &Scalar) -> String {
     let authored = scalar_raw_from_source(source, scalar);
-    if authored == scalar.value() {
+    if authored.starts_with(['|', '>']) {
+        let line_start = source[..scalar.byte_range().start as usize]
+            .rfind('\n')
+            .map_or(0, |index| index + 1);
+        let indent = block_parent_indent(&source[line_start..scalar.byte_range().start as usize]);
+        decode_block_scalar(&authored, indent)
+    } else if authored == scalar.value() {
         scalar.as_string()
     } else {
-        // The compatibility overlay only rewrites complete, single-line block plain scalars.
+        // Other compatibility replacements rewrite complete, single-line block plain scalars.
         authored
     }
+}
+
+/// Decodes authored block scalar text already bounded and checked by the syntax adapter.
+/// YAML 1.2.2 section 8.1 defines relative indentation, folding and chomping independently of
+/// the private backend's lexer and scalar decoder.
+fn decode_block_scalar(authored: &str, parent_indent: usize) -> String {
+    let Some((header, body)) = authored.split_once('\n') else {
+        return String::new();
+    };
+    let token = header.split_ascii_whitespace().next().unwrap_or_default();
+    let explicit = token.bytes().skip(1).find(|byte| matches!(byte, b'1'..=b'9'));
+    let indent = explicit.map_or_else(
+        || {
+            body.split_inclusive('\n')
+                .find_map(|line| {
+                    let content = line.trim_end_matches(['\r', '\n']);
+                    let spaces = content.bytes().take_while(|byte| *byte == b' ').count();
+                    (spaces < content.len()).then_some(spaces)
+                })
+                // An implicit block with no non-empty content consists entirely of trailing
+                // empty lines. Their indentation spaces are not scalar content.
+                .unwrap_or_else(|| body.split_inclusive('\n').map(|line| {
+                    line.bytes().take_while(|byte| *byte == b' ').count()
+                }).max().unwrap_or(parent_indent + 1))
+        },
+        |digit| parent_indent + usize::from(digit - b'0'),
+    );
+    let lines: Vec<_> = body
+        .split_inclusive('\n')
+        .map(|line| {
+            let has_break = line.ends_with('\n');
+            let content = line.strip_suffix('\n').unwrap_or(line);
+            let content = content.strip_suffix('\r').unwrap_or(content);
+            let spaces = content.bytes().take_while(|byte| *byte == b' ').count();
+            let text = &content[spaces.min(indent)..];
+            (text, has_break, spaces > indent || text.starts_with('\t'))
+        })
+        .collect();
+    let folded = token.starts_with('>');
+    let mut decoded = String::new();
+    for (index, &(text, has_break, more_indented)) in lines.iter().enumerate() {
+        decoded.push_str(text);
+        if !has_break {
+            continue;
+        }
+        if !folded || text.is_empty() || more_indented {
+            decoded.push('\n');
+            continue;
+        }
+        match lines.get(index + 1) {
+            Some((next, _, false)) if !next.is_empty() => decoded.push(' '),
+            Some((next, _, _))
+                if next.is_empty()
+                    && lines[index + 1..]
+                        .iter()
+                        .find(|(text, _, _)| !text.is_empty())
+                        .is_some_and(|(_, _, more)| !more) => {}
+            _ => decoded.push('\n'),
+        }
+    }
+    let has_final_break = decoded.ends_with('\n');
+    if !token.contains('+') {
+        decoded.truncate(decoded.trim_end_matches('\n').len());
+        if !token.contains('-') && has_final_break && !decoded.is_empty() {
+            decoded.push('\n');
+        }
+    }
+    decoded
 }
 
 fn collect_value_scalars(source_id: SourceId, source: &str, node: YamlNode, values: &mut Vec<ValueScalar>) {
@@ -1012,7 +1228,7 @@ fn collect_scalar(source_id: SourceId, source: &str, scalar: &Scalar, values: &m
 #[cfg(test)]
 mod tests {
     use super::{
-        MergeSyntaxScalar, MergeSyntaxValue, SyntaxDocument, parser_compatible_source,
+        MergeSyntaxScalar, MergeSyntaxValue, SyntaxDocument, block_scalar_is_complete, parser_compatible_source,
         unparsed_input_offset_after_document_end,
     };
     use crate::source::SourceId;
@@ -1047,6 +1263,15 @@ mod tests {
     }
 
     #[test]
+    fn block_boundary_guard_rejects_backend_scalars_crossing_siblings() {
+        let source = "services:\n  app:\n    command: |2\n      body\n  sibling:\n    image: later\n";
+        let (_, blocks) = parser_compatible_source(source);
+        let raw = yaml_edit::YamlFile::parse(source);
+        assert_eq!(blocks.len(), 1);
+        assert!(!block_scalar_is_complete(&raw, source, &blocks[0]));
+    }
+
+    #[test]
     fn comma_bearing_short_volumes_are_complete_and_preserved() -> Result<(), Box<dyn std::error::Error>> {
         let source = "services:\n  app:\n    volumes:\n      - ./data:/data:Z,ro\n  later:\n    image: later\n";
 
@@ -1061,14 +1286,14 @@ mod tests {
     fn anchor_compatibility_does_not_merge_colliding_names() {
         let source = "first: &shared-name one\nsecond: &shared_name two\n";
 
-        assert_eq!(parser_compatible_source(source), None);
+        assert_eq!(parser_compatible_source(source).0, None);
     }
 
     #[test]
     fn anchor_compatibility_ignores_scalar_and_comment_content() {
         let source = "quoted: \"*not-an-alias\"\nplain: echo &not-an-anchor\n# *also-not-an-alias\n";
 
-        assert_eq!(parser_compatible_source(source), None);
+        assert_eq!(parser_compatible_source(source).0, None);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # ADR 0015: Byte-preserving YAML backend compatibility
 
-- Status: accepted
+- Status: superseded by [ADR 0028](0028-source-preserving-block-scalar-compatibility.md)
 - Date: 2026-08-02
 - Updated: 2026-08-05
 

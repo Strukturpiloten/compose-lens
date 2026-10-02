@@ -1,0 +1,18 @@
+schema = 1
+id = "block-scalar-quotes"
+suite = "syntax"
+description = "Block-body quotes remain content without absorbing a sibling service."
+secrets_reviewed = true
+files = ["compose.yaml"]
+
+[provenance]
+source = "authored"
+license = "MPL-2.0"
+redistribution = "allowed"
+modifications = "none"
+
+[environment]
+description = "No interpolation, filesystem access, provider, or runtime is used."
+
+[expectations]
+summary = "Both services retain their own environment and the healthcheck is a quote plus newline."
