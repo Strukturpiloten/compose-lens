@@ -1824,16 +1824,16 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     for required in [
         "model = \"gpt-6-sol\"",
         "model_reasoning_effort = \"xhigh\"",
-        "max_concurrent_threads_per_session = 9",
-        "default_subagent_model = \"gpt-6-sol\"",
+        "max_concurrent_threads_per_session = 8",
+        "default_subagent_model = \"gpt-6.1-sol\"",
         "default_subagent_reasoning_effort = \"medium\"",
     ] {
         assert!(config.contains(required), "missing agent default: {required}");
     }
     for (role, model, effort, sandbox) in [
-        ("implementation-worker", "gpt-6-sol", "high", "workspace-write"),
-        ("specification-researcher", "gpt-6-sol", "high", "read-only"),
-        ("reviewer", "gpt-6-sol", "high", "read-only"),
+        ("implementation-worker", "gpt-6.1-sol", "high", "workspace-write"),
+        ("specification-researcher", "gpt-6.1-sol", "high", "read-only"),
+        ("reviewer", "gpt-6.1-sol", "high", "read-only"),
         ("verifier", "gpt-6-luna", "high", "workspace-write"),
     ] {
         let text = fs::read_to_string(root.join(format!(".codex/agents/{role}.toml")))?;
@@ -1856,12 +1856,17 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
     assert!(verifier.contains("never run the default formatting gate"));
     assert!(verifier.contains("Escalate complex failure diagnosis to the primary agent"));
     let instructions = fs::read_to_string(root.join("AGENTS.md"))?;
+    let instructions = instructions.split_whitespace().collect::<Vec<_>>().join(" ");
     for required in [
         "`gpt-6-sol` with `xhigh` reasoning",
-        "use `gpt-6-sol` with `high` reasoning",
+        "use `gpt-6.1-sol` with `high` reasoning",
         "`gpt-6-luna` with `high`",
-        "reserve `gpt-6-astra` with `xhigh` reasoning for particularly difficult",
-        "Use up to nine concurrent subagents plus the primary manager",
+        "Task-specific subagents may use `gpt-6.1-sol` or `gpt-6-luna` with `medium`, `high`, or `xhigh` reasoning",
+        "Use `gpt-6-astra` only with `xhigh` reasoning for particularly difficult architectural questions",
+        "`agents.max_concurrent_threads_per_session` excludes the primary manager",
+        "Use up to eight concurrent subagents plus the primary manager (nine agents in total), subject to the session's actual runtime limit",
+        "Eight is a ceiling, not a target or eight distinct roles",
+        "several subagents may use the same role for independent tasks",
         "Do not create nested agents to evade the limit",
         "Run at most one complete gate or heavy runtime suite at a time",
         "reviewer checks the original requirements and independent expected results",

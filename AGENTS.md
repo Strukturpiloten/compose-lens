@@ -1,6 +1,6 @@
 # Repository guidance for coding agents
 
-This file applies to the entire ComposeLens repository.
+Applies throughout ComposeLens.
 
 ## Read before changing the repository
 
@@ -10,7 +10,7 @@ Always read:
 2. `docs/architecture.md`
 3. `docs/decisions/README.md`
 
-Then read only the material relevant to the change:
+Then read relevant material:
 
 | Work                                                | Read                                                             |
 | --------------------------------------------------- | ---------------------------------------------------------------- |
@@ -21,9 +21,8 @@ Then read only the material relevant to the change:
 | Dependencies or releases                            | `docs/dependency-policy.md`, `docs/releasing.md`                 |
 | Development environment                             | `docs/development-environment.md`                                |
 
-Read an accepted ADR when a change touches its decision. Architectural changes require an ADR or an
-explicit amendment or superseding decision in the same change. Do not reread every historical ADR
-for an unrelated documentation or maintenance edit.
+Read affected accepted ADRs. Architectural changes require an ADR, explicit amendment, or superseding
+decision in the same change. Skip unrelated historical ADRs.
 
 ## Scope
 
@@ -158,14 +157,20 @@ checkout and must not perform those writes.
 
 Model defaults: [`.codex/config.toml`](.codex/config.toml); task settings:
 [`.codex/agents/`](.codex/agents/). The primary manager always uses `gpt-6-sol` with `xhigh` reasoning;
-implementation/research/review use `gpt-6-sol` with `high` reasoning; check-only verification uses
+implementation/research/review use `gpt-6.1-sol` with `high` reasoning; check-only verification uses
 `gpt-6-luna` with `high` reasoning. Use Luna for bounded read-only exploration and Sol for difficult
-failure diagnosis; reserve `gpt-6-astra` with `xhigh` reasoning for particularly difficult
+failure diagnosis. Task-specific subagents may use `gpt-6.1-sol` or `gpt-6-luna` with `medium`, `high`,
+or `xhigh` reasoning. Use `gpt-6-astra` only with `xhigh` reasoning for particularly difficult
 architectural questions. Models do not expand scope or permissions.
 
+`agents.max_concurrent_threads_per_session` excludes the primary manager; its value of eight permits
+nine agents in total.
+
 - Before delegation, define contract, repository, checkout, and file ownership.
-  Use up to nine concurrent subagents plus the primary manager, subject to the runtime limit.
-  Nine is a ceiling, not a target or nine distinct roles. Do not create nested agents to evade the limit.
+  Use up to eight concurrent subagents plus the primary manager (nine agents in total), subject to
+  the session's actual runtime limit. Eight is a ceiling, not a target or eight distinct roles:
+  several subagents may use the same role for independent tasks. Do not create nested agents to evade
+  the limit.
 - The reviewer checks the original requirements and independent expected results, not just agreement
   between the implementation and its tests.
 - After writing finishes, the verifier runs `./scripts/check-all.sh --check` without tracked-file edits;
@@ -198,7 +203,6 @@ a reduced tier. A later edit invalidates either; neither grants release, publica
 
 ## Code discovery
 
-For code discovery, use an available codebase-memory graph first; otherwise use CodeGraph only if
-the repository already has a usable index. Do not create an index without user authorization.
-If neither graph is available or a query cannot answer the question, use `rg` and targeted reads.
-For string literals, configuration, scripts, and documentation, start with `rg` directly.
+For code discovery, use codebase-memory first, then an existing usable CodeGraph index. Do not create
+an index without user authorization. Fall back to `rg` and targeted reads when graphs are unavailable
+or insufficient. Start with `rg` for literals, configuration, scripts, and documentation.
