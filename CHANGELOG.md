@@ -6,6 +6,20 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Fixed
+
+- Accept complete short volume mounts ending in options such as `:Z,ro` without discarding their
+  authored source ([#128](https://github.com/Strukturpiloten/compose-lens/issues/128)).
+- Preserve YAML implicit nulls as distinct from quoted empty strings in resource definitions,
+  merged projects, and typed service values
+  ([#133](https://github.com/Strukturpiloten/compose-lens/issues/133),
+  [#138](https://github.com/Strukturpiloten/compose-lens/issues/138)).
+- Keep option-like strings beginning with `--` quoted in canonical and generated Compose output
+  ([#136](https://github.com/Strukturpiloten/compose-lens/issues/136)).
+- Quote strings containing a colon followed by YAML separation whitespace in canonical and
+  generated Compose output so they parse back as intended
+  ([#167](https://github.com/Strukturpiloten/compose-lens/issues/167)).
+
 ## [0.3.2](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.1...v0.3.2) - 2026-09-13
 
 ### Added
