@@ -1,0 +1,13 @@
+---
+services:
+  mongodb:
+    image: mongo:8
+    environment:
+      - MONGO_INITDB_DATABASE=left
+    healthcheck:
+      test: |
+        "
+  postgresql:
+    image: "postgres:18"
+    environment:
+      - POSTGRES_DB=right

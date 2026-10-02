@@ -37,6 +37,133 @@ use compose_lens::render::{
 };
 use std::path::PathBuf;
 
+#[test]
+fn block_scalar_quotes_retain_service_ownership_and_native_provenance() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::model::{ComposeScalar, Environment, HealthcheckTest};
+    use compose_lens::source::SourceId;
+    use compose_lens::syntax::SyntaxDocument;
+
+    let source = include_str!("../fixtures/syntax/block-scalar-quotes/compose.yaml");
+    let source_id = SourceId::new(173);
+    let syntax = SyntaxDocument::parse(source_id, source)?;
+    assert!(syntax.is_valid(), "{:?}", syntax.diagnostics());
+    let parsed = ComposeDocument::parse(syntax.document());
+    assert!(parsed.is_valid(), "{:?}", parsed.diagnostics());
+    let native = parsed.document().ok_or("native document expected")?;
+    for (service_name, key, expected) in [
+        ("mongodb", "MONGO_INITDB_DATABASE", "left"),
+        ("postgresql", "POSTGRES_DB", "right"),
+    ] {
+        let service = native.service(service_name).ok_or("native service expected")?;
+        let Some(Environment::List { entries, .. }) = service.environment() else {
+            return Err("native list environment expected".into());
+        };
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name(), key);
+        assert_eq!(entries[0].value(), Some(expected));
+        assert_eq!(
+            syntax.document().text(entries[0].raw().span()),
+            Some(entries[0].raw().value().as_str())
+        );
+    }
+    let test = native
+        .service("mongodb")
+        .and_then(|service| service.healthcheck())
+        .and_then(|healthcheck| healthcheck.test())
+        .ok_or("native healthcheck expected")?;
+    let HealthcheckTest::String(value) = test else {
+        return Err("scalar healthcheck expected".into());
+    };
+    assert_eq!(value.value(), "\"\n");
+    assert_eq!(syntax.document().text(value.span()), Some("|\n        \"\n"));
+
+    let loaded = LoadedProject::load([DocumentInput::new(
+        source_id,
+        DocumentOrigin::new("compose.yaml", "project"),
+        source,
+    )])?;
+    let merged = merge_project(&loaded, None);
+    assert!(merged.is_valid(), "{:?}", merged.diagnostics());
+    let view = build_project_view(merged.project().ok_or("merged project expected")?, None);
+    assert!(view.is_valid(), "{:?}", view.diagnostics());
+    let project = view.view().ok_or("project view expected")?;
+    for (service_name, key, expected) in [
+        ("mongodb", "MONGO_INITDB_DATABASE", "left"),
+        ("postgresql", "POSTGRES_DB", "right"),
+    ] {
+        let service = project.service(service_name).ok_or("view service expected")?;
+        let environment = service.environment().ok_or("view environment expected")?;
+        assert_eq!(environment.value().entries().len(), 1);
+        let entry = environment.value().get(key).ok_or("view environment entry expected")?;
+        assert_eq!(entry.value().value(), &ComposeScalar::String(expected.to_owned()));
+        let span = entry.value().effective_source().ok_or("environment source expected")?;
+        assert_eq!(span.source_id(), source_id);
+        assert_eq!(syntax.document().text(span), Some(format!("{key}={expected}").as_str()));
+    }
+    let test = project
+        .service("mongodb")
+        .and_then(|service| service.healthcheck())
+        .and_then(|healthcheck| healthcheck.value().test())
+        .ok_or("view healthcheck expected")?;
+    assert!(matches!(test.value(), HealthcheckTest::String(value) if value.value() == "\"\n"));
+    assert_eq!(test.effective_source(), Some(value.span()));
+    assert_eq!(syntax.document().render_preserved(), source);
+    Ok(())
+}
+
+#[test]
+fn block_scalar_interpolation_preserves_source_and_redacts_resolved_values() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::merge::MergedScalar;
+    use compose_lens::source::SourceId;
+
+    let source = "---\nservices:\n  app:\n    command: >2-\n      \"${BLOCK_SECRET}\n      tail'\n  sibling:\n    image: \"${BLOCK_SECRET}\"\n";
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(174),
+        DocumentOrigin::new("compose.yaml", "project"),
+        source,
+    )])?;
+    assert!(loaded.is_valid(), "{:?}", loaded.diagnostics());
+    let mut environment = MapEnvironment::new();
+    environment.insert_sensitive("BLOCK_SECRET", "block-sensitive-value");
+    let interpolation = loaded.interpolate(&environment);
+    assert!(interpolation.is_valid(), "{:?}", interpolation.diagnostics());
+    let merged = merge_project(&loaded, Some(&interpolation));
+    assert!(merged.is_valid(), "{:?}", merged.diagnostics());
+    let project = merged.project().ok_or("merged project expected")?;
+    let command = project
+        .value(&["services", "app", "command"])
+        .ok_or("command expected")?;
+    // Existing interpolation policy excludes literal/folded block scalars. Masking their quotes
+    // must not change that classification or the adjacent eligible scalar's sensitivity.
+    assert_eq!(
+        command.as_scalar().map(MergedScalar::value),
+        Some("\"${BLOCK_SECRET} tail'")
+    );
+    assert!(!command.is_sensitive());
+    let sibling_image = project
+        .value(&["services", "sibling", "image"])
+        .ok_or("sibling image expected")?;
+    assert_eq!(
+        sibling_image.as_scalar().map(MergedScalar::value),
+        Some("block-sensitive-value")
+    );
+    assert!(sibling_image.is_sensitive());
+    for debug in [
+        format!("{interpolation:?}"),
+        format!("{merged:?}"),
+        format!("{:?}", build_project_view(project, None)),
+    ] {
+        assert!(!debug.contains("block-sensitive-value"));
+    }
+    let span = command
+        .provenance()
+        .effective_source()
+        .ok_or("command source expected")?;
+    assert_eq!(span.source_id(), SourceId::new(174));
+    assert_eq!(&source[span.range()], ">2-\n      \"${BLOCK_SECRET}\n      tail'\n");
+    Ok(())
+}
+
 struct SyntheticIncludeLoader;
 
 impl IncludeLoader for SyntheticIncludeLoader {

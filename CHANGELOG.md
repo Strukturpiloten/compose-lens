@@ -6,6 +6,12 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve sibling services and their environment values when literal or folded YAML blocks contain
+  quotes, retaining authored bytes, scalar semantics, and source provenance
+  ([#173](https://github.com/Strukturpiloten/compose-lens/issues/173)).
+
 ## [0.3.3](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.2...v0.3.3) - 2026-10-02
 
 ### Fixed
