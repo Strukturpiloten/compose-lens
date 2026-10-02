@@ -6,6 +6,8 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.3.3](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.2...v0.3.3) - 2026-10-02
+
 ### Fixed
 
 - Accept complete short volume mounts ending in options such as `:Z,ro` without discarding their
