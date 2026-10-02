@@ -6,6 +6,8 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.3.4](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.3...v0.3.4) - 2026-10-02
+
 ### Fixed
 
 - Preserve sibling services and their environment values when literal or folded YAML blocks contain
