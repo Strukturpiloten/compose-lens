@@ -50,11 +50,20 @@ a hash-locked PEP 508 file reference; changing that bootstrap contract requires 
 and wrong-hash regression to change together. A moving provider-discovery candidate belongs in a new
 reviewed matrix target, never a rewrite of a retained boundary observation.
 
-Renovate's three-day minimum release age governs direct dependency updates. Renovate cannot prove
-the age of versions selected while regenerating a lock file, so lock-file maintenance has a
-rule-local zero-day Renovate override and may auto-merge only when the shared, fail-closed
-lockfile-release-age guard proves every newly introduced registry release is at least 72 hours old
-and the required aggregate PR gate succeeds.
+Renovate's three-day minimum release age governs third-party direct dependency updates. The exact
+BoxFerry package names and `compose-lens`, `podman-lens`, `quadlet-lens`, and `docker-lens` have a
+zero-day exception restricted to the Cargo manager and crate datasource; it does not change review
+or automerge requirements. Renovate cannot prove the age of versions selected while regenerating
+a lock file, so lock-file maintenance also has a rule-local zero-day Renovate override. It may
+auto-merge only when the shared, fail-closed lockfile-release-age guard succeeds and the required
+aggregate PR gate passes.
+
+The shared guard waives only elapsed release age for those four exact Lens names from canonical
+crates.io Cargo sources. It still performs bounded registry lookups and validates release metadata,
+and rejects future timestamps. Cargo lockfile checksum and integrity verification is not waived.
+Every newly introduced third-party registry release, including transitive dependencies of a Lens
+crate, must remain at least 72 hours old. Other registries, ecosystems, and similarly named packages
+receive no Lens exception; registry errors and invalid or missing metadata fail closed.
 
 Fixed GitHub-hosted `ubuntu-*` runner labels have one
 `github-runners` regex owner across every workflow. Runner upgrades stay grouped with automerge
