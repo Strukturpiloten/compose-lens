@@ -42,7 +42,7 @@ assert!(parsed.document().and_then(|document| document.service("web")).is_some()
 assert!(parsed.diagnostics().is_empty());
 ```
 
-Rust 1.85.0 or newer is required.
+Rust 1.98.1 or newer is required.
 
 ## Processing model
 

@@ -506,10 +506,10 @@ impl GeneratedLoggingOption {
     /// number scalar. No driver-specific option semantics are applied.
     pub fn new(name: impl Into<String>, value: GeneratedLoggingOptionValue) -> Result<Self, GenerationError> {
         let name = required("logging option key", name.into())?;
-        if let GeneratedLoggingOptionValue::Number(number) = &value {
-            if !valid_yaml_number(number.expose()) {
-                return Err(GenerationError::InvalidLoggingOptionNumber);
-            }
+        if let GeneratedLoggingOptionValue::Number(number) = &value
+            && !valid_yaml_number(number.expose())
+        {
+            return Err(GenerationError::InvalidLoggingOptionNumber);
         }
         Ok(Self { name, value })
     }
@@ -607,10 +607,10 @@ impl GeneratedNetworkDriverOption {
     /// number scalar. Driver-option semantics remain uninterpreted.
     pub fn new(name: impl Into<String>, value: GeneratedNetworkDriverOptionValue) -> Result<Self, GenerationError> {
         let name = required("network driver option key", name.into())?;
-        if let GeneratedNetworkDriverOptionValue::Number(number) = &value {
-            if !valid_yaml_number(number.expose()) {
-                return Err(GenerationError::InvalidNetworkDriverOptionNumber);
-            }
+        if let GeneratedNetworkDriverOptionValue::Number(number) = &value
+            && !valid_yaml_number(number.expose())
+        {
+            return Err(GenerationError::InvalidNetworkDriverOptionNumber);
         }
         Ok(Self { name, value })
     }
@@ -662,10 +662,10 @@ impl GeneratedVolumeDriverOption {
     /// number scalar. Driver-option semantics remain uninterpreted.
     pub fn new(name: impl Into<String>, value: GeneratedVolumeDriverOptionValue) -> Result<Self, GenerationError> {
         let name = required("volume driver option key", name.into())?;
-        if let GeneratedVolumeDriverOptionValue::Number(number) = &value {
-            if !valid_yaml_number(number.expose()) {
-                return Err(GenerationError::InvalidVolumeDriverOptionNumber);
-            }
+        if let GeneratedVolumeDriverOptionValue::Number(number) = &value
+            && !valid_yaml_number(number.expose())
+        {
+            return Err(GenerationError::InvalidVolumeDriverOptionNumber);
         }
         Ok(Self { name, value })
     }
@@ -2570,10 +2570,10 @@ impl GeneratedService {
     /// signed, fractional, exponent-shaped, or otherwise not ASCII decimal, or
     /// [`GenerationError::DuplicateField`] when already configured.
     pub fn set_pids_limit(&mut self, limit: GeneratedPidsLimit) -> Result<(), GenerationError> {
-        if let GeneratedPidsLimit::Finite(decimal) = &limit {
-            if !valid_positive_pids_decimal(decimal) {
-                return Err(GenerationError::InvalidPidsLimit);
-            }
+        if let GeneratedPidsLimit::Finite(decimal) = &limit
+            && !valid_positive_pids_decimal(decimal)
+        {
+            return Err(GenerationError::InvalidPidsLimit);
         }
         set_once(&mut self.pids_limit, limit, "pids_limit")
     }
@@ -2725,10 +2725,10 @@ impl GeneratedService {
     /// Returns [`GenerationError::InvalidPullPolicyDuration`] for an invalid custom interval or
     /// [`GenerationError::DuplicateField`] when already configured.
     pub fn set_pull_policy(&mut self, policy: GeneratedPullPolicy) -> Result<(), GenerationError> {
-        if let GeneratedPullPolicy::Every(duration) = &policy {
-            if !valid_pull_policy_duration(duration.expose()) {
-                return Err(GenerationError::InvalidPullPolicyDuration);
-            }
+        if let GeneratedPullPolicy::Every(duration) = &policy
+            && !valid_pull_policy_duration(duration.expose())
+        {
+            return Err(GenerationError::InvalidPullPolicyDuration);
         }
         set_once(&mut self.pull_policy, policy, "pull_policy")
     }

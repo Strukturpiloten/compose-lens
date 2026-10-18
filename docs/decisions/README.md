@@ -39,5 +39,6 @@
 | [0026](0026-independent-real-application-conformance.md)        | accepted   | Independent real-application semantics and versioned external evidence                            |
 | [0027](0027-release-provider-configuration-evidence.md)         | accepted   | Release-gated observed provider-configuration evidence                                            |
 | [0028](0028-source-preserving-block-scalar-compatibility.md)    | accepted   | Private block-scalar quote and indentation adaptation with authored semantics and boundary guards |
+| [0029](0029-align-minimum-and-normal-rust-toolchains.md)        | accepted   | Align minimum and normal Rust toolchains at 1.98.1                                                |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.

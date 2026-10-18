@@ -82,10 +82,10 @@ impl SyntaxDocument {
                 ));
             }
         }
-        if diagnostics.is_empty() {
-            if let Some(document_end) = unparsed_input_offset(&parse, &source) {
-                diagnostics.push(unparsed_input_diagnostic(source_id, source.len(), document_end));
-            }
+        if diagnostics.is_empty()
+            && let Some(document_end) = unparsed_input_offset(&parse, &source)
+        {
+            diagnostics.push(unparsed_input_diagnostic(source_id, source.len(), document_end));
         }
 
         Ok(SyntaxParse {
@@ -394,33 +394,33 @@ fn parser_compatible_source(source: &str) -> (Option<String>, Vec<BlockScalarBou
         let indent = content.bytes().take_while(|byte| *byte == b' ').count();
         let blank = content[indent..].is_empty();
 
-        if let Some(block) = blocks.last_mut().filter(|block| block.end == offset) {
-            if blank || indent > block.parent_indent {
-                if blank && block.content_indent.is_none() {
-                    block.leading_blank_indent = block.leading_blank_indent.max(indent);
-                } else if !blank {
-                    let required = *block.content_indent.get_or_insert(indent);
-                    block.valid &= indent >= required && block.leading_blank_indent <= required;
-                    if block.explicit_indent && indent > required {
-                        // The implicit private header must infer the explicit minimum even when
-                        // the first content line deliberately retains additional leading spaces.
-                        compatible[offset + required..offset + indent].fill(b'_');
-                        changed = true;
-                    }
+        if let Some(block) = blocks.last_mut().filter(|block| block.end == offset)
+            && (blank || indent > block.parent_indent)
+        {
+            if blank && block.content_indent.is_none() {
+                block.leading_blank_indent = block.leading_blank_indent.max(indent);
+            } else if !blank {
+                let required = *block.content_indent.get_or_insert(indent);
+                block.valid &= indent >= required && block.leading_blank_indent <= required;
+                if block.explicit_indent && indent > required {
+                    // The implicit private header must infer the explicit minimum even when
+                    // the first content line deliberately retains additional leading spaces.
+                    compatible[offset + required..offset + indent].fill(b'_');
+                    changed = true;
                 }
-                // Quotes are content in YAML block scalars, but the backend lexer scans them as
-                // quoted strings before recognizing the block. Keep byte offsets while preventing
-                // that scan from consuming a dedented sibling. Decode the original scalar below.
-                for (index, byte) in content.bytes().enumerate() {
-                    if matches!(byte, b'\'' | b'"') {
-                        compatible[offset + index] = b'_';
-                        changed = true;
-                    }
-                }
-                block.end += line.len();
-                offset += line.len();
-                continue;
             }
+            // Quotes are content in YAML block scalars, but the backend lexer scans them as
+            // quoted strings before recognizing the block. Keep byte offsets while preventing
+            // that scan from consuming a dedented sibling. Decode the original scalar below.
+            for (index, byte) in content.bytes().enumerate() {
+                if matches!(byte, b'\'' | b'"') {
+                    compatible[offset + index] = b'_';
+                    changed = true;
+                }
+            }
+            block.end += line.len();
+            offset += line.len();
+            continue;
         }
 
         let (line_changed, starts_block_scalar) = mask_block_plain_commas(content, offset, &mut compatible, &mut state);
@@ -1015,10 +1015,10 @@ fn extract_merge_value(
                     || MergeSyntaxValue::Empty(span),
                     |value| extract_merge_value(source_id, source, value, registry, aliases),
                 );
-            if matches!(tag.as_str(), "!!timestamp" | "!!regex") {
-                if let MergeSyntaxValue::Scalar(scalar) = &mut value {
-                    scalar.strict_yaml_string = false;
-                }
+            if matches!(tag.as_str(), "!!timestamp" | "!!regex")
+                && let MergeSyntaxValue::Scalar(scalar) = &mut value
+            {
+                scalar.strict_yaml_string = false;
             }
             MergeSyntaxValue::Tagged {
                 tag,

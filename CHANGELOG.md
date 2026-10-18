@@ -6,6 +6,11 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Changed
+
+- Require Rust 1.98.1 or newer, aligning the minimum and normal toolchains
+  ([ADR 0029](docs/decisions/0029-align-minimum-and-normal-rust-toolchains.md)).
+
 ## [0.3.4](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.3...v0.3.4) - 2026-10-02
 
 ### Fixed

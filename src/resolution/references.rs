@@ -346,19 +346,19 @@ fn collect_volumes(
         if mount_type != "volume" {
             continue;
         }
-        if let Some(source) = value.get("source") {
-            if let Some(scalar) = source.as_scalar() {
-                push_resource(
-                    service.key(),
-                    scalar.value(),
-                    super::effective_span(source),
-                    ReferenceKind::Volume,
-                    definitions.contains(scalar.value()),
-                    scalar.is_sensitive(),
-                    references,
-                    diagnostics,
-                );
-            }
+        if let Some(source) = value.get("source")
+            && let Some(scalar) = source.as_scalar()
+        {
+            push_resource(
+                service.key(),
+                scalar.value(),
+                super::effective_span(source),
+                ReferenceKind::Volume,
+                definitions.contains(scalar.value()),
+                scalar.is_sensitive(),
+                references,
+                diagnostics,
+            );
         }
     }
 }
@@ -467,25 +467,23 @@ fn collect_service_references(
         }
     }
     collect_service_links(service, service_names, selection, references, diagnostics);
-    if let Some(extends) = service.value().get("extends") {
-        if extends.get("file").is_none() {
-            if let Some(target) = extends.get("service") {
-                if let Some(scalar) = target.as_scalar() {
-                    push_service(
-                        service.key(),
-                        scalar.value(),
-                        super::effective_span(target),
-                        ReferenceKind::Extends,
-                        scalar.is_sensitive(),
-                        true,
-                        service_names,
-                        selection,
-                        references,
-                        diagnostics,
-                    );
-                }
-            }
-        }
+    if let Some(extends) = service.value().get("extends")
+        && extends.get("file").is_none()
+        && let Some(target) = extends.get("service")
+        && let Some(scalar) = target.as_scalar()
+    {
+        push_service(
+            service.key(),
+            scalar.value(),
+            super::effective_span(target),
+            ReferenceKind::Extends,
+            scalar.is_sensitive(),
+            true,
+            service_names,
+            selection,
+            references,
+            diagnostics,
+        );
     }
 }
 

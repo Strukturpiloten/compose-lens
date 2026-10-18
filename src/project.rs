@@ -5312,18 +5312,23 @@ impl<'a> Builder<'a> {
                 .and_then(ProjectDeploy::resources)
                 .and_then(|value| value.value().reservations())
                 .and_then(|value| value.value().memory()),
-        ) {
-            if same_memory_value(reservation.value(), deploy_reservation.value()) == Some(false) {
-                self.diagnostics.push(
+        ) && same_memory_value(reservation.value(), deploy_reservation.value()) == Some(false)
+        {
+            self.diagnostics.push(
                 Diagnostic::new(
                     SERVICE_MEMORY_RESERVATION_DEPLOY_CONFLICT,
                     Severity::Warning,
                     "service mem_reservation and deploy reservation memory are both retained for caller reconciliation",
                 )
-                .with_label(DiagnosticLabel::primary(project_value_span(reservation), "service mem_reservation retained"))
-                .with_label(DiagnosticLabel::secondary(project_value_span(deploy_reservation), "deploy reservation memory retained")),
+                .with_label(DiagnosticLabel::primary(
+                    project_value_span(reservation),
+                    "service mem_reservation retained",
+                ))
+                .with_label(DiagnosticLabel::secondary(
+                    project_value_span(deploy_reservation),
+                    "deploy reservation memory retained",
+                )),
             );
-            }
         }
         if let Some(memswap) = service
             .memswap_limit
@@ -5342,27 +5347,26 @@ impl<'a> Builder<'a> {
                 )),
             );
         }
-        if let (Some(memswap), Some(memory)) = (service.memswap_limit.as_ref(), service.mem_limit.as_ref()) {
-            if memswap.value().is_positive()
-                && memory_compare_same_unit(memswap.value().raw().value(), memory.value().raw().value())
-                    == Some(std::cmp::Ordering::Less)
-            {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        SERVICE_MEMSWAP_BELOW_MEMORY_LIMIT,
-                        Severity::Error,
-                        "positive memswap_limit is below the comparable service mem_limit",
-                    )
-                    .with_label(DiagnosticLabel::primary(
-                        project_value_span(memswap),
-                        "memory-plus-swap limit retained",
-                    ))
-                    .with_label(DiagnosticLabel::secondary(
-                        project_value_span(memory),
-                        "service memory limit retained",
-                    )),
-                );
-            }
+        if let (Some(memswap), Some(memory)) = (service.memswap_limit.as_ref(), service.mem_limit.as_ref())
+            && memswap.value().is_positive()
+            && memory_compare_same_unit(memswap.value().raw().value(), memory.value().raw().value())
+                == Some(std::cmp::Ordering::Less)
+        {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    SERVICE_MEMSWAP_BELOW_MEMORY_LIMIT,
+                    Severity::Error,
+                    "positive memswap_limit is below the comparable service mem_limit",
+                )
+                .with_label(DiagnosticLabel::primary(
+                    project_value_span(memswap),
+                    "memory-plus-swap limit retained",
+                ))
+                .with_label(DiagnosticLabel::secondary(
+                    project_value_span(memory),
+                    "service memory limit retained",
+                )),
+            );
         }
     }
 
@@ -5376,24 +5380,23 @@ impl<'a> Builder<'a> {
             };
             if let (Some(scale_number), Some(replica_number)) =
                 (normalize_integer(scale_raw), normalize_integer(replica_raw))
+                && scale_number != replica_number
             {
-                if scale_number != replica_number {
-                    self.diagnostics.push(
-                        Diagnostic::new(
-                            SERVICE_SCALE_DEPLOY_REPLICAS_CONFLICT,
-                            Severity::Warning,
-                            "scale and deploy.replicas have different proven integer values",
-                        )
-                        .with_label(DiagnosticLabel::primary(
-                            project_value_span(scale),
-                            "service scale retained",
-                        ))
-                        .with_label(DiagnosticLabel::secondary(
-                            project_value_span(replicas),
-                            "deploy replicas retained",
-                        )),
-                    );
-                }
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SERVICE_SCALE_DEPLOY_REPLICAS_CONFLICT,
+                        Severity::Warning,
+                        "scale and deploy.replicas have different proven integer values",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        project_value_span(scale),
+                        "service scale retained",
+                    ))
+                    .with_label(DiagnosticLabel::secondary(
+                        project_value_span(replicas),
+                        "deploy replicas retained",
+                    )),
+                );
             }
         }
     }
@@ -5414,24 +5417,23 @@ impl<'a> Builder<'a> {
             };
             if let (Some(service_number), Some(limit_number)) =
                 (normalize_decimal(service_raw), normalize_decimal(limit_raw))
+                && service_number != limit_number
             {
-                if service_number != limit_number {
-                    self.diagnostics.push(
-                        Diagnostic::new(
-                            SERVICE_CPUS_DEPLOY_LIMIT_CONFLICT,
-                            Severity::Warning,
-                            "cpus and deploy.resources.limits.cpus have different proven decimal values",
-                        )
-                        .with_label(DiagnosticLabel::primary(
-                            project_value_span(cpus),
-                            "service cpus retained",
-                        ))
-                        .with_label(DiagnosticLabel::secondary(
-                            project_value_span(limit),
-                            "deploy CPU limit retained",
-                        )),
-                    );
-                }
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        SERVICE_CPUS_DEPLOY_LIMIT_CONFLICT,
+                        Severity::Warning,
+                        "cpus and deploy.resources.limits.cpus have different proven decimal values",
+                    )
+                    .with_label(DiagnosticLabel::primary(
+                        project_value_span(cpus),
+                        "service cpus retained",
+                    ))
+                    .with_label(DiagnosticLabel::secondary(
+                        project_value_span(limit),
+                        "deploy CPU limit retained",
+                    )),
+                );
             }
         }
     }
@@ -7688,24 +7690,24 @@ impl<'a> Builder<'a> {
                 let mut values = Vec::new();
                 let mut bad = false;
                 for item in items {
-                    if let MergedValueKind::Scalar(s) = item.kind() {
-                        if s.kind() == MergedScalarKind::String {
-                            if values
-                                .iter()
-                                .any(|value: &ProjectValue<String>| value.value() == s.value())
-                            {
-                                self.diagnostics.push(
-                                    Diagnostic::new(
-                                        BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM,
-                                        Severity::Warning,
-                                        "build no_cache_filter retains duplicate stage",
-                                    )
-                                    .with_label(DiagnosticLabel::primary(effective_span(item), "duplicate retained")),
-                                );
-                            }
-                            values.push(ProjectValue::new(s.value().to_owned(), item));
-                            continue;
+                    if let MergedValueKind::Scalar(s) = item.kind()
+                        && s.kind() == MergedScalarKind::String
+                    {
+                        if values
+                            .iter()
+                            .any(|value: &ProjectValue<String>| value.value() == s.value())
+                        {
+                            self.diagnostics.push(
+                                Diagnostic::new(
+                                    BUILD_NO_CACHE_FILTER_DUPLICATE_ITEM,
+                                    Severity::Warning,
+                                    "build no_cache_filter retains duplicate stage",
+                                )
+                                .with_label(DiagnosticLabel::primary(effective_span(item), "duplicate retained")),
+                            );
                         }
+                        values.push(ProjectValue::new(s.value().to_owned(), item));
+                        continue;
                     }
                     self.expected(item, "build no_cache_filter entries must be string scalars");
                     bad = true;

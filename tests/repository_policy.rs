@@ -200,6 +200,83 @@ fn repository_supply_chain_has_single_sources_and_immutable_pins() -> Result<(),
 }
 
 #[test]
+fn minimum_and_normal_rust_versions_match_the_supported_policy() -> Result<(), String> {
+    let minimum = repository_toml_string("Cargo.toml", &["workspace", "package", "rust-version"])?;
+    let normal = repository_toml_string("rust-toolchain.toml", &["toolchain", "channel"])?;
+    let clippy = repository_toml_string("clippy.toml", &["msrv"])?;
+    validate_rust_version_policy(&minimum, &normal, &clippy)?;
+
+    for (path, expected) in [
+        ("README.md", format!("Rust {minimum} or newer")),
+        ("docs/public/index.md", format!("Rust {minimum} or newer")),
+        ("docs/api-stability.md", format!("Rust {minimum} or newer")),
+        ("AGENTS.md", format!("Rust {minimum}+")),
+        ("AGENTS.md", format!("cargo +{minimum} ci-check")),
+        ("AGENTS.md", format!("cargo +{minimum} ci-policy")),
+    ] {
+        if !read_repository_file(path)?.contains(&expected) {
+            return Err(format!("{path} must document `{expected}`"));
+        }
+    }
+    Ok(())
+}
+
+fn repository_toml_string(path: &str, keys: &[&str]) -> Result<String, String> {
+    let parsed: toml::Value =
+        toml::from_str(&read_repository_file(path)?).map_err(|error| format!("failed to parse {path}: {error}"))?;
+    keys.iter()
+        .try_fold(&parsed, |value, key| value.get(*key))
+        .and_then(toml::Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| format!("{path} must declare a string at {}", keys.join(".")))
+}
+
+fn validate_rust_version_policy(minimum: &str, normal: &str, clippy: &str) -> Result<(), String> {
+    let parse_version = |version: &str| -> Result<[u32; 3], String> {
+        let components = version
+            .split('.')
+            .map(str::parse::<u32>)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("invalid Rust version {version}: {error}"))?;
+        components
+            .try_into()
+            .map_err(|_| format!("Rust version {version} must contain major, minor, and patch components"))
+    };
+    let minimum_version = parse_version(minimum)?;
+    if minimum_version < [1, 98, 1] {
+        return Err(format!("manifest minimum {minimum} must be at least Rust 1.98.1"));
+    }
+    if parse_version(normal)? < minimum_version {
+        return Err(format!(
+            "normal Rust toolchain {normal} must be at least manifest minimum {minimum}"
+        ));
+    }
+    if clippy != minimum {
+        return Err(format!("Clippy MSRV {clippy} must equal manifest minimum {minimum}"));
+    }
+    Ok(())
+}
+
+#[test]
+fn rust_version_policy_allows_newer_normal_toolchains_and_rejects_drift() -> Result<(), String> {
+    for normal in ["1.98.1", "1.99.0", "1.100.0"] {
+        validate_rust_version_policy("1.98.1", normal, "1.98.1")?;
+    }
+    for (minimum, normal, clippy) in [
+        ("1.98.1", "1.98.0", "1.98.1"),
+        ("1.85.0", "1.99.0", "1.85.0"),
+        ("1.98.1", "1.99.0", "1.99.0"),
+        ("1.98.1", "stable", "1.98.1"),
+        ("1.98.1", "1.99", "1.98.1"),
+    ] {
+        if validate_rust_version_policy(minimum, normal, clippy).is_ok() {
+            return Err(format!("Rust version policy must reject {minimum}/{normal}/{clippy}"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
     const ACTION: &str = "obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9";
     const CONFIGURATION: &str = "package: compose-lens";

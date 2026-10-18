@@ -29,7 +29,7 @@ if [[ "${CHECK_ALL_TEST_FAIL:-}" == "${command_name}" ]]; then
 fi
 case "${command_name}:$*" in
   git:ls-files*) printf 'README.md\0' ;;
-  jq:*) printf '1.85.0\n' ;;
+  jq:*) printf '1.98.1\n' ;;
 esac
 MOCK
 chmod +x "${test_root}/bin/mock"
@@ -79,6 +79,10 @@ diff -u "${test_root}/default.commands" "${test_root}/fix.commands"
 assert_contains fix "bash scripts/check-files.sh --fix"
 assert_contains check "bash scripts/check-files.sh --check"
 assert_contains check "bash .devcontainer/verify-tools.sh --check-python-venv"
+for mode in fix check; do
+  assert_contains "${mode}" 'cargo +1.98.1 ci-check'
+  assert_contains "${mode}" 'cargo +1.98.1 ci-policy'
+done
 [[ "$(head -n 1 "${test_root}/check.commands")" == "bash .devcontainer/verify-tools.sh --check-python-venv" ]]
 if grep -q '^cargo fmt' "${test_root}/fix.commands"; then
   assert_contains fix "cargo fmt --all"

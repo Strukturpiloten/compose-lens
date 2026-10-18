@@ -187,35 +187,34 @@ fn collect_services(
 }
 
 fn collect_service_features(service: &MergedValue, path: &[String], occurrences: &mut Vec<CompatibilityOccurrence>) {
-    if let Some(image) = service.get("image") {
-        if let Some(scalar) = image.as_scalar() {
-            if has_tag_and_digest(scalar.value()) {
-                let mut image_path = path.to_owned();
-                image_path.push("image".to_owned());
-                occurrences.push(CompatibilityOccurrence {
-                    feature: CompatibilityFeature::ImageTagAndDigest,
-                    path: image_path,
-                    source: effective_span(image),
-                    sensitive: scalar.is_sensitive(),
-                });
-            }
-        }
+    if let Some(image) = service.get("image")
+        && let Some(scalar) = image.as_scalar()
+        && has_tag_and_digest(scalar.value())
+    {
+        let mut image_path = path.to_owned();
+        image_path.push("image".to_owned());
+        occurrences.push(CompatibilityOccurrence {
+            feature: CompatibilityFeature::ImageTagAndDigest,
+            path: image_path,
+            source: effective_span(image),
+            sensitive: scalar.is_sensitive(),
+        });
     }
 
-    if let Some(userns_mode) = service.get("userns_mode") {
-        if let Some(scalar) = userns_mode.as_scalar() {
-            let source = effective_span(userns_mode);
-            let mode = UserNamespaceMode::parse(Located::new(scalar.value().to_owned(), source));
-            if mode.is_podman_specific() {
-                let mut mode_path = path.to_owned();
-                mode_path.push("userns_mode".to_owned());
-                occurrences.push(CompatibilityOccurrence {
-                    feature: CompatibilityFeature::PodmanUserNamespaceMode,
-                    path: mode_path,
-                    source,
-                    sensitive: scalar.is_sensitive(),
-                });
-            }
+    if let Some(userns_mode) = service.get("userns_mode")
+        && let Some(scalar) = userns_mode.as_scalar()
+    {
+        let source = effective_span(userns_mode);
+        let mode = UserNamespaceMode::parse(Located::new(scalar.value().to_owned(), source));
+        if mode.is_podman_specific() {
+            let mut mode_path = path.to_owned();
+            mode_path.push("userns_mode".to_owned());
+            occurrences.push(CompatibilityOccurrence {
+                feature: CompatibilityFeature::PodmanUserNamespaceMode,
+                path: mode_path,
+                source,
+                sensitive: scalar.is_sensitive(),
+            });
         }
     }
 

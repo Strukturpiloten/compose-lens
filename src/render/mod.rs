@@ -319,17 +319,17 @@ impl Renderer {
         self.output.push('-');
         self.sensitive |= value.is_sensitive();
         let core = self.write_tag_prefixes(value);
-        if let MergedValueKind::Mapping(entries) = core.kind() {
-            if let Some((first, remaining)) = entries.split_first() {
-                self.output.push(' ');
-                write_quoted(&mut self.output, first.key());
-                self.output.push(':');
-                self.write_after_indicator(first.value(), indent + (self.indent_width() * 2));
-                for entry in remaining {
-                    self.write_entry(entry, indent + self.indent_width());
-                }
-                return;
+        if let MergedValueKind::Mapping(entries) = core.kind()
+            && let Some((first, remaining)) = entries.split_first()
+        {
+            self.output.push(' ');
+            write_quoted(&mut self.output, first.key());
+            self.output.push(':');
+            self.write_after_indicator(first.value(), indent + (self.indent_width() * 2));
+            for entry in remaining {
+                self.write_entry(entry, indent + self.indent_width());
             }
+            return;
         }
         self.write_after_indicator(value, indent + self.indent_width());
     }

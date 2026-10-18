@@ -12,7 +12,10 @@ Within 0.3.x:
 - diagnostic code strings remain stable automation keys;
 - canonical-v2 output remains deterministic for the same semantic input;
 - parsing, processing, validation, and rendering keep their documented side-effect boundaries; and
-- every supported API compiles on Rust 1.85.0 or newer.
+- every supported API compiles on Rust 1.98.1 or newer.
+
+[ADR 0029](decisions/0029-align-minimum-and-normal-rust-toolchains.md) explicitly amends the earlier
+minimum Rust version promise; consumers on older compilers must upgrade before adopting this change.
 
 A bug fix may change behavior that contradicts a documented contract or reviewed conformance
 evidence. Such a change needs a regression test and a concise changelog entry. A patch release must
