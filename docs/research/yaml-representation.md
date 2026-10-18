@@ -49,7 +49,9 @@ This is a deliberately reversible selection:
 
 - The dependency is pinned exactly because it is pre-1.0.
 - No `yaml-edit` type appears in the public API.
-- Parser updates must pass the authored preservation and malformed-input corpus on Rust 1.85.0.
+- Parser updates must pass the authored preservation and malformed-input corpus on the current
+  minimum Rust version declared in `Cargo.toml` (see
+  [ADR 0029](../decisions/0029-align-minimum-and-normal-rust-toolchains.md)).
 - ComposeLens remains responsible for Compose typing, duplicate-key policy, alias semantics, validation profiles, and deterministic canonical rendering.
 - `saphyr-parser` remains a possible semantic conformance oracle if the concrete parser accepts input whose YAML validity is uncertain.
 - Tree-sitter remains a possible editor-oriented fallback if incremental parsing becomes a concrete requirement.

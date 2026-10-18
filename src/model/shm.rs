@@ -149,10 +149,10 @@ fn split_documented_unit(value: &str) -> Option<(&str, ShmSizeUnit)> {
         ("m", ShmSizeUnit::M),
         ("g", ShmSizeUnit::G),
     ] {
-        if let Some(amount) = value.strip_suffix(suffix) {
-            if !amount.is_empty() {
-                return Some((amount, unit));
-            }
+        if let Some(amount) = value.strip_suffix(suffix)
+            && !amount.is_empty()
+        {
+            return Some((amount, unit));
         }
     }
     None

@@ -41,6 +41,14 @@ Renovate proposes supported updates. Repository policy verifies immutable action
 metadata, single version sources, and locked tooling. Every update still needs the same review and
 complete gate as a hand-authored dependency change.
 
+The Rust minimum and normal toolchain are aligned by
+[ADR 0029](decisions/0029-align-minimum-and-normal-rust-toolchains.md). Renovate's built-in Cargo
+manager continues to own Cargo dependency requirements and lockfile updates; the existing
+`rust-toolchain` manager owns the channel pin in `rust-toolchain.toml` and retains its separate
+Rust toolchain group. The MSRV alignment adds no dependency requirement or extraction path, so
+Renovate configuration is unchanged. Minimum-version, Clippy, and documentation changes remain
+part of the reviewed policy update; no new manager or automatic MSRV update policy is introduced.
+
 Provider-conformance artifact URLs, checksums, and observed-record versions are immutable evidence:
 they are not routine Renovate updates. Renovate surfaces the matrix-declared Python runtime and
 bootstrap pins for manual provenance and checksum review with automerge disabled. The reusable runner

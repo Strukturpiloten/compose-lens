@@ -192,22 +192,20 @@ pub(crate) fn classify_security_option(value: &str) -> SecurityOptionKind {
         .chars()
         .filter(|character| !character.is_whitespace())
         .collect::<String>();
-    if let (Some(prefix), Some(suffix)) = (compact.get(..7), compact.get(7..)) {
-        if prefix.eq_ignore_ascii_case("seccomp")
-            && (suffix.is_empty() || suffix.starts_with(':') || suffix.starts_with('='))
-        {
-            return SecurityOptionKind::SeccompNearMiss;
-        }
+    if let (Some(prefix), Some(suffix)) = (compact.get(..7), compact.get(7..))
+        && prefix.eq_ignore_ascii_case("seccomp")
+        && (suffix.is_empty() || suffix.starts_with(':') || suffix.starts_with('='))
+    {
+        return SecurityOptionKind::SeccompNearMiss;
     }
     if let Some(kind) = classify_exact_boolean_option(value) {
         return kind;
     }
-    if let (Some(prefix), Some(suffix)) = (compact.get(..17), compact.get(17..)) {
-        if prefix.eq_ignore_ascii_case("no-new-privileges")
-            && (suffix.is_empty() || suffix.starts_with(':') || suffix.starts_with('='))
-        {
-            return SecurityOptionKind::NoNewPrivilegesNearMiss;
-        }
+    if let (Some(prefix), Some(suffix)) = (compact.get(..17), compact.get(17..))
+        && prefix.eq_ignore_ascii_case("no-new-privileges")
+        && (suffix.is_empty() || suffix.starts_with(':') || suffix.starts_with('='))
+    {
+        return SecurityOptionKind::NoNewPrivilegesNearMiss;
     }
     if let Some(paths) = value.strip_prefix("mask=") {
         return if !paths.is_empty() && !paths.chars().any(char::is_whitespace) {

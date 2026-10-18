@@ -62,7 +62,7 @@ constrain round-trip behavior or the public model.
 
 ## Canonical development commands
 
-Rust 2024 supports Rust 1.85.0+; `rust-toolchain.toml` pins the normal toolchain.
+ComposeLens requires Rust 1.98.1+ with Rust 2024; `rust-toolchain.toml` pins the normal toolchain.
 
 ```console
 ./scripts/check-all.sh
@@ -74,8 +74,8 @@ cargo ci-clippy
 cargo ci-test
 cargo ci-doctest
 RUSTDOCFLAGS="-D warnings" cargo ci-doc
-cargo +1.85.0 ci-check
-cargo +1.85.0 ci-policy
+cargo +1.98.1 ci-check
+cargo +1.98.1 ci-policy
 cargo deny check
 cargo test --locked --test conformance
 cargo test --locked --test runtime_conformance
