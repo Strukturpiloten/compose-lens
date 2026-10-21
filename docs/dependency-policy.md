@@ -64,7 +64,12 @@ zero-day exception restricted to the Cargo manager and crate datasource; it does
 or automerge requirements. Renovate cannot prove the age of versions selected while regenerating
 a lock file, so lock-file maintenance also has a rule-local zero-day Renovate override. It may
 auto-merge only when the shared, fail-closed lockfile-release-age guard succeeds and the required
-aggregate PR gate passes.
+`Required CI` aggregate passes.
+
+The `Required CI` check-name alignment changes only the existing aggregate's display name.
+Action/tool revisions, runner labels, provider artifacts and checksums, and Renovate extraction
+paths are unchanged. Existing GitHub Actions and workflow tool/runner regex managers retain
+their ownership, grouping and approval rules; no new pin or manager is introduced.
 
 The shared guard waives only elapsed release age for those four exact Lens names from canonical
 crates.io Cargo sources. It still performs bounded registry lookups and validates release metadata,

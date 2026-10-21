@@ -14,7 +14,7 @@ allowed to publish the crate, create a tag, or create a GitHub release.
 - Protect the `release` environment with a required reviewer and default-branch restriction.
 - Keep crates.io trusted publishing bound to repository `compose-lens`, workflow `release.yml`, and
   environment `release`. Do not store a crates.io token in GitHub.
-- Require the stable `PR gate` status in branch protection.
+- Require the stable `Required CI` status in branch protection.
 
 The preparation configuration disables publication, tags, and GitHub releases. Those actions remain
 inside the protected workflow.
