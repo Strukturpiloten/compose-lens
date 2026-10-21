@@ -6,6 +6,8 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.4...v0.4.0) - 2026-10-21
+
 ### Changed
 
 - Require Rust 1.98.1 or newer, aligning the minimum and normal toolchains
