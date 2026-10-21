@@ -73,8 +73,8 @@ file/link job plus the lockfile-age guard. Inline code, fenced or indented examp
 code, policy, unknown, or mixed changes select all jobs. There is no independent executable-guide
 suite, so those changes never use a reduced PR plan. Initial rollout against a base without the
 planner also runs all jobs. Main pushes, manual CI, and the reusable release CI always run all jobs
-for the exact tested commit. The stable `PR gate` accepts only planned skips and succeeds only when
-every selected job succeeds.
+for the exact tested commit. The stable `Required CI` accepts only planned skips and succeeds only
+when every selected job succeeds.
 
 The VS Code “Plan changed validation” task previews a local plan. “Validate changed files” runs
 it against staged, unstaged, untracked, and committed branch changes, checking that the local

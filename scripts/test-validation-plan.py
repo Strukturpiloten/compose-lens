@@ -247,12 +247,14 @@ class ValidationPlanTests(unittest.TestCase):
         needs["validation-plan"] = {"result": "success"}
         args = arguments(self.root, "pull_request", self.base, head)
         self.assertEqual(len(planner.verify_gate(plan, needs, POLICY, args)), len(POLICY["jobs"]))
-        for result in ("skipped", "failure", "cancelled", "timed_out", None):
-            with self.subTest(result=result):
-                broken = json.loads(json.dumps(needs))
-                broken["documentation"]["result"] = result
-                with self.assertRaises(planner.PlanError):
-                    planner.verify_gate(plan, broken, POLICY, args)
+        selected = ["validation-plan", *(job for job in POLICY["jobs"] if plan["jobs"][job])]
+        for job in selected:
+            for result in ("skipped", "failure", "cancelled", "timed_out", None):
+                with self.subTest(job=job, result=result):
+                    broken = copy.deepcopy(needs)
+                    broken[job]["result"] = result
+                    with self.assertRaises(planner.PlanError):
+                        planner.verify_gate(plan, broken, POLICY, args)
         broken = json.loads(json.dumps(needs))
         broken["rust"]["result"] = "failure"
         with self.assertRaises(planner.PlanError):
@@ -272,13 +274,53 @@ class ValidationPlanTests(unittest.TestCase):
                 needs["validation-plan"] = {"result": "success"}
                 args = arguments(self.root, event)
                 planner.verify_gate(plan, needs, POLICY, args)
-                needs["coverage"]["result"] = "skipped"
-                with self.assertRaises(planner.PlanError):
-                    planner.verify_gate(plan, needs, POLICY, args)
-                needs["coverage"]["result"] = "success"
+                for job in ("validation-plan", *POLICY["jobs"]):
+                    missing = copy.deepcopy(needs)
+                    missing.pop(job)
+                    with self.subTest(missing=job), self.assertRaises(planner.PlanError):
+                        planner.verify_gate(plan, missing, POLICY, args)
+                    for result in ("failure", "cancelled", "skipped", "timed_out", None):
+                        with self.subTest(job=job, result=result):
+                            broken = copy.deepcopy(needs)
+                            broken[job]["result"] = result
+                            with self.assertRaises(planner.PlanError):
+                                planner.verify_gate(plan, broken, POLICY, args)
                 plan["profile"] = "prose"
                 with self.assertRaises(planner.PlanError):
                     planner.verify_gate(plan, needs, POLICY, args)
+
+    def test_required_ci_names_only_the_real_trusted_fail_closed_aggregate(self) -> None:
+        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        jobs = re.findall(r"(?ms)^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)",
+                          workflow.split("\njobs:\n", 1)[1])
+        self.assertEqual(len(jobs), len({job for job, _ in jobs}), "job IDs must be unique")
+        named_required = [job for job, body in jobs
+                          if re.search(r"(?m)^    name: ['\"]?Required CI['\"]?\s*$", body)]
+        self.assertEqual(named_required, ["pr-gate"], "no unrelated or duplicate success check may shadow the aggregate")
+        gate = dict(jobs)["pr-gate"]
+        self.assertTrue(gate.startswith("    name: Required CI\n    if: always()\n"))
+        dependencies = re.search(r"(?ms)^    needs:\n      \[(.*?)^      \]", gate)
+        self.assertIsNotNone(dependencies)
+        self.assertEqual(re.findall(r"[a-z][a-z0-9-]*", dependencies.group(1)),
+                         ["validation-plan", *POLICY["jobs"]])
+        for required in (
+            "ref: ${{ github.event.pull_request.base.sha }}",
+            "PLAN_JSON: ${{ needs.validation-plan.outputs.plan }}",
+            "NEEDS_JSON: ${{ toJSON(needs) }}",
+            "set -euo pipefail",
+            'verifier=.validation-base/scripts/validation-plan.py',
+            'policy_root=.validation-base',
+            'python3 "${verifier}" gate --policy-root "${policy_root}"',
+            '--event "${EVENT_NAME}" --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}"',
+            '--tested-sha "${GITHUB_SHA}"',
+            'or set(needs) != {"validation-plan", *jobs}',
+            'if needs[job].get("result") != "success":',
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, gate)
+        for event in ("pull_request:", "workflow_dispatch:", "workflow_call:"):
+            self.assertIn("  " + event, workflow)
+        self.assertIn("  push:\n    branches:\n      - main\n", workflow)
 
     def test_first_rollout_never_executes_candidate_classifier_or_accepts_a_skip(self) -> None:
         workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
