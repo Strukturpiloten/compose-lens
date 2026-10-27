@@ -2043,6 +2043,7 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
         ("implementation-worker", "gpt-6.1-sol", "high", "workspace-write"),
         ("specification-researcher", "gpt-6.1-sol", "high", "read-only"),
         ("reviewer", "gpt-6.1-sol", "high", "read-only"),
+        ("presentation-worker", "gpt-6.1-terra", "medium", "workspace-write"),
         ("verifier", "gpt-6-luna", "high", "workspace-write"),
     ] {
         let text = fs::read_to_string(root.join(format!(".codex/agents/{role}.toml")))?;
@@ -2057,6 +2058,19 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
+    let presentation = fs::read_to_string(root.join(".codex/agents/presentation-worker.toml"))?;
+    for required in [
+        "explicit file ownership",
+        "Escalate architecture, native-format semantics, security, migrations",
+        "Browser and application inspection is read-only",
+        "Git or GitHub writes",
+        "A Sol reviewer independently checks the original requirements",
+    ] {
+        assert!(
+            presentation.contains(required),
+            "missing presentation boundary: {required}"
+        );
+    }
     let reviewer = fs::read_to_string(root.join(".codex/agents/reviewer.toml"))?;
     assert!(reviewer.contains("original user requirements"));
     assert!(reviewer.contains("independent expected results"));
@@ -2070,7 +2084,7 @@ fn agent_roles_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
         "`gpt-6-sol` with `xhigh` reasoning",
         "use `gpt-6.1-sol` with `high` reasoning",
         "`gpt-6-luna` with `high`",
-        "Task-specific subagents may use `gpt-6.1-sol` or `gpt-6-luna` with `medium`, `high`, or `xhigh` reasoning",
+        "Task-specific subagents may use `gpt-6.1-sol`, `gpt-6.1-terra`, or `gpt-6-luna` with `medium`, `high`, or `xhigh` reasoning",
         "Use `gpt-6-astra` only with `xhigh` reasoning for particularly difficult architectural questions",
         "`agents.max_concurrent_threads_per_session` excludes the primary manager",
         "Use up to eight concurrent subagents plus the primary manager (nine agents in total), subject to the session's actual runtime limit",
