@@ -4,9 +4,10 @@ mod generated;
 mod preserved;
 
 pub use generated::{
-    ComposeDocumentBuilder, GeneratedAnnotation, GeneratedCommand, GeneratedComposeDocument,
-    GeneratedConfigFileDefinition, GeneratedCpuRtRuntime, GeneratedDevice, GeneratedDns, GeneratedDnsSearch,
-    GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile, GeneratedEnvironmentFileFormat,
+    ComposeDocumentBuilder, GENERATED_EXTENSION_MAX_DEPTH, GENERATED_EXTENSION_MAX_NODES, GeneratedAnnotation,
+    GeneratedCommand, GeneratedComposeDocument, GeneratedConfigFileDefinition, GeneratedCpuRtRuntime, GeneratedDevice,
+    GeneratedDns, GeneratedDnsSearch, GeneratedEntrypoint, GeneratedEnvironment, GeneratedEnvironmentFile,
+    GeneratedEnvironmentFileFormat, GeneratedExtension, GeneratedExtensionEntry, GeneratedExtensionValue,
     GeneratedExtraHost, GeneratedHostname, GeneratedLabel, GeneratedLogging, GeneratedLoggingOption,
     GeneratedLoggingOptionValue, GeneratedLongDevice, GeneratedMemLimit, GeneratedMount, GeneratedNetworkAttachment,
     GeneratedNetworkDefinition, GeneratedNetworkDriverOption, GeneratedNetworkDriverOptionValue, GeneratedPidsLimit,

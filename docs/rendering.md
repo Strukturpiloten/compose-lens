@@ -71,6 +71,45 @@ Generated service-network aliases retain insertion order. Callers with protected
 the generated-string alias boundary so the complete generated document is marked sensitive and
 `Debug` output remains redacted without changing the emitted YAML.
 
+### Inert extensions
+
+`GeneratedExtension` adds an exact-case `x-*` field to a document or directly to a service.
+`GeneratedExtensionValue` constructs ordered string-keyed mappings and sequences, nulls,
+booleans, validated numeric spellings, and ordinary or folded strings. Values have no vendor,
+provider, interpolation, or cross-format meaning. Duplicate exact keys and invalid namespaces
+fail explicitly; differently cased keys remain distinct. Numbers retain spelling and precision
+without floating-point coercion.
+
+Recursive constructors enforce the public depth and node bounds before rendering. A scalar has
+depth zero; each mapping or sequence adds one level. Node accounting includes values and nested
+mapping keys. Empty mappings and sequences remain explicit. Unsupported authored tags, aliases,
+and non-string keys remain distinguishable at the merged native boundary; strict key/scalar
+classification and authored scalar presentation are public accessors. Unsupported key spellings (including tagged key properties)
+retain their source spans and stay distinct from authored string keys with identical spelling.
+Flow mappings retain every entry; block indentation recovery applies only to block mappings.
+Quoted `<<` string keys remain inert, including alongside real plain merge keys. Native source
+expansion preserves inherited strict-key identity, unsupported keys, source spans, and duplicate
+evidence. Local keys override inherited keys; earlier mappings in a merge sequence override later
+ones. Invalid or unresolved merge sources remain available under a non-strict `<<` key for callers
+to diagnose rather than disappearing or donating partial fields.
+If the private parser consumes an anchored mapping declaration as plain-scalar content, syntax
+parsing reports `compose.yaml.unparsed-input` rather than accepting changed structure.
+
+The folded-string constructor chooses explicit indentation and strip, clip, or keep chomping,
+then verifies exact semantic parse-back. It retains empty strings, blank paragraphs, leading
+spaces, and zero, one, or multiple trailing LFs. CR/control characters and values the native
+parser cannot represent exactly (including a body beginning with tab indentation) return an
+explicit construction error. Strings do not acquire implicit interpolation or environment access.
+
+`GeneratedString::sensitive` protects extension keys as well as scalar values throughout builders,
+errors, and generated results. A sensitive generated document conservatively marks all retained
+extension names sensitive in its native parse-back model, so debugging a service, field reference,
+or source-aware name wrapper also redacts names. Explicit value/text accessors remain available;
+writing YAML bytes does not persist in-memory sensitivity marks.
+
+See [ADR 0030](decisions/0030-inert-generated-extension-values.md) and
+`tests/extension_metadata.rs` for the bounded construction and source-evidence contract.
+
 ## Preservation edits
 
 `render::apply_preservation_edits` atomically replaces existing YAML value scalars at exact

@@ -6,6 +6,17 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+### Added
+
+- Construct bounded native `x-*` values at document and service scope, with exact numeric spelling,
+  folded-string parse-back, protected keys/values, and public scalar/key evidence
+  ([ADR 0030](docs/decisions/0030-inert-generated-extension-values.md)).
+
+### Fixed
+
+- Retain complete flow mappings and unsupported key evidence without conflating string keys;
+  diagnose anchored mapping structure consumed by the private parser as plain text.
+
 ### Changed
 
 - Require Rust 1.98.1 or newer, aligning the minimum and normal toolchains

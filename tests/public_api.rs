@@ -4295,3 +4295,42 @@ fn exposes_generated_top_level_file_definition_contracts() -> Result<(), Box<dyn
     );
     Ok(())
 }
+
+#[test]
+fn inert_extensions_expose_native_presentation_and_checked_generation() -> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::render::{GeneratedExtension, GeneratedExtensionEntry, GeneratedExtensionValue};
+    use compose_lens::source::SourceId;
+    use compose_lens::syntax::ScalarPresentation;
+    let payload = GeneratedExtensionValue::mapping(vec![GeneratedExtensionEntry::new(
+        GeneratedString::plain("text")?,
+        GeneratedExtensionValue::folded_string(GeneratedString::plain("first\nsecond\n")?)?,
+    )])?;
+    let mut builder = ComposeDocumentBuilder::new();
+    let mut service = GeneratedService::new("app")?;
+    service.add_extension(GeneratedExtension::new(
+        GeneratedString::plain("x-service")?,
+        GeneratedExtensionValue::null(),
+    )?)?;
+    builder.add_service(service)?;
+    builder.add_extension(GeneratedExtension::new(GeneratedString::plain("x-document")?, payload)?)?;
+    let generated = builder.build(SourceId::new(186))?;
+    let loaded = LoadedProject::load([DocumentInput::new(
+        SourceId::new(187),
+        DocumentOrigin::new("generated.yaml", "public-api"),
+        generated.text(),
+    )])?;
+    let result = merge_project(&loaded, None);
+    let entries = result
+        .project()
+        .ok_or("merged project")?
+        .root()
+        .get("x-document")
+        .and_then(|value| value.as_mapping())
+        .ok_or("extension mapping")?;
+    assert!(entries[0].is_strict_yaml_string());
+    let scalar = entries[0].value().as_scalar().ok_or("extension scalar")?;
+    assert!(scalar.is_strict_yaml_string());
+    assert_eq!(scalar.presentation(), ScalarPresentation::Folded);
+    assert_eq!(scalar.value(), "first\nsecond\n");
+    Ok(())
+}

@@ -5,7 +5,7 @@ use crate::interpolation::DocumentInterpolation;
 use crate::loader::{LoadedProject, ProjectInterpolation};
 use crate::model::{Located, ShortPort, ShortVolumeMount};
 use crate::source::{SourceId, SourceSpan};
-use crate::syntax::{MergeScalarKind, MergeSyntaxEntry, MergeSyntaxScalar, MergeSyntaxValue};
+use crate::syntax::{MergeScalarKind, MergeSyntaxEntry, MergeSyntaxScalar, MergeSyntaxValue, ScalarPresentation};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -83,6 +83,7 @@ pub struct MergedScalar {
     value: String,
     kind: MergedScalarKind,
     plain: bool,
+    presentation: ScalarPresentation,
     strict_yaml_string: bool,
     sensitive: bool,
 }
@@ -108,8 +109,14 @@ impl MergedScalar {
 
     /// Returns whether the scalar was a YAML string rather than a timestamp or regex style.
     #[must_use]
-    pub(crate) const fn is_strict_yaml_string(&self) -> bool {
+    pub const fn is_strict_yaml_string(&self) -> bool {
         self.strict_yaml_string
+    }
+
+    /// Returns the authored presentation retained before optional interpolation.
+    #[must_use]
+    pub const fn presentation(&self) -> ScalarPresentation {
+        self.presentation
     }
 
     /// Reports whether the scalar used YAML plain style before interpolation.
@@ -133,6 +140,7 @@ impl fmt::Debug for MergedScalar {
             .field("value", &if self.sensitive { "<redacted>" } else { &self.value })
             .field("kind", &self.kind)
             .field("plain", &self.plain)
+            .field("presentation", &self.presentation)
             .field("strict_yaml_string", &self.strict_yaml_string)
             .field("sensitive", &self.sensitive)
             .finish()
@@ -187,7 +195,10 @@ impl fmt::Debug for MergedEntry {
 }
 
 impl MergedEntry {
-    /// Returns the semantic mapping key.
+    /// Returns the semantic scalar key, or retained source spelling for an unsupported key.
+    ///
+    /// Check [`Self::is_strict_yaml_string`] before interpreting this as a string key. Unsupported
+    /// keys and authored string keys with identical spelling remain separate entries.
     #[must_use]
     pub fn key(&self) -> &str {
         &self.key
@@ -207,7 +218,7 @@ impl MergedEntry {
 
     /// Reports whether the effective key was authored as a strict YAML string.
     #[must_use]
-    pub(crate) const fn is_strict_yaml_string(&self) -> bool {
+    pub const fn is_strict_yaml_string(&self) -> bool {
         self.strict_yaml_string
     }
 
@@ -313,7 +324,9 @@ impl MergedValue {
     pub fn is_sensitive(&self) -> bool {
         match &self.kind {
             MergedValueKind::Scalar(value) => value.sensitive,
-            MergedValueKind::Mapping(entries) => entries.iter().any(|entry| entry.value.is_sensitive()),
+            MergedValueKind::Mapping(entries) => entries
+                .iter()
+                .any(|entry| entry.key_sensitive || entry.value.is_sensitive()),
             MergedValueKind::Sequence(values) => values.iter().any(Self::is_sensitive),
             MergedValueKind::Tagged { value, .. } => value.is_sensitive(),
             MergedValueKind::Null(_) | MergedValueKind::Alias(_) => false,
@@ -540,6 +553,7 @@ fn convert_scalar(value: MergeSyntaxScalar, interpolation: Option<&DocumentInter
             value: semantic,
             kind,
             plain: value.plain,
+            presentation: value.presentation,
             strict_yaml_string: value.strict_yaml_string,
             sensitive,
         }),
@@ -668,7 +682,9 @@ fn merge_mappings(
     };
 
     for incoming_entry in incoming_entries {
-        if let Some(index) = base_entries.iter().position(|entry| entry.key == incoming_entry.key) {
+        if let Some(index) = base_entries.iter().position(|entry| {
+            entry.key == incoming_entry.key && entry.strict_yaml_string == incoming_entry.strict_yaml_string
+        }) {
             let mut child_path = path.to_vec();
             child_path.push(incoming_entry.key.clone());
             let existing = &mut base_entries[index];
@@ -917,6 +933,7 @@ fn normalize_keyed(value: MergedValue) -> Option<MergedValue> {
                             value: entry_value.to_owned(),
                             kind: MergedScalarKind::String,
                             plain: true,
+                            presentation: ScalarPresentation::Plain,
                             strict_yaml_string: true,
                             sensitive: scalar.sensitive,
                         }),

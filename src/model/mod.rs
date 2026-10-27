@@ -822,15 +822,26 @@ pub const BUILD_SSH_EXPECTED_FORM: DiagnosticCode = DiagnosticCode::new("compose
 pub const BUILD_SSH_DUPLICATE_ITEM: DiagnosticCode = DiagnosticCode::new("compose.build.ssh-duplicate-item");
 
 /// A typed value and the exact source span from which it was read.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Located<T> {
     value: T,
     span: SourceSpan,
+    sensitive: bool,
 }
 
 impl<T> Located<T> {
     pub(crate) const fn new(value: T, span: SourceSpan) -> Self {
-        Self { value, span }
+        Self {
+            value,
+            span,
+            sensitive: false,
+        }
+    }
+
+    /// Reports whether this value was protected during native generated parse-back.
+    #[must_use]
+    pub const fn is_sensitive(&self) -> bool {
+        self.sensitive
     }
 
     /// Returns the typed value.
@@ -849,6 +860,18 @@ impl<T> Located<T> {
     #[must_use]
     pub fn into_value(self) -> T {
         self.value
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Located<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut debug = formatter.debug_struct("Located");
+        if self.sensitive {
+            debug.field("value", &"<redacted>");
+        } else {
+            debug.field("value", &self.value);
+        }
+        debug.field("span", &self.span).finish()
     }
 }
 
@@ -1698,6 +1721,19 @@ pub struct ComposeDocument {
 }
 
 impl ComposeDocument {
+    // Native extension values are source references, so only their retained key names need taint.
+    // Conservatively protect all extension names in a sensitive generated document.
+    pub(crate) fn protect_extension_keys(&mut self) {
+        for field in &mut self.extension_fields {
+            field.name.sensitive = true;
+        }
+        for service in &mut self.services {
+            for field in &mut service.extension_fields {
+                field.name.sensitive = true;
+            }
+        }
+    }
+
     /// Extracts the initial typed Compose subset from a loss-aware syntax document.
     ///
     /// Parsing does not interpolate values, apply defaults, normalize short and long forms, or

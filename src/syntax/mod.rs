@@ -7,8 +7,8 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 use yaml_edit::{
-    AnchorRegistry, AsYaml, Mapping, MappingMergedExt, Parse, ParseErrorKind, Scalar, ScalarStyle, ScalarType,
-    ScalarValue, YamlFile, YamlNode,
+    AnchorRegistry, AsYaml, Mapping, Parse, ParseErrorKind, Scalar, ScalarStyle, ScalarType, ScalarValue, YamlFile,
+    YamlNode,
 };
 
 /// A generic YAML syntax error not covered by a more specific code.
@@ -25,6 +25,22 @@ pub const YAML_UNCLOSED_FLOW_MAPPING: DiagnosticCode = DiagnosticCode::new("comp
 
 /// A quoted scalar is missing its closing quote.
 pub const YAML_UNTERMINATED_STRING: DiagnosticCode = DiagnosticCode::new("compose.yaml.unterminated-string");
+
+/// Authored YAML scalar presentation, independently of its semantic category.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ScalarPresentation {
+    /// An unquoted scalar.
+    Plain,
+    /// A single-quoted scalar.
+    SingleQuoted,
+    /// A double-quoted scalar.
+    DoubleQuoted,
+    /// A literal block scalar (`|`).
+    Literal,
+    /// A folded block scalar (`>`).
+    Folded,
+}
 
 /// A loss-aware YAML document and its original source text.
 ///
@@ -88,14 +104,21 @@ impl SyntaxDocument {
             diagnostics.push(unparsed_input_diagnostic(source_id, source.len(), document_end));
         }
 
-        Ok(SyntaxParse {
-            document: Self {
-                source_id,
-                source,
-                parse,
-            },
-            diagnostics,
-        })
+        let document = Self {
+            source_id,
+            source,
+            parse,
+        };
+        for scalar in document.editable_value_scalars() {
+            if let Some(offset) = anchored_mapping_in_plain_scalar(&scalar.raw) {
+                diagnostics.push(unparsed_input_diagnostic(
+                    source_id,
+                    document.source.len(),
+                    scalar.span.start() + offset,
+                ));
+            }
+        }
+        Ok(SyntaxParse { document, diagnostics })
     }
 
     /// Returns the source identifier supplied by the caller.
@@ -228,6 +251,7 @@ pub(crate) struct MergeSyntaxScalar {
     pub(crate) value: String,
     pub(crate) kind: MergeScalarKind,
     pub(crate) plain: bool,
+    pub(crate) presentation: ScalarPresentation,
     pub(crate) strict_yaml_string: bool,
     pub(crate) span: SourceSpan,
 }
@@ -1041,15 +1065,15 @@ fn extract_merge_mapping(
     aliases: &mut Vec<String>,
 ) -> MergeSyntaxValue {
     let span = position_span(source_id, mapping.byte_range());
-    let direct = flatten_merge_fields(source_id, source, raw_merge_fields(source_id, source, mapping));
+    let fields = raw_merge_fields(source_id, source, mapping);
+    let direct = if is_flow_mapping(source, mapping) {
+        fields
+    } else {
+        flatten_merge_fields(source_id, source, fields)
+    };
     let mut entries = Vec::new();
-    let mut direct_keys = Vec::new();
-
-    for field in direct {
-        if field.key.value == "<<" {
-            continue;
-        }
-        direct_keys.push(field.key.value.clone());
+    let mut inherited = Vec::new();
+    for mut field in direct {
         let value = field.value.map_or_else(
             || {
                 MergeSyntaxValue::Empty(SourceSpan::from_valid_offsets(
@@ -1058,28 +1082,63 @@ fn extract_merge_mapping(
                     field.key.span.end(),
                 ))
             },
-            |value| extract_merge_value(source_id, source, resolve_alias(value, registry), registry, aliases),
+            |value| extract_merge_value(source_id, source, value, registry, aliases),
         );
-        entries.push(MergeSyntaxEntry { key: field.key, value });
-    }
-
-    for (key, value) in mapping.merged(registry).iter() {
-        let Some(key) = key
-            .as_scalar()
-            .map(|scalar| extract_merge_scalar(source_id, source, scalar))
-        else {
-            continue;
-        };
-        if direct_keys.contains(&key.value) {
-            continue;
+        if field.key.plain && field.key.value == "<<" {
+            match merge_source_groups(value) {
+                Ok(groups) => inherited.extend(groups),
+                Err(value) => {
+                    // Invalid/unresolved merge sources must remain diagnosable, not disappear.
+                    field.key.strict_yaml_string = false;
+                    entries.push(MergeSyntaxEntry { key: field.key, value });
+                }
+            }
+        } else {
+            entries.push(MergeSyntaxEntry { key: field.key, value });
         }
-        entries.push(MergeSyntaxEntry {
-            key,
-            value: extract_merge_value(source_id, source, value, registry, aliases),
-        });
     }
-
+    // Local keys override inherited keys; earlier merge sources override later sources. Add a
+    // group's keys only after filtering it so duplicate entries within that source stay visible.
+    let mut previous: BTreeSet<_> = entries
+        .iter()
+        .map(|entry| (entry.key.value.clone(), entry.key.strict_yaml_string))
+        .collect();
+    for group in inherited {
+        let mut added = BTreeSet::new();
+        entries.extend(group.into_iter().filter(|entry| {
+            let key = (entry.key.value.clone(), entry.key.strict_yaml_string);
+            if previous.contains(&key) {
+                false
+            } else {
+                added.insert(key);
+                true
+            }
+        }));
+        previous.extend(added);
+    }
     MergeSyntaxValue::Mapping { entries, span }
+}
+
+fn merge_source_groups(value: MergeSyntaxValue) -> Result<Vec<Vec<MergeSyntaxEntry>>, MergeSyntaxValue> {
+    match value {
+        MergeSyntaxValue::Mapping { entries, .. } => Ok(vec![entries]),
+        MergeSyntaxValue::Sequence { values, span } => {
+            if values
+                .iter()
+                .any(|value| !matches!(value, MergeSyntaxValue::Mapping { .. }))
+            {
+                return Err(MergeSyntaxValue::Sequence { values, span });
+            }
+            Ok(values
+                .into_iter()
+                .filter_map(|value| match value {
+                    MergeSyntaxValue::Mapping { entries, .. } => Some(entries),
+                    _ => None,
+                })
+                .collect())
+        }
+        value => Err(value),
+    }
 }
 
 #[derive(Debug)]
@@ -1089,16 +1148,77 @@ struct RawMergeField {
 }
 
 fn raw_merge_fields(source_id: SourceId, source: &str, mapping: &Mapping) -> Vec<RawMergeField> {
+    let node = YamlNode::Mapping(mapping.clone());
+    let Some(syntax) = node.as_node() else {
+        return Vec::new();
+    };
+    // Mapping children are entry nodes. Keep their KEY wrappers available: key_node() omits
+    // unsupported properties such as a tag token followed by a scalar inside that wrapper.
     mapping
         .entries()
-        .filter_map(|entry| {
-            let key = entry.key_node()?.as_scalar().cloned()?;
+        .zip(syntax.children())
+        .filter_map(|(entry, authored)| {
+            let wrapper = authored.children().next()?;
+            let range = wrapper.text_range();
+            let span = SourceSpan::from_valid_offsets(
+                source_id,
+                u32::from(authored.text_range().start()) as usize,
+                u32::from(range.end()) as usize,
+            );
+            let key = if source.get(span.range()).is_some_and(|raw| raw.starts_with(['!', '&'])) {
+                // key_node() exposes only the scalar body and hides leading property tokens.
+                unsupported_merge_key(source, span)
+            } else {
+                entry.key_node().map_or_else(
+                    || unsupported_merge_key(source, span),
+                    |node| extract_merge_key(source_id, source, &node),
+                )
+            };
             Some(RawMergeField {
-                key: extract_merge_scalar(source_id, source, &key),
+                key,
                 value: entry.value_node(),
             })
         })
         .collect()
+}
+
+// The backend can consume an anchored sibling mapping key into a preceding plain scalar.
+// Such a declaration cannot be valid plain-scalar content: colon + separation requires structure.
+fn anchored_mapping_in_plain_scalar(raw: &str) -> Option<usize> {
+    if raw.starts_with(['\'', '"', '|', '>']) {
+        return None;
+    }
+    let mut offset = 0;
+    for line in raw.split_inclusive('\n') {
+        let content = line.trim_start_matches([' ', '\t']);
+        if content.starts_with('&')
+            && (content.contains(": ") || content.contains(":\t") || content.trim_end().ends_with(':'))
+        {
+            return Some(offset + line.len() - content.len());
+        }
+        offset += line.len();
+    }
+    None
+}
+
+fn extract_merge_key(source_id: SourceId, source: &str, node: &YamlNode) -> MergeSyntaxScalar {
+    node.as_scalar().map_or_else(
+        || unsupported_merge_key(source, yaml_node_span(source_id, node)),
+        |scalar| extract_merge_scalar(source_id, source, scalar),
+    )
+}
+
+fn unsupported_merge_key(source: &str, span: SourceSpan) -> MergeSyntaxScalar {
+    let raw = source.get(span.range()).unwrap_or_default().to_owned();
+    MergeSyntaxScalar {
+        value: raw.clone(),
+        raw,
+        kind: MergeScalarKind::String,
+        plain: false,
+        presentation: ScalarPresentation::Plain,
+        strict_yaml_string: false,
+        span,
+    }
 }
 
 fn flatten_merge_fields(source_id: SourceId, source: &str, fields: Vec<RawMergeField>) -> Vec<RawMergeField> {
@@ -1155,18 +1275,6 @@ fn source_column(source: &str, offset: usize) -> usize {
     source[line_start..offset.min(source.len())].chars().count()
 }
 
-fn resolve_alias(node: YamlNode, registry: &AnchorRegistry) -> YamlNode {
-    let YamlNode::Alias(alias) = &node else {
-        return node;
-    };
-    registry
-        .resolve(&alias.name())
-        .and_then(|target| {
-            YamlNode::from_syntax(target.clone()).or_else(|| target.children().find_map(YamlNode::from_syntax))
-        })
-        .unwrap_or(node)
-}
-
 fn extract_merge_scalar(source_id: SourceId, source: &str, scalar: &Scalar) -> MergeSyntaxScalar {
     let scalar_type = ScalarValue::from_scalar(scalar).scalar_type();
     let kind = match scalar_type {
@@ -1176,6 +1284,13 @@ fn extract_merge_scalar(source_id: SourceId, source: &str, scalar: &Scalar) -> M
         ScalarType::String | ScalarType::Timestamp | ScalarType::Regex => MergeScalarKind::String,
     };
     MergeSyntaxScalar {
+        presentation: match scalar_raw_from_source(source, scalar).chars().next() {
+            Some('|') => ScalarPresentation::Literal,
+            Some('>') => ScalarPresentation::Folded,
+            Some('\'') => ScalarPresentation::SingleQuoted,
+            Some('"') => ScalarPresentation::DoubleQuoted,
+            _ => ScalarPresentation::Plain,
+        },
         raw: scalar_raw_from_source(source, scalar),
         value: scalar_string_from_source(source, scalar),
         kind,
