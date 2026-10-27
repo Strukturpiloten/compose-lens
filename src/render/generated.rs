@@ -15,6 +15,12 @@ use crate::{
 use yaml_edit::{ScalarType, ScalarValue, YamlFile};
 
 use super::write_quoted;
+mod extensions;
+pub use extensions::{
+    GENERATED_EXTENSION_MAX_DEPTH, GENERATED_EXTENSION_MAX_NODES, GeneratedExtension, GeneratedExtensionEntry,
+    GeneratedExtensionValue,
+};
+use extensions::{add_extension, render_extensions};
 
 /// A generated Compose construction request is invalid or cannot be represented safely.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -72,6 +78,16 @@ pub enum GenerationError {
     InvalidNetworkDriverOptionNumber,
     /// A generated volume driver option number is not one complete YAML number scalar.
     InvalidVolumeDriverOptionNumber,
+    /// A generated extension name is outside the exact lowercase `x-*` namespace.
+    InvalidExtensionName,
+    /// A generated extension number is not one complete native YAML number.
+    InvalidExtensionNumber,
+    /// A folded extension string cannot retain its exact semantic value.
+    InvalidFoldedExtensionString,
+    /// An extension mapping or scope contains a duplicate exact key.
+    DuplicateExtensionKey,
+    /// A generated extension exceeds the documented depth or node bound.
+    ExtensionLimit,
     /// A generated ulimit name is outside the portable lowercase ASCII grammar.
     InvalidUlimitName,
     /// A generated ulimit value is outside the supported portable decimal or unlimited set.
@@ -162,15 +178,7 @@ impl fmt::Display for GenerationError {
             Self::InvalidTmpfsItem => formatter.write_str(
                 "generated tmpfs item must be a non-empty path optionally followed by a colon and non-empty comma-separated raw options",
             ),
-            Self::InvalidDeviceValue(member) => write!(
-                formatter,
-                "generated device {member} must be a safe resolved single-line string{}",
-                if matches!(*member, "short item" | "source") {
-                    " and must not be empty"
-                } else {
-                    ""
-                }
-            ),
+            Self::InvalidDeviceValue(member) => format_invalid_device_value(formatter, member),
             Self::InvalidSysctlName => formatter
                 .write_str("generated sysctl name must be a non-empty resolved single-line string"),
             Self::InvalidSysctlValue => formatter
@@ -181,6 +189,11 @@ impl fmt::Display for GenerationError {
                 .write_str("generated network driver option number must be one complete YAML number scalar"),
             Self::InvalidVolumeDriverOptionNumber => formatter
                 .write_str("generated volume driver option number must be one complete YAML number scalar"),
+            Self::InvalidExtensionName => formatter.write_str("generated extension name requires the exact x- prefix and a non-empty single-line suffix"),
+            Self::InvalidExtensionNumber => formatter.write_str("generated extension number must be one complete YAML number scalar"),
+            Self::InvalidFoldedExtensionString => formatter.write_str("generated folded extension string cannot preserve its exact value"),
+            Self::DuplicateExtensionKey => formatter.write_str("generated extension contains a duplicate exact key"),
+            Self::ExtensionLimit => formatter.write_str("generated extension exceeds its depth or node limit"),
             Self::InvalidUlimitName => formatter
                 .write_str("generated ulimit name must match lowercase ASCII `[a-z]+`"),
             Self::InvalidUlimitValue => formatter
@@ -213,6 +226,18 @@ impl fmt::Display for GenerationError {
 }
 
 impl Error for GenerationError {}
+
+fn format_invalid_device_value(formatter: &mut fmt::Formatter<'_>, member: &str) -> fmt::Result {
+    write!(
+        formatter,
+        "generated device {member} must be a safe resolved single-line string{}",
+        if matches!(member, "short item" | "source") {
+            " and must not be empty"
+        } else {
+            ""
+        }
+    )
+}
 
 /// A plain or sensitive string used by generated Compose fields.
 #[derive(Clone, Eq, PartialEq)]
@@ -2002,6 +2027,7 @@ pub struct GeneratedService {
     mounts: Vec<GeneratedMount>,
     networks: Vec<GeneratedNetworkAttachment>,
     runtime_fields: Vec<GeneratedServiceRuntimeField>,
+    extensions: Vec<GeneratedExtension>,
 }
 
 impl GeneratedService {
@@ -2055,7 +2081,16 @@ impl GeneratedService {
             mounts: Vec::new(),
             networks: Vec::new(),
             runtime_fields: Vec::new(),
+            extensions: Vec::new(),
         })
+    }
+
+    /// Adds an inert extension in insertion order, preserving exact key casing.
+    ///
+    /// # Errors
+    /// Rejects duplicate exact extension keys without exposing protected names.
+    pub fn add_extension(&mut self, extension: GeneratedExtension) -> Result<(), GenerationError> {
+        add_extension(&mut self.extensions, extension)
     }
 
     /// Returns the service name.
@@ -2798,10 +2833,12 @@ impl GeneratedService {
     }
 
     fn is_sensitive(&self) -> bool {
-        matches!(
-            self.hostname.as_ref(),
-            Some(GeneratedHostname::Resolved(hostname)) if hostname.is_sensitive()
-        ) || self.image.as_ref().is_some_and(GeneratedString::is_sensitive)
+        self.extensions.iter().any(GeneratedExtension::is_sensitive)
+            || matches!(
+                self.hostname.as_ref(),
+                Some(GeneratedHostname::Resolved(hostname)) if hostname.is_sensitive()
+            )
+            || self.image.as_ref().is_some_and(GeneratedString::is_sensitive)
             || self.entrypoint.as_ref().is_some_and(entrypoint_is_sensitive)
             || self.command.as_ref().is_some_and(command_is_sensitive)
             || self
@@ -3051,6 +3088,7 @@ pub struct ComposeDocumentBuilder {
     volumes: Vec<GeneratedVolume>,
     configs: Vec<GeneratedConfigFileDefinition>,
     secrets: Vec<GeneratedSecretFileDefinition>,
+    extensions: Vec<GeneratedExtension>,
 }
 
 impl ComposeDocumentBuilder {
@@ -3064,7 +3102,16 @@ impl ComposeDocumentBuilder {
             volumes: Vec::new(),
             configs: Vec::new(),
             secrets: Vec::new(),
+            extensions: Vec::new(),
         }
+    }
+
+    /// Adds an inert document extension in insertion order, preserving exact key casing.
+    ///
+    /// # Errors
+    /// Rejects duplicate exact extension keys without exposing protected names.
+    pub fn add_extension(&mut self, extension: GeneratedExtension) -> Result<(), GenerationError> {
+        add_extension(&mut self.extensions, extension)
     }
 
     /// Sets the optional top-level Compose project name exactly once.
@@ -3183,7 +3230,8 @@ impl ComposeDocumentBuilder {
             || self.networks.iter().any(GeneratedNetwork::is_sensitive)
             || self.volumes.iter().any(GeneratedVolume::is_sensitive)
             || self.configs.iter().any(GeneratedConfigFileDefinition::is_sensitive)
-            || self.secrets.iter().any(GeneratedSecretFileDefinition::is_sensitive);
+            || self.secrets.iter().any(GeneratedSecretFileDefinition::is_sensitive)
+            || self.extensions.iter().any(GeneratedExtension::is_sensitive);
         let text = render_document(&self);
         let syntax = SyntaxDocument::parse(source_id, text.clone())
             .map_err(|_| GenerationError::InternalInvariant("syntax-tree"))?;
@@ -3194,10 +3242,13 @@ impl ComposeDocumentBuilder {
         if !model.is_valid() {
             return Err(GenerationError::InternalInvariant("typed-model"));
         }
-        let document = model
+        let mut document = model
             .document()
             .cloned()
             .ok_or(GenerationError::InternalInvariant("document-root"))?;
+        if sensitive {
+            document.protect_extension_keys();
+        }
         Ok(GeneratedComposeDocument {
             text,
             sensitive,
@@ -3275,6 +3326,7 @@ fn render_document(project: &ComposeDocumentBuilder) -> String {
         GeneratedSecretFileDefinition::name,
         GeneratedSecretFileDefinition::file,
     );
+    render_extensions(&mut output, &project.extensions, 0);
     output
 }
 
@@ -3378,6 +3430,7 @@ fn render_service(output: &mut String, service: &GeneratedService) {
     render_ports(output, &service.ports);
     render_mounts(output, &service.mounts);
     render_networks(output, &service.networks);
+    render_extensions(output, &service.extensions, 2);
 }
 
 fn render_runtime_fields(output: &mut String, fields: &[GeneratedServiceRuntimeField]) {

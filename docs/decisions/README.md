@@ -41,4 +41,6 @@
 | [0028](0028-source-preserving-block-scalar-compatibility.md)    | accepted   | Private block-scalar quote and indentation adaptation with authored semantics and boundary guards |
 | [0029](0029-align-minimum-and-normal-rust-toolchains.md)        | accepted   | Align minimum and normal Rust toolchains at 1.98.1                                                |
 
+| [0030](0030-inert-generated-extension-values.md) | accepted | Bounded recursive inert extension generation and native scalar/key evidence |
+
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.
