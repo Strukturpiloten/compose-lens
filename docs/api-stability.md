@@ -1,11 +1,11 @@
 # API stability policy
 
-ComposeLens is pre-1.0, but its public API is not an unbounded experiment. Version 0.3.x is the
+ComposeLens is pre-1.0, but its public API is not an unbounded experiment. Version 0.4.x is the
 current supported release line for BoxFerry and independent Rust consumers.
 
 ## Patch-release contract
 
-Within 0.3.x:
+Within 0.4.x:
 
 - supported module paths exercised by `tests/public_api.rs` remain source-compatible;
 - public interfaces use ComposeLens-owned types and keep the YAML backend private;
