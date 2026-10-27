@@ -60,25 +60,30 @@ default decisions, reference validation, compatibility validation, and rendering
 operations. Each receives all external context as an argument and returns diagnostics plus a new
 view or result. Inputs remain available for later explanation.
 
+Unevaluated interpolation inspection is a separate operation in `interpolation`: it returns native
+syntax evidence from explicit decoded input without granting a provider or evaluating expressions.
+Its style-aware wrapper preserves native presentation exclusions. [ADR 0031](decisions/0031-unevaluated-interpolation-inspection.md)
+defines this boundary.
+
 The [processing model](processing-model.md) describes the stages. Durable decisions live in ADRs
 0004 through 0008 and 0020 through 0023.
 
 ## Module ownership
 
-| Concern                                 | Module          |
-| --------------------------------------- | --------------- |
-| Text positions and source identity      | `source`        |
-| YAML structure and spelling             | `syntax`        |
-| Diagnostics                             | `diagnostic`    |
-| Native Compose types                    | `model`         |
-| Ordered documents and includes          | `loader`        |
-| Variable substitution                   | `interpolation` |
-| Compose merge                           | `merge`         |
-| Profiles                                | `profiles`      |
-| Effective native project values         | `project`       |
-| Paths, references, and defaults         | `resolution`    |
-| Provider/runtime evidence               | `validation`    |
-| Canonical, generated, and edited output | `render`        |
+| Concern                                          | Module          |
+| ------------------------------------------------ | --------------- |
+| Text positions and source identity               | `source`        |
+| YAML structure and spelling                      | `syntax`        |
+| Diagnostics                                      | `diagnostic`    |
+| Native Compose types                             | `model`         |
+| Ordered documents and includes                   | `loader`        |
+| Unevaluated inspection and variable substitution | `interpolation` |
+| Compose merge                                    | `merge`         |
+| Profiles                                         | `profiles`      |
+| Effective native project values                  | `project`       |
+| Paths, references, and defaults                  | `resolution`    |
+| Provider/runtime evidence                        | `validation`    |
+| Canonical, generated, and edited output          | `render`        |
 
 Dependencies point from later stages toward earlier representations. Syntax does not import model
 semantics, the native model does not import BoxFerry types, and parsing modules do not gain file or

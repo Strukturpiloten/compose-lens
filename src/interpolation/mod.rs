@@ -1,5 +1,14 @@
 //! Explicit, non-destructive Compose variable interpolation.
 
+mod inspect;
+pub use inspect::{
+    ExcludedInterpolation, INSPECTION_LIMIT, INTERPOLATION_INSPECTION_MAX_BYTES, INTERPOLATION_INSPECTION_MAX_DEPTH,
+    INTERPOLATION_INSPECTION_MAX_SEGMENTS, InterpolationInspection, InterpolationInspectionError,
+    InterpolationInspectionErrorKind, InterpolationIssueKind, InterpolationLiteral, InterpolationReference,
+    InterpolationReferenceForm, InterpolationSegment, InvalidInterpolation, ScalarInterpolationInspection,
+    inspect_interpolation, inspect_scalar_interpolation,
+};
+
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
 use crate::source::{SourceId, SourceSpan};
 use crate::syntax::SyntaxDocument;

@@ -1,7 +1,7 @@
 //! Provenance-preserving Compose multi-file merge behavior.
 
 use crate::diagnostic::{Diagnostic, DiagnosticCode, DiagnosticLabel, Severity};
-use crate::interpolation::DocumentInterpolation;
+use crate::interpolation::{DocumentInterpolation, InterpolationInput};
 use crate::loader::{LoadedProject, ProjectInterpolation};
 use crate::model::{Located, ShortPort, ShortVolumeMount};
 use crate::source::{SourceId, SourceSpan};
@@ -232,6 +232,23 @@ impl MergedEntry {
     #[must_use]
     pub const fn raw_list_item(&self) -> Option<&MergedScalar> {
         self.raw_list_item.as_ref()
+    }
+
+    /// Returns the complete decoded list scalar with its latest authored item span and taint.
+    ///
+    /// Use [`Self::raw_list_item`] for the original presentation, rather than the synthetic
+    /// normalized value's presentation. This is the current semantic item: an interpolation
+    /// overlay may already have resolved it. Authored inspection requires merging without an
+    /// interpolation overlay (`merge_project(..., None)`). No raw YAML decoding is performed here.
+    #[must_use]
+    pub fn raw_list_item_input(&self) -> Option<InterpolationInput<'_>> {
+        let scalar = self.raw_list_item.as_ref()?;
+        let input = InterpolationInput::new(scalar.value(), *self.key_sources.last()?);
+        Some(if scalar.is_sensitive() {
+            input.sensitive()
+        } else {
+            input
+        })
     }
 
     /// Returns the merged entry value.

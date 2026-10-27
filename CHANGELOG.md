@@ -8,6 +8,9 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ### Added
 
+- Inspect authored interpolation without evaluation, retaining native syntax, eligibility, source
+  evidence, and protected values ([ADR 0031](docs/decisions/0031-unevaluated-interpolation-inspection.md)).
+
 - Construct bounded native `x-*` values at document and service scope, with exact numeric spelling,
   folded-string parse-back, protected keys/values, and public scalar/key evidence
   ([ADR 0030](docs/decisions/0030-inert-generated-extension-values.md)).

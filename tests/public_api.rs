@@ -4334,3 +4334,43 @@ fn inert_extensions_expose_native_presentation_and_checked_generation() -> Resul
     assert_eq!(scalar.value(), "first\nsecond\n");
     Ok(())
 }
+
+#[test]
+fn unevaluated_interpolation_inspection_exposes_native_segments_and_explicit_eligibility()
+-> Result<(), Box<dyn std::error::Error>> {
+    use compose_lens::{
+        interpolation::{
+            InterpolationInput, InterpolationOperator, InterpolationReferenceForm, InterpolationSegment,
+            ScalarInterpolationInspection, inspect_interpolation, inspect_scalar_interpolation,
+        },
+        source::{SourceId, SourceSpan},
+        syntax::ScalarPresentation,
+    };
+    let span = SourceSpan::new(SourceId::new(189), 10, 40).ok_or("containing scalar span")?;
+    let result = inspect_interpolation(InterpolationInput::new("prefix-$$-$NAME", span))?;
+    assert!(result.is_valid());
+    assert!(result.diagnostics().is_empty());
+    assert_eq!(result.span(), span);
+    let InterpolationSegment::Literal(literal) = &result.segments()[0] else {
+        return Err("literal segment".into());
+    };
+    assert_eq!(literal.value(), "prefix-$-");
+    let InterpolationSegment::Reference(reference) = &result.segments()[1] else {
+        return Err("native reference".into());
+    };
+    assert_eq!(reference.name(), "NAME");
+    assert_eq!(reference.operator(), InterpolationOperator::Direct);
+    assert_eq!(reference.form(), InterpolationReferenceForm::Unbraced);
+    assert_eq!(reference.range(), 10..15);
+    let excluded = inspect_scalar_interpolation(
+        InterpolationInput::new("$NAME $$", span).sensitive(),
+        ScalarPresentation::Folded,
+    )?;
+    let ScalarInterpolationInspection::Excluded(excluded) = excluded else {
+        return Err("native excluded presentation".into());
+    };
+    assert!(excluded.contains_dollar());
+    assert!(excluded.is_sensitive());
+    assert_eq!(excluded.original(), "$NAME $$");
+    Ok(())
+}

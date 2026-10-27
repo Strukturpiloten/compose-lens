@@ -50,6 +50,12 @@ resolves paths, validates a provider, and renders in one call.
 Caller-owned traits remain the authorization boundary for include content, environment values, path
 policy, and defaults. Results preserve source evidence and redact sensitive `Debug` output.
 
+Unevaluated interpolation inspection is additive and separate from provider-backed evaluation.
+Its typed segments retain native operators and decoded-root ranges plus containing source spans;
+its style-aware result makes excluded scalar presentations explicit. Applications own deferred
+binding and conversion policy. The stage and source-evidence contract is described in the
+[processing model](processing-model.md#inspect-authored-interpolation-without-evaluating-it).
+
 ## Before 1.0
 
 Intentional source breaks require a new 0.x minor version, a release-worthy breaking change, an ADR

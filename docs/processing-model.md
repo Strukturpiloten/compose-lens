@@ -76,6 +76,41 @@ The merge result preserves syntax that could affect behavior. It does not normal
 apply target policy, or resolve conflicts on behalf of BoxFerry. ADR
 [0006](decisions/0006-provenance-preserving-compose-merge.md) owns the merge contract.
 
+### Inspect authored interpolation without evaluating it
+
+`interpolation::inspect_interpolation` accepts an explicit `InterpolationInput` and returns ordered
+literal, reference, and invalid segments. It has no provider and performs no lookup, substitution,
+missing-variable handling, or branch selection. Native operators, braced/unbraced form, exact
+operands, and nested operand syntax remain available. Literal `$$` escapes collapse exactly once;
+a literal segment that now looks like `$NAME` stays literal and must not be inspected again.
+Malformed or unsupported braced syntax remains an invalid segment with a native diagnostic.
+
+Every segment range uses UTF-8 byte offsets in the complete original decoded scalar, including
+nested operands. Its source span covers the containing authored YAML token. Quoting and escapes
+can make raw source offsets differ from decoded offsets; inspection never invents a byte-for-byte
+mapping. Source spans and explicit original-value accessors remain available for callers' own
+provenance and diagnostics. Protected inputs redact names, literals, operands, and invalid syntax
+through every result and nested `Debug` boundary; bound errors never store source content.
+
+The style-aware `inspect_scalar_interpolation` returns either `Inspected` or `Excluded`. Plain and
+double-quoted input is eligible. Single-quoted and literal/folded block input is explicitly excluded,
+preserving the policy in [ADR 0028](decisions/0028-source-preserving-block-scalar-compatibility.md).
+Excluded input remains unchanged, including `$$`, and reports whether it contains dollars. Consumers
+can reject excluded dollar syntax in their own mode instead of assuming it is an inspected literal.
+Mapping keys remain outside document-interpolation eligibility. Inspection never traverses a
+document or automatically interprets inert metadata.
+
+Inspection caps input bytes, total segments across the complete operand tree, and operand depth.
+Exceeding a public bound returns a typed source-aware error rather than a partial successful tree.
+These are inspection resource limits, independent of evaluator options or provider behavior.
+
+To inspect authored merged values, merge without an interpolation overlay first. A merged scalar's
+`value()` is its current semantic value; after an overlay it may already be resolved. For normalized
+keyed lists, `MergedEntry::raw_list_item_input()` retains the complete decoded item, latest item
+source span, and sensitivity. Pair it with `raw_list_item().presentation()`; a synthetic normalized
+suffix does not retain the original scalar style. This helper does not decode raw YAML or reverse
+prior evaluation. See [ADR 0031](decisions/0031-unevaluated-interpolation-inspection.md).
+
 ## Post-merge views
 
 Profile selection is non-destructive. Services without profile restrictions remain active; restricted
