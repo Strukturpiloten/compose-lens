@@ -6,6 +6,8 @@ All notable changes to ComposeLens will be documented in this file. The project 
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/Strukturpiloten/compose-lens/compare/v0.3.4...v0.4.0) - 2026-10-27
+
 ### Added
 
 - Inspect authored interpolation without evaluation, retaining native syntax, eligibility, source

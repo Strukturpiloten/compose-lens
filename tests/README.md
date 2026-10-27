@@ -17,7 +17,7 @@ helpers live in `support/` and never become public library API.
 | `conformance`               | Provider matrix policy and the explicit ignored capture runner                                       |
 | `runtime_conformance`       | Planned runtime contexts and fail-closed isolation policy                                            |
 | `real_world`                | Licensed project regressions                                                                         |
-| `public_api`                | External-consumer contract for the current 0.3.x release line                                        |
+| `public_api`                | External-consumer contract for the current 0.4.x release line                                        |
 | `environment_resolution`    | Caller-authorized environment/secret values, precedence, states, redaction                           |
 | `application_conformance`   | Independent real-application semantics and retained evidence                                         |
 
