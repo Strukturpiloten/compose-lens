@@ -62,6 +62,17 @@ inserts only the dated version heading, with blank lines on both sides; the cura
 Release-plz owns generated layout, and `.prettierignore` excludes only the changelog from Prettier.
 Markdownlint and release-structure validation still apply.
 
+The complete local gate and ordinary CI call `scripts/check-release-metadata.sh --development`.
+This checks the current numbered section against the package version while allowing new notes under
+`Unreleased`, including when a prepared release is newer than the latest published tag. CI for
+`release-plz-*` pull requests selects `--release`; the Release workflow also uses `--release`,
+including `validation_only` dispatches. Release validation requires empty `Unreleased` notes even
+when tags are absent or already match the package version. Calling the script without an argument
+retains this strict release behavior. Neither mode publishes anything or changes versions or notes.
+
+These validation-context changes alter no dependency, tool, runner, action, or workflow revision.
+Existing Renovate owners, extraction paths, groups, and approval rules remain unchanged.
+
 ## Recovery
 
 Use `workflow_dispatch` to retry preparation or protected publication. Rerun `Release` from the same
