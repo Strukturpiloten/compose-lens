@@ -53,7 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           test "${GITHUB_REF}" = "refs/heads/${DEFAULT_BRANCH}"
-          bash scripts/check-release-metadata.sh
+          bash scripts/check-release-metadata.sh --release
 
   release-gate:
     name: Release validation gate

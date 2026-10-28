@@ -62,6 +62,33 @@ fn ci_runs_once_per_pull_request_update_and_on_main_pushes() -> Result<(), Strin
 }
 
 #[test]
+fn release_metadata_context_is_explicit_at_every_gate() -> Result<(), String> {
+    let local = read_repository_file("scripts/check-all.sh")?;
+    if !local.contains(
+        "run_step \"Check release metadata and changelog\" bash scripts/check-release-metadata.sh --development",
+    ) {
+        return Err("the complete local gate must allow development notes".to_owned());
+    }
+    let ci = read_repository_file(".github/workflows/ci.yml")?;
+    for required in [
+        "run: bash scripts/test-release-metadata.sh",
+        "RELEASE_METADATA_MODE: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-plz-') && '--release' || '--development' }}",
+        "run: bash scripts/check-release-metadata.sh \"${RELEASE_METADATA_MODE}\"",
+    ] {
+        if !ci.contains(required) {
+            return Err(format!(
+                "CI must select a fixed, quoted release metadata mode: `{required}`"
+            ));
+        }
+    }
+    let release = read_repository_file(".github/workflows/release.yml")?;
+    if !release.contains("bash scripts/check-release-metadata.sh --release") {
+        return Err("Release must require strict metadata validation, including validation_only".to_owned());
+    }
+    Ok(())
+}
+
+#[test]
 fn release_requires_reusable_complete_and_bounded_native_validation() -> Result<(), String> {
     let release = read_repository_file(".github/workflows/release.yml")?;
 
@@ -91,7 +118,7 @@ fn release_requires_reusable_complete_and_bounded_native_validation() -> Result<
         "METADATA_RESULT: ${{ needs.release-metadata-validation.result }}",
         "if [[ \"${status}\" != success ]]; then",
         "release-metadata-validation:\n    name: Validate release metadata",
-        "bash scripts/check-release-metadata.sh",
+        "bash scripts/check-release-metadata.sh --release",
     ] {
         if !release.contains(required) {
             return Err(format!("release gate is missing fail-closed contract `{required}`"));
