@@ -1,5 +1,8 @@
 //! Executable repository and fixture-contract checks.
 
+#[path = "support/digest.rs"]
+mod digest;
+
 mod support;
 
 #[path = "support/application_policy.rs"]
@@ -49,8 +52,7 @@ fn ci_runs_once_per_pull_request_update_and_on_main_pushes() -> Result<(), Strin
     let workflow_path = repository_root().join(".github/workflows/ci.yml");
     let workflow = fs::read_to_string(&workflow_path)
         .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
-    let expected =
-        "on:\n  push:\n    branches:\n      - main\n  pull_request:\n  workflow_dispatch:\n  workflow_call:\n";
+    let expected = "on:\n  push:\n    branches:\n      - main\n  pull_request:\n  merge_group:\n  workflow_dispatch:\n  workflow_call:\n";
     if !workflow.contains(expected) {
         return Err(
             "CI must run for main pushes, pull requests, and manual dispatch without duplicate feature-branch push runs"
@@ -166,9 +168,6 @@ fn validate_provider_conformance_contract() -> Result<(), String> {
         "docker-compose-5-3-1",
         "podman-compose-1-3-0",
         "podman-compose-1-5-0",
-        "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0",
-        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1",
-        "python-version: 3.13.14",
         "runs-on: ${{ matrix.runner }}",
         "COMPOSE_LENS_CONFORMANCE_RUNNER_LABEL: ${{ matrix.runner }}",
         "# renovate: datasource=github-runners\n        runner:\n          - ubuntu-24.04",
@@ -177,6 +176,7 @@ fn validate_provider_conformance_contract() -> Result<(), String> {
             return Err(format!("native conformance workflow is missing `{required}`"));
         }
     }
+    validate_provider_workflow_runtime_contract(&native, &provider_matrix)?;
     for required in [
         "run[\"status\"] == \"observed\"",
         "len(probes) != 8",
@@ -217,6 +217,47 @@ fn validate_provider_conformance_contract() -> Result<(), String> {
     }
     if provider_matrix.matches("\"--dry-run\"").count() != 4 {
         return Err("both podman-compose targets must keep dry-run version and config boundaries".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_provider_workflow_runtime_contract(native: &str, provider_matrix: &str) -> Result<(), String> {
+    for action in ["actions/setup-python", "actions/upload-artifact"] {
+        if !support::has_exactly_one_immutable_versioned_action(native, action) {
+            return Err(format!(
+                "native conformance must contain one immutable versioned `{action}` action"
+            ));
+        }
+    }
+    let runtime = pinned_workflow_tool_version(
+        native,
+        "renovate: datasource=python-version depName=python",
+        "python-version",
+    )?;
+    let matrix: toml::Value =
+        toml::from_str(provider_matrix).map_err(|error| format!("invalid provider configuration matrix: {error}"))?;
+    let targets = matrix
+        .get("targets")
+        .and_then(toml::Value::as_array)
+        .ok_or("provider configuration matrix must declare targets")?;
+    let mut python_targets = 0;
+    for target in targets {
+        let Some(execution) = target.get("execution").and_then(toml::Value::as_array) else {
+            return Err("provider target must declare execution".to_owned());
+        };
+        for entry in execution.iter().filter_map(toml::Value::as_str) {
+            if let Some(expected) = entry.strip_prefix("python=") {
+                python_targets += 1;
+                if expected != runtime {
+                    return Err(format!(
+                        "workflow Python {runtime} differs from reviewed provider runtime {expected}"
+                    ));
+                }
+            }
+        }
+    }
+    if python_targets != 2 {
+        return Err("both reviewed podman-compose targets must declare their Python runtime".to_owned());
     }
     Ok(())
 }
@@ -305,7 +346,7 @@ fn rust_version_policy_allows_newer_normal_toolchains_and_rejects_drift() -> Res
 
 #[test]
 fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
-    const ACTION: &str = "obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9";
+    const ACTION: &str = "obi1kenobi/cargo-semver-checks-action";
     const CONFIGURATION: &str = "package: compose-lens";
 
     let workflow_name = "ci.yml";
@@ -313,8 +354,17 @@ fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
     let workflow = fs::read_to_string(&workflow_path)
         .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
 
-    let configured_action = format!("uses: {ACTION}\n        with:\n          {CONFIGURATION}");
-    if workflow.matches(ACTION).count() != 1
+    let prefix = format!("{ACTION}@");
+    let reference = workflow
+        .lines()
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("uses: ")
+                .filter(|reference| reference.starts_with(&prefix))
+        })
+        .ok_or("CI must declare the API compatibility action")?;
+    let configured_action = format!("uses: {reference}\n        with:\n          {CONFIGURATION}");
+    if !support::has_exactly_one_immutable_versioned_action(&workflow, ACTION)
         || workflow.matches(&configured_action).count() != 1
         || workflow.contains("release-type:")
     {
@@ -411,11 +461,13 @@ fn ci_uses_a_trusted_change_plan_and_fail_closed_aggregate_gate() -> Result<(), 
         "run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-validation-plan.py",
         "  lockfile-release-age:\n    name: Lockfile release age",
         "repository: Strukturpiloten/.github",
-        "ref: ${{ github.event.pull_request.head.sha }}",
+        "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}",
         "--repository-root \"${GITHUB_WORKSPACE}\"",
         "--base \"${BASE_SHA}\"",
         "--head \"${HEAD_SHA}\"",
         "--minimum-age-hours 72",
+        "test \"${HEAD_SHA}\" = \"${GITHUB_SHA}\"",
+        "git merge-base --is-ancestor \"${BASE_SHA}\" \"${HEAD_SHA}\"",
     ] {
         if !workflow.contains(required) {
             return Err(format!("CI workflow is missing contract `{required}`"));
@@ -862,7 +914,7 @@ fn compose_schema_snapshot_and_inventory_are_complete() -> Result<(), String> {
         .pointer("/upstream/sha256")
         .and_then(Value::as_str)
         .ok_or("inventory must declare `upstream.sha256`")?;
-    let digest = format!("{:x}", Sha256::digest(schema_bytes));
+    let digest = digest::lowercase_hex(&Sha256::digest(schema_bytes));
     if digest != expected_digest {
         return Err(format!(
             "schema digest mismatch: expected {expected_digest}, found {digest}"
@@ -1209,7 +1261,6 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
         "approve the updated permissions for the App installation",
         "command: release-pr",
         "renovate: datasource=crate depName=release-plz",
-        "version: \"0.3.160\"",
         "(.head.ref | startswith(\"release-plz-\"))",
         "actions/workflows/release.yml/dispatches",
         "actions: write",
@@ -1219,6 +1270,7 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
             return Err(format!("release-plz workflow is missing `{required}`"));
         }
     }
+    pinned_workflow_tool_version(&workflow, "renovate: datasource=crate depName=release-plz", "version")?;
     for forbidden in [
         "secrets.RELEASE_PLZ_APP_ID",
         "app-id:",
@@ -1251,6 +1303,60 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
     let release = read_repository_file(".github/workflows/release.yml")?;
     if release.contains("docs/releases/${version}.md") || !release.contains("bash scripts/extract-release-notes.sh") {
         return Err("protected publication must derive release notes from CHANGELOG.md".to_owned());
+    }
+    Ok(())
+}
+
+fn pinned_workflow_tool_version(document: &str, marker: &str, key: &str) -> Result<String, String> {
+    let marker = format!("# {marker}");
+    let mut pins = document.lines().skip_while(|line| line.trim() != marker);
+    pins.next()
+        .ok_or_else(|| format!("missing Renovate marker `{marker}`"))?;
+    if document.lines().filter(|line| line.trim() == marker).count() != 1 {
+        return Err(format!("tool version must have one Renovate marker `{marker}`"));
+    }
+    let line = pins.next().ok_or("tool marker must immediately precede the version")?;
+    let prefix = format!("{key}: ");
+    let version = line
+        .trim()
+        .strip_prefix(&prefix)
+        .ok_or("tool marker must immediately precede its version key")?;
+    let version = if let Some(quoted) = version.strip_prefix('"') {
+        quoted.strip_suffix('"').ok_or("tool version has unmatched quotes")?
+    } else {
+        version
+    };
+    let components = version.split('.').collect::<Vec<_>>();
+    if components.len() != 3
+        || components
+            .iter()
+            .any(|component| component.is_empty() || !component.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return Err(format!(
+            "{key} must pin an exact major.minor.patch version, found `{version}`"
+        ));
+    }
+    Ok(version.to_owned())
+}
+
+#[test]
+fn tool_version_contract_allows_updates_and_rejects_missing_or_ambiguous_pins() -> Result<(), String> {
+    const MARKER: &str = "renovate: datasource=crate depName=release-plz";
+    for version in ["0.3.160", "0.4.0", "1.0.0"] {
+        let document = format!("# {MARKER}\nversion: \"{version}\"\n");
+        assert_eq!(pinned_workflow_tool_version(&document, MARKER, "version")?, version);
+    }
+    for document in [
+        "version: 0.3.160",
+        "# renovate: datasource=crate depName=release-plz\nversion: latest",
+        "# renovate: datasource=crate depName=release-plz\nversion: 0.3",
+        "# renovate: datasource=crate depName=release-plz\nversion: 0.3.160 # unparsed value",
+        "# renovate: datasource=crate depName=release-plz\nversion: 0.3.160\n# renovate: datasource=crate depName=release-plz\nversion: 0.4.0",
+    ] {
+        assert!(
+            pinned_workflow_tool_version(document, MARKER, "version").is_err(),
+            "accepted {document}"
+        );
     }
     Ok(())
 }

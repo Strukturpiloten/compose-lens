@@ -1,5 +1,8 @@
 //! Repository-owned, explicitly invoked Compose-provider conformance harness.
 
+#[path = "support/digest.rs"]
+mod digest;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::error::Error;
@@ -742,7 +745,7 @@ fn is_https_url(value: &str) -> bool {
 
 fn sha256_file(path: &Path) -> Result<String, std::io::Error> {
     let bytes = fs::read(path)?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(digest::lowercase_hex(&Sha256::digest(bytes)))
 }
 
 fn fixture_sha256(directory: &Path, files: &[String]) -> Result<String, std::io::Error> {
@@ -753,7 +756,7 @@ fn fixture_sha256(directory: &Path, files: &[String]) -> Result<String, std::io:
         digest.update(fs::read(directory.join(file))?);
         digest.update([0]);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(digest::lowercase_hex(&digest.finalize()))
 }
 
 /// Compare a fresh capture with reviewed provider evidence.  The stored record is

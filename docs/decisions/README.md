@@ -44,3 +44,5 @@
 | [0031](0031-unevaluated-interpolation-inspection.md)            | accepted   | Bounded source-aware interpolation inspection without providers or evaluation                     |
 
 Use the next four-digit number for new decisions. Include context, decision, consequences, and alternatives. Supersede accepted decisions with a new ADR rather than rewriting history.
+
+- [0032: Shared repository automation](0032-shared-repository-automation.md)

@@ -1,5 +1,8 @@
 //! Pure policy checks for the isolated runtime-effect matrix.
 
+#[path = "support/digest.rs"]
+mod digest;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -171,7 +174,7 @@ fn fixture_sha256(directory: &Path, files: &[String]) -> Result<String, std::io:
         digest.update(fs::read(directory.join(file))?);
         digest.update([0]);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(digest::lowercase_hex(&digest.finalize()))
 }
 
 fn table_array<'a>(root: &'a Table, field: &str) -> Result<Vec<&'a Table>, String> {

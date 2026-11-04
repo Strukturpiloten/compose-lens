@@ -34,5 +34,51 @@
     ],
     "executable-docs": [["bash", "scripts/check-all.sh", "--check"]],
     "full": [["bash", "scripts/check-all.sh", "--check"]]
+  },
+  "tasks": {
+    "rust-quality": {
+      "commands": [
+        ["bash", ".devcontainer/verify-tools.sh", "--check-python-venv"],
+        ["cargo", "fmt", "--all", "--", "--check"],
+        ["cargo", "ci-check"],
+        ["cargo", "ci-policy"],
+        ["cargo", "ci-clippy"],
+        ["cargo", "ci-test"],
+        ["cargo", "ci-application"],
+        ["cargo", "ci-doctest"],
+        ["cargo", "ci-doc"],
+        ["bash", "scripts/test-provider-python-bootstrap.sh"],
+        ["cargo", "ci-package"]
+      ],
+      "timeout_seconds": 1800
+    },
+    "coverage": {
+      "commands": [
+        ["cargo", "llvm-cov", "clean", "--locked"],
+        [
+          "cargo",
+          "llvm-cov",
+          "--locked",
+          "--no-clean",
+          "--workspace",
+          "--all-features",
+          "--all-targets",
+          "--summary-only",
+          "--fail-under-regions",
+          "88",
+          "--fail-under-functions",
+          "87",
+          "--fail-under-lines",
+          "89"
+        ]
+      ],
+      "timeout_seconds": 1800
+    },
+    "release-metadata": {
+      "commands": [["bash", "scripts/check-release-metadata.sh", "--development"]]
+    },
+    "release-metadata-strict": {
+      "commands": [["bash", "scripts/check-release-metadata.sh", "--release"]]
+    }
   }
 }

@@ -130,7 +130,7 @@ fn verify_directory_members(root: &Path, listed: &BTreeSet<&str>) -> Result<(), 
 
 fn sha256(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(crate::digest::lowercase_hex(&Sha256::digest(bytes)))
 }
 
 fn require_table<'a>(table: &'a Table, field: &str) -> Result<&'a Table, String> {
