@@ -324,14 +324,14 @@ class ValidationPlanTests(unittest.TestCase):
 
     def test_first_rollout_never_executes_candidate_classifier_or_accepts_a_skip(self) -> None:
         workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        self.assertNotIn("scripts/validation-plan.py plan --force-full", workflow)
+        self.assertIn("scripts/validation-plan.py plan --force-full", workflow)
         job_declaration = f'jobs = "{" ".join(POLICY["jobs"])}".split()'
-        self.assertEqual(workflow.count(job_declaration), 2)
         blocks = re.findall(
             r"(?ms)^[ \t]+python3 - <<'PY'(?: \| tee -a \"\$\{GITHUB_STEP_SUMMARY\}\")?\n(.*?)^[ \t]+PY$",
             workflow,
         )
         self.assertEqual(len(blocks), 2)
+        self.assertTrue(all(job_declaration in block for block in blocks))
         planner_code, gate_code = (textwrap.dedent(block) for block in blocks)
         with tempfile.TemporaryDirectory(prefix="compose-lens-bootstrap-plan-") as directory:
             output = Path(directory) / "github-output"
@@ -369,6 +369,105 @@ class ValidationPlanTests(unittest.TestCase):
                 capture_output=True, text=True, check=False,
             )
             self.assertNotEqual(rejected.returncode, 0)
+
+
+    def test_prerequisite_queue_requires_complete_plan_and_every_success(self) -> None:
+        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        blocks = re.findall(
+            r"(?ms)^[ \t]+python3 - <<'PYQUEUE'(?: \| tee -a \"\$\{GITHUB_STEP_SUMMARY\}\")?\n(.*?)^[ \t]+PYQUEUE$",
+            workflow,
+        )
+        self.assertEqual(len(blocks), 2)
+        planner_code, gate_code = (textwrap.dedent(block) for block in blocks)
+        with tempfile.TemporaryDirectory(prefix="compose-lens-queue-bootstrap-") as directory:
+            output = Path(directory) / "github-output"
+            environment = {**os.environ, "GITHUB_SHA": self.base, "GITHUB_OUTPUT": str(output)}
+            planned = subprocess.run([sys.executable, "-c", planner_code], env=environment, capture_output=True, text=True, check=False)
+            self.assertEqual(planned.returncode, 0, planned.stderr)
+            fields = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            plan = json.loads(fields["plan"])
+            self.assertEqual(plan["profile"], "full")
+            self.assertEqual(plan["jobs"], dict.fromkeys(POLICY["jobs"], True))
+            needs = {job: {"result": "success"} for job in ("validation-plan", *POLICY["jobs"])}
+            environment.update(PLAN_JSON=fields["plan"], NEEDS_JSON=json.dumps(needs))
+            verified = subprocess.run([sys.executable, "-c", gate_code], env=environment, capture_output=True, text=True, check=False)
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+            for job in needs:
+                for result in ("failure", "cancelled", "skipped"):
+                    broken = copy.deepcopy(needs)
+                    broken[job]["result"] = result
+                    environment["NEEDS_JSON"] = json.dumps(broken)
+                    rejected = subprocess.run([sys.executable, "-c", gate_code], env=environment, capture_output=True, text=True, check=False)
+                    self.assertNotEqual(rejected.returncode, 0, (job, result))
+
+
+    def test_admission_seed_and_service_have_narrow_contract(self) -> None:
+        manifest = json.loads((SOURCE_ROOT / ".github/automation.json").read_text())
+        self.assertEqual(set(manifest), {"schema", "repository", "revision", "policy", "interface"})
+        self.assertEqual(manifest["schema"], 1)
+        self.assertEqual(manifest["interface"], 1)
+        self.assertEqual(manifest["repository"], "Strukturpiloten/boxferry")
+        self.assertRegex(manifest["revision"], r"^[a-f0-9]{40}$")
+        self.assertEqual(manifest["policy"], "scripts/validation-policy.json")
+        self.assertTrue((SOURCE_ROOT / manifest["policy"]).is_file())
+        service = (SOURCE_ROOT / ".github/workflows/dependency-eligibility.yml").read_text()
+        self.assertIn("workflow_run:", service)
+        self.assertIn("schedule:", service)
+        self.assertNotIn("pull_request_target:", service)
+        config = json.loads((SOURCE_ROOT / ".github/renovate.json").read_text())
+        captures = []
+        for manager in config["customManagers"]:
+            for path, content in ((".github/workflows/dependency-eligibility.yml", service), (".github/automation.json", json.dumps(manifest))):
+                if not any(re.search(pattern[1:-1], path) for pattern in manager["managerFilePatterns"]):
+                    continue
+                for pattern in manager["matchStrings"]:
+                    pattern = re.sub(r"\(\?<([A-Za-z_]\w*)>", r"(?P<\1>", pattern)
+                    captures.extend((manager, match) for match in re.finditer(pattern, content))
+        self.assertEqual(len(captures), 3)
+        self.assertEqual(len({id(manager) for manager, _ in captures}), 1)
+        self.assertTrue(all(match["currentDigest"] == manifest["revision"] for _, match in captures))
+
+
+    def test_bootstrap_hosted_pr_explicitly_selects_complete_plan(self) -> None:
+        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nRevised prose.\n")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-qm", "docs: fixture")
+        head = git(self.root, "rev-parse", "HEAD")
+        args = arguments(self.root, "pull_request", self.base, head)
+        args.force_full = True
+        plan = planner.make_plan(args, POLICY)
+        self.assertEqual(plan["profile"], "full")
+        self.assertEqual(plan["jobs"], dict.fromkeys(POLICY["jobs"], True))
+
+
+    def test_bootstrap_queue_age_guard_requires_exact_candidate_and_base_ancestry(self) -> None:
+        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text()
+        guard = workflow.split("      - name: Bind exact queue candidate and ancestor\n", 1)[1]
+        guard = guard.split("      - name: Reject newly introduced dependencies", 1)[0]
+        code = textwrap.dedent(guard.split("        run: |\n", 1)[1])
+        write(self.root, "src/main.rs", "fn main() { println!(\"fixture\"); }\n")
+        git(self.root, "add", ".")
+        git(self.root, "commit", "-qm", "test: candidate")
+        head = git(self.root, "rev-parse", "HEAD")
+        tree = git(self.root, "rev-parse", "HEAD^{tree}")
+        unrelated = git(self.root, "commit-tree", tree, "-m", "unrelated")
+        for base, candidate, tested, accepted in (
+            (self.base, head, head, True),
+            (self.base, self.base, head, False),
+            (self.base, self.base, self.base, False),
+            ("d" * 40, head, head, False),
+            (unrelated, head, head, False),
+            ("invalid", head, head, False),
+        ):
+            with self.subTest(base=base, candidate=candidate, tested=tested):
+                result = subprocess.run(["bash", "-c", code], cwd=self.root,
+                                        env={**os.environ, "BASE_SHA": base, "HEAD_SHA": candidate,
+                                             "GITHUB_SHA": tested}, capture_output=True, check=False)
+                self.assertEqual(result.returncode == 0, accepted)
+        age = workflow.split("  lockfile-release-age:\n", 1)[1].split("  pr-gate:\n", 1)[0]
+        self.assertIn("if: github.event_name == 'pull_request' || github.event_name == 'merge_group'", age)
+        self.assertIn("github.event.pull_request.base.sha || github.event.merge_group.base_sha", age)
+        self.assertIn("github.event.pull_request.head.sha || github.event.merge_group.head_sha", age)
 
 
 if __name__ == "__main__":

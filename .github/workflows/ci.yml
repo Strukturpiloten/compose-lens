@@ -6,6 +6,7 @@ on:
     branches:
       - main
   pull_request:
+  merge_group:
   workflow_dispatch:
   workflow_call:
 
@@ -56,10 +57,29 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          if [[ "${EVENT_NAME}" == 'pull_request' ]]; then
+          if [[ "${EVENT_NAME}" == 'merge_group' ]]; then
+            # Prerequisite rollout queues retain every existing validation lane.
+            python3 - <<'PYQUEUE'
+          import json
+          import os
+          import re
+          jobs = "rust msrv dependencies api documentation coverage lockfile-release-age".split()
+          tested = os.environ["GITHUB_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", tested):
+              raise SystemExit("queue candidate must be an exact commit")
+          plan = {"schema": 2, "repository": "Strukturpiloten/compose-lens", "event": "merge_group",
+                  "base_sha": tested, "head_sha": tested, "tested_sha": tested, "profile": "full",
+                  "jobs": {job: True for job in jobs}, "reasons": ["bootstrap queue always selects full validation"],
+                  "local_fingerprint": None}
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("plan=" + json.dumps(plan, sort_keys=True, separators=(",", ":")) + "\nprofile=full\n")
+              for job in jobs:
+                  output.write("select_" + job.replace("-", "_") + "=true\n")
+          PYQUEUE
+          elif [[ "${EVENT_NAME}" == 'pull_request' ]]; then
             if [[ -f .validation-base/scripts/validation-plan.py &&
                   -f .validation-base/scripts/validation-policy.json ]]; then
-              python3 .validation-base/scripts/validation-plan.py plan \
+              python3 .validation-base/scripts/validation-plan.py plan --force-full \
                 --repository-root "${GITHUB_WORKSPACE}" \
                 --policy-root .validation-base \
                 --event pull_request --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \
@@ -258,17 +278,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Preserve the aggregate result outside pull requests
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.event_name != 'merge_group'
         run: echo 'Lockfile release-age comparison applies to pull requests.'
       - name: Check out the exact pull-request candidate and base history
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
           persist-credentials: false
       - name: Check out the shared lockfile policy
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: Strukturpiloten/.github
@@ -276,11 +296,25 @@ jobs:
           ref: e362e4564f8e3c1d9d113242e3bf34011f2d7cd7
           path: .github/strukturpiloten-shared
           persist-credentials: false
-      - name: Reject newly introduced dependencies younger than three days
-        if: github.event_name == 'pull_request'
+      - name: Bind exact queue candidate and ancestor
+        if: github.event_name == 'merge_group'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          for revision in "${BASE_SHA}" "${HEAD_SHA}" "${GITHUB_SHA}"; do
+            [[ "${revision}" =~ ^[0-9a-f]{40}$ ]]
+          done
+          test "${HEAD_SHA}" = "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${HEAD_SHA}"
+          git cat-file -e "${BASE_SHA}^{commit}"
+          git merge-base --is-ancestor "${BASE_SHA}" "${HEAD_SHA}"
+      - name: Reject newly introduced dependencies younger than three days
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: >-
           python3 .github/strukturpiloten-shared/scripts/lockfile_release_age.py
           --repository-root "${GITHUB_WORKSPACE}"
@@ -325,7 +359,27 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          if [[ "${EVENT_NAME}" == 'pull_request' &&
+          if [[ "${EVENT_NAME}" == 'merge_group' ]]; then
+            python3 - <<'PYQUEUE' | tee -a "${GITHUB_STEP_SUMMARY}"
+          import json
+          import os
+          jobs = "rust msrv dependencies api documentation coverage lockfile-release-age".split()
+          plan = json.loads(os.environ["PLAN_JSON"])
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          if (set(plan) != {"schema", "repository", "event", "base_sha", "head_sha", "tested_sha",
+                            "profile", "jobs", "reasons", "local_fingerprint"}
+                  or plan["schema"] != 2 or plan["repository"] != "Strukturpiloten/compose-lens"
+                  or plan["event"] != "merge_group" or plan["profile"] != "full"
+                  or any(plan[key] != os.environ["GITHUB_SHA"] for key in ("base_sha", "head_sha", "tested_sha"))
+                  or plan["jobs"] != {job: True for job in jobs}
+                  or set(needs) != {"validation-plan", *jobs}):
+              raise SystemExit("queue full-validation contract is inconsistent")
+          for job in ("validation-plan", *jobs):
+              if needs[job].get("result") != "success":
+                  raise SystemExit(f"queue required job {job} did not succeed")
+          print("Prerequisite queue full validation: every existing lane succeeded")
+          PYQUEUE
+          elif [[ "${EVENT_NAME}" == 'pull_request' &&
                 ( ! -f .validation-base/scripts/validation-plan.py ||
                   ! -f .validation-base/scripts/validation-policy.json ) ]]; then
             # Bootstrap has no trusted verifier. Require the literal complete plan and all jobs.

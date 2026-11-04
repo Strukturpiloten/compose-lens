@@ -1,5 +1,8 @@
 //! Independent native contracts for reviewed real-application definitions.
 
+#[path = "support/digest.rs"]
+mod digest;
+
 #[path = "support/application.rs"]
 mod application;
 

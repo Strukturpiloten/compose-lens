@@ -628,7 +628,7 @@ fn validate_recorded_hash(path: &str, expected: &str, context: &str) -> Result<(
         return Err(format!("{context}: unsafe evidence path {path}"));
     }
     let source = read_repository_file(path)?;
-    let actual = format!("{:x}", Sha256::digest(source.as_bytes()));
+    let actual = crate::digest::lowercase_hex(&Sha256::digest(source.as_bytes()));
     if actual != expected {
         return Err(format!("{context}: {path} hashes to {actual}, expected {expected}"));
     }
@@ -930,7 +930,7 @@ fn validate_application_fixture_hashes(id: &str, revision: &str, copied: &[(&str
         require_sha256(application, hash_key, id)?;
         let bytes =
             fs::read(fixture_root.join(path)).map_err(|error| format!("{id}: failed to read {path}: {error}"))?;
-        let actual = format!("{:x}", Sha256::digest(bytes));
+        let actual = crate::digest::lowercase_hex(&Sha256::digest(bytes));
         if actual != *expected_sha256 {
             return Err(format!(
                 "{id}: {path} hash mismatch; expected {expected_sha256}, found {actual}"
