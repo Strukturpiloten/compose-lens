@@ -36,7 +36,7 @@ jobs:
   release-metadata-validation:
     name: Validate release metadata
     if: github.repository == 'Strukturpiloten/compose-lens'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -59,7 +59,7 @@ jobs:
     name: Release validation gate
     if: always()
     needs: [provider-config-conformance, deterministic-validation, release-metadata-validation]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Require every release prerequisite to succeed
@@ -95,7 +95,7 @@ jobs:
       needs.release-gate.result == 'success'
     needs: release-gate
     environment: release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     env:
       RELEASE_GITHUB_API_VERSION: "2026-03-10"

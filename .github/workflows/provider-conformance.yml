@@ -37,7 +37,7 @@ jobs:
       matrix:
         # renovate: datasource=github-runners
         runner:
-          - ubuntu-24.04
+          - ubuntu-26.04
         target:
           - docker-compose-2-24-3
           - docker-compose-2-24-4

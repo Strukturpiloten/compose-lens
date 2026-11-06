@@ -23,7 +23,7 @@ env:
 jobs:
   validation-plan:
     name: Validation plan
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
@@ -112,7 +112,7 @@ jobs:
 
   rust:
     name: Rust quality
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: validation-plan
     if: needs.validation-plan.outputs.select_rust == 'true'
     timeout-minutes: 30
@@ -151,7 +151,7 @@ jobs:
 
   coverage:
     name: Coverage ratchet
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: validation-plan
     if: needs.validation-plan.outputs.select_coverage == 'true'
     timeout-minutes: 30
@@ -171,7 +171,7 @@ jobs:
 
   msrv:
     name: MSRV
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: validation-plan
     if: needs.validation-plan.outputs.select_msrv == 'true'
     timeout-minutes: 20
@@ -201,7 +201,7 @@ jobs:
 
   dependencies:
     name: Dependency and license policy
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: validation-plan
     if: needs.validation-plan.outputs.select_dependencies == 'true'
     timeout-minutes: 15
@@ -215,7 +215,7 @@ jobs:
 
   api:
     name: Public API compatibility
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: validation-plan
     if: needs.validation-plan.outputs.select_api == 'true'
     timeout-minutes: 20
@@ -228,7 +228,7 @@ jobs:
 
   documentation:
     name: Repository files and documentation
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: validation-plan
     if: needs.validation-plan.outputs.select_documentation == 'true'
     timeout-minutes: 15
@@ -272,7 +272,7 @@ jobs:
 
   lockfile-release-age:
     name: Lockfile release age
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: validation-plan
     if: needs.validation-plan.outputs.select_lockfile_release_age == 'true'
     timeout-minutes: 5
@@ -336,7 +336,7 @@ jobs:
         coverage,
         lockfile-release-age,
       ]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Check out candidate aggregate verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
