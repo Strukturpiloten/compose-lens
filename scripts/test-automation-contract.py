@@ -3,19 +3,28 @@
 
 from __future__ import annotations
 
+import contextlib
+import copy
+import hashlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from boxferry_ci import __file__ as shared_module_file
 from boxferry_ci import tooling as shared_tooling
+from boxferry_ci.contracts import ContractError
+from boxferry_ci.gate import GateFailure, verify_devcontainer_gate
+from boxferry_ci.planner import Comparison, path_profiles
 from boxferry_ci.policy import load_policy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -121,11 +130,11 @@ class ConsumerContractTests(unittest.TestCase):
             POLICY.local_commands["full"], (("bash", "scripts/check-all.sh", "--check"),)
         )
 
-    def test_ordinary_gate_defers_image_qualification_without_losing_jobs(self) -> None:
+    def test_image_caller_keeps_original_plan_and_exact_bound_gate(self) -> None:
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
         self.assertEqual(
-            set(POLICY.jobs),
-            {
+            POLICY.jobs,
+            (
                 "rust",
                 "msrv",
                 "dependencies",
@@ -133,19 +142,251 @@ class ConsumerContractTests(unittest.TestCase):
                 "documentation",
                 "coverage",
                 "lockfile-release-age",
+                "devcontainer-validation",
+            ),
+        )
+        image = ci.split("  devcontainer-validation:\n", 1)[1].split("  pr-gate:\n", 1)[0]
+        self.assertIn("    needs: validation-plan\n", image)
+        self.assertIn(
+            "    if: needs.validation-plan.outputs.select_devcontainer_validation != 'false'\n",
+            image,
+        )
+        self.assertIn("    permissions:\n      contents: read\n", image)
+        self.assertIn(
+            "shared-devcontainer-validation.yml@"
+            + MANIFEST["revision"]
+            + " # automation-v1 interface v1",
+            image,
+        )
+        self.assertEqual(
+            set(re.findall(r"^      ([a-z_]+):", image.split("    with:\n", 1)[1], re.MULTILINE)),
+            {"candidate_sha", "policy_sha", "automation_sha", "config_path"},
+        )
+        for binding in (
+            "candidate_sha: ${{ github.sha }}",
+            "policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}",
+            "automation_sha: " + MANIFEST["revision"],
+            "config_path: scripts/validation-policy.json",
+        ):
+            self.assertIn(binding, image)
+        self.assertIn(
+            "select_devcontainer_validation: ${{ steps.plan.outputs.select_devcontainer_validation }}",
+            ci,
+        )
+        aggregate = ci.split("  pr-gate:\n", 1)[1]
+        for job in ("validation-plan", *POLICY.jobs):
+            self.assertIn(f"      - {job}\n", aggregate)
+        self.assertIn("    if: always()\n", aggregate)
+        self.assertIn("boxferry_ci gate --devcontainer-validation", aggregate)
+        self.assertIn('--plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}"', aggregate)
+        self.assertIn("PLAN_JSON: ${{ needs.validation-plan.outputs.plan }}", aggregate)
+        self.assertIn("NEEDS_JSON: ${{ toJSON(needs) }}", aggregate)
+        self.assertNotIn("shared-devcontainer-updates.yml@", ci)
+
+    def test_actual_trusted_seed_and_adopted_prose_use_exact_image_receipts(self) -> None:
+        # Reconstruct the exact reviewed preseed bytes, independently admitted by the source.
+        adopted_bytes = (ROOT / "scripts/validation-policy.json").read_bytes()
+        seed_bytes = adopted_bytes.replace(
+            b'    "lockfile-release-age",\n    "devcontainer-validation"\n  ],',
+            b'    "lockfile-release-age"\n  ],',
+            1,
+        )
+        self.assertNotEqual(seed_bytes, adopted_bytes)
+        self.assertEqual(
+            hashlib.sha256(seed_bytes).hexdigest(),
+            "7957938d108af2e6799befc95b19d12d32d1bc37f97d0bc1118e6d8889d36c73",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "seed.json"
+            path.write_bytes(seed_bytes)
+            trusted_seed = load_policy(path)
+            for event in ("pull_request", "merge_group"):
+                comparison = Comparison(event, "a" * 40, "b" * 40, "c" * 40)
+                for policy in (trusted_seed, POLICY):
+                    selected = {job: job in policy.selected_jobs(("prose",)) for job in policy.jobs}
+                    plan: dict[str, object] = {
+                        "schema": 3,
+                        "repository": policy.repository,
+                        "event": event,
+                        "base_sha": comparison.base_sha,
+                        "head_sha": comparison.head_sha,
+                        "tested_sha": comparison.tested_sha,
+                        "profile": "prose",
+                        "profiles": ["prose"],
+                        "jobs": selected,
+                        "reasons": ["independent consumer prose expectation"],
+                        "local_fingerprint": None,
+                    }
+                    needs: dict[str, dict[str, object]] = {
+                        job: {"result": "success" if enabled else "skipped"}
+                        for job, enabled in selected.items()
+                    }
+                    needs["validation-plan"] = {"result": "success"}
+                    needs["devcontainer-validation"] = {
+                        "result": "success",
+                        "outputs": {"candidate_sha": comparison.tested_sha},
+                    }
+                    original = copy.deepcopy(plan)
+                    verify_devcontainer_gate(
+                        plan, needs, policy, comparison, expected_plan=original
+                    )
+                    self.assertEqual(
+                        plan, original, "supplemental image must not rewrite trusted plan"
+                    )
+                    for receipt in (None, comparison.base_sha, comparison.head_sha, "d" * 40):
+                        changed = copy.deepcopy(needs)
+                        changed["devcontainer-validation"]["outputs"] = {"candidate_sha": receipt}
+                        with self.subTest(
+                            event=event, seed=policy is trusted_seed, receipt=receipt
+                        ):
+                            with self.assertRaises(ContractError):
+                                verify_devcontainer_gate(
+                                    plan,
+                                    changed,
+                                    policy,
+                                    comparison,
+                                    expected_plan=original,
+                                )
+                    for outcome in ("failure", "cancelled", "skipped"):
+                        changed = copy.deepcopy(needs)
+                        changed["devcontainer-validation"] = {"result": outcome}
+                        if policy is POLICY and outcome == "skipped":
+                            verify_devcontainer_gate(
+                                plan,
+                                changed,
+                                policy,
+                                comparison,
+                                expected_plan=original,
+                            )
+                        else:
+                            with self.assertRaises((ContractError, GateFailure)):
+                                verify_devcontainer_gate(
+                                    plan,
+                                    changed,
+                                    policy,
+                                    comparison,
+                                    expected_plan=original,
+                                )
+                    changed = copy.deepcopy(needs)
+                    changed["documentation"] = {"result": "failure"}
+                    with self.assertRaises(GateFailure):
+                        verify_devcontainer_gate(
+                            plan, changed, policy, comparison, expected_plan=original
+                        )
+
+    def test_final_image_inputs_cannot_inherit_prose_skips(self) -> None:
+        dockerfile = (ROOT / ".devcontainer/Dockerfile").read_text()
+        copied = []
+        for line in dockerfile.splitlines():
+            if line.startswith("COPY ") and not line.startswith("COPY --from="):
+                copied.extend(line.split()[1:-1])
+        self.assertEqual(
+            set(copied),
+            {
+                "rust-toolchain.toml",
+                ".github/automation.json",
+                "scripts/shared-ci.py",
+                "scripts/install-file-tools.sh",
+                "package.json",
+                "package-lock.json",
             },
         )
-        for value in (
-            "--devcontainer-validation",
-            "select_devcontainer_validation",
-            "shared-devcontainer-validation.yml@",
-            "shared-devcontainer-updates.yml@",
+        inputs = [
+            *copied,
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/devcontainer-lock.json",
+            ".devcontainer/verify-tools.sh",
+            "scripts/validation-policy.json",
+            "unknown-input",
+        ]
+        for name in inputs:
+            with self.subTest(path=name):
+                self.assertEqual(path_profiles(name, (b"plain text\n",), POLICY, set()), {"full"})
+        prose = path_profiles(
+            POLICY.public_documentation_root + "overview.md", (b"Plain text.\n",), POLICY, set()
+        )
+        self.assertEqual(prose, {"prose"})
+        self.assertNotIn("devcontainer-validation", POLICY.selected_jobs(tuple(prose)))
+        self.assertIn("devcontainer-validation", POLICY.selected_jobs(("full",)))
+        for profile in ("prose", "executable-docs", "full"):
+            self.assertTrue(
+                all(
+                    "devcontainer" not in " ".join(command)
+                    for command in POLICY.local_commands[profile]
+                )
+            )
+
+    def test_recipe_exports_selected_python_tools_and_rust_before_cargo_tools(self) -> None:
+        image = (ROOT / ".devcontainer/Dockerfile").read_text()
+        self.assertIn(
+            "FROM docker.io/library/node:24.22.1-bookworm-slim@sha256:"
+            "55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205",
+            image,
+        )
+        self.assertLess(
+            image.index("rustup default"), image.index('cargo "+${rust_channel}" install')
+        )
+        for required in (
+            "COPY .github/automation.json /opt/compose-lens-tooling/.github/",
+            "COPY scripts/shared-ci.py /opt/compose-lens-tooling/scripts/",
+            "--destination /usr/local/bin --tools actionlint lychee --python-tools",
+            "UV_CACHE_DIR=/opt/compose-lens-tooling/uv-cache",
+            "UV_PYTHON_INSTALL_DIR=/opt/compose-lens-tooling/python",
+            "chown -R vscode:vscode",
         ):
-            self.assertNotIn(value, ci)
-        for job in POLICY.jobs:
-            self.assertIn(f"      - {job}\n", ci)
-        self.assertIn("boxferry_ci gate", ci)
-        self.assertIn('--plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}"', ci)
+            self.assertIn(required, image)
+        for retired in (
+            "ARG ACTIONLINT_VERSION",
+            "ARG LYCHEE_VERSION",
+            "cargo install --locked --version",
+        ):
+            self.assertNotIn(retired, image)
+        verifier = (ROOT / ".devcontainer/verify-tools.sh").read_text()
+        embedded = re.search(r"<<\s*'PYTHON'\n(?P<body>[\s\S]*?)\nPYTHON(?:\n|$)", verifier)
+        if embedded is None:
+            self.fail("lifecycle verifier must execute its selected-authority Python probe")
+        body = embedded["body"]
+        compile(body, ".devcontainer/verify-tools.sh:python", "exec")
+        metadata = tomllib.loads(
+            (Path(shared_module_file).resolve().parents[2] / "pyproject.toml").read_text()
+        )
+        expected = {"uv": metadata["tool"]["uv"]["required-version"][2:], "node": "24.22.1"}
+        for name in ("ruff", "ty"):
+            expected[name] = next(
+                value.split("==", 1)[1]
+                for value in metadata["dependency-groups"]["dev"]
+                if value.startswith(name + "==")
+            )
+        with tempfile.TemporaryDirectory() as temporary:
+            tooling = Path(temporary)
+            (tooling / ".github").mkdir()
+            (tooling / ".github/automation.json").write_text(json.dumps(MANIFEST))
+            project = tooling / "target/boxferry-automation" / MANIFEST["revision"] / "automation"
+            project.mkdir(parents=True)
+            (project / "pyproject.toml").write_text(
+                (Path(shared_module_file).resolve().parents[2] / "pyproject.toml").read_text()
+            )
+
+            def executable(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                name = argv[0]
+                if name == "rustup":
+                    return subprocess.CompletedProcess(
+                        argv, 0, "rustc " + argv[2] + " (test)\n", ""
+                    )
+                version = (
+                    ("v" + expected[name]) if name == "node" else (name + " " + expected[name])
+                )
+                return subprocess.CompletedProcess(argv, 0, version + "\n", "")
+
+            with (
+                patch.object(sys, "argv", ["verify-tools", str(ROOT), str(tooling)]),
+                patch("subprocess.run", executable),
+            ):
+                exec(compile(body, "verify-tools", "exec"), {"__name__": "__main__"})
+                expected["ruff"] = "0.0.0"
+                with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                    exec(compile(body, "verify-tools", "exec"), {"__name__": "__main__"})
 
     def test_ordinary_local_gate_does_not_require_image_storage_or_privilege(self) -> None:
         script = (ROOT / "scripts/check-all.sh").read_text()
@@ -175,16 +416,162 @@ class ConsumerContractTests(unittest.TestCase):
         self.assertEqual(command.count("--repository"), 1)
         self.assertEqual(command[command.index("--repository") + 1], "Strukturpiloten/compose-lens")
 
-    def test_deferred_image_keeps_its_existing_integrity_and_installer(self) -> None:
+    def test_qualification_recipe_keeps_integrity_and_image_only_installer(self) -> None:
         dockerfile = (ROOT / ".devcontainer/Dockerfile").read_text()
         images = re.findall(r"# release: ([^\n]+)\nFROM ([^\s]+)", dockerfile)
         self.assertEqual(len(images), 2)
         for release, reference in images:
             self.assertRegex(release, r"^[0-9]+\.[0-9]+\.[0-9]+-[^\s]+$")
             self.assertRegex(reference, r"@sha256:[a-f0-9]{64}$")
-        self.assertIn("COPY scripts/install-file-tools.sh /tmp/install-file-tools.sh", dockerfile)
-        self.assertNotIn("shared-ci.py", dockerfile)
-        self.assertNotIn("--python-tools", dockerfile)
+        self.assertIn(
+            "COPY scripts/install-file-tools.sh /opt/compose-lens-tooling/scripts/",
+            dockerfile,
+        )
+        self.assertIn("bash /opt/compose-lens-tooling/scripts/install-file-tools.sh", dockerfile)
+
+    def test_image_installer_resolves_native_urls_and_checks_asset_bytes(self) -> None:
+        source = (ROOT / "scripts/install-file-tools.sh").read_text()
+        versions = dict(re.findall(r'readonly ([a-z0-9_]+)_version="([^"]+)"', source))
+        with tempfile.TemporaryDirectory(prefix="compose image tools ") as temporary:
+            fixture = Path(temporary)
+            binary = fixture / "bin"
+            binary.mkdir()
+            (binary / "uname").write_text(
+                f"#!{sys.executable}\nimport os\nprint(os.environ['FIXTURE_ARCH'])\n"
+            )
+            (binary / "curl").write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, shutil, sys\nfrom pathlib import Path\n"
+                "args = sys.argv[1:]\n"
+                "assert all(flag in args for flag in ('--proto', '--tlsv1.2', '--fail', '--location'))\n"
+                "url = args[-1]\n"
+                "with Path(os.environ['DOWNLOAD_LOG']).open('a') as log: log.write(url + '\\n')\n"
+                "assets = json.loads(Path(os.environ['ASSET_MAP']).read_text())\n"
+                "if url not in assets: raise SystemExit(22)\n"
+                "destination = Path(args[args.index('--output') + 1])\n"
+                "shutil.copyfile(assets[url], destination)\n"
+                "if os.environ.get('CORRUPT_HADOLINT') == '1' and 'hadolint-linux-' in url:\n"
+                "    with destination.open('ab') as stream: stream.write(b'corrupt')\n"
+            )
+            for command in binary.iterdir():
+                command.chmod(0o755)
+            for architecture, shellcheck_arch, hadolint_arch, shfmt_arch, tombi_arch in (
+                ("x86_64", "x86_64", "x86_64", "amd64", "x86_64-unknown-linux-musl"),
+                ("aarch64", "aarch64", "arm64", "arm64", "aarch64-unknown-linux-musl"),
+                ("arm64", "aarch64", "arm64", "arm64", "aarch64-unknown-linux-musl"),
+            ):
+                with self.subTest(architecture=architecture):
+                    case = fixture / architecture
+                    case.mkdir()
+                    expected = {
+                        "tombi": (
+                            f"https://github.com/tombi-toml/tombi/releases/download/v{versions['tombi']}/"
+                            f"tombi-cli-{versions['tombi']}-{tombi_arch}.tar.gz",
+                            f"tombi-cli-{versions['tombi']}-{tombi_arch}/tombi",
+                            "w:gz",
+                        ),
+                        "shfmt": (
+                            f"https://github.com/mvdan/sh/releases/download/v{versions['shfmt']}/"
+                            f"shfmt_v{versions['shfmt']}_linux_{shfmt_arch}",
+                            None,
+                            None,
+                        ),
+                        "shellcheck": (
+                            f"https://github.com/koalaman/shellcheck/releases/download/v{versions['shellcheck']}/"
+                            f"shellcheck-v{versions['shellcheck']}.linux.{shellcheck_arch}.tar.xz",
+                            f"shellcheck-v{versions['shellcheck']}/shellcheck",
+                            "w:xz",
+                        ),
+                        "hadolint": (
+                            f"https://github.com/hadolint/hadolint/releases/download/v{versions['hadolint']}/"
+                            f"hadolint-linux-{hadolint_arch}",
+                            None,
+                            None,
+                        ),
+                    }
+                    payloads = {}
+                    modified = source
+                    for tool, (url, member, mode) in expected.items():
+                        payload = case / tool
+                        contents = ("synthetic " + tool + " " + architecture + "\n").encode()
+                        if member is None:
+                            payload.write_bytes(contents)
+                        else:
+                            archive = (
+                                tarfile.open(payload, "w:gz")
+                                if mode == "w:gz"
+                                else tarfile.open(payload, "w:xz")
+                            )
+                            with archive:
+                                info = tarfile.TarInfo(member)
+                                info.size = len(contents)
+                                info.mode = 0o755
+                                archive.addfile(info, io.BytesIO(contents))
+                        payloads[url] = str(payload)
+                        checksum = hashlib.sha256(payload.read_bytes()).hexdigest()
+                        # Only the private fixture copy uses synthetic payload checksums.
+                        modified, count = re.subn(
+                            rf'(readonly {tool}_checksum=")[a-f0-9]{{64}}(")',
+                            lambda match: match[1] + checksum + match[2],
+                            modified,
+                        )
+                        self.assertEqual(count, 2)
+                    script = case / "installer.sh"
+                    script.write_text(modified)
+                    mapping = case / "assets.json"
+                    mapping.write_text(json.dumps(payloads))
+                    log = case / "downloads.log"
+                    environment = {
+                        **os.environ,
+                        "PATH": str(binary) + os.pathsep + os.environ["PATH"],
+                        "FIXTURE_ARCH": architecture,
+                        "ASSET_MAP": str(mapping),
+                        "DOWNLOAD_LOG": str(log),
+                        "CORRUPT_HADOLINT": "0",
+                        "TMPDIR": str(case),
+                    }
+                    destination = case / "installed tools"
+                    result = subprocess.run(
+                        ["bash", str(script), str(destination)],
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        timeout=20,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(
+                        log.read_text().splitlines(), [row[0] for row in expected.values()]
+                    )
+                    self.assertEqual({item.name for item in destination.iterdir()}, set(expected))
+                    if architecture == "aarch64":
+                        corrupt_destination = case / "corrupt tools"
+                        result = subprocess.run(
+                            ["bash", str(script), str(corrupt_destination)],
+                            env={**environment, "CORRUPT_HADOLINT": "1"},
+                            capture_output=True,
+                            text=True,
+                            timeout=20,
+                            check=False,
+                        )
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertFalse((corrupt_destination / "hadolint").exists())
+            unsupported_log = fixture / "unsupported.log"
+            result = subprocess.run(
+                ["bash", str(script), str(fixture / "unsupported")],
+                env={
+                    **environment,
+                    "FIXTURE_ARCH": "riscv64",
+                    "DOWNLOAD_LOG": str(unsupported_log),
+                },
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Unsupported file-tool architecture", result.stderr)
+            self.assertFalse(unsupported_log.exists())
 
     def test_legacy_image_pins_have_one_held_owner_without_freezing_host_tools(self) -> None:
         config = json.loads((ROOT / ".github/renovate.json").read_text())

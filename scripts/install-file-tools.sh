@@ -16,6 +16,7 @@ readonly hadolint_version="2.15.1"
 case "$(uname -m)" in
   x86_64)
     readonly release_architecture="x86_64"
+    readonly hadolint_architecture="x86_64"
     readonly shfmt_architecture="amd64"
     readonly tombi_architecture="x86_64-unknown-linux-musl"
     readonly tombi_checksum="9aa69eb3e75a4a22a961b8a1c8cc44e4f81328ce25ad5b10d151be1a09faa88d"
@@ -25,6 +26,7 @@ case "$(uname -m)" in
     ;;
   aarch64 | arm64)
     readonly release_architecture="aarch64"
+    readonly hadolint_architecture="arm64"
     readonly shfmt_architecture="arm64"
     readonly tombi_architecture="aarch64-unknown-linux-musl"
     readonly tombi_checksum="21f51d092597053266e0ed051082743b5956b6de2f0db1cecce78e0eb29165e5"
@@ -81,7 +83,7 @@ install -m 0755 \
 
 hadolint_binary="${temporary_directory}/hadolint"
 download \
-  "https://github.com/hadolint/hadolint/releases/download/v${hadolint_version}/hadolint-linux-${release_architecture}" \
+  "https://github.com/hadolint/hadolint/releases/download/v${hadolint_version}/hadolint-linux-${hadolint_architecture}" \
   "${hadolint_binary}" "${hadolint_checksum}"
 install -m 0755 "${hadolint_binary}" "${install_directory}/hadolint"
 

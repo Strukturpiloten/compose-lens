@@ -65,3 +65,17 @@ keep their ordinary owners. The unchanged image closure is explicitly unqualifie
 Fresh standard GitHub CI image qualification and later updater activation remain separate under
 issue #563. No image build, runtime mutation, App activation, publication or deployment is performed
 by ordinary adoption. Native provider evidence and maintainer-approved release boundaries remain.
+
+## 2026-11-07 CI image qualification caller
+
+Issue #208 adds the CI-only Dev Container prerequisite using the admitted shared source and
+its exact reviewed preseed policy. A missing trusted image selector runs qualification;
+after adoption only an explicit false selector may skip it. Required CI preserves every
+original job and plan binding and verifies the shared exact-candidate image receipt.
+The shared callee owns source resolution, native amd64/arm64 Docker lanes and bounded cleanup.
+
+This source integration does not establish successful native qualification. Actual per-lane
+candidate, resource, failure/cancellation and cleanup evidence remains required. Conventional
+VS Code development keeps its existing Podman storage and complete source gate. No local
+image executor, updater/App invocation, schedule or proposal-hold removal is introduced;
+those later acceptance stages remain separate under #563.

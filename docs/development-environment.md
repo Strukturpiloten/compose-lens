@@ -108,7 +108,7 @@ Cargo home.
 ## Updating the container
 
 Direct image, Feature and legacy image-tool proposals remain disabled until fresh standard
-GitHub CI qualification is reviewed under issue #563. Retain the current image, Feature lock,
+GitHub CI qualification is reviewed under issue #563. Retain the reviewed image pins and Feature lock,
 checksums and VS Code lifecycle definitions meanwhile. Rebuilding the existing setup does not
 activate the deferred updater or establish new qualification evidence.
 
@@ -141,4 +141,5 @@ implementation and its architecture-specific integrity inventory. CI uses this s
 Run it with a caller-owned destination and put that directory on PATH; it does not require sudo.
 The existing Dev Container alone retains `scripts/install-file-tools.sh` and its pinned legacy
 image tools. Image and Feature proposals stay disabled until fresh GitHub qualification. The
-image closure is unchanged and remains distinct from ordinary package/compiler/tool ownership.
+CI qualification recipe exports tools from the selected shared authority; its source integration
+does not establish native qualification or change ordinary package/compiler/tool ownership.
