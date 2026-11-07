@@ -315,6 +315,8 @@ fn is_immutable_versioned_action(reference: &str) -> bool {
                     | "Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml"
                     | "Strukturpiloten/boxferry/.github/workflows/shared-dependency-eligibility.yml"
                     | "Strukturpiloten/boxferry/.github/workflows/shared-dependency-wait.yml"
+                    | "Strukturpiloten/boxferry/.github/workflows/shared-devcontainer-validation.yml"
+                    | "Strukturpiloten/boxferry/.github/workflows/shared-devcontainer-updates.yml"
             ))
 }
 
@@ -361,6 +363,8 @@ mod tests {
             "shared-release-validation.yml",
             "shared-dependency-eligibility.yml",
             "shared-dependency-wait.yml",
+            "shared-devcontainer-validation.yml",
+            "shared-devcontainer-updates.yml",
         ] {
             assert!(is_immutable_versioned_action(&format!(
                 "{prefix}{workflow}@{sha} # automation-v1 interface v1"
@@ -379,6 +383,30 @@ mod tests {
             assert!(
                 !is_immutable_versioned_action(&reference),
                 "accepted weakened shared pin: {reference}"
+            );
+        }
+    }
+
+    #[test]
+    fn image_qualification_comments_reject_weakened_refs_owners_and_interfaces() {
+        let prefix = "Strukturpiloten/boxferry/.github/workflows/";
+        let workflow = "shared-devcontainer-validation.yml";
+        let sha = "0123456789abcdef0123456789abcdef01234567";
+        for reference in [
+            format!("{prefix}{workflow}@automation-v1 # automation-v1 interface v1"),
+            format!("{prefix}{workflow}@main # automation-v1 interface v1"),
+            format!("{prefix}{workflow}@v1.0.0 # automation-v1 interface v1"),
+            format!("{prefix}{workflow}@0123456789abcdef # automation-v1 interface v1"),
+            format!("{prefix}{workflow}@0123456789abcdef0123456789abcdef0123456g # automation-v1 interface v1"),
+            format!("{prefix}{workflow}@0123456789abcdef0123456789abcdef0123456A # automation-v1 interface v1"),
+            format!("other/boxferry/.github/workflows/{workflow}@{sha} # automation-v1 interface v1"),
+            format!("{prefix}shared-devcontainer-unknown.yml@{sha} # automation-v1 interface v1"),
+            format!("{prefix}{workflow}@{sha} # automation-v1"),
+            format!("{prefix}{workflow}@{sha} # automation-v1 interface v2"),
+        ] {
+            assert!(
+                !is_immutable_versioned_action(&reference),
+                "accepted weakened image qualification pin: {reference}"
             );
         }
     }

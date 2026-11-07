@@ -412,9 +412,14 @@ fn ci_uses_a_trusted_change_plan_and_fail_closed_aggregate_gate() -> Result<(), 
         ),
         ("    if: always()\n", "    if: success()\n"),
         ("      - coverage\n", ""),
+        ("      - devcontainer-validation\n", ""),
         (
-            "python -m boxferry_ci gate",
+            "select_devcontainer_validation != 'false'",
+            "select_devcontainer_validation == 'true'",
+        ),
+        (
             "python -m boxferry_ci gate --devcontainer-validation",
+            "python -m boxferry_ci gate",
         ),
     ] {
         let changed = workflow.replace(before, after);
@@ -436,20 +441,18 @@ fn validate_ci_plan_and_gate(workflow: &str, policy: &Value) -> Result<(), Strin
         "NEEDS_JSON: ${{ toJSON(needs) }}",
         "shared-dependency-wait.yml@",
         "candidate_sha: ${{ github.sha }}",
+        "select_devcontainer_validation: ${{ steps.plan.outputs.select_devcontainer_validation }}",
+        "if: needs.validation-plan.outputs.select_devcontainer_validation != 'false'",
+        "shared-devcontainer-validation.yml@",
+        "python -m boxferry_ci gate --devcontainer-validation",
     ] {
         if !workflow.contains(required) {
             return Err(format!("CI is missing `{required}`"));
         }
     }
-    for deferred in [
-        "  devcontainer-validation:",
-        "devcontainer-local",
-        "--devcontainer-validation",
-        "select_devcontainer_validation",
-        "shared-devcontainer-validation.yml@",
-    ] {
-        if workflow.contains(deferred) {
-            return Err(format!("ordinary CI must defer image qualification `{deferred}`"));
+    for forbidden in ["devcontainer-local", "shared-devcontainer-updates.yml@"] {
+        if workflow.contains(forbidden) {
+            return Err(format!("qualification CI must not activate `{forbidden}`"));
         }
     }
     for job in [
@@ -468,13 +471,25 @@ fn validate_ci_plan_and_gate(workflow: &str, policy: &Value) -> Result<(), Strin
             return Err(format!("CI job {job} must remain plan-controlled"));
         }
     }
-    // Ordinary adoption keeps the exact product gate; image qualification is deferred by ADR 0032.
+    // CI qualification adds one receipt dependency while retaining every original product gate.
     let expected_gate = concat!(
         "  pr-gate:\n    name: Required CI\n    if: always()\n    needs:\n",
         "      - validation-plan\n      - rust\n      - msrv\n      - dependencies\n",
         "      - api\n      - documentation\n      - coverage\n      - lockfile-release-age\n",
+        "      - devcontainer-validation\n",
     );
-    if policy["profile_jobs"]["prose"] != serde_json::json!(["documentation", "lockfile-release-age"])
+    if policy["jobs"]
+        != serde_json::json!([
+            "rust",
+            "msrv",
+            "dependencies",
+            "api",
+            "documentation",
+            "coverage",
+            "lockfile-release-age",
+            "devcontainer-validation"
+        ])
+        || policy["profile_jobs"]["prose"] != serde_json::json!(["documentation", "lockfile-release-age"])
         || !workflow.contains(expected_gate)
         || workflow.matches("    name: Required CI\n").count() != 1
         || workflow.contains("continue-on-error: true")
