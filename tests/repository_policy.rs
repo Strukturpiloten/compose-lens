@@ -93,55 +93,51 @@ fn release_metadata_context_is_explicit_at_every_gate() -> Result<(), String> {
 #[test]
 fn release_requires_reusable_complete_and_bounded_native_validation() -> Result<(), String> {
     let release = read_repository_file(".github/workflows/release.yml")?;
-
     for required in [
         "validation_only:",
         "default: false",
         "uses: ./.github/workflows/ci.yml",
+        "api_purpose: published",
         "uses: ./.github/workflows/provider-conformance.yml",
-        "provider-config-conformance:\n    name: Validate observed provider configuration evidence\n    if: github.repository == 'Strukturpiloten/compose-lens'\n    uses: ./.github/workflows/provider-conformance.yml\n    permissions:\n      contents: read",
-        "needs: [provider-config-conformance, deterministic-validation, release-metadata-validation]",
-        "needs: release-gate",
+        "shared-release-validation.yml@",
+        "needs_json: ${{ toJSON(needs) }}",
         "inputs.validation_only != true",
         "needs.release-gate.result == 'success'",
+        "needs.crate-preparation.result == 'success'",
         "artifact-metadata: write",
         "attestations: write",
         "contents: write",
         "id-token: write",
-    ] {
-        if !release.contains(required) {
-            return Err(format!("release workflow is missing fail-closed contract `{required}`"));
-        }
-    }
-    for required in [
-        "  release-gate:\n    name: Release validation gate\n    if: always()",
-        "PROVIDER_RESULT: ${{ needs.provider-config-conformance.result }}",
-        "DETERMINISTIC_RESULT: ${{ needs.deterministic-validation.result }}",
-        "METADATA_RESULT: ${{ needs.release-metadata-validation.result }}",
-        "if [[ \"${status}\" != success ]]; then",
-        "release-metadata-validation:\n    name: Validate release metadata",
         "bash scripts/check-release-metadata.sh --release",
     ] {
         if !release.contains(required) {
-            return Err(format!("release gate is missing fail-closed contract `{required}`"));
+            return Err(format!("release contract is missing `{required}`"));
         }
     }
+    let policy: Value = serde_json::from_str(&read_repository_file("scripts/release-policy.json")?)
+        .map_err(|error| error.to_string())?;
+    if policy["required_jobs"]
+        != serde_json::json!([
+            "provider-config-conformance",
+            "deterministic-validation",
+            "release-metadata-validation"
+        ])
+    {
+        return Err("every existing native, deterministic, and metadata prerequisite must remain required".to_owned());
+    }
+    let publication = release
+        .split_once("  release:\n")
+        .ok_or("missing protected publication job")?
+        .1;
     for forbidden in [
-        "- name: Install pinned Node.js toolchain",
-        "- name: Install locked Node file-quality tools",
-        "- name: Install checksum-pinned native file-quality tools",
-        "- name: Check non-Rust file formatting and lint",
         "- name: Run Clippy",
         "- name: Run tests",
+        "- name: Install locked Node file-quality tools",
     ] {
-        let publication = release
-            .split_once("  release:\n")
-            .map_or(release.as_str(), |(_, publication)| publication);
         if publication.contains(forbidden) {
-            return Err(format!("credentialed publication job must not repeat `{forbidden}`"));
+            return Err(format!("credentialed publication must not repeat `{forbidden}`"));
         }
     }
-
     validate_provider_conformance_contract()
 }
 
@@ -209,7 +205,10 @@ fn validate_provider_conformance_contract() -> Result<(), String> {
     if !complete_gate.contains("bash scripts/test-provider-python-bootstrap.sh") {
         return Err("complete gate must run the provider Python bootstrap regression".to_owned());
     }
-    if !ci.contains("run: bash scripts/test-provider-python-bootstrap.sh") {
+    if !ci.contains("task: rust-quality")
+        || !read_repository_file("scripts/validation-policy.json")?
+            .contains("scripts/test-provider-python-bootstrap.sh")
+    {
         return Err("pull-request CI must run the provider Python bootstrap regression".to_owned());
     }
     if native.contains("runtime-effect-matrix") || runner.contains("runtime-effect-matrix") {
@@ -346,131 +345,111 @@ fn rust_version_policy_allows_newer_normal_toolchains_and_rejects_drift() -> Res
 
 #[test]
 fn public_api_compatibility_runs_in_ci_and_release() -> Result<(), String> {
-    const ACTION: &str = "obi1kenobi/cargo-semver-checks-action";
-    const CONFIGURATION: &str = "package: compose-lens";
-
-    let workflow_name = "ci.yml";
-    let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
-    let workflow = fs::read_to_string(&workflow_path)
-        .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
-
-    let prefix = format!("{ACTION}@");
-    let reference = workflow
-        .lines()
-        .find_map(|line| {
-            line.trim()
-                .strip_prefix("uses: ")
-                .filter(|reference| reference.starts_with(&prefix))
-        })
-        .ok_or("CI must declare the API compatibility action")?;
-    let configured_action = format!("uses: {reference}\n        with:\n          {CONFIGURATION}");
-    if !support::has_exactly_one_immutable_versioned_action(&workflow, ACTION)
-        || workflow.matches(&configured_action).count() != 1
-        || workflow.contains("release-type:")
-    {
-        return Err(format!(
-            "{workflow_name} must contain one version-derived cargo-semver-checks action for compose-lens"
-        ));
+    let workflow = read_repository_file(".github/workflows/ci.yml")?;
+    for required in [
+        "shared-rust-semver.yml@",
+        "package: compose-lens",
+        "default: published",
+        "api_purpose: ${{ inputs.api_purpose || 'development' }}",
+        "PUBLISHED_API_CANDIDATE_SHA: ${{ needs.api.outputs.published_api_candidate_sha }}",
+        "test \"${PUBLISHED_API_CANDIDATE_SHA}\" = \"${GITHUB_SHA}\"",
+        "published_api_candidate_sha: ${{ steps.result.outputs.published_api_candidate_sha }}",
+    ] {
+        if !workflow.contains(required) {
+            return Err(format!("shared API contract is missing `{required}`"));
+        }
     }
-
+    let release = read_repository_file(".github/workflows/release.yml")?;
+    if !release.contains("uses: ./.github/workflows/ci.yml\n    with:\n      api_purpose: published") {
+        return Err("Release must require published-purpose API validation".to_owned());
+    }
     Ok(())
 }
 
 #[test]
 fn coverage_ratchet_runs_in_ci_and_release() -> Result<(), String> {
-    const CLEAN: &str = "cargo llvm-cov clean --locked";
-    const COMMAND: &str = "cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only\n          --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89";
-
-    let dockerfile = read_repository_file(".devcontainer/Dockerfile")?;
-    let expected_version = pinned_cargo_llvm_cov_version(&dockerfile, ".devcontainer/Dockerfile")?;
-
-    for workflow_name in ["ci.yml"] {
-        let workflow_path = repository_root().join(".github/workflows").join(workflow_name);
-        let workflow = fs::read_to_string(&workflow_path)
-            .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
-
-        let workflow_version = pinned_cargo_llvm_cov_version(&workflow, workflow_name)?;
-        if workflow_version != expected_version {
-            return Err(format!(
-                "{workflow_name} pins cargo-llvm-cov {workflow_version}, but the Dev Container pins {expected_version}"
-            ));
-        }
-
-        for required in ["rustup component add llvm-tools-preview", CLEAN, COMMAND] {
-            if workflow.matches(required).count() != 1 {
-                return Err(format!(
-                    "{workflow_name} must contain one pinned ComposeLens coverage guard `{required}`"
-                ));
-            }
-        }
+    let policy: Value = serde_json::from_str(&read_repository_file("scripts/validation-policy.json")?)
+        .map_err(|error| error.to_string())?;
+    let expected = serde_json::json!([
+        ["cargo", "llvm-cov", "clean", "--locked"],
+        [
+            "cargo",
+            "llvm-cov",
+            "--locked",
+            "--no-clean",
+            "--workspace",
+            "--all-features",
+            "--all-targets",
+            "--summary-only",
+            "--fail-under-regions",
+            "88",
+            "--fail-under-functions",
+            "87",
+            "--fail-under-lines",
+            "89"
+        ]
+    ]);
+    if policy["tasks"]["coverage"]["commands"] != expected {
+        return Err("ComposeLens coverage commands and 88/87/89 thresholds must remain exact".to_owned());
     }
-
+    let workflow = read_repository_file(".github/workflows/ci.yml")?;
+    if !workflow.contains("task: coverage") || !workflow.contains("shared-rust-ci.yml@") {
+        return Err("CI must run consumer-owned coverage through the shared Rust workflow".to_owned());
+    }
     Ok(())
-}
-
-fn pinned_cargo_llvm_cov_version(document: &str, source: &str) -> Result<String, String> {
-    const WORKFLOW_PREFIX: &str = "run: cargo install --locked --version ";
-    const WORKFLOW_SUFFIX: &str = " cargo-llvm-cov";
-    const DEVCONTAINER_PREFIX: &str = "ARG CARGO_LLVM_COV_VERSION=";
-
-    let versions = document
-        .lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            line.strip_prefix(WORKFLOW_PREFIX)
-                .and_then(|value| value.strip_suffix(WORKFLOW_SUFFIX))
-                .or_else(|| line.strip_prefix(DEVCONTAINER_PREFIX))
-        })
-        .collect::<Vec<_>>();
-
-    if versions.len() != 1 {
-        return Err(format!(
-            "{source} must contain exactly one cargo-llvm-cov version pin, found {}",
-            versions.len()
-        ));
-    }
-
-    let version = versions[0];
-    let components = version.split('.').collect::<Vec<_>>();
-    if components.len() != 3
-        || components
-            .iter()
-            .any(|component| component.is_empty() || !component.bytes().all(|byte| byte.is_ascii_digit()))
-    {
-        return Err(format!(
-            "{source} must pin cargo-llvm-cov to an exact major.minor.patch version, found `{version}`"
-        ));
-    }
-
-    Ok(version.to_owned())
 }
 
 #[test]
 fn ci_uses_a_trusted_change_plan_and_fail_closed_aggregate_gate() -> Result<(), String> {
     let workflow = read_repository_file(".github/workflows/ci.yml")?;
-    let policy = read_repository_file("scripts/validation-policy.json")?;
-    let planner = read_repository_file("scripts/validation-plan.py")?;
+    let policy: Value = serde_json::from_str(&read_repository_file("scripts/validation-policy.json")?)
+        .map_err(|error| error.to_string())?;
+    validate_ci_plan_and_gate(&workflow, &policy)?;
+    for (before, after) in [
+        (
+            "policy-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}",
+            "policy-sha: ${{ github.sha }}",
+        ),
+        ("    if: always()\n", "    if: success()\n"),
+        ("      - coverage\n", ""),
+        (
+            "python -m boxferry_ci gate",
+            "python -m boxferry_ci gate --devcontainer-validation",
+        ),
+    ] {
+        let changed = workflow.replace(before, after);
+        assert_ne!(changed, workflow);
+        assert!(
+            validate_ci_plan_and_gate(&changed, &policy).is_err(),
+            "accepted CI contract drift: {before}"
+        );
+    }
+    Ok(())
+}
+
+fn validate_ci_plan_and_gate(workflow: &str, policy: &Value) -> Result<(), String> {
     for required in [
-        "  validation-plan:\n    name: Validation plan",
-        "ref: ${{ github.event.pull_request.base.sha }}",
-        "python3 .validation-base/scripts/validation-plan.py plan",
-        "jobs = \"rust msrv dependencies api documentation coverage lockfile-release-age\".split()",
-        "  pr-gate:\n    name: Required CI\n    if: always()",
+        "uses: ./_automation/.github/actions/shared-source",
+        "policy-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}",
+        "python -m boxferry_ci plan",
+        "python -m boxferry_ci gate",
         "NEEDS_JSON: ${{ toJSON(needs) }}",
-        "python3 \"${verifier}\" gate",
-        "run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-validation-plan.py",
-        "  lockfile-release-age:\n    name: Lockfile release age",
-        "repository: Strukturpiloten/.github",
-        "ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}",
-        "--repository-root \"${GITHUB_WORKSPACE}\"",
-        "--base \"${BASE_SHA}\"",
-        "--head \"${HEAD_SHA}\"",
-        "--minimum-age-hours 72",
-        "test \"${HEAD_SHA}\" = \"${GITHUB_SHA}\"",
-        "git merge-base --is-ancestor \"${BASE_SHA}\" \"${HEAD_SHA}\"",
+        "shared-dependency-wait.yml@",
+        "candidate_sha: ${{ github.sha }}",
     ] {
         if !workflow.contains(required) {
-            return Err(format!("CI workflow is missing contract `{required}`"));
+            return Err(format!("CI is missing `{required}`"));
+        }
+    }
+    for deferred in [
+        "  devcontainer-validation:",
+        "devcontainer-local",
+        "--devcontainer-validation",
+        "select_devcontainer_validation",
+        "shared-devcontainer-validation.yml@",
+    ] {
+        if workflow.contains(deferred) {
+            return Err(format!("ordinary CI must defer image qualification `{deferred}`"));
         }
     }
     for job in [
@@ -482,51 +461,29 @@ fn ci_uses_a_trusted_change_plan_and_fail_closed_aggregate_gate() -> Result<(), 
         "coverage",
         "lockfile-release-age",
     ] {
-        let selection = format!(
+        if !workflow.contains(&format!(
             "if: needs.validation-plan.outputs.select_{} == 'true'",
             job.replace('-', "_")
-        );
-        if !workflow.contains(&selection) {
-            return Err(format!("CI job {job} is not controlled by the trusted plan"));
+        )) {
+            return Err(format!("CI job {job} must remain plan-controlled"));
         }
     }
-    if workflow.contains("  portability:") || workflow.contains("runs-on: macos-") {
-        return Err("Linux-only CI must not claim macOS runner evidence".to_owned());
+    // Ordinary adoption keeps the exact product gate; image qualification is deferred by ADR 0032.
+    let expected_gate = concat!(
+        "  pr-gate:\n    name: Required CI\n    if: always()\n    needs:\n",
+        "      - validation-plan\n      - rust\n      - msrv\n      - dependencies\n",
+        "      - api\n      - documentation\n      - coverage\n      - lockfile-release-age\n",
+    );
+    if policy["profile_jobs"]["prose"] != serde_json::json!(["documentation", "lockfile-release-age"])
+        || !workflow.contains(expected_gate)
+        || workflow.matches("    name: Required CI\n").count() != 1
+        || workflow.contains("continue-on-error: true")
+        || workflow.contains("--force-full")
+    {
+        return Err("trusted narrow plans and the strict ordinary aggregate must remain active".to_owned());
     }
-    let policy_value: Value =
-        serde_json::from_str(&policy).map_err(|error| format!("validation policy is invalid JSON: {error}"))?;
-    for (pointer, expected) in [
-        ("/schema", serde_json::json!(2)),
-        ("/repository", serde_json::json!("Strukturpiloten/compose-lens")),
-        ("/documentation_examples_manifest", Value::Null),
-        (
-            "/profile_jobs/prose",
-            serde_json::json!(["documentation", "lockfile-release-age"]),
-        ),
-    ] {
-        if policy_value.pointer(pointer) != Some(&expected) {
-            return Err(format!("validation policy has unexpected {pointer}"));
-        }
-    }
-    let executable_jobs = policy_value
-        .pointer("/profile_jobs/executable-docs")
-        .and_then(Value::as_array)
-        .ok_or("validation policy is missing executable-docs jobs")?;
-    if !executable_jobs.starts_with(&[serde_json::json!("rust"), serde_json::json!("msrv")]) {
-        return Err("executable-docs must run Rust and MSRV checks".to_owned());
-    }
-    if !policy.contains("scripts/check-all.sh") {
-        return Err("validation policy is missing the complete local gate".to_owned());
-    }
-    for required in [
-        "def verify_gate(",
-        "def require_worktree_local_target(",
-        "profile_jobs",
-        "local_fingerprint",
-    ] {
-        if !planner.contains(required) {
-            return Err(format!("validation planner is missing `{required}`"));
-        }
+    if workflow.contains("runs-on: macos-") {
+        return Err("Linux CI must not claim macOS evidence".to_owned());
     }
     Ok(())
 }
@@ -534,10 +491,7 @@ fn ci_uses_a_trusted_change_plan_and_fail_closed_aggregate_gate() -> Result<(), 
 #[test]
 fn release_workflow_reuses_ci_for_the_msrv() -> Result<(), String> {
     let workflow = read_repository_file(".github/workflows/release.yml")?;
-    for required in [
-        "needs: [provider-config-conformance, deterministic-validation, release-metadata-validation]",
-        "uses: ./.github/workflows/ci.yml",
-    ] {
+    for required in ["needs_json: ${{ toJSON(needs) }}", "uses: ./.github/workflows/ci.yml"] {
         if !workflow.contains(required) {
             return Err(format!("release workflow is missing reusable CI guard `{required}`"));
         }
@@ -585,8 +539,8 @@ fn local_developer_workflow_covers_format_lint_test_and_release_checks() -> Resu
         "env CARGO_TARGET_DIR=\"${coverage_target_dir}\"",
         "env CARGO_HOME=\"${semver_cargo_home}\"",
         "CARGO_TARGET_DIR=\"${semver_target_dir}\"",
-        "cargo semver-checks check-release",
-        "--package compose-lens",
+        "python3 scripts/shared-ci.py run --event local --task api-development",
+        "--report-json target/api-development-task.json",
     ] {
         if !script.contains(required) {
             return Err(format!("local validation runner missing `{required}`"));
@@ -750,7 +704,7 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
         let workflow = read_repository_file(&format!(".github/workflows/{workflow_name}"))?;
         for required in [
             "npm ci --ignore-scripts",
-            "bash scripts/install-file-tools.sh /usr/local/bin",
+            "bash scripts/install-host-tools.sh",
             "bash scripts/check-files.sh --check",
         ] {
             if !workflow.contains(required) {
@@ -1163,41 +1117,37 @@ fn release_workflow_uses_the_create_response_as_its_draft_identity() -> Result<(
 
 #[test]
 fn release_workflow_uses_only_trusted_publishing() -> Result<(), String> {
-    let workflow_path = repository_root().join(".github/workflows/release.yml");
-    let workflow = fs::read_to_string(&workflow_path)
-        .map_err(|error| format!("failed to read {}: {error}", workflow_path.display()))?;
-
+    let workflow = read_repository_file(".github/workflows/release.yml")?;
     for forbidden in [
         "CRATES_IO_API_TOKEN",
         "CRATES_IO_BOOTSTRAP_TOKEN",
         "cargo login",
-        "--token",
+        "cargo publish --locked",
         "secrets.",
     ] {
         if workflow.contains(forbidden) {
-            return Err(format!(
-                "release workflow contains the forbidden long-lived credential path `{forbidden}`"
-            ));
+            return Err(format!("credential path `{forbidden}` must remain absent"));
         }
     }
-
+    if workflow
+        .matches("uses: ./_automation/.github/actions/shared-crate-publish")
+        .count()
+        != 2
+    {
+        return Err("Release must use shared inventory and protected trusted publication".to_owned());
+    }
     for required in [
         "id-token: write",
-        "rust-lang/crates-io-auth-action@",
-        "CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}",
-        "cargo publish --locked",
+        "validation-only: \"true\"",
+        "validation-only: ${{ inputs.validation_only }}",
+        "validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}",
+        "validation-result: ${{ needs.release-gate.result }}",
+        "needs.crate-preparation.result == 'success'",
     ] {
         if !workflow.contains(required) {
-            return Err(format!(
-                "release workflow is missing the trusted-publishing guard `{required}`"
-            ));
+            return Err(format!("Release is missing `{required}`"));
         }
     }
-
-    if workflow.matches("cargo publish --locked").count() != 1 {
-        return Err("release workflow must contain exactly one publication command".to_owned());
-    }
-
     Ok(())
 }
 
@@ -1252,54 +1202,31 @@ fn validate_release_plz_contract(repository: &str) -> Result<(), String> {
     for required in [
         repository,
         "vars.RELEASE_PLZ_APP_CLIENT_ID",
-        "client-id:",
         "secrets.RELEASE_PLZ_APP_PRIVATE_KEY",
-        "permission-contents: write",
-        "permission-pull-requests: write",
-        "continue-on-error: true",
-        "steps.app-token.outcome == 'failure'",
-        "approve the updated permissions for the App installation",
-        "command: release-pr",
-        "renovate: datasource=crate depName=release-plz",
+        "shared-release-prepare.yml@",
+        "candidate_sha: ${{ github.sha }}",
+        "policy_sha: ${{ github.sha }}",
         "(.head.ref | startswith(\"release-plz-\"))",
         "actions/workflows/release.yml/dispatches",
         "actions: write",
         "No release was dispatched.",
     ] {
         if !workflow.contains(required) {
-            return Err(format!("release-plz workflow is missing `{required}`"));
+            return Err(format!("release preparation is missing `{required}`"));
         }
     }
-    pinned_workflow_tool_version(&workflow, "renovate: datasource=crate depName=release-plz", "version")?;
     for forbidden in [
         "secrets.RELEASE_PLZ_APP_ID",
         "app-id:",
-        "command: release\n",
         "cargo publish",
         "git tag",
         "gh release create",
+        "command: release-pr",
     ] {
         if workflow.contains(forbidden) {
-            return Err(format!("release-plz workflow must not contain `{forbidden}`"));
+            return Err(format!("caller must delegate `{forbidden}` or reject it"));
         }
     }
-
-    for action in ["release-plz/action", "actions/create-github-app-token"] {
-        if !support::has_exactly_one_immutable_versioned_action(&workflow, action) {
-            return Err(format!(
-                "release-plz workflow must contain exactly one immutable versioned `{action}` action"
-            ));
-        }
-    }
-
-    if workflow
-        .matches("renovate: datasource=crate depName=release-plz")
-        .count()
-        != 1
-    {
-        return Err("release-plz action must have one canonical Renovate extraction marker".to_owned());
-    }
-
     let release = read_repository_file(".github/workflows/release.yml")?;
     if release.contains("docs/releases/${version}.md") || !release.contains("bash scripts/extract-release-notes.sh") {
         return Err("protected publication must derive release notes from CHANGELOG.md".to_owned());
@@ -1432,391 +1359,46 @@ fn tracked_files_are_not_ignored() -> Result<(), String> {
 }
 
 #[test]
-fn renovate_tracks_every_directly_pinned_development_tool() -> Result<(), String> {
-    let renovate = read_repository_file(".github/renovate.json")?;
-    let renovate_value: Value =
-        serde_json::from_str(&renovate).map_err(|error| format!("failed to parse Renovate configuration: {error}"))?;
-    validate_renovate_lockfile_policy(&renovate_value)?;
-    for required in [
-        "Update versioned Dev Container tools",
-        "Review the exact Debian Bookworm Dev Container venv package",
-        "Signal updates for checksum-pinned file-quality tools",
-        "Update directly pinned workflow tool versions",
-        "Update the documented Dev Container CLI",
-        "Update the GitHub CLI installed in the Dev Container",
-        "Signal manual review for provider-conformance Python bootstrap pins",
-        "sha256=(?<currentDigest>[a-f0-9]{64})",
-        "Track the reviewed Python bootstrap runtime across the provider matrix and runner",
-        "Track fixed GitHub-hosted runner environments",
-        "Require provenance and checksum review for provider-conformance bootstrap pins",
-        "Review GitHub-hosted runner environment upgrades manually",
-        r#""matchManagers": ["cargo"]"#,
-        r#""matchManagers": ["npm"]"#,
-        r#""matchManagers": ["github-actions"]"#,
-        r#""matchManagers": ["devcontainer"]"#,
-        r#""matchManagers": ["rust-toolchain"]"#,
-        "Automerge tested non-major dependency updates",
-        "Do not delay BoxFerry and Lens releases",
-        r#""minimumReleaseAge": "0 days""#,
-        r#""platformAutomerge": false"#,
-        r#""boxferry-model""#,
-        r#""compose-lens""#,
-        r#""podman-lens""#,
-        r#""quadlet-lens""#,
-    ] {
-        if !renovate.contains(required) {
-            return Err(format!("Renovate configuration is missing `{required}`"));
+fn renovate_delegates_shared_policy_and_keeps_consumer_pin_ownership() -> Result<(), String> {
+    let manifest: Value =
+        serde_json::from_str(&read_repository_file(".github/automation.json")?).map_err(|error| error.to_string())?;
+    let revision = manifest["revision"].as_str().ok_or("missing immutable revision")?;
+    let config: Value =
+        serde_json::from_str(&read_repository_file(".github/renovate.json")?).map_err(|error| error.to_string())?;
+    let expected = serde_json::json!([
+        format!("github>Strukturpiloten/boxferry//renovate-presets/common#{revision}"),
+        format!("github>Strukturpiloten/boxferry//renovate-presets/rust#{revision}")
+    ]);
+    if config["extends"] != expected {
+        return Err("common and Rust policy must share the manifest revision".to_owned());
+    }
+    for field in ["minimumReleaseAge", "automerge", "lockFileMaintenance"] {
+        if config.get(field).is_some() {
+            return Err(format!("consumer must not duplicate shared `{field}`"));
         }
     }
-
-    if renovate.matches(r#""automerge": false"#).count() != 5 {
-        return Err("Renovate must keep Dev Container features, Debian venv, checksum tools, provider bootstrap pins, and hosted runners manual".to_owned());
-    }
-
-    validate_python_venv_renovate_policy(&renovate_value)?;
-
-    for workflow_name in ["ci.yml"] {
-        let workflow = read_repository_file(&format!(".github/workflows/{workflow_name}"))?;
-        for required in [
-            "renovate: datasource=crate depName=cargo-llvm-cov",
-            "renovate: datasource=node-version depName=node",
-        ] {
-            if !workflow.contains(required) {
-                return Err(format!("{workflow_name} is missing Renovate marker `{required}`"));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn validate_python_venv_renovate_policy(renovate: &Value) -> Result<(), String> {
-    let dockerfile = read_repository_file(".devcontainer/Dockerfile")?;
-    let marker = "# renovate: datasource=repology depName=debian_12/python3-venv\nARG PYTHON3_VENV_VERSION=";
-    if dockerfile.matches(marker).count() != 1
-        || dockerfile.matches("ARG PYTHON3_VENV_VERSION=").count() != 1
-        || !dockerfile
-            .contains("apt-get install --yes --no-install-recommends \"python3-venv=${PYTHON3_VENV_VERSION}\"")
-    {
-        return Err("the Dev Container must install one exact Renovate-owned Bookworm python3-venv package".to_owned());
-    }
-    let owner = renovate["customManagers"]
+    let managers = config["customManagers"]
         .as_array()
-        .ok_or("Renovate customManagers must be an array")?
-        .iter()
-        .filter(|manager| {
-            manager["description"] == "Update versioned Dev Container tools"
-                && manager["managerFilePatterns"].as_array().is_some_and(|patterns| {
-                    patterns
-                        .iter()
-                        .any(|pattern| pattern == "/^\\.devcontainer/Dockerfile$/")
-                })
-                && manager["matchStrings"].as_array().is_some_and(|patterns| {
-                    patterns.iter().any(|pattern| {
-                        pattern.as_str().is_some_and(|pattern| {
-                            pattern.contains("datasource=(?<datasource>")
-                                && pattern.contains("ARG [A-Z0-9_]+_VERSION=(?<currentValue>")
-                        })
-                    })
-                })
-        })
-        .count();
-    let package_rule = renovate["packageRules"]
-        .as_array()
-        .ok_or("Renovate packageRules must be an array")?
-        .iter()
-        .filter(|rule| {
-            rule["description"] == "Review the exact Debian Bookworm Dev Container venv package"
-                && rule["matchDatasources"]
-                    .as_array()
-                    .is_some_and(|values| values.len() == 1 && values[0] == "repology")
-                && rule["matchPackageNames"]
-                    .as_array()
-                    .is_some_and(|values| values.len() == 1 && values[0] == "debian_12/python3-venv")
-                && rule["versioning"] == "deb"
-                && rule["automerge"] == false
-                && rule["dependencyDashboardApproval"] == true
-        })
-        .count();
-    if owner != 1 || package_rule != 1 {
-        return Err(
-            "the Bookworm python3-venv pin needs one Renovate extraction owner and one manual Debian package rule"
-                .to_owned(),
-        );
-    }
-    Ok(())
-}
-
-fn validate_renovate_lockfile_policy(renovate: &Value) -> Result<(), String> {
-    if renovate["minimumReleaseAge"] != "3 days" {
-        return Err("Renovate must retain the three-day minimum release age".to_owned());
-    }
-    let rules = renovate["packageRules"]
-        .as_array()
-        .ok_or_else(|| "Renovate packageRules must be an array".to_owned())?;
-    let lock_matches = rules
-        .iter()
-        .enumerate()
-        .filter(|(_, rule)| rule["description"] == "Automerge green-gated lock-file maintenance")
-        .collect::<Vec<_>>();
-    if lock_matches.len() != 1 {
-        return Err("Renovate must keep exactly one lock-file maintenance rule".to_owned());
-    }
-    let (lock_index, lock_rule) = lock_matches[0];
-    if lock_rule["matchUpdateTypes"] != serde_json::json!(["lockFileMaintenance"])
-        || lock_rule["minimumReleaseAge"] != "0 days"
-        || lock_rule["automerge"] != true
-        || lock_rule["automergeType"] != "pr"
-        || lock_rule["platformAutomerge"] != false
-    {
-        return Err("Renovate lock-file maintenance must be PR-based and green-gated".to_owned());
-    }
-    let generic_index = rules
-        .iter()
-        .position(|rule| rule["description"] == "Automerge tested non-major dependency updates")
-        .ok_or_else(|| "Renovate generic non-major automerge rule is missing".to_owned())?;
-    let generic_rule = &rules[generic_index];
-    if generic_rule["matchUpdateTypes"] != serde_json::json!(["minor", "patch", "pin", "digest", "pinDigest"])
-        || generic_rule["automerge"] != true
-        || generic_rule["automergeType"] != "pr"
-        || generic_rule["platformAutomerge"] != false
-        || lock_index <= generic_index
-    {
-        return Err("Renovate automerge categories and ordering must remain exact and green-gated".to_owned());
-    }
+        .ok_or("consumer regex managers are missing")?;
     for description in [
-        "Keep Dev Container feature versions current; the lock file owns digests",
-        "Require checksum review for downloaded file-quality tools",
+        "Update versioned Dev Container tools",
+        "Update the Dev Container base release and digest together",
+        "Track fixed GitHub-hosted runner environments",
     ] {
-        let (index, rule) = rules
+        if managers
             .iter()
-            .enumerate()
-            .find(|(_, rule)| rule["description"] == description)
-            .ok_or_else(|| format!("Renovate manual rule `{description}` is missing"))?;
-        if index <= generic_index || index <= lock_index || rule["automerge"] != false {
-            return Err(format!(
-                "Renovate manual rule `{description}` must follow both automerge rules and disable it explicitly"
-            ));
+            .filter(|manager| manager["description"] == description)
+            .count()
+            != 1
+        {
+            return Err(format!("consumer must keep one `{description}` owner"));
         }
     }
-    validate_renovate_first_party_age_policy(renovate)?;
-    validate_shared_policy_manager(renovate)
-}
-
-fn validate_renovate_first_party_age_policy(renovate: &Value) -> Result<(), String> {
-    let rules = renovate["packageRules"]
-        .as_array()
-        .ok_or_else(|| "Renovate packageRules must be an array".to_owned())?;
-    let description = "Do not delay BoxFerry and Lens releases";
-    let matching_rules = rules
-        .iter()
-        .filter(|rule| rule["description"] == description)
-        .collect::<Vec<_>>();
-    let expected = serde_json::json!({
-        "description": description,
-        "matchManagers": ["cargo"],
-        "matchDatasources": ["crate"],
-        "matchPackageNames": [
-            "boxferry", "boxferry-model", "boxferry-engine", "boxferry-compose",
-            "boxferry-podman", "boxferry-quadlet", "compose-lens", "podman-lens",
-            "quadlet-lens", "docker-lens"
-        ],
-        "minimumReleaseAge": "0 days"
-    });
-    if matching_rules.len() != 1 || matching_rules[0] != &expected {
-        return Err(
-            "Renovate first-party age exception must contain only the exact BoxFerry and four Lens crates in the Cargo/crate ecosystem"
-                .to_owned(),
-        );
-    }
-    if rules.iter().any(|rule| {
-        rule.get("minimumReleaseAge").is_some()
-            && rule["description"] != description
-            && rule["description"] != "Automerge green-gated lock-file maintenance"
-    }) {
-        return Err("Renovate must not add another package release-age override".to_owned());
+    let dockerfile = read_repository_file(".devcontainer/Dockerfile")?;
+    if !dockerfile.contains("apt-get install --yes --no-install-recommends \"python3-venv=${PYTHON3_VENV_VERSION}\"") {
+        return Err("signed Bookworm venv package pin must remain explicit".to_owned());
     }
     Ok(())
-}
-
-#[test]
-fn renovate_first_party_age_exception_is_exact_and_scoped() -> Result<(), String> {
-    let renovate: Value =
-        serde_json::from_str(&read_repository_file(".github/renovate.json")?).map_err(|error| error.to_string())?;
-    validate_renovate_lockfile_policy(&renovate)
-}
-
-#[test]
-fn renovate_rejects_broadened_or_incomplete_first_party_age_exceptions() -> Result<(), String> {
-    let renovate: Value =
-        serde_json::from_str(&read_repository_file(".github/renovate.json")?).map_err(|error| error.to_string())?;
-    let rule_index = renovate["packageRules"]
-        .as_array()
-        .ok_or("Renovate packageRules must be an array")?
-        .iter()
-        .position(|rule| rule["description"] == "Do not delay BoxFerry and Lens releases")
-        .ok_or("Renovate first-party age exception is missing")?;
-    let rule_path = format!("/packageRules/{rule_index}");
-    for (field, value) in [
-        ("matchManagers", serde_json::json!(["npm"])),
-        ("matchManagers", serde_json::json!(["*"])),
-        ("matchManagers", serde_json::json!(["cargo", "npm"])),
-        ("matchManagers", Value::Null),
-        ("matchDatasources", serde_json::json!(["npm"])),
-        ("matchDatasources", serde_json::json!(["*"])),
-        ("matchDatasources", serde_json::json!(["crate", "npm"])),
-        ("matchDatasources", Value::Null),
-        ("minimumReleaseAge", serde_json::json!("1 day")),
-        ("automerge", serde_json::json!(true)),
-    ] {
-        let mut mutated = renovate.clone();
-        mutated["packageRules"][rule_index][field] = value;
-        assert!(
-            validate_renovate_lockfile_policy(&mutated).is_err(),
-            "accepted mutated first-party rule field {field}"
-        );
-    }
-    let names_path = format!("{rule_path}/matchPackageNames");
-    let names = renovate
-        .pointer(&names_path)
-        .and_then(Value::as_array)
-        .ok_or("Renovate first-party package names must be an array")?;
-    for (index, name) in names.iter().enumerate() {
-        let mut mutated = renovate.clone();
-        mutated
-            .pointer_mut(&names_path)
-            .and_then(Value::as_array_mut)
-            .ok_or("Renovate first-party package names must be an array")?
-            .remove(index);
-        assert!(
-            validate_renovate_lockfile_policy(&mutated).is_err(),
-            "accepted omission of first-party package {name}"
-        );
-    }
-    for name in ["*", "*-lens", "compose-lens-*", "compose-lens-extra", "serde"] {
-        let mut mutated = renovate.clone();
-        mutated
-            .pointer_mut(&names_path)
-            .and_then(Value::as_array_mut)
-            .ok_or("Renovate first-party package names must be an array")?
-            .push(serde_json::json!(name));
-        assert!(
-            validate_renovate_lockfile_policy(&mutated).is_err(),
-            "accepted expanded first-party package name {name}"
-        );
-    }
-    let mut mutated = renovate.clone();
-    mutated["minimumReleaseAge"] = serde_json::json!("0 days");
-    assert!(validate_renovate_lockfile_policy(&mutated).is_err());
-    let mut mutated = renovate.clone();
-    mutated["packageRules"]
-        .as_array_mut()
-        .ok_or("Renovate packageRules must be an array")?
-        .remove(rule_index);
-    assert!(validate_renovate_lockfile_policy(&mutated).is_err());
-    let mut mutated = renovate.clone();
-    let duplicate = mutated["packageRules"][rule_index].clone();
-    mutated["packageRules"]
-        .as_array_mut()
-        .ok_or("Renovate packageRules must be an array")?
-        .push(duplicate);
-    assert!(validate_renovate_lockfile_policy(&mutated).is_err());
-    let mut mutated = renovate;
-    mutated["packageRules"]
-        .as_array_mut()
-        .ok_or("Renovate packageRules must be an array")?
-        .push(serde_json::json!({
-            "description": "Bypass third-party release age",
-            "matchPackageNames": ["serde"],
-            "minimumReleaseAge": "0 days"
-        }));
-    assert!(validate_renovate_lockfile_policy(&mutated).is_err());
-    Ok(())
-}
-
-fn validate_shared_policy_manager(renovate: &Value) -> Result<(), String> {
-    let managers = renovate["customManagers"]
-        .as_array()
-        .ok_or_else(|| "Renovate customManagers must be an array".to_owned())?
-        .iter()
-        .filter(|manager| manager["description"] == "Track the immutable Strukturpiloten shared-policy commit")
-        .collect::<Vec<_>>();
-    if managers.len() != 1
-        || managers[0]["customType"] != "regex"
-        || managers[0]["managerFilePatterns"] != serde_json::json!([r"/^\.github/workflows/.*\.ya?ml$/"])
-    {
-        return Err("Renovate must own exactly one immutable shared workflow revision marker".to_owned());
-    }
-    if managers[0]["datasourceTemplate"] != "github-digest" {
-        return Err("shared-policy Renovate manager must declare the github-digest datasource".to_owned());
-    }
-    let pattern = managers[0]["matchStrings"][0]
-        .as_str()
-        .ok_or_else(|| "shared-policy Renovate manager must have one regex".to_owned())?;
-    let template = managers[0]["autoReplaceStringTemplate"]
-        .as_str()
-        .ok_or_else(|| "shared-policy Renovate manager must have a replacement template".to_owned())?;
-    if !template.contains('\n') || template.contains(r"\n") {
-        return Err("shared-policy Renovate replacement must use a real newline".to_owned());
-    }
-    let new_digest = "b4a7d2e8f1c903b6a5d4e2f7182930c4b6d5e7f1";
-    let rewritten = template
-        .replace("{{{indentation}}}", "      ")
-        .replace("{{{depName}}}", "Strukturpiloten/.github")
-        .replace("{{{newValue}}}", "main")
-        .replace("{{{newDigest}}}", new_digest);
-    if reextract_shared_policy_marker(pattern, &rewritten) != Some(("Strukturpiloten/.github", "main", new_digest)) {
-        return Err("shared-policy Renovate regex must re-extract its replacement".to_owned());
-    }
-    let workflow = read_repository_file(".github/workflows/ci.yml")?;
-    let marker = "# renovate: datasource=github-digest depName=Strukturpiloten/.github currentValue=main";
-    let lines = workflow.lines().collect::<Vec<_>>();
-    let marker_line = lines
-        .iter()
-        .position(|line| line.trim() == marker)
-        .ok_or_else(|| "CI shared-policy Renovate marker is missing".to_owned())?;
-    let shared_ref = lines
-        .get(marker_line + 1)
-        .and_then(|line| line.trim().strip_prefix("ref: "))
-        .ok_or_else(|| "CI shared-policy marker must be adjacent to its ref".to_owned())?;
-    if workflow.matches(marker).count() != 1
-        || shared_ref.len() != 40
-        || !shared_ref
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err("CI must pin one full immutable shared workflow revision".to_owned());
-    }
-    Ok(())
-}
-
-fn reextract_shared_policy_marker<'a>(
-    manager_pattern: &str,
-    candidate: &'a str,
-) -> Option<(&'a str, &'a str, &'a str)> {
-    let expected_pattern = "(?<indentation>[ \\t]*)# renovate: datasource=github-digest depName=(?<depName>Strukturpiloten/\\.github) currentValue=(?<currentValue>main)\\n[ \\t]*ref:\\s*(?<currentDigest>[a-f0-9]{40})";
-    if manager_pattern != expected_pattern {
-        return None;
-    }
-    let (marker_line, ref_line) = candidate.split_once('\n')?;
-    let (indentation, marker) = marker_line.split_once('#')?;
-    if !indentation.bytes().all(|byte| matches!(byte, b' ' | b'\t')) {
-        return None;
-    }
-    let marker = marker.strip_prefix(" renovate: datasource=github-digest depName=")?;
-    let (dep_name, current_value) = marker.split_once(" currentValue=")?;
-    if dep_name != "Strukturpiloten/.github" || current_value != "main" {
-        return None;
-    }
-    let ref_line = ref_line.strip_prefix(indentation)?.strip_prefix("ref: ")?;
-    if ref_line.len() != 40
-        || !ref_line
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-    {
-        return None;
-    }
-    Some((dep_name, current_value, ref_line))
 }
 
 fn validate_release_note_extraction(repository: &str) -> Result<(), String> {
@@ -2294,18 +1876,30 @@ fn standing_git_authorization_is_scoped_and_safeguarded() -> Result<(), Box<dyn 
 // Keep configuration assertions above platform-independent.
 #[test]
 fn ci_checks_python_venv_before_expensive_rust_validation() -> Result<(), String> {
-    let workflow = read_repository_file(".github/workflows/ci.yml")?;
-    let preflight = workflow
-        .find("run: bash .devcontainer/verify-tools.sh --check-python-venv")
-        .ok_or("CI must check a pip-capable Python venv")?;
-    let cargo_check = workflow
-        .find("run: cargo ci-check")
-        .ok_or("CI Rust quality must run cargo ci-check")?;
-    let bootstrap = workflow
-        .find("run: bash scripts/test-provider-python-bootstrap.sh")
-        .ok_or("CI must run the provider Python bootstrap regression")?;
-    if !(preflight < cargo_check && cargo_check < bootstrap) {
-        return Err("CI must check Python venv before expensive Rust validation and bootstrap".to_owned());
+    let policy: Value = serde_json::from_str(&read_repository_file("scripts/validation-policy.json")?)
+        .map_err(|error| error.to_string())?;
+    let commands = policy["tasks"]["rust-quality"]["commands"]
+        .as_array()
+        .ok_or("Rust quality task is missing")?;
+    if commands.first()
+        != Some(&serde_json::json!([
+            "bash",
+            ".devcontainer/verify-tools.sh",
+            "--check-python-venv"
+        ]))
+    {
+        return Err("pip-capable venv preflight must be first".to_owned());
+    }
+    let check = commands
+        .iter()
+        .position(|value| value == &serde_json::json!(["cargo", "ci-check"]))
+        .ok_or("cargo check is missing")?;
+    let bootstrap = commands
+        .iter()
+        .position(|value| value == &serde_json::json!(["bash", "scripts/test-provider-python-bootstrap.sh"]))
+        .ok_or("provider bootstrap regression is missing")?;
+    if check >= bootstrap {
+        return Err("check must precede provider bootstrap regression".to_owned());
     }
     Ok(())
 }

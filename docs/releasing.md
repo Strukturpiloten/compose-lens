@@ -81,3 +81,15 @@ draft release, and skips a crate already visible on crates.io.
 
 Never replace a published tag or release. If a workflow correction needs a new commit after an
 unpublished tag was created, remove only that unpublished tag before retrying.
+
+## Shared implementation and image qualification
+
+Release preparation uses the manifest-selected immutable shared implementation. It preserves
+release-plz 0.4.0 and the updated 0.5.148 Action wrapper. Caller-owned notes, package checks,
+checksums, attestations and immutable GitHub-release hooks remain. Shared mechanics own protected
+crates.io publication; validation-only execution cannot reach its credentialed publisher.
+
+Release requests published API compatibility and the shared API job's distinct published receipt.
+A generic candidate receipt is insufficient. Ordinary adoption does not publish software or
+change protected release approval. Image qualification and updater activation are separate
+GitHub CI work under issue #563; no local private-store/root-control requirement is added.

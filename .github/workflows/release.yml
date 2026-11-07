@@ -30,14 +30,20 @@ jobs:
     name: Validate release candidate
     if: github.repository == 'Strukturpiloten/compose-lens'
     uses: ./.github/workflows/ci.yml
+    with:
+      api_purpose: published
     permissions:
+      actions: read
       contents: read
+      statuses: read
 
   release-metadata-validation:
     name: Validate release metadata
     if: github.repository == 'Strukturpiloten/compose-lens'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      candidate_sha: ${{ steps.candidate.outputs.sha }}
     permissions:
       contents: read
     steps:
@@ -55,45 +61,70 @@ jobs:
           test "${GITHUB_REF}" = "refs/heads/${DEFAULT_BRANCH}"
           bash scripts/check-release-metadata.sh --release
 
+      - name: Expose exact validated candidate
+        id: candidate
+        run: printf 'sha=%s\n' "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
   release-gate:
     name: Release validation gate
     if: always()
-    needs: [provider-config-conformance, deterministic-validation, release-metadata-validation]
+    needs:
+      - provider-config-conformance
+      - deterministic-validation
+      - release-metadata-validation
+    permissions:
+      contents: read
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@9eb757145e7e078ba8944df525c9884eec87effc # automation-v1 interface v1
+    with:
+      candidate_sha: ${{ github.sha }}
+      automation_sha: 9eb757145e7e078ba8944df525c9884eec87effc
+      policy_sha: ${{ github.sha }}
+      config_path: scripts/release-policy.json
+      needs_json: ${{ toJSON(needs) }}
+  crate-preparation:
+    name: Validate shared publication inventory without publishing
+    needs: release-gate
+    if: github.repository == 'Strukturpiloten/compose-lens' && needs.release-gate.result == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - name: Require every release prerequisite to succeed
-        shell: bash
-        env:
-          PROVIDER_RESULT: ${{ needs.provider-config-conformance.result }}
-          DETERMINISTIC_RESULT: ${{ needs.deterministic-validation.result }}
-          METADATA_RESULT: ${{ needs.release-metadata-validation.result }}
-        run: |
-          set -euo pipefail
-          results=(
-            "Provider configuration conformance|${PROVIDER_RESULT}"
-            "Complete deterministic CI|${DETERMINISTIC_RESULT}"
-            "Release metadata|${METADATA_RESULT}"
-          )
-          failed=0
-          for result in "${results[@]}"; do
-            name="${result%%|*}"
-            status="${result#*|}"
-            printf 'Release prerequisite %s: %s\n' "${name}" "${status}"
-            if [[ "${status}" != success ]]; then
-              echo "::error title=Release prerequisite did not succeed::${name} concluded ${status}."
-              failed=1
-            fi
-          done
-          (( failed == 0 ))
+      - name: Check out exact candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: source
+          persist-credentials: false
+      - name: Check out immutable shared automation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Strukturpiloten/boxferry
+          # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
+          ref: 9eb757145e7e078ba8944df525c9884eec87effc
+          path: _automation
+          persist-credentials: false
+      - name: Install locked shared Python tooling
+        uses: ./_automation/.github/actions/shared-python
+      - name: Validate exact-gated crate inventory without credentials or registry access
+        uses: ./_automation/.github/actions/shared-crate-publish
+        with:
+          candidate-sha: ${{ github.sha }}
+          automation-sha: 9eb757145e7e078ba8944df525c9884eec87effc
+          release-config: ${{ github.workspace }}/source/scripts/release-policy.json
+          package: compose-lens
+          validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}
+          validation-result: ${{ needs.release-gate.result }}
+          validation-only: "true"
 
   release:
     name: Publish ComposeLens
     if: >-
       github.repository == 'Strukturpiloten/compose-lens' &&
       inputs.validation_only != true &&
-      needs.release-gate.result == 'success'
-    needs: release-gate
+      needs.release-gate.result == 'success' &&
+      needs.crate-preparation.result == 'success'
+    needs: [release-gate, crate-preparation]
     environment: release
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -109,10 +140,22 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
+          path: source
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Check out immutable shared automation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Strukturpiloten/boxferry
+          # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
+          ref: 9eb757145e7e078ba8944df525c9884eec87effc
+          path: _automation
+          persist-credentials: false
+      - name: Install locked shared Python tooling
+        uses: ./_automation/.github/actions/shared-python
       - name: Install configured Rust toolchain
+        working-directory: source
         run: rustup show active-toolchain
 
       - name: Derive and validate release metadata
@@ -120,6 +163,7 @@ jobs:
         shell: bash
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        working-directory: source
         run: |
           set -euo pipefail
 
@@ -148,42 +192,11 @@ jobs:
             printf 'crate=%s\n' "${crate}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Check crates.io publication state
-        id: registry
-        shell: bash
-        env:
-          CRATES_IO_USER_AGENT: ComposeLens release workflow (+https://github.com/Strukturpiloten/compose-lens)
-          VERSION: ${{ steps.metadata.outputs.version }}
-        run: |
-          set -euo pipefail
-          status="$(
-            curl --silent --show-error \
-              --user-agent "${CRATES_IO_USER_AGENT}" \
-              --retry 3 \
-              --retry-all-errors \
-              --connect-timeout 10 \
-              --max-time 60 \
-              --output /dev/null \
-              --write-out '%{http_code}' \
-              "https://crates.io/api/v1/crates/compose-lens/${VERSION}"
-          )"
-          case "${status}" in
-            200)
-              echo "published=true" >> "${GITHUB_OUTPUT}"
-              ;;
-            404)
-              echo "published=false" >> "${GITHUB_OUTPUT}"
-              ;;
-            *)
-              echo "Unexpected crates.io response: HTTP ${status}." >&2
-              exit 1
-              ;;
-          esac
-
       - name: Build release package and checksum
         shell: bash
         env:
           CRATE: ${{ steps.metadata.outputs.crate }}
+        working-directory: source
         run: |
           set -euo pipefail
           cargo ci-package
@@ -192,13 +205,14 @@ jobs:
       - name: Attest release package
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ steps.metadata.outputs.crate }}
+          subject-path: ${{ github.workspace }}/source/${{ steps.metadata.outputs.crate }}
 
       - name: Create or verify annotated release tag
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.metadata.outputs.tag }}
+        working-directory: source
         run: |
           set -euo pipefail
 
@@ -233,6 +247,7 @@ jobs:
           NOTES: ${{ steps.metadata.outputs.notes }}
           TAG: ${{ steps.metadata.outputs.tag }}
           VERSION: ${{ steps.metadata.outputs.version }}
+        working-directory: source
         run: |
           set -euo pipefail
 
@@ -321,6 +336,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
           UPLOAD_URL: ${{ steps.release.outputs.upload_url }}
+        working-directory: source
         run: |
           set -euo pipefail
 
@@ -366,22 +382,22 @@ jobs:
           upload_asset "${CRATE}" "application/gzip"
           upload_asset "${CRATE}.sha256" "text/plain"
 
-      - name: Authenticate to crates.io with trusted publishing
-        id: crates-auth
-        if: steps.registry.outputs.published != 'true'
-        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
-
-      - name: Publish crate with trusted publishing
-        if: steps.registry.outputs.published != 'true'
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
-        run: cargo publish --locked
-
+      - name: Publish exact approved crate through shared mechanics
+        uses: ./_automation/.github/actions/shared-crate-publish
+        with:
+          candidate-sha: ${{ github.sha }}
+          automation-sha: 9eb757145e7e078ba8944df525c9884eec87effc
+          release-config: ${{ github.workspace }}/source/scripts/release-policy.json
+          package: compose-lens
+          validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}
+          validation-result: ${{ needs.release-gate.result }}
+          validation-only: ${{ inputs.validation_only }}
       - name: Publish immutable GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        working-directory: source
         run: |
           set -euo pipefail
           jq --null-input '{draft: false, make_latest: "true"}' |

@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "repository": "Strukturpiloten/compose-lens",
+  "packages": ["compose-lens"],
+  "required_jobs": [
+    "provider-config-conformance",
+    "deterministic-validation",
+    "release-metadata-validation"
+  ],
+  "publication_enabled": true
+}

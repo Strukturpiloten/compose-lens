@@ -79,6 +79,41 @@
     },
     "release-metadata-strict": {
       "commands": [["bash", "scripts/check-release-metadata.sh", "--release"]]
+    },
+    "python-quality": {
+      "commands": [
+        ["ruff", "check", "--config", "pyproject.toml", "scripts"],
+        ["ruff", "format", "--check", "--config", "pyproject.toml", "scripts"],
+        ["ty", "check", "--project", ".", "scripts"],
+        ["python3", "scripts/test-automation-contract.py"]
+      ],
+      "timeout_seconds": 300
+    },
+    "python-format": {
+      "commands": [["ruff", "format", "--config", "pyproject.toml", "scripts"]]
+    },
+    "api-development": {
+      "commands": [
+        [
+          "python",
+          "-m",
+          "boxferry_ci.api_baselines",
+          "run",
+          "--repository-root",
+          ".",
+          "--repository",
+          "Strukturpiloten/compose-lens",
+          "--api-purpose",
+          "development",
+          "--package",
+          "compose-lens",
+          "--release-type",
+          "minor",
+          "--report-json",
+          "target/api-development.json"
+        ]
+      ],
+      "timeout_seconds": 1200
     }
   }
 }

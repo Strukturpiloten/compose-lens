@@ -1,8 +1,8 @@
 # Development environment
 
-The supported setup is the repository's unprivileged VS Code Dev Container. Reopen the checkout in
-the container before running the complete gate; it contains the exact Rust and repository tools used
-by CI.
+Use VS Code Dev Containers with the existing configured Podman engine and storage; rootless
+operation is preferred. The current image remains unchanged. Ordinary tooling follows the
+manifest-selected shared implementation; rebuilding or qualifying an image is separate work.
 
 ## Sources of truth
 
@@ -14,17 +14,27 @@ by CI.
 | Container base and installed tools       | `.devcontainer/Dockerfile`             |
 | Dev Container features                   | `.devcontainer/devcontainer-lock.json` |
 | Node-based file tools                    | `package-lock.json`                    |
-| Native file-tool checksums               | `scripts/install-file-tools.sh`        |
+| Legacy image file-tool checksums         | `scripts/install-file-tools.sh`        |
 
 CI and release workflows read versions from these files instead of maintaining another prose copy.
-Renovate proposes updates; every proposal receives ordinary review and validation.
+Ordinary development updates merge automatically after the required integrity and compatibility
+checks. Qualified provider and workload targets remain fixed under the dependency policy.
 
-The Bookworm Dev Container installs an exact `python3-venv` package from Debian's signed apt
-repository. Apt verifies package checksums through signed repository metadata rather than a
-separate hand-written checksum. The Dockerfile pin is the single version source; Renovate tracks
-the Debian 12 package through Repology and requires manual candidate review. Debian's package
-metadata lists `3.11.2-1+b1` for both amd64 and arm64 at this pin. Review any candidate against
-the pinned image's apt indexes before changing it.
+The existing Bookworm image retains its exact signed `python3-venv` package, legacy file tools
+and Feature integrity graph. Image and Feature proposals remain disabled pending fresh standard
+GitHub CI qualification; ordinary dependency updates are not held by that image rule.
+
+Repository automation uses `scripts/shared-ci.py` and the exact revision in
+`.github/automation.json`. The shared locked Python project owns uv, Ruff, ty, and their integrity
+metadata; consumers do not duplicate these package versions. Its verified local bootstrap starts
+from Python. The separate system venv/pip probe remains necessary for native provider-bootstrap
+tests. A development implementation override is explicitly marked mutable and cannot establish
+publication evidence.
+
+Ordinary host file tools use `scripts/install-host-tools.sh` and the canonical shared inventory.
+Python tooling is bootstrapped from the selected locked project. The retained image-only installer
+is not a fallback for host or CI tooling. Package and compiler declarations keep their existing
+ordinary owners even when an image consumes those files.
 
 ## Complete validation
 
@@ -44,9 +54,19 @@ non-Rust formatting, workflow security, repository policy, all targets, Clippy, 
 package contents, the offline provider-bootstrap regression, coverage ratchets, MSRV, dependency
 policy, offline links, and SemVer checks. Any later edit invalidates the result.
 
+The complete ordinary gate retains all Rust, provider, policy, coverage and API checks. It does
+not build or run the Dev Container. Use VS Code Dev Containers with the existing configured
+Podman engine and storage; rootless operation is preferred. No private graph root, root bridge
+or mandatory local image controls are introduced. Fresh image qualification runs separately on
+standard GitHub CI before image-update activation under issue #563.
+
 The issue-to-PR sequence and ownership rules are canonical in [`AGENTS.md`](../AGENTS.md). Human and
 agent contributors use the same complete gate. The local change-aware planner and VS Code tasks
 can shorten iteration on public prose, but do not replace the complete pre-publication run.
+
+Ordinary adoption uses the existing local checks and configured Podman setup in VS Code Dev
+Containers. It adds no local image, private-store or privilege prerequisite. Fresh standard
+GitHub CI image qualification under issue #563 remains separate from ordinary adoption.
 
 ## Focused checks
 
@@ -81,13 +101,16 @@ scheduled automation performs rate-limited external checks.
 
 Coverage and SemVer artifacts use repository-specific writable storage below
 `$CARGO_TARGET_DIR/check-all/compose-lens`. This avoids another repository's cleanup, read-only global
-package locks, or stale generated Rustdoc projects affecting a result.
+package locks, or stale generated Rustdoc projects affecting a result. Before SemVer analysis,
+the shared loader verifies the declared Cargo tool and Rust channel using that same isolated
+Cargo home.
 
 ## Updating the container
 
-When a Dev Container feature changes, regenerate its committed lock with the pinned CLI version from
-the repository configuration, review resolved versions and integrity hashes, rebuild, then run the
-complete gate. Do not hand-edit a resolved feature reference merely to satisfy a check.
+Direct image, Feature and legacy image-tool proposals remain disabled until fresh standard
+GitHub CI qualification is reviewed under issue #563. Retain the current image, Feature lock,
+checksums and VS Code lifecycle definitions meanwhile. Rebuilding the existing setup does not
+activate the deferred updater or establish new qualification evidence.
 
 ## External conformance
 
@@ -112,3 +135,10 @@ authorization in [`AGENTS.md`](../AGENTS.md).
 The shell-runner regression tests target the Linux Dev Container gate. Agent-configuration checks
 remain platform-independent. macOS client compatibility is intended but not verified by CI; the
 CI and release validation lanes are Linux-only.
+
+Ordinary downloaded tools use `scripts/install-host-tools.sh`, the selected immutable shared
+implementation and its architecture-specific integrity inventory. CI uses this same launcher.
+Run it with a caller-owned destination and put that directory on PATH; it does not require sudo.
+The existing Dev Container alone retains `scripts/install-file-tools.sh` and its pinned legacy
+image tools. Image and Feature proposals stay disabled until fresh GitHub qualification. The
+image closure is unchanged and remains distinct from ordinary package/compiler/tool ownership.
