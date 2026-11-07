@@ -1,473 +1,119 @@
 #!/usr/bin/env python3
-"""Regression contracts for the shared change-aware validation planner."""
+"""Independent ComposeLens expectations for the canonical planner and gate."""
 
 from __future__ import annotations
 
-import argparse
 import copy
-import importlib.util
 import json
-import os
-from pathlib import Path
-import re
-import subprocess
-import sys
-import tempfile
-import textwrap
 import unittest
-from unittest.mock import patch
+from pathlib import Path
+from typing import Any
 
+from boxferry_ci.contracts import ContractError
+from boxferry_ci.gate import GateFailure, verify_gate
+from boxferry_ci.planner import Comparison, make_plan, parse_diff, path_profiles
+from boxferry_ci.policy import load_policy
 
-SOURCE_ROOT = Path(__file__).resolve().parent.parent
-SPEC = importlib.util.spec_from_file_location("validation_plan", SOURCE_ROOT / "scripts/validation-plan.py")
-assert SPEC is not None and SPEC.loader is not None
-planner = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(planner)
-POLICY = planner.policy_at(SOURCE_ROOT)
-
-
-def git(root: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=root, check=True, text=True, capture_output=True)
-    return result.stdout.strip()
-
-
-def write(root: Path, name: str, content: str) -> None:
-    path = root / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-
-
-def arguments(root: Path, event: str, base: str = "", head: str = "") -> argparse.Namespace:
-    return argparse.Namespace(
-        repository_root=root, policy_root=SOURCE_ROOT, event=event,
-        base_sha=base, head_sha=head, tested_sha=head or git(root, "rev-parse", "HEAD"),
-        base_ref="main", force_full=False,
-    )
+ROOT = Path(__file__).resolve().parents[1]
+POLICY = load_policy(ROOT / "scripts/validation-policy.json")
+SHA = "a" * 40
 
 
 class ValidationPlanTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.directory = tempfile.TemporaryDirectory(prefix="compose-lens-validation-plan-")
-        self.addCleanup(self.directory.cleanup)
-        self.root = Path(self.directory.name)
-        git(self.root, "init", "-q", "-b", "main")
-        git(self.root, "config", "user.name", "Validation Test")
-        git(self.root, "config", "user.email", "validation@example.invalid")
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nPlain text.\n")
-        write(self.root, "docs/public/getting-started/index.md", "# Start\n\n```console\n$ compose-lens --version\n```\n")
-        write(self.root, "src/main.rs", "fn main() {}\n")
-        git(self.root, "add", ".")
-        git(self.root, "commit", "-qm", "baseline")
-        self.base = git(self.root, "rev-parse", "HEAD")
+    def test_prose_and_executable_examples_have_distinct_selection(self) -> None:
+        for contents, expected in (
+            (b"# Concepts\n\nOrdinary prose.\n", {"prose"}),
+            (b"```console\ncargo test\n```\n", {"executable-docs"}),
+            (b"Use `cargo test`.\n", {"executable-docs"}),
+            (b"    cargo test\n", {"executable-docs"}),
+        ):
+            with self.subTest(contents=contents):
+                self.assertEqual(
+                    path_profiles("docs/public/concepts/index.md", (contents,), POLICY, set()),
+                    expected,
+                )
 
-    def commit(self, message: str = "candidate") -> str:
-        git(self.root, "add", "-A")
-        git(self.root, "commit", "-qm", message)
-        return git(self.root, "rev-parse", "HEAD")
-
-    def plan(self, base: str, head: str) -> dict:
-        return planner.make_plan(arguments(self.root, "pull_request", base, head), POLICY)
-
-    def test_public_prose_selects_only_file_and_lockfile_checks(self) -> None:
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nUpdated prose.\n")
-        head = self.commit()
-        plan = self.plan(self.base, head)
-        self.assertEqual(plan["profile"], "prose")
-        self.assertEqual({name for name, selected in plan["jobs"].items() if selected}, set(POLICY["profile_jobs"]["prose"]))
-
-    def test_executable_docs_and_new_code_fences_select_focused_suite(self) -> None:
-        write(self.root, "docs/public/getting-started/index.md", "# Start\n\nUpdated example.\n")
-        head = self.commit()
-        self.assertEqual(self.plan(self.base, head)["profile"], "executable-docs")
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\n```console\n$ compose-lens --version\n```\n")
-        next_head = self.commit("new example")
-        self.assertEqual(self.plan(head, next_head)["profile"], "executable-docs")
-
-    def test_new_inline_cli_examples_are_not_treated_as_prose(self) -> None:
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nUse `cargo test --locked`.\n")
-        head = self.commit("inline command")
-        self.assertEqual(self.plan(self.base, head)["profile"], "executable-docs")
-
-    def test_indented_cli_examples_are_not_treated_as_prose(self) -> None:
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\n    cargo test --locked\n")
-        head = self.commit("indented command")
-        self.assertEqual(self.plan(self.base, head)["profile"], "executable-docs")
-
-    def test_tabs_after_one_to_three_spaces_are_executable_in_new_and_edited_docs(self) -> None:
-        for spaces in range(1, 4):
-            with self.subTest(spaces=spaces, change="new"):
-                path = f"docs/public/tab-new-{spaces}.md"
-                before = git(self.root, "rev-parse", "HEAD")
-                write(self.root, path, f"# Example\n\n{' ' * spaces}\tcargo test --locked\n")
-                head = self.commit("new indented example")
-                self.assertEqual(self.plan(before, head)["profile"], "executable-docs")
-
-            with self.subTest(spaces=spaces, change="edited"):
-                path = f"docs/public/tab-edited-{spaces}.md"
-                before = git(self.root, "rev-parse", "HEAD")
-                write(self.root, path, "# Example\n\nPlain prose.\n")
-                prose_head = self.commit("new plain prose")
-                self.assertEqual(self.plan(before, prose_head)["profile"], "prose")
-                write(self.root, path, f"# Example\n\n{' ' * spaces}\tcargo test --locked\n")
-                head = self.commit("edit to indented example")
-                self.assertEqual(self.plan(prose_head, head)["profile"], "executable-docs")
-
-    def test_policy_rejects_executable_documentation_downgrades(self) -> None:
-        policy = copy.deepcopy(POLICY)
-        policy["profile_jobs"]["executable-docs"] = ["documentation"]
-        write(self.root, "scripts/validation-policy.json", json.dumps(policy))
-        with self.assertRaisesRegex(planner.PlanError, "fewer jobs"):
-            planner.policy_at(self.root)
-        policy = copy.deepcopy(POLICY)
-        policy["local_commands"]["executable-docs"] = [["cargo", "test", "--test", "public_guides"]]
-        write(self.root, "scripts/validation-policy.json", json.dumps(policy))
-        with self.assertRaisesRegex(planner.PlanError, "include prose commands"):
-            planner.policy_at(self.root)
-        policy["local_commands"]["executable-docs"] = list(policy["local_commands"]["full"])
-        write(self.root, "scripts/validation-policy.json", json.dumps(policy))
-        planner.policy_at(self.root)
-
-    def test_optional_manifest_and_profile_specific_jobs_are_fail_closed(self) -> None:
-        policy = {
-            **POLICY,
-            "documentation_examples_manifest": None,
-            "executable_documentation_roots": ["docs/public/guides/"],
-            "profile_jobs": {
-                "prose": list(POLICY["profile_jobs"]["prose"]),
-                "executable-docs": list(POLICY["jobs"]),
-            },
-        }
-        write(self.root, "docs/public/guides/new.md", "# New guide\n\nPlain text.\n")
-        head = self.commit("new guide")
-        plan = planner.make_plan(arguments(self.root, "pull_request", self.base, head), policy)
-        self.assertEqual(plan["profile"], "executable-docs")
-        self.assertTrue(all(plan["jobs"].values()))
-        needs = {job: {"result": "success"} for job in policy["jobs"]}
-        needs["validation-plan"] = {"result": "success"}
-        planner.verify_gate(plan, needs, policy, arguments(self.root, "pull_request", self.base, head))
-        needs["rust"]["result"] = "skipped"
-        with self.assertRaises(planner.PlanError):
-            planner.verify_gate(plan, needs, policy, arguments(self.root, "pull_request", self.base, head))
-
-    def test_code_policy_unknown_and_mixed_paths_are_full(self) -> None:
+    def test_configuration_native_inputs_and_unknown_paths_force_complete(self) -> None:
         for path in (
-            "src/main.rs", "scripts/validation-plan.py", "scripts/validation-policy.json",
-            "scripts/validation-policy.json", "fixtures/sample.yaml", "README.md",
-            "docs/public/unknown.json",
+            "scripts/validation-policy.json",
+            ".github/workflows/ci.yml",
+            ".devcontainer/Dockerfile",
+            "Cargo.lock",
+            "src/lib.rs",
+            "conformance/provider-config-matrix.toml",
+            "unknown.md",
         ):
             with self.subTest(path=path):
-                write(self.root, path, "changed\n")
-                head = self.commit(path)
-                self.assertEqual(self.plan(self.base, head)["profile"], "full")
-                git(self.root, "revert", "--no-edit", head)
-                self.base = git(self.root, "rev-parse", "HEAD")
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nNew prose.\n")
-        write(self.root, "src/main.rs", "fn main() { println!(\"x\"); }\n")
-        head = self.commit("mixed")
-        self.assertEqual(self.plan(self.base, head)["profile"], "full")
+                self.assertEqual(path_profiles(path, (b"text\n",), POLICY, set()), {"full"})
 
-    def test_add_delete_rename_and_special_path_bytes(self) -> None:
-        write(self.root, "docs/public/new page ü.md", "# New\n")
-        added = self.commit("add")
-        self.assertEqual(self.plan(self.base, added)["profile"], "prose")
-        git(self.root, "mv", "docs/public/new page ü.md", "docs/public/renamed page ü.md")
-        renamed = self.commit("rename")
-        self.assertEqual(self.plan(added, renamed)["profile"], "prose")
-        git(self.root, "rm", "docs/public/renamed page ü.md")
-        deleted = self.commit("delete")
-        self.assertEqual(self.plan(renamed, deleted)["profile"], "prose")
-        write(self.root, "docs/public/line\nbreak.md", "# A\n")
-        newline = self.commit("newline")
-        self.assertEqual(self.plan(deleted, newline)["profile"], "prose")
-        git(self.root, "mv", "docs/public/line\nbreak.md", "src/line-break.rs")
-        moved_to_code = self.commit("rename across boundary")
-        self.assertEqual(self.plan(newline, moved_to_code)["profile"], "full")
-
-    def test_missing_comparison_and_empty_comparison_fall_back_to_full(self) -> None:
-        self.assertEqual(self.plan(self.base, self.base)["profile"], "full")
-        self.assertEqual(self.plan("0" * 40, self.base)["profile"], "full")
-        with self.assertRaises(planner.PlanError):
-            planner.parse_diff(b"R100\0old\0")
-        with self.assertRaises(planner.PlanError):
-            planner.parse_diff(b"X\0path\0")
-
-    def test_local_staged_unstaged_and_untracked_changes(self) -> None:
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nStaged.\n")
-        git(self.root, "add", "docs/public/concepts/index.md")
-        staged = planner.make_plan(arguments(self.root, "local"), POLICY)
-        self.assertEqual(staged["profile"], "prose")
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nUnstaged.\n")
-        unstaged = planner.make_plan(arguments(self.root, "local"), POLICY)
-        self.assertEqual(unstaged["profile"], "prose")
-        self.assertNotEqual(staged["local_fingerprint"], unstaged["local_fingerprint"])
-        write(self.root, "src/untracked.rs", "fn extra() {}\n")
-        self.assertEqual(planner.make_plan(arguments(self.root, "local"), POLICY)["profile"], "full")
-
-    def test_local_committed_branch_changes_are_included(self) -> None:
-        git(self.root, "switch", "-qc", "issue")
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nCommitted prose.\n")
-        self.commit()
-        self.assertEqual(planner.make_plan(arguments(self.root, "local"), POLICY)["profile"], "prose")
-
-    def test_local_index_cannot_be_hidden_by_restoring_only_worktree_bytes(self) -> None:
-        write(self.root, "src/main.rs", "fn main() { println!(\"staged\"); }\n")
-        git(self.root, "add", "src/main.rs")
-        write(self.root, "src/main.rs", "fn main() {}\n")
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nOnly prose in the worktree.\n")
-        plan = planner.make_plan(arguments(self.root, "local"), POLICY)
-        self.assertEqual(plan["profile"], "full")
-
-    def test_local_index_content_can_promote_restored_docs_to_executable(self) -> None:
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\n```console\n$ compose-lens --version\n```\n")
-        git(self.root, "add", "docs/public/concepts/index.md")
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nPlain text.\n")
-        plan = planner.make_plan(arguments(self.root, "local"), POLICY)
-        self.assertEqual(plan["profile"], "executable-docs")
-
-    def test_local_runner_rejects_target_from_a_relocated_worktree(self) -> None:
-        former_target = self.root.parent / "former-worktree" / "target"
-        with patch.dict(os.environ, {"CARGO_TARGET_DIR": str(former_target)}):
-            with self.assertRaisesRegex(planner.PlanError, "inside this worktree"):
-                planner.run_local(arguments(self.root, "local"), POLICY)
-        with patch.dict(os.environ, {"CARGO_TARGET_DIR": str(self.root / "target")}):
-            planner.require_worktree_local_target(self.root)
-
-    def test_main_dispatch_and_release_caller_are_always_full(self) -> None:
+    def test_non_pr_events_select_every_job_without_force_full(self) -> None:
         for event in ("push", "workflow_dispatch", "workflow_call"):
             with self.subTest(event=event):
-                plan = planner.make_plan(arguments(self.root, event), POLICY)
-                self.assertEqual(plan["profile"], "full")
-                self.assertTrue(all(plan["jobs"].values()))
+                plan = make_plan(ROOT, POLICY, event=event, tested_sha=SHA)
+                self.assertEqual(plan["profiles"], ["full"])
+                self.assertEqual(plan["jobs"], dict.fromkeys(POLICY.jobs, True))
 
-    def test_gate_rejects_missing_skipped_failed_and_cancelled_required_jobs(self) -> None:
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nNew prose.\n")
-        head = self.commit()
-        plan = self.plan(self.base, head)
-        needs = {job: {"result": "success" if plan["jobs"][job] else "skipped"} for job in POLICY["jobs"]}
-        needs["validation-plan"] = {"result": "success"}
-        args = arguments(self.root, "pull_request", self.base, head)
-        self.assertEqual(len(planner.verify_gate(plan, needs, POLICY, args)), len(POLICY["jobs"]))
-        selected = ["validation-plan", *(job for job in POLICY["jobs"] if plan["jobs"][job])]
-        for job in selected:
-            for result in ("skipped", "failure", "cancelled", "timed_out", None):
-                with self.subTest(job=job, result=result):
-                    broken = copy.deepcopy(needs)
-                    broken[job]["result"] = result
-                    with self.assertRaises(planner.PlanError):
-                        planner.verify_gate(plan, broken, POLICY, args)
-        broken = json.loads(json.dumps(needs))
-        broken["rust"]["result"] = "failure"
-        with self.assertRaises(planner.PlanError):
-            planner.verify_gate(plan, broken, POLICY, args)
-        with self.assertRaises(planner.PlanError):
-            planner.verify_gate(plan, {}, POLICY, args)
-        broken_plan = json.loads(json.dumps(plan))
-        broken_plan["jobs"]["documentation"] = "true"
-        with self.assertRaises(planner.PlanError):
-            planner.verify_gate(broken_plan, needs, POLICY, args)
-
-    def test_gate_requires_all_jobs_for_main_and_release_events(self) -> None:
-        for event in ("push", "workflow_dispatch", "workflow_call"):
-            with self.subTest(event=event):
-                plan = planner.make_plan(arguments(self.root, event), POLICY)
-                needs = {job: {"result": "success"} for job in POLICY["jobs"]}
-                needs["validation-plan"] = {"result": "success"}
-                args = arguments(self.root, event)
-                planner.verify_gate(plan, needs, POLICY, args)
-                for job in ("validation-plan", *POLICY["jobs"]):
-                    missing = copy.deepcopy(needs)
-                    missing.pop(job)
-                    with self.subTest(missing=job), self.assertRaises(planner.PlanError):
-                        planner.verify_gate(plan, missing, POLICY, args)
-                    for result in ("failure", "cancelled", "skipped", "timed_out", None):
-                        with self.subTest(job=job, result=result):
-                            broken = copy.deepcopy(needs)
-                            broken[job]["result"] = result
-                            with self.assertRaises(planner.PlanError):
-                                planner.verify_gate(plan, broken, POLICY, args)
-                plan["profile"] = "prose"
-                with self.assertRaises(planner.PlanError):
-                    planner.verify_gate(plan, needs, POLICY, args)
-
-    def test_required_ci_names_only_the_real_trusted_fail_closed_aggregate(self) -> None:
-        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        jobs = re.findall(r"(?ms)^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)",
-                          workflow.split("\njobs:\n", 1)[1])
-        self.assertEqual(len(jobs), len({job for job, _ in jobs}), "job IDs must be unique")
-        named_required = [job for job, body in jobs
-                          if re.search(r"(?m)^    name: ['\"]?Required CI['\"]?\s*$", body)]
-        self.assertEqual(named_required, ["pr-gate"], "no unrelated or duplicate success check may shadow the aggregate")
-        gate = dict(jobs)["pr-gate"]
-        self.assertTrue(gate.startswith("    name: Required CI\n    if: always()\n"))
-        dependencies = re.search(r"(?ms)^    needs:\n      \[(.*?)^      \]", gate)
-        self.assertIsNotNone(dependencies)
-        self.assertEqual(re.findall(r"[a-z][a-z0-9-]*", dependencies.group(1)),
-                         ["validation-plan", *POLICY["jobs"]])
-        for required in (
-            "ref: ${{ github.event.pull_request.base.sha }}",
-            "PLAN_JSON: ${{ needs.validation-plan.outputs.plan }}",
-            "NEEDS_JSON: ${{ toJSON(needs) }}",
-            "set -euo pipefail",
-            'verifier=.validation-base/scripts/validation-plan.py',
-            'policy_root=.validation-base',
-            'python3 "${verifier}" gate --policy-root "${policy_root}"',
-            '--event "${EVENT_NAME}" --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}"',
-            '--tested-sha "${GITHUB_SHA}"',
-            'or set(needs) != {"validation-plan", *jobs}',
-            'if needs[job].get("result") != "success":',
-        ):
-            with self.subTest(required=required):
-                self.assertIn(required, gate)
-        for event in ("pull_request:", "workflow_dispatch:", "workflow_call:"):
-            self.assertIn("  " + event, workflow)
-        self.assertIn("  push:\n    branches:\n      - main\n", workflow)
-
-    def test_first_rollout_never_executes_candidate_classifier_or_accepts_a_skip(self) -> None:
-        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        self.assertIn("scripts/validation-plan.py plan --force-full", workflow)
-        job_declaration = f'jobs = "{" ".join(POLICY["jobs"])}".split()'
-        blocks = re.findall(
-            r"(?ms)^[ \t]+python3 - <<'PY'(?: \| tee -a \"\$\{GITHUB_STEP_SUMMARY\}\")?\n(.*?)^[ \t]+PY$",
-            workflow,
+    def test_diff_parser_preserves_both_rename_paths_and_rejects_corruption(self) -> None:
+        self.assertEqual(
+            parse_diff(b"R100\0old.md\0src/lib.rs\0"), [("R", ("old.md", "src/lib.rs"))]
         )
-        self.assertEqual(len(blocks), 2)
-        self.assertTrue(all(job_declaration in block for block in blocks))
-        planner_code, gate_code = (textwrap.dedent(block) for block in blocks)
-        with tempfile.TemporaryDirectory(prefix="compose-lens-bootstrap-plan-") as directory:
-            output = Path(directory) / "github-output"
-            environment = {
-                **os.environ, "BASE_SHA": self.base, "HEAD_SHA": self.base,
-                "GITHUB_SHA": self.base, "GITHUB_OUTPUT": str(output),
-            }
-            planned = subprocess.run(
-                [sys.executable, "-c", planner_code], env=environment,
-                capture_output=True, text=True, check=False,
-            )
-            self.assertEqual(planned.returncode, 0, planned.stderr)
-            fields = dict(line.split("=", 1) for line in output.read_text().splitlines())
-            plan = json.loads(fields["plan"])
-            self.assertEqual(plan["schema"], POLICY["schema"])
-            self.assertEqual(plan["profile"], "full")
-            self.assertTrue(all(plan["jobs"].values()))
-            self.assertEqual(
-                {key for key, value in fields.items() if key.startswith("select_") and value == "true"},
-                {"select_" + job.replace("-", "_") for job in POLICY["jobs"]},
-            )
-            needs = {job: {"result": "success"} for job in POLICY["jobs"]}
-            needs["validation-plan"] = {"result": "success"}
-            environment["PLAN_JSON"] = fields["plan"]
-            environment["NEEDS_JSON"] = json.dumps(needs)
-            verified = subprocess.run(
-                [sys.executable, "-c", gate_code], env=environment,
-                capture_output=True, text=True, check=False,
-            )
-            self.assertEqual(verified.returncode, 0, verified.stderr)
-            needs["rust"]["result"] = "skipped"
-            environment["NEEDS_JSON"] = json.dumps(needs)
-            rejected = subprocess.run(
-                [sys.executable, "-c", gate_code], env=environment,
-                capture_output=True, text=True, check=False,
-            )
-            self.assertNotEqual(rejected.returncode, 0)
+        for raw in (b"M\0missing-delimiter", b"R100\0only-one-path\0", b"M\0../outside\0"):
+            with self.subTest(raw=raw), self.assertRaises(ContractError):
+                parse_diff(raw)
 
-
-    def test_prerequisite_queue_requires_complete_plan_and_every_success(self) -> None:
-        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        blocks = re.findall(
-            r"(?ms)^[ \t]+python3 - <<'PYQUEUE'(?: \| tee -a \"\$\{GITHUB_STEP_SUMMARY\}\")?\n(.*?)^[ \t]+PYQUEUE$",
-            workflow,
+    def test_every_ordinary_job_and_exact_candidate_are_required(self) -> None:
+        self.assertEqual(
+            set(POLICY.jobs),
+            {
+                "rust",
+                "msrv",
+                "dependencies",
+                "api",
+                "documentation",
+                "coverage",
+                "lockfile-release-age",
+            },
         )
-        self.assertEqual(len(blocks), 2)
-        planner_code, gate_code = (textwrap.dedent(block) for block in blocks)
-        with tempfile.TemporaryDirectory(prefix="compose-lens-queue-bootstrap-") as directory:
-            output = Path(directory) / "github-output"
-            environment = {**os.environ, "GITHUB_SHA": self.base, "GITHUB_OUTPUT": str(output)}
-            planned = subprocess.run([sys.executable, "-c", planner_code], env=environment, capture_output=True, text=True, check=False)
-            self.assertEqual(planned.returncode, 0, planned.stderr)
-            fields = dict(line.split("=", 1) for line in output.read_text().splitlines())
-            plan = json.loads(fields["plan"])
-            self.assertEqual(plan["profile"], "full")
-            self.assertEqual(plan["jobs"], dict.fromkeys(POLICY["jobs"], True))
-            needs = {job: {"result": "success"} for job in ("validation-plan", *POLICY["jobs"])}
-            environment.update(PLAN_JSON=fields["plan"], NEEDS_JSON=json.dumps(needs))
-            verified = subprocess.run([sys.executable, "-c", gate_code], env=environment, capture_output=True, text=True, check=False)
-            self.assertEqual(verified.returncode, 0, verified.stderr)
-            for job in needs:
-                for result in ("failure", "cancelled", "skipped"):
-                    broken = copy.deepcopy(needs)
-                    broken[job]["result"] = result
-                    environment["NEEDS_JSON"] = json.dumps(broken)
-                    rejected = subprocess.run([sys.executable, "-c", gate_code], env=environment, capture_output=True, text=True, check=False)
-                    self.assertNotEqual(rejected.returncode, 0, (job, result))
+        plan = make_plan(ROOT, POLICY, event="push", tested_sha=SHA)
+        needs: dict[str, Any] = {
+            job: {"result": "success"} for job in ("validation-plan", *POLICY.jobs)
+        }
+        comparison = Comparison("push", SHA, SHA, SHA)
+        verify_gate(plan, needs, POLICY, comparison, expected_plan=plan)
+        with self.assertRaises(ContractError):
+            verify_gate(
+                plan,
+                needs,
+                POLICY,
+                Comparison("push", "b" * 40, "b" * 40, "b" * 40),
+                expected_plan=plan,
+            )
+        for job in POLICY.jobs:
+            for result in ("failure", "cancelled", "skipped"):
+                changed = copy.deepcopy(needs)
+                changed[job]["result"] = result
+                with self.subTest(job=job, result=result), self.assertRaises(GateFailure):
+                    verify_gate(plan, changed, POLICY, comparison, expected_plan=plan)
+        changed = copy.deepcopy(needs)
+        changed["devcontainer-validation"] = {"result": "success"}
+        with self.assertRaises(ContractError):
+            verify_gate(plan, changed, POLICY, comparison, expected_plan=plan)
 
-
-    def test_admission_seed_and_service_have_narrow_contract(self) -> None:
-        manifest = json.loads((SOURCE_ROOT / ".github/automation.json").read_text())
-        self.assertEqual(set(manifest), {"schema", "repository", "revision", "policy", "interface"})
-        self.assertEqual(manifest["schema"], 1)
-        self.assertEqual(manifest["interface"], 1)
-        self.assertEqual(manifest["repository"], "Strukturpiloten/boxferry")
-        self.assertRegex(manifest["revision"], r"^[a-f0-9]{40}$")
-        self.assertEqual(manifest["policy"], "scripts/validation-policy.json")
-        self.assertTrue((SOURCE_ROOT / manifest["policy"]).is_file())
-        service = (SOURCE_ROOT / ".github/workflows/dependency-eligibility.yml").read_text()
-        self.assertIn("workflow_run:", service)
-        self.assertIn("schedule:", service)
-        self.assertNotIn("pull_request_target:", service)
-        config = json.loads((SOURCE_ROOT / ".github/renovate.json").read_text())
-        captures = []
-        for manager in config["customManagers"]:
-            for path, content in ((".github/workflows/dependency-eligibility.yml", service), (".github/automation.json", json.dumps(manifest))):
-                if not any(re.search(pattern[1:-1], path) for pattern in manager["managerFilePatterns"]):
-                    continue
-                for pattern in manager["matchStrings"]:
-                    pattern = re.sub(r"\(\?<([A-Za-z_]\w*)>", r"(?P<\1>", pattern)
-                    captures.extend((manager, match) for match in re.finditer(pattern, content))
-        self.assertEqual(len(captures), 3)
-        self.assertEqual(len({id(manager) for manager, _ in captures}), 1)
-        self.assertTrue(all(match["currentDigest"] == manifest["revision"] for _, match in captures))
-
-
-    def test_bootstrap_hosted_pr_explicitly_selects_complete_plan(self) -> None:
-        write(self.root, "docs/public/concepts/index.md", "# Concepts\n\nRevised prose.\n")
-        git(self.root, "add", ".")
-        git(self.root, "commit", "-qm", "docs: fixture")
-        head = git(self.root, "rev-parse", "HEAD")
-        args = arguments(self.root, "pull_request", self.base, head)
-        args.force_full = True
-        plan = planner.make_plan(args, POLICY)
-        self.assertEqual(plan["profile"], "full")
-        self.assertEqual(plan["jobs"], dict.fromkeys(POLICY["jobs"], True))
-
-
-    def test_bootstrap_queue_age_guard_requires_exact_candidate_and_base_ancestry(self) -> None:
-        workflow = (SOURCE_ROOT / ".github/workflows/ci.yml").read_text()
-        guard = workflow.split("      - name: Bind exact queue candidate and ancestor\n", 1)[1]
-        guard = guard.split("      - name: Reject newly introduced dependencies", 1)[0]
-        code = textwrap.dedent(guard.split("        run: |\n", 1)[1])
-        write(self.root, "src/main.rs", "fn main() { println!(\"fixture\"); }\n")
-        git(self.root, "add", ".")
-        git(self.root, "commit", "-qm", "test: candidate")
-        head = git(self.root, "rev-parse", "HEAD")
-        tree = git(self.root, "rev-parse", "HEAD^{tree}")
-        unrelated = git(self.root, "commit-tree", tree, "-m", "unrelated")
-        for base, candidate, tested, accepted in (
-            (self.base, head, head, True),
-            (self.base, self.base, head, False),
-            (self.base, self.base, self.base, False),
-            ("d" * 40, head, head, False),
-            (unrelated, head, head, False),
-            ("invalid", head, head, False),
-        ):
-            with self.subTest(base=base, candidate=candidate, tested=tested):
-                result = subprocess.run(["bash", "-c", code], cwd=self.root,
-                                        env={**os.environ, "BASE_SHA": base, "HEAD_SHA": candidate,
-                                             "GITHUB_SHA": tested}, capture_output=True, check=False)
-                self.assertEqual(result.returncode == 0, accepted)
-        age = workflow.split("  lockfile-release-age:\n", 1)[1].split("  pr-gate:\n", 1)[0]
-        self.assertIn("if: github.event_name == 'pull_request' || github.event_name == 'merge_group'", age)
-        self.assertIn("github.event.pull_request.base.sha || github.event.merge_group.base_sha", age)
-        self.assertIn("github.event.pull_request.head.sha || github.event.merge_group.head_sha", age)
+    def test_missing_job_and_candidate_authored_skip_are_rejected(self) -> None:
+        plan = make_plan(ROOT, POLICY, event="push", tested_sha=SHA)
+        needs: dict[str, Any] = {
+            job: {"result": "success"} for job in ("validation-plan", *POLICY.jobs)
+        }
+        del needs["coverage"]
+        with self.assertRaises(ContractError):
+            verify_gate(plan, needs, POLICY, Comparison("push", SHA, SHA, SHA), expected_plan=plan)
+        changed = json.loads(json.dumps(plan))
+        changed["jobs"]["coverage"] = False
+        needs["coverage"] = {"result": "skipped"}
+        with self.assertRaises(ContractError):
+            verify_gate(
+                changed, needs, POLICY, Comparison("push", SHA, SHA, SHA), expected_plan=plan
+            )
 
 
 if __name__ == "__main__":

@@ -121,7 +121,7 @@ pub(crate) fn validate_application_independence_and_gates() -> Result<(), String
 
     for (path, required) in [
         ("scripts/check-all.sh", "cargo ci-application"),
-        (".github/workflows/ci.yml", "run: cargo ci-application"),
+        ("scripts/validation-policy.json", "ci-application"),
     ] {
         let source = read_repository_file(path)?;
         let count = source.matches(required).count();

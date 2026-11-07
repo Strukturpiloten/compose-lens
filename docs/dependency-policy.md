@@ -1,99 +1,44 @@
-# Dependency and license policy
+# Dependency policy
 
-Dependencies are design decisions. Prefer the standard library and focused, maintained crates whose
-APIs preserve ComposeLens's source fidelity and explicit processing boundaries.
+ComposeLens keeps its own Cargo graph and never depends on BoxFerry product crates. BoxFerry
+owns reusable development automation through the immutable revision in `.github/automation.json`.
 
-## Cargo rules
+## Canonical policy and ownership
 
-- Use compatible crates.io requirements by default; wildcard requirements are denied.
-- Use an exact pin only for a documented representation or compatibility reason.
-- Keep default features only when reviewed and useful.
-- Avoid overlapping crates without a clear responsibility difference.
-- Commit `Cargo.lock` and use locked resolution in CI and releases.
-- Record a dependency that constrains YAML representation, round trips, source locations, or public
-  APIs in an ADR.
+`.github/renovate.json` extends the common and Rust presets at the manifest-selected revision.
+They own grouping, automatic reviewed pull requests, immutable source pins, lockfile maintenance
+and approval policy. Consumer managers retain only repository-specific declarations. Every pin
+has one extraction owner; update consumers and Renovate evidence together.
 
-Unapproved registries and Git dependencies are denied. An exception must be narrowly versioned,
-explained in `deny.toml`, and justified in the introducing change; lasting architectural or
-distribution exceptions require an ADR.
+Ordinary third-party releases retain the 72-hour hold. A verified isolated first-party release
+may waive age for its whole necessary Cargo resolution through the canonical trusted closure
+check. Mixed updates, other registries and metadata failures do not qualify. Integrity, audit,
+compatibility and exact-candidate checks still apply. Ordinary Rust dependencies remain active.
 
-## Licenses and advisories
+Trusted dependency admission reads the exact base manifest. Candidate code cannot authorize its
+own admission. Required CI verifies every selected ordinary job and independently planned skip;
+main, manual, final local and release validation remain complete for that ordinary scope.
 
-`deny.toml` is the machine-readable source of truth for accepted licenses, advisories, bans,
-duplicates, and sources. An allowlisted license records project policy even when no current dependency
-uses it. Adding a license requires review of its distribution obligations; this policy is not legal
-advice.
+Native provider targets, bootstrap artifacts and historical observations stay fixed. Preserve
+native/custom discovery and integrity without automatic proposals or manual update routes.
 
-Do not silence an advisory, source, duplicate, or license finding merely to make CI pass. Run:
+## Integrity and tooling
 
-```console
-cargo deny check
-```
+Rust/package/compiler declarations remain in `rust-toolchain.toml`, `Cargo.toml` and `Cargo.lock`.
+The selected shared Python lock owns uv, Ruff and ty; no second Python lock or mypy is added.
+`scripts/shared-ci.py` verifies the exact archive before dispatch. Ordinary host and CI file tools
+use `scripts/install-host-tools.sh` and the selected shared architecture-specific integrity inventory.
+Local SemVer preflight and development API checks share the verified compiler and isolated storage.
 
-## Repository tooling
+The current-main Dev Container Dockerfile, lifecycle verification, Feature graph and lock remain
+unchanged. Its legacy `scripts/install-file-tools.sh` is image-only, with one retained extractor.
+A late `enabled: false` rule holds image, Feature and image-tool proposals without a manual
+approval route. Host tooling never falls back to this installer. Existing image ARG versions do
+not become ordinary tool authorities; package/compiler inputs retain their ordinary owners.
 
-GitHub Actions, release preparation, the Rust toolchain, Dev Container assets, Node tools, and native
-file tools are supply-chain dependencies even though they are not shipped in the Rust graph. Their
-exact versions, action SHAs, lockfiles, and checksums live in executable configuration rather than
-this guide.
+VS Code Dev Containers use the configured existing Podman storage, preferably rootless. Ordinary
+validation requires no private Podman store, root bridge or local image controls. Fresh standard
+GitHub CI image qualification and subsequent updater activation are separate requirements under
+issue #563; the unchanged image closure is not newly qualified by ordinary adoption.
 
-Renovate proposes supported updates. Repository policy verifies immutable action pins, integrity
-metadata, single version sources, and locked tooling. Every update still needs the same review and
-complete gate as a hand-authored dependency change.
-
-The Rust minimum and normal toolchain are aligned by
-[ADR 0029](decisions/0029-align-minimum-and-normal-rust-toolchains.md). Renovate's built-in Cargo
-manager continues to own Cargo dependency requirements and lockfile updates; the existing
-`rust-toolchain` manager owns the channel pin in `rust-toolchain.toml` and retains its separate
-Rust toolchain group. The MSRV alignment adds no dependency requirement or extraction path, so
-Renovate configuration is unchanged. Minimum-version, Clippy, and documentation changes remain
-part of the reviewed policy update; no new manager or automatic MSRV update policy is introduced.
-
-Provider-conformance artifact URLs, checksums, and observed-record versions are immutable evidence:
-they are not routine Renovate updates. Renovate surfaces the matrix-declared Python runtime and
-bootstrap pins for manual provenance and checksum review with automerge disabled. The reusable runner
-selects that runtime and rejects a podman-compose row unless `python3` reports the exact declared
-version. It preserves the immutable wheel URL basename and installs the verified local wheel through
-a hash-locked PEP 508 file reference; changing that bootstrap contract requires its offline install
-and wrong-hash regression to change together. A moving provider-discovery candidate belongs in a new
-reviewed matrix target, never a rewrite of a retained boundary observation.
-
-Renovate's three-day minimum release age governs third-party direct dependency updates. The exact
-BoxFerry package names and `compose-lens`, `podman-lens`, `quadlet-lens`, and `docker-lens` have a
-zero-day exception restricted to the Cargo manager and crate datasource; it does not change review
-or automerge requirements. Renovate cannot prove the age of versions selected while regenerating
-a lock file, so lock-file maintenance also has a rule-local zero-day Renovate override. It may
-auto-merge only when the shared, fail-closed lockfile-release-age guard succeeds and the required
-`Required CI` aggregate passes.
-
-The `Required CI` check-name alignment changes only the existing aggregate's display name.
-Action/tool revisions, runner labels, provider artifacts and checksums, and Renovate extraction
-paths are unchanged. Existing GitHub Actions and workflow tool/runner regex managers retain
-their ownership, grouping and approval rules; no new pin or manager is introduced.
-
-The shared guard waives only elapsed release age for those four exact Lens names from canonical
-crates.io Cargo sources. It still performs bounded registry lookups and validates release metadata,
-and rejects future timestamps. Cargo lockfile checksum and integrity verification is not waived.
-Every newly introduced third-party registry release, including transitive dependencies of a Lens
-crate, must remain at least 72 hours old. Other registries, ecosystems, and similarly named packages
-receive no Lens exception; registry errors and invalid or missing metadata fail closed.
-
-Fixed GitHub-hosted `ubuntu-*` runner labels have one
-`github-runners` regex owner across every workflow. Runner upgrades stay grouped with automerge
-disabled because their preinstalled tools and operating-system changes affect release evidence.
-
-Every immutable revision has one Renovate owner. Dev Container and checksum-pinned tool updates
-remain manual. The Dev Container's Bookworm `python3-venv` package has one exact Dockerfile version
-pin and one Renovate regex owner using Repology's Debian 12 package record. Renovate only proposes
-a candidate; manual review must verify that exact revision exists in the pinned image's signed apt
-indexes for amd64 and arm64 before accepting it. Apt's signed index and package hashes provide
-integrity for this distribution package; no separate guessed checksum is stored. The venv preflight
-in local validation and post-create verification detects images that lack `ensurepip` or pip.
-
-## YAML representation
-
-`yaml-edit` is pinned exactly in `Cargo.toml` with default features disabled. It remains private and
-no `yaml-edit` type may appear in the public API. Renovate owns the reviewed version and lockfile
-update, while the compatibility contract remains version-independent. The decision and alternatives are recorded in
-[ADR 0002](decisions/0002-loss-aware-yaml-syntax.md) and the
-[YAML representation evaluation](research/yaml-representation.md).
+`yaml-edit` remains a private exact dependency under [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md).

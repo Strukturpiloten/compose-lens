@@ -152,6 +152,14 @@ printf 'Using isolated coverage target directory: %s\n' "${coverage_target_dir}"
 printf 'Using isolated cargo-semver-checks Cargo home: %s\n' "${semver_cargo_home}"
 printf 'Using isolated cargo-semver-checks target directory: %s\n' "${semver_target_dir}"
 
+# Use the same Cargo home and working directory as the final SemVer command.
+current_step="Verify exact local Cargo SemVer selection"
+semver_selection="$(env CARGO_HOME="${semver_cargo_home}" CARGO_TARGET_DIR="${semver_target_dir}" \
+  python3 scripts/shared-ci.py cargo-tools verify \
+  --repository-root "${repository_root}" --package cargo-semver-checks)"
+semver_rust_channel="$(jq -er '.rust_channel' <<< "${semver_selection}")"
+readonly semver_rust_channel
+
 if [[ "${format_mode}" == "check" ]]; then
   run_step "Check Rust formatting" cargo fmt --all -- --check
   run_step "Check non-Rust files" bash scripts/check-files.sh --check
@@ -162,7 +170,10 @@ fi
 run_step "Check whitespace errors" git --no-pager diff --check
 run_step "Lint GitHub Actions syntax" actionlint
 run_step "Audit GitHub Actions security" zizmor .github/workflows
-run_step "Test validation-plan contracts" env PYTHONDONTWRITEBYTECODE=1 python3 scripts/test-validation-plan.py
+if [[ "${format_mode}" == "fix" ]]; then
+  python3 scripts/shared-ci.py run --task python-format
+fi
+run_step "Check locked shared Python tooling and consumer contracts" python3 scripts/shared-ci.py run --task python-quality
 run_step "Check all workspace targets and features" cargo ci-check
 run_step "Check repository policies" cargo ci-policy
 run_step "Run Clippy with warnings denied" cargo ci-clippy
@@ -190,9 +201,9 @@ run_step "Check repository policies with the MSRV" cargo "+${msrv}" ci-policy
 run_step "Audit dependencies, licenses, bans, and sources" cargo deny --all-features check
 run_step "Check local documentation links" lychee --config lychee.toml --root-dir . --offline \
   "${markdown_files[@]}"
-run_step "Check published API compatibility" env CARGO_HOME="${semver_cargo_home}" \
-  CARGO_TARGET_DIR="${semver_target_dir}" \
-  cargo semver-checks check-release \
-  --package compose-lens
+run_step "Check development API compatibility" env CARGO_HOME="${semver_cargo_home}" \
+  CARGO_TARGET_DIR="${semver_target_dir}" RUSTUP_TOOLCHAIN="${semver_rust_channel}" \
+  python3 scripts/shared-ci.py run --event local --task api-development \
+  --report-json target/api-development-task.json
 
 printf '\nComposeLens local validation passed all %d steps.\n' "${total_steps}"

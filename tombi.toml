@@ -19,6 +19,12 @@ tables-out-of-order = "error"
 path = "docs/schemas/tombi-cargo-offline.schema.json"
 include = ["Cargo.toml", "**/Cargo.toml"]
 
+# Ruff and ty validate tool semantics; use a local structural schema to avoid embedded remote
+# references when checking the root Python tooling configuration on offline runners.
+[[schemas]]
+path = "docs/schemas/tombi-python-tools-offline.schema.json"
+include = ["pyproject.toml"]
+
 # Fixture manifests and conformance records use deliberate domain ordering. Tombi still parses and
 # lints them, but formatting is disabled so evidence spelling and ordering remain stable.
 [[overrides]]

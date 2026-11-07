@@ -134,3 +134,17 @@ links are checked locally; scheduled automation performs networked external-link
 
 Authored YAML parser fixtures are excluded from generic formatting because malformed and byte-exact
 input is part of their contract. Metadata and repository-owned complete YAML remain syntax-checked.
+
+## Shared automation integration
+
+`scripts/test-automation-contract.py` and `scripts/test-validation-plan.py` protect the selected
+shared interface: complete ordinary non-PR selection, unknown/native inputs, malformed diffs,
+all original job outcomes, exact candidates and forged-skip rejection. Shell dispatch tests keep
+both modes, SemVer identity and API failure propagation without invoking compilers or engines.
+Native provider/application commands and coverage 88/87/89 remain consumer-owned.
+
+The locked shared Python project runs Ruff and ty. Tests separately enforce the canonical host
+installer, retained image-only installer, single disabled image-pin owner, and W1/W2 native/custom
+Renovate ownership. Image qualification is absent from this ordinary gate and remains a fresh
+GitHub CI prerequisite before image-update activation. Passing ordinary tests makes no image,
+local storage, lifetime, cleanup or App qualification claim.
