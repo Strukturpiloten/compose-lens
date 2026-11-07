@@ -53,7 +53,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+          ref: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
           path: _automation
           persist-credentials: false
       - name: Bind exact candidate and trusted policy
@@ -61,7 +61,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-source
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+          automation-sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
           policy-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
           config-path: scripts/validation-policy.json
       - name: Install locked shared Python tooling
@@ -73,7 +73,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
           POLICY_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
-          AUTOMATION_SHA: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+          AUTOMATION_SHA: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
           POLICY_CONFIG: ${{ steps.source.outputs.config }}
         run: |
           uv run --locked --project _automation/automation python -m boxferry_ci plan \
@@ -87,10 +87,10 @@ jobs:
     if: needs.validation-plan.outputs.select_rust == 'true'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-ci.yml@c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-ci.yml@da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+      automation_sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       config_path: scripts/validation-policy.json
       task: rust-quality
@@ -100,10 +100,10 @@ jobs:
     if: needs.validation-plan.outputs.select_coverage == 'true'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-ci.yml@c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-ci.yml@da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+      automation_sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       config_path: scripts/validation-policy.json
       task: coverage
@@ -113,10 +113,10 @@ jobs:
     if: needs.validation-plan.outputs.select_msrv == 'true'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-ci.yml@c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-ci.yml@da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+      automation_sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       config_path: scripts/validation-policy.json
       task: msrv
@@ -126,10 +126,10 @@ jobs:
     if: needs.validation-plan.outputs.select_dependencies == 'true'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-dependencies.yml@c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-dependencies.yml@da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+      automation_sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       config_path: scripts/validation-policy.json
   api:
@@ -138,10 +138,10 @@ jobs:
     if: needs.validation-plan.outputs.select_api == 'true'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml@da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+      automation_sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
       config_path: scripts/validation-policy.json
       package: compose-lens
@@ -163,7 +163,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+          ref: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
           path: _automation
           persist-credentials: false
       - name: Install locked shared Python tooling
@@ -171,7 +171,7 @@ jobs:
       - name: Install canonical shared Node.js toolchain
         uses: ./_automation/.github/actions/shared-node
         with:
-          automation-sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+          automation-sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Install locked Node file-quality tools
@@ -214,10 +214,10 @@ jobs:
       actions: read
       statuses: read
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-dependency-wait.yml@c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-dependency-wait.yml@da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+      automation_sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
 
   pr-gate:
@@ -239,7 +239,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+          ref: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
           path: _automation
           persist-credentials: false
       - name: Bind exact candidate and trusted policy
@@ -247,7 +247,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-source
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+          automation-sha: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
           policy-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
           config-path: scripts/validation-policy.json
       - name: Install locked shared Python tooling
@@ -258,7 +258,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
           POLICY_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
-          AUTOMATION_SHA: c8dac82382c9cec8f2857e66e4f9e0bc6100dcb1
+          AUTOMATION_SHA: da716b7df2706b7cf4b677bdcbec9ff12ebfd8e7
           POLICY_CONFIG: ${{ steps.source.outputs.config }}
           PLAN_JSON: ${{ needs.validation-plan.outputs.plan }}
           NEEDS_JSON: ${{ toJSON(needs) }}
