@@ -3,6 +3,10 @@
 
 from __future__ import annotations
 
+import contextlib
+import copy
+import hashlib
+import io
 import json
 import os
 import re
@@ -10,12 +14,16 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from boxferry_ci import __file__ as shared_module_file
 from boxferry_ci import tooling as shared_tooling
+from boxferry_ci.contracts import ContractError
+from boxferry_ci.gate import GateFailure, verify_devcontainer_gate
+from boxferry_ci.planner import Comparison, path_profiles
 from boxferry_ci.policy import load_policy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -121,11 +129,11 @@ class ConsumerContractTests(unittest.TestCase):
             POLICY.local_commands["full"], (("bash", "scripts/check-all.sh", "--check"),)
         )
 
-    def test_ordinary_gate_defers_image_qualification_without_losing_jobs(self) -> None:
+    def test_image_caller_keeps_original_plan_and_exact_bound_gate(self) -> None:
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
         self.assertEqual(
-            set(POLICY.jobs),
-            {
+            POLICY.jobs,
+            (
                 "rust",
                 "msrv",
                 "dependencies",
@@ -133,19 +141,251 @@ class ConsumerContractTests(unittest.TestCase):
                 "documentation",
                 "coverage",
                 "lockfile-release-age",
+                "devcontainer-validation",
+            ),
+        )
+        image = ci.split("  devcontainer-validation:\n", 1)[1].split("  pr-gate:\n", 1)[0]
+        self.assertIn("    needs: validation-plan\n", image)
+        self.assertIn(
+            "    if: needs.validation-plan.outputs.select_devcontainer_validation != 'false'\n",
+            image,
+        )
+        self.assertIn("    permissions:\n      contents: read\n", image)
+        self.assertIn(
+            "shared-devcontainer-validation.yml@"
+            + MANIFEST["revision"]
+            + " # automation-v1 interface v1",
+            image,
+        )
+        self.assertEqual(
+            set(re.findall(r"^      ([a-z_]+):", image.split("    with:\n", 1)[1], re.MULTILINE)),
+            {"candidate_sha", "policy_sha", "automation_sha", "config_path"},
+        )
+        for binding in (
+            "candidate_sha: ${{ github.sha }}",
+            "policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}",
+            "automation_sha: " + MANIFEST["revision"],
+            "config_path: scripts/validation-policy.json",
+        ):
+            self.assertIn(binding, image)
+        self.assertIn(
+            "select_devcontainer_validation: ${{ steps.plan.outputs.select_devcontainer_validation }}",
+            ci,
+        )
+        aggregate = ci.split("  pr-gate:\n", 1)[1]
+        for job in ("validation-plan", *POLICY.jobs):
+            self.assertIn(f"      - {job}\n", aggregate)
+        self.assertIn("    if: always()\n", aggregate)
+        self.assertIn("boxferry_ci gate --devcontainer-validation", aggregate)
+        self.assertIn('--plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}"', aggregate)
+        self.assertIn("PLAN_JSON: ${{ needs.validation-plan.outputs.plan }}", aggregate)
+        self.assertIn("NEEDS_JSON: ${{ toJSON(needs) }}", aggregate)
+        self.assertNotIn("shared-devcontainer-updates.yml@", ci)
+
+    def test_actual_trusted_seed_and_adopted_prose_use_exact_image_receipts(self) -> None:
+        # Reconstruct the exact reviewed preseed bytes, independently admitted by the source.
+        adopted_bytes = (ROOT / "scripts/validation-policy.json").read_bytes()
+        seed_bytes = adopted_bytes.replace(
+            b'    "lockfile-release-age",\n    "devcontainer-validation"\n  ],',
+            b'    "lockfile-release-age"\n  ],',
+            1,
+        )
+        self.assertNotEqual(seed_bytes, adopted_bytes)
+        self.assertEqual(
+            hashlib.sha256(seed_bytes).hexdigest(),
+            "7957938d108af2e6799befc95b19d12d32d1bc37f97d0bc1118e6d8889d36c73",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "seed.json"
+            path.write_bytes(seed_bytes)
+            trusted_seed = load_policy(path)
+            for event in ("pull_request", "merge_group"):
+                comparison = Comparison(event, "a" * 40, "b" * 40, "c" * 40)
+                for policy in (trusted_seed, POLICY):
+                    selected = {job: job in policy.selected_jobs(("prose",)) for job in policy.jobs}
+                    plan: dict[str, object] = {
+                        "schema": 3,
+                        "repository": policy.repository,
+                        "event": event,
+                        "base_sha": comparison.base_sha,
+                        "head_sha": comparison.head_sha,
+                        "tested_sha": comparison.tested_sha,
+                        "profile": "prose",
+                        "profiles": ["prose"],
+                        "jobs": selected,
+                        "reasons": ["independent consumer prose expectation"],
+                        "local_fingerprint": None,
+                    }
+                    needs: dict[str, dict[str, object]] = {
+                        job: {"result": "success" if enabled else "skipped"}
+                        for job, enabled in selected.items()
+                    }
+                    needs["validation-plan"] = {"result": "success"}
+                    needs["devcontainer-validation"] = {
+                        "result": "success",
+                        "outputs": {"candidate_sha": comparison.tested_sha},
+                    }
+                    original = copy.deepcopy(plan)
+                    verify_devcontainer_gate(
+                        plan, needs, policy, comparison, expected_plan=original
+                    )
+                    self.assertEqual(
+                        plan, original, "supplemental image must not rewrite trusted plan"
+                    )
+                    for receipt in (None, comparison.base_sha, comparison.head_sha, "d" * 40):
+                        changed = copy.deepcopy(needs)
+                        changed["devcontainer-validation"]["outputs"] = {"candidate_sha": receipt}
+                        with self.subTest(
+                            event=event, seed=policy is trusted_seed, receipt=receipt
+                        ):
+                            with self.assertRaises(ContractError):
+                                verify_devcontainer_gate(
+                                    plan,
+                                    changed,
+                                    policy,
+                                    comparison,
+                                    expected_plan=original,
+                                )
+                    for outcome in ("failure", "cancelled", "skipped"):
+                        changed = copy.deepcopy(needs)
+                        changed["devcontainer-validation"] = {"result": outcome}
+                        if policy is POLICY and outcome == "skipped":
+                            verify_devcontainer_gate(
+                                plan,
+                                changed,
+                                policy,
+                                comparison,
+                                expected_plan=original,
+                            )
+                        else:
+                            with self.assertRaises((ContractError, GateFailure)):
+                                verify_devcontainer_gate(
+                                    plan,
+                                    changed,
+                                    policy,
+                                    comparison,
+                                    expected_plan=original,
+                                )
+                    changed = copy.deepcopy(needs)
+                    changed["documentation"] = {"result": "failure"}
+                    with self.assertRaises(GateFailure):
+                        verify_devcontainer_gate(
+                            plan, changed, policy, comparison, expected_plan=original
+                        )
+
+    def test_final_image_inputs_cannot_inherit_prose_skips(self) -> None:
+        dockerfile = (ROOT / ".devcontainer/Dockerfile").read_text()
+        copied = []
+        for line in dockerfile.splitlines():
+            if line.startswith("COPY ") and not line.startswith("COPY --from="):
+                copied.extend(line.split()[1:-1])
+        self.assertEqual(
+            set(copied),
+            {
+                "rust-toolchain.toml",
+                ".github/automation.json",
+                "scripts/shared-ci.py",
+                "scripts/install-host-tools.sh",
+                "package.json",
+                "package-lock.json",
             },
         )
-        for value in (
-            "--devcontainer-validation",
-            "select_devcontainer_validation",
-            "shared-devcontainer-validation.yml@",
-            "shared-devcontainer-updates.yml@",
+        inputs = [
+            *copied,
+            ".devcontainer/Dockerfile",
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/devcontainer-lock.json",
+            ".devcontainer/verify-tools.sh",
+            "scripts/validation-policy.json",
+            "unknown-input",
+        ]
+        for name in inputs:
+            with self.subTest(path=name):
+                self.assertEqual(path_profiles(name, (b"plain text\n",), POLICY, set()), {"full"})
+        prose = path_profiles(
+            POLICY.public_documentation_root + "overview.md", (b"Plain text.\n",), POLICY, set()
+        )
+        self.assertEqual(prose, {"prose"})
+        self.assertNotIn("devcontainer-validation", POLICY.selected_jobs(tuple(prose)))
+        self.assertIn("devcontainer-validation", POLICY.selected_jobs(("full",)))
+        for profile in ("prose", "executable-docs", "full"):
+            self.assertTrue(
+                all(
+                    "devcontainer" not in " ".join(command)
+                    for command in POLICY.local_commands[profile]
+                )
+            )
+
+    def test_recipe_exports_selected_python_tools_and_rust_before_cargo_tools(self) -> None:
+        image = (ROOT / ".devcontainer/Dockerfile").read_text()
+        self.assertIn(
+            "FROM docker.io/library/node:24.22.1-bookworm-slim@sha256:"
+            "55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205",
+            image,
+        )
+        self.assertLess(
+            image.index("rustup default"), image.index('cargo "+${rust_channel}" install')
+        )
+        for required in (
+            "COPY .github/automation.json /opt/compose-lens-tooling/.github/",
+            "COPY scripts/shared-ci.py /opt/compose-lens-tooling/scripts/",
+            "--destination /usr/local/bin --python-tools",
+            "UV_CACHE_DIR=/opt/compose-lens-tooling/uv-cache",
+            "UV_PYTHON_INSTALL_DIR=/opt/compose-lens-tooling/python",
+            "chown -R vscode:vscode",
         ):
-            self.assertNotIn(value, ci)
-        for job in POLICY.jobs:
-            self.assertIn(f"      - {job}\n", ci)
-        self.assertIn("boxferry_ci gate", ci)
-        self.assertIn('--plan-json "${PLAN_JSON}" --needs-json "${NEEDS_JSON}"', ci)
+            self.assertIn(required, image)
+        for retired in (
+            "ARG ACTIONLINT_VERSION",
+            "ARG LYCHEE_VERSION",
+            "cargo install --locked --version",
+        ):
+            self.assertNotIn(retired, image)
+        verifier = (ROOT / ".devcontainer/verify-tools.sh").read_text()
+        embedded = re.search(r"<<\s*'PYTHON'\n(?P<body>[\s\S]*?)\nPYTHON(?:\n|$)", verifier)
+        if embedded is None:
+            self.fail("lifecycle verifier must execute its selected-authority Python probe")
+        body = embedded["body"]
+        compile(body, ".devcontainer/verify-tools.sh:python", "exec")
+        metadata = tomllib.loads(
+            (Path(shared_module_file).resolve().parents[2] / "pyproject.toml").read_text()
+        )
+        expected = {"uv": metadata["tool"]["uv"]["required-version"][2:], "node": "24.22.1"}
+        for name in ("ruff", "ty"):
+            expected[name] = next(
+                value.split("==", 1)[1]
+                for value in metadata["dependency-groups"]["dev"]
+                if value.startswith(name + "==")
+            )
+        with tempfile.TemporaryDirectory() as temporary:
+            tooling = Path(temporary)
+            (tooling / ".github").mkdir()
+            (tooling / ".github/automation.json").write_text(json.dumps(MANIFEST))
+            project = tooling / "target/boxferry-automation" / MANIFEST["revision"] / "automation"
+            project.mkdir(parents=True)
+            (project / "pyproject.toml").write_text(
+                (Path(shared_module_file).resolve().parents[2] / "pyproject.toml").read_text()
+            )
+
+            def executable(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+                name = argv[0]
+                if name == "rustup":
+                    return subprocess.CompletedProcess(
+                        argv, 0, "rustc " + argv[2] + " (test)\n", ""
+                    )
+                version = (
+                    ("v" + expected[name]) if name == "node" else (name + " " + expected[name])
+                )
+                return subprocess.CompletedProcess(argv, 0, version + "\n", "")
+
+            with (
+                patch.object(sys, "argv", ["verify-tools", str(ROOT), str(tooling)]),
+                patch("subprocess.run", executable),
+            ):
+                exec(compile(body, "verify-tools", "exec"), {"__name__": "__main__"})
+                expected["ruff"] = "0.0.0"
+                with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                    exec(compile(body, "verify-tools", "exec"), {"__name__": "__main__"})
 
     def test_ordinary_local_gate_does_not_require_image_storage_or_privilege(self) -> None:
         script = (ROOT / "scripts/check-all.sh").read_text()
@@ -175,35 +415,43 @@ class ConsumerContractTests(unittest.TestCase):
         self.assertEqual(command.count("--repository"), 1)
         self.assertEqual(command[command.index("--repository") + 1], "Strukturpiloten/compose-lens")
 
-    def test_deferred_image_keeps_its_existing_integrity_and_installer(self) -> None:
+    def test_qualification_recipe_reuses_the_local_canonical_tool_launcher(self) -> None:
         dockerfile = (ROOT / ".devcontainer/Dockerfile").read_text()
         images = re.findall(r"# release: ([^\n]+)\nFROM ([^\s]+)", dockerfile)
         self.assertEqual(len(images), 2)
         for release, reference in images:
             self.assertRegex(release, r"^[0-9]+\.[0-9]+\.[0-9]+-[^\s]+$")
             self.assertRegex(reference, r"@sha256:[a-f0-9]{64}$")
-        self.assertIn("COPY scripts/install-file-tools.sh /tmp/install-file-tools.sh", dockerfile)
-        self.assertNotIn("shared-ci.py", dockerfile)
-        self.assertNotIn("--python-tools", dockerfile)
+        self.assertIn(
+            "COPY scripts/install-host-tools.sh /opt/compose-lens-tooling/scripts/", dockerfile
+        )
+        self.assertIn(
+            "bash /opt/compose-lens-tooling/scripts/install-host-tools.sh /usr/local/bin;",
+            dockerfile,
+        )
+        self.assertNotIn("install-file-tools.sh", dockerfile)
+        self.assertIn("--destination /usr/local/bin --python-tools;", dockerfile)
 
-    def test_legacy_image_pins_have_one_held_owner_without_freezing_host_tools(self) -> None:
+    def test_compatibility_entrypoint_has_no_independent_tool_inventory(self) -> None:
+        compatibility = (ROOT / "scripts/install-file-tools.sh").read_text()
+        self.assertIn('exec bash "${script_directory}/install-host-tools.sh" "$@"', compatibility)
+        host = (ROOT / "scripts/install-host-tools.sh").read_text()
+        for name, source in (("compatibility", compatibility), ("canonical", host)):
+            with self.subTest(wrapper=name):
+                for retired in ("renovate:", "_version=", "_checksum=", "curl", "https://"):
+                    self.assertNotIn(retired, source)
+        self.assertIn("--tools tombi shfmt shellcheck hadolint actionlint lychee", host)
+
+    def test_retired_installer_owner_is_absent_without_freezing_shared_tool_updates(self) -> None:
         config = json.loads((ROOT / ".github/renovate.json").read_text())
         owners = [
             manager
             for manager in config["customManagers"]
             if any("install-file-tools" in value for value in manager["managerFilePatterns"])
         ]
-        self.assertEqual(len(owners), 1)
-        self.assertEqual(
-            owners[0]["matchStrings"],
-            [
-                r'# renovate: datasource=(?<datasource>[^\s]+) depName=(?<depName>[^\s]+)\nreadonly [a-z0-9_]+_version="(?<currentValue>[^"]+)"'
-            ],
-        )
+        self.assertEqual(owners, [])
         hold = config["packageRules"][-1]
-        self.assertEqual(
-            hold["matchFileNames"], [".devcontainer/**", "scripts/install-file-tools.sh"]
-        )
+        self.assertEqual(hold["matchFileNames"], [".devcontainer/**"])
         self.assertIs(hold["enabled"], False)
         self.assertIs(hold["dependencyDashboardApproval"], False)
         self.assertNotIn("matchPackageNames", hold)
@@ -211,18 +459,19 @@ class ConsumerContractTests(unittest.TestCase):
         host = (ROOT / "scripts/install-host-tools.sh").read_text()
         self.assertIn('shared-ci.py" tools', host)
         self.assertNotIn("install-file-tools.sh", host)
-        self.assertNotIn("curl", host)
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
         self.assertIn("bash scripts/install-host-tools.sh", ci)
         self.assertNotIn("bash scripts/install-file-tools.sh", ci)
 
-    def test_host_tool_wrapper_forwards_to_the_actual_selected_core_interface(self) -> None:
+    def test_local_and_compatibility_wrappers_forward_the_actual_selected_tools(self) -> None:
         with tempfile.TemporaryDirectory(prefix="compose tools ") as temporary:
             fixture = Path(temporary)
             scripts = fixture / "scripts"
             scripts.mkdir()
             wrapper = scripts / "install-host-tools.sh"
             shutil.copyfile(ROOT / "scripts/install-host-tools.sh", wrapper)
+            compatibility = scripts / "install-file-tools.sh"
+            shutil.copyfile(ROOT / "scripts/install-file-tools.sh", compatibility)
             binary = fixture / "bin"
             binary.mkdir()
             interpreter = binary / "python3"
@@ -249,13 +498,23 @@ class ConsumerContractTests(unittest.TestCase):
                 "ARGV_LOG": str(argv_log),
                 "INSTALL_LOG": str(install_log),
             }
-            for arguments, destination in (
-                ([], "/usr/local/bin"),
-                ([str(fixture / "destination spaces")], str(fixture / "destination spaces")),
+            for entrypoint, arguments, destination in (
+                (wrapper, [], "/usr/local/bin"),
+                (
+                    wrapper,
+                    [str(fixture / "destination spaces")],
+                    str(fixture / "destination spaces"),
+                ),
+                (compatibility, [], "/usr/local/bin"),
+                (
+                    compatibility,
+                    [str(fixture / "destination spaces")],
+                    str(fixture / "destination spaces"),
+                ),
             ):
-                with self.subTest(arguments=arguments):
+                with self.subTest(entrypoint=entrypoint.name, arguments=arguments):
                     result = subprocess.run(
-                        ["/bin/bash", str(wrapper), *arguments],
+                        ["/bin/bash", str(entrypoint), *arguments],
                         env=environment,
                         capture_output=True,
                         text=True,
@@ -270,16 +529,16 @@ class ConsumerContractTests(unittest.TestCase):
                             "tools",
                             "--destination",
                             destination,
-                            "--profile",
-                            "core",
+                            "--tools",
+                            *shared_tooling.WEBSITE,
                         ],
                     )
                     self.assertEqual(
                         json.loads(install_log.read_text()),
-                        {"destination": destination, "tools": list(shared_tooling.CORE)},
+                        {"destination": destination, "tools": list(shared_tooling.WEBSITE)},
                     )
             refused = subprocess.run(
-                ["/bin/bash", str(wrapper)],
+                ["/bin/bash", str(compatibility)],
                 env={**environment, "TOOL_FAILURE": "1"},
                 capture_output=True,
                 text=True,
@@ -289,7 +548,7 @@ class ConsumerContractTests(unittest.TestCase):
             self.assertEqual(refused.returncode, 2)
             self.assertIn("Canonical tool installation failed", refused.stderr)
             failed = subprocess.run(
-                ["/bin/bash", str(wrapper)],
+                ["/bin/bash", str(compatibility)],
                 env={**environment, "FORCE_STATUS": "23"},
                 capture_output=True,
                 text=True,
@@ -299,7 +558,7 @@ class ConsumerContractTests(unittest.TestCase):
             self.assertEqual(failed.returncode, 23)
             argv_log.unlink()
             invalid = subprocess.run(
-                ["/bin/bash", str(wrapper), "one", "two"],
+                ["/bin/bash", str(compatibility), "one", "two"],
                 env=environment,
                 capture_output=True,
                 text=True,

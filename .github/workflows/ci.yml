@@ -47,6 +47,7 @@ jobs:
       select_api: ${{ steps.plan.outputs.select_api }}
       select_coverage: ${{ steps.plan.outputs.select_coverage }}
       select_lockfile_release_age: ${{ steps.plan.outputs.select_lockfile_release_age }}
+      select_devcontainer_validation: ${{ steps.plan.outputs.select_devcontainer_validation }}
     steps:
       - name: Check out immutable shared automation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -220,6 +221,18 @@ jobs:
       automation_sha: a87b112d174f249bce12153eb2ae4d72cd531abf
       policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
 
+  devcontainer-validation:
+    name: Dev Container qualification
+    needs: validation-plan
+    if: needs.validation-plan.outputs.select_devcontainer_validation != 'false'
+    permissions:
+      contents: read
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-devcontainer-validation.yml@a87b112d174f249bce12153eb2ae4d72cd531abf # automation-v1 interface v1
+    with:
+      candidate_sha: ${{ github.sha }}
+      policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}
+      automation_sha: a87b112d174f249bce12153eb2ae4d72cd531abf
+      config_path: scripts/validation-policy.json
   pr-gate:
     name: Required CI
     if: always()
@@ -232,6 +245,7 @@ jobs:
       - documentation
       - coverage
       - lockfile-release-age
+      - devcontainer-validation
     runs-on: ubuntu-24.04
     steps:
       - name: Check out immutable shared automation
@@ -263,7 +277,7 @@ jobs:
           PLAN_JSON: ${{ needs.validation-plan.outputs.plan }}
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          uv run --locked --project _automation/automation python -m boxferry_ci gate \
+          uv run --locked --project _automation/automation python -m boxferry_ci gate --devcontainer-validation \
             --repository-root source --config "${POLICY_CONFIG}" \
             --event "${EVENT_NAME}" --base-sha "${BASE_SHA}" --head-sha "${HEAD_SHA}" \
             --tested-sha "${GITHUB_SHA}" --policy-sha "${POLICY_SHA}" --automation-sha "${AUTOMATION_SHA}" \

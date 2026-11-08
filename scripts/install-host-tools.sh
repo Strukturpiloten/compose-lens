@@ -5,4 +5,4 @@ if (($# > 1)); then
   printf 'Usage: %s [destination]\n' "$0" >&2
   exit 2
 fi
-exec python3 "${script_directory}/shared-ci.py" tools --destination "${1:-/usr/local/bin}" --profile core
+exec python3 "${script_directory}/shared-ci.py" tools --destination "${1:-/usr/local/bin}" --tools tombi shfmt shellcheck hadolint actionlint lychee

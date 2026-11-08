@@ -21,14 +21,6 @@
     },
     {
       "customType": "regex",
-      "description": "Signal updates for checksum-pinned file-quality tools",
-      "managerFilePatterns": ["/^scripts/install-file-tools\\.sh$/"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\nreadonly [a-z0-9_]+_version=\"(?<currentValue>[^\"]+)\""
-      ]
-    },
-    {
-      "customType": "regex",
       "description": "Update directly pinned workflow tool versions",
       "managerFilePatterns": ["/^\\.github/workflows/.*\\.yml$/"],
       "matchStrings": [
@@ -132,8 +124,8 @@
       "dependencyDashboardApproval": false
     },
     {
-      "description": "Defer image, Feature and legacy image-tool proposals until GitHub image qualification",
-      "matchFileNames": [".devcontainer/**", "scripts/install-file-tools.sh"],
+      "description": "Defer image and Feature proposals until GitHub image qualification",
+      "matchFileNames": [".devcontainer/**"],
       "enabled": false,
       "dependencyDashboardApproval": false
     }

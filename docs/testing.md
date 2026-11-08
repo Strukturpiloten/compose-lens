@@ -144,7 +144,10 @@ both modes, SemVer identity and API failure propagation without invoking compile
 Native provider/application commands and coverage 88/87/89 remain consumer-owned.
 
 The locked shared Python project runs Ruff and ty. Tests separately enforce the canonical host
-installer, retained image-only installer, single disabled image-pin owner, and W1/W2 native/custom
-Renovate ownership. Image qualification is absent from this ordinary gate and remains a fresh
-GitHub CI prerequisite before image-update activation. Passing ordinary tests makes no image,
-local storage, lifetime, cleanup or App qualification claim.
+installer, compatibility forwarding, canonical image/local tool ownership, retained image holds,
+and W1/W2 native/custom
+Renovate ownership. The CI aggregate additionally requires the exact-candidate shared image receipt: an admitted
+preseed policy runs both native lanes even without a selector; an adopted policy permits only
+explicitly unselected skips. Consumer tests protect the actual caller, input closure and seed/adopted
+receipt integration. The local source gate stays image-free. Passing source tests makes no native
+image, local storage, cleanup or App qualification claim; actual CI evidence precedes updater activation.

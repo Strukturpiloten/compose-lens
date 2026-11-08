@@ -72,6 +72,7 @@ class ValidationPlanTests(unittest.TestCase):
                 "documentation",
                 "coverage",
                 "lockfile-release-age",
+                "devcontainer-validation",
             },
         )
         plan = make_plan(ROOT, POLICY, event="push", tested_sha=SHA)
@@ -95,7 +96,7 @@ class ValidationPlanTests(unittest.TestCase):
                 with self.subTest(job=job, result=result), self.assertRaises(GateFailure):
                     verify_gate(plan, changed, POLICY, comparison, expected_plan=plan)
         changed = copy.deepcopy(needs)
-        changed["devcontainer-validation"] = {"result": "success"}
+        changed["unplanned-job"] = {"result": "success"}
         with self.assertRaises(ContractError):
             verify_gate(plan, changed, POLICY, comparison, expected_plan=plan)
 

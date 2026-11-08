@@ -1,28 +1,29 @@
 # Development environment
 
 Use VS Code Dev Containers with the existing configured Podman engine and storage; rootless
-operation is preferred. The current image remains unchanged. Ordinary tooling follows the
-manifest-selected shared implementation; rebuilding or qualifying an image is separate work.
+operation is preferred. The candidate recipe now uses the same canonical tooling as local checks. Successful image
+qualification remains separate from this source integration.
 
 ## Sources of truth
 
-| Concern                                  | Source                                 |
-| ---------------------------------------- | -------------------------------------- |
-| Normal Rust toolchain                    | `rust-toolchain.toml`                  |
-| Minimum Rust version and package version | `Cargo.toml`                           |
-| Rust dependency resolution               | `Cargo.lock`                           |
-| Container base and installed tools       | `.devcontainer/Dockerfile`             |
-| Dev Container features                   | `.devcontainer/devcontainer-lock.json` |
-| Node-based file tools                    | `package-lock.json`                    |
-| Legacy image file-tool checksums         | `scripts/install-file-tools.sh`        |
+| Concern                                  | Source                                           |
+| ---------------------------------------- | ------------------------------------------------ |
+| Normal Rust toolchain                    | `rust-toolchain.toml`                            |
+| Minimum Rust version and package version | `Cargo.toml`                                     |
+| Rust dependency resolution               | `Cargo.lock`                                     |
+| Container base and installed tools       | `.devcontainer/Dockerfile`                       |
+| Dev Container features                   | `.devcontainer/devcontainer-lock.json`           |
+| Node-based file tools                    | `package-lock.json`                              |
+| Downloaded tool versions and checksums   | Selected shared `automation/tool-artifacts.json` |
 
 CI and release workflows read versions from these files instead of maintaining another prose copy.
 Ordinary development updates merge automatically after the required integrity and compatibility
 checks. Qualified provider and workload targets remain fixed under the dependency policy.
 
-The existing Bookworm image retains its exact signed `python3-venv` package, legacy file tools
-and Feature integrity graph. Image and Feature proposals remain disabled pending fresh standard
-GitHub CI qualification; ordinary dependency updates are not held by that image rule.
+The Bookworm recipe retains its exact signed `python3-venv` package and Feature integrity graph.
+Downloaded tools come from canonical shared version/checksum pairs. Image and Feature proposals
+remain disabled pending fresh standard GitHub CI qualification; ordinary dependency updates are
+not held by that image rule.
 
 Repository automation uses `scripts/shared-ci.py` and the exact revision in
 `.github/automation.json`. The shared locked Python project owns uv, Ruff, ty, and their integrity
@@ -31,10 +32,10 @@ from Python. The separate system venv/pip probe remains necessary for native pro
 tests. A development implementation override is explicitly marked mutable and cannot establish
 publication evidence.
 
-Ordinary host file tools use `scripts/install-host-tools.sh` and the canonical shared inventory.
-Python tooling is bootstrapped from the selected locked project. The retained image-only installer
-is not a fallback for host or CI tooling. Package and compiler declarations keep their existing
-ordinary owners even when an image consumes those files.
+Local, CI and image file tools, including Actionlint, use `scripts/install-host-tools.sh` and the
+canonical shared inventory. The compatibility `scripts/install-file-tools.sh` forwards to this
+same launcher. Python tooling is bootstrapped from the selected locked project. Package and
+compiler declarations keep their existing ordinary owners even when an image consumes those files.
 
 ## Complete validation
 
@@ -107,8 +108,8 @@ Cargo home.
 
 ## Updating the container
 
-Direct image, Feature and legacy image-tool proposals remain disabled until fresh standard
-GitHub CI qualification is reviewed under issue #563. Retain the current image, Feature lock,
+Direct image and Feature proposals remain disabled until fresh standard
+GitHub CI qualification is reviewed under issue #563. Retain the reviewed image pins and Feature lock,
 checksums and VS Code lifecycle definitions meanwhile. Rebuilding the existing setup does not
 activate the deferred updater or establish new qualification evidence.
 
@@ -139,6 +140,7 @@ CI and release validation lanes are Linux-only.
 Ordinary downloaded tools use `scripts/install-host-tools.sh`, the selected immutable shared
 implementation and its architecture-specific integrity inventory. CI uses this same launcher.
 Run it with a caller-owned destination and put that directory on PATH; it does not require sudo.
-The existing Dev Container alone retains `scripts/install-file-tools.sh` and its pinned legacy
-image tools. Image and Feature proposals stay disabled until fresh GitHub qualification. The
-image closure is unchanged and remains distinct from ordinary package/compiler/tool ownership.
+The CI qualification recipe calls that same launcher and separately exports canonical Python
+tools. The compatibility installer has no independent inventory or update owner. Image and
+Feature proposals stay disabled until fresh GitHub qualification; this source integration does
+not establish native qualification or change ordinary package/compiler ownership.
