@@ -1,6 +1,7 @@
 # Script guidance
 
 Shared orchestration belongs to the selected BoxFerry interface; keep consumer wrappers thin.
-Use the shared locked uv/Ruff/ty environment and install-host-tools.sh for ordinary tooling.
-install-file-tools.sh is the retained image-only installer. Preserve provider/bootstrap and
-shell-dispatch regressions. Image qualification is a separate GitHub CI requirement.
+Local, CI and image tools use install-host-tools.sh and its canonical integrity inventory.
+install-file-tools.sh only forwards compatibility calls; do not add versions or downloaders.
+Preserve provider/bootstrap and shell-dispatch regressions. Image qualification remains a
+separate GitHub CI requirement.
