@@ -93,3 +93,30 @@ entrypoint with no inventory or downloader. Its obsolete Renovate manager and re
 proposal hold are removed; the image/Feature hold and fixed native targets remain. No new
 checksum authority, Feature update activation, runtime or publication permission is introduced.
 Native amd64/arm64 image acceptance still requires actual hosted build/probe evidence.
+
+## 2026-11-09 exact-candidate coverage selection
+
+Coverage uses the candidate's existing annotated `CARGO_LLVM_COV_VERSION` declaration and exact
+`rust-toolchain.toml` channel through the admitted shared Cargo-tool verifier. Local complete
+validation requires candidate metadata and verifies the invocation before formatting or builds,
+then runs both coverage commands with the verified compiler in the same Cargo home and the
+existing isolated coverage target directory. Shared CI installs and verifies that same candidate
+selection in its separate coverage job; release retains the existing complete CI reuse.
+
+The Dockerfile ARG remains the sole coverage version authority. Its existing extraction owner
+stays in place; the retired workflow Cargo-install pattern is removed. A narrow crate/path/package
+exception keeps coverage-tool updates automatic with the inherited third-party age, grouping and
+approval policy. Other Dev Container tool, image and Feature proposal holds remain. This source
+adoption establishes no native image, live App, release-validation or publication evidence.
+
+## 2026-11-09 explicit trusted Rust tasks
+
+Shared Rust quality, coverage and MSRV calls require explicit tasks from the independently trusted
+policy revision. ComposeLens now declares MSRV's existing effective commands and 900-second task
+budget explicitly; this replaces the prior shared default without changing validation behavior.
+Coverage commands and ratchets remain consumer-owned. An omitted task fails before Rust setup
+and again at execution rather than silently selecting a shared fallback.
+
+PR and merge-queue policy remains bound to its trusted base. The explicit MSRV declaration must
+reach that base before strict MSRV caller adoption can pass; candidate policy cannot seed its own
+trusted admission. A strict draft alone does not establish a publishable adoption or hosted success.

@@ -32,6 +32,13 @@ case "${command_name}:$*" in
   git:ls-files*) printf 'README.md\0' ;;
   jq:-er\ .rust_channel) printf '9.8.7\n' ;;
   jq:*) printf '1.98.1\n' ;;
+  python3:scripts/shared-ci.py\ cargo-tools\ verify*--package\ cargo-llvm-cov\ --require-candidate)
+    [[ "${CARGO_HOME}" == "${CHECK_ALL_TEST_COVERAGE_HOME}" ]]
+    printf '{"rust_channel":"9.8.7"}\n' ;;
+  cargo:llvm-cov*)
+    [[ "${CARGO_HOME}" == "${CHECK_ALL_TEST_COVERAGE_HOME}" ]]
+    [[ "${CARGO_TARGET_DIR}" == */check-all/compose-lens/coverage ]]
+    [[ "${RUSTUP_TOOLCHAIN}" == '9.8.7' ]] ;;
   python3:scripts/shared-ci.py\ cargo-tools\ verify*)
     [[ "${CARGO_HOME}" == "${CARGO_TARGET_DIR%/cargo-semver-checks-target}/cargo-home" ]]
     [[ "${CARGO_TARGET_DIR}" == */check-all/compose-lens/cargo-semver-checks-target ]]
@@ -54,6 +61,8 @@ run_gate() {
   : > "${test_root}/${label}.commands"
   PATH="${test_root}/bin:${PATH}" \
     CHECK_ALL_TEST_LOG="${test_root}/${label}.commands" \
+    CARGO_HOME="${test_root}/ambient-cargo-home" \
+    CHECK_ALL_TEST_COVERAGE_HOME="${test_root}/ambient-cargo-home" \
     CARGO_TARGET_DIR="${CHECK_ALL_TEST_TARGET_DIR:-${test_root}/repository/target}" \
     BOXFERRY_SEMVER_RELEASE_TYPE="" PODMAN_LENS_SEMVER_CHECK=0 \
     BOXFERRY_WEBSITE_SOURCE_MODE=local \
@@ -103,6 +112,31 @@ for mode in fix check; do
     printf 'Invalid SemVer selection reached formatting or compatibility.\n' >&2
     exit 1
   fi
+done
+
+# Coverage shares its ambient Cargo home with the preflight, keeps isolated
+# artifacts, and forwards the verified channel to clean and the ratchet.
+coverage_verification="python3 scripts/shared-ci.py cargo-tools verify --repository-root ${test_root}/repository --package cargo-llvm-cov --require-candidate"
+for mode in default fix check; do
+  assert_contains "${mode}" "${coverage_verification}"
+  [[ "$(grep -Fxc -- "${coverage_verification}" "${test_root}/${mode}.commands")" == 1 ]]
+  assert_contains "${mode}" 'cargo llvm-cov clean --locked'
+  assert_contains "${mode}" 'cargo llvm-cov --locked --no-clean --workspace --all-features --all-targets --summary-only --fail-under-regions 88 --fail-under-functions 87 --fail-under-lines 89'
+done
+for mode in fix check; do
+  status=0
+  CHECK_ALL_TEST_FAIL_COMMAND="${coverage_verification}" run_gate invalid_coverage "--${mode}" || status=$?
+  [[ "${status}" == 17 ]]
+  [[ "$(tail -n 1 "${test_root}/invalid_coverage.commands")" == "${coverage_verification}" ]]
+  grep -Fq 'Verify exact local Cargo coverage selection' "${test_root}/invalid_coverage.output"
+  if grep -Eq '^cargo (fmt|llvm-cov)' "${test_root}/invalid_coverage.commands"; then
+    printf 'Invalid coverage selection reached formatting or coverage.\n' >&2
+    exit 1
+  fi
+  status=0
+  CHECK_ALL_TEST_FAIL_COMMAND='cargo llvm-cov clean --locked' run_gate failed_clean "--${mode}" || status=$?
+  [[ "${status}" == 17 ]]
+  [[ "$(tail -n 1 "${test_root}/failed_clean.commands")" == 'cargo llvm-cov clean --locked' ]]
 done
 
 api_development='python3 scripts/shared-ci.py run --event local --task api-development --report-json target/api-development-task.json'

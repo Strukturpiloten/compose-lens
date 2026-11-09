@@ -20,6 +20,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from boxferry_ci import __file__ as shared_module_file
+from boxferry_ci import cargo_tools
 from boxferry_ci import tooling as shared_tooling
 from boxferry_ci.contracts import ContractError
 from boxferry_ci.gate import GateFailure, verify_devcontainer_gate
@@ -129,6 +130,92 @@ class ConsumerContractTests(unittest.TestCase):
             POLICY.local_commands["full"], (("bash", "scripts/check-all.sh", "--check"),)
         )
 
+    def assert_shared_rust_calls(self, ci: str) -> None:
+        self.assertEqual(
+            ci.count("uses: Strukturpiloten/boxferry/.github/workflows/shared-rust-ci.yml@"), 3
+        )
+        for job, selector, task, successor in (
+            ("rust", "rust", "rust-quality", "coverage"),
+            ("coverage", "coverage", "coverage", "msrv"),
+            ("msrv", "msrv", "msrv", "dependencies"),
+        ):
+            block = ci.split(f"  {job}:\n", 1)[1].split(f"  {successor}:\n", 1)[0]
+            self.assertIn(task, POLICY.tasks)
+            self.assertIn(f"select_{selector} == 'true'", block)
+            self.assertIn("shared-rust-ci.yml@" + MANIFEST["revision"], block)
+            self.assertIn("    permissions:\n      contents: read\n", block)
+            self.assertEqual(
+                set(re.findall(r"(?m)^      ([a-z_]+):", block.split("    with:\n", 1)[1])),
+                {
+                    "candidate_sha",
+                    "automation_sha",
+                    "policy_sha",
+                    "config_path",
+                    "task",
+                    "require_configured_task",
+                },
+            )
+            for binding in (
+                "candidate_sha: ${{ github.sha }}",
+                "automation_sha: " + MANIFEST["revision"],
+                "policy_sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.sha }}",
+                "config_path: scripts/validation-policy.json",
+                "task: " + task,
+            ):
+                self.assertIn(binding, block)
+            self.assertEqual(
+                re.findall(r"(?m)^      require_configured_task: (.+)$", block), ["true"]
+            )
+
+    def test_shared_coverage_job_binds_the_candidate_without_tool_overrides(self) -> None:
+        ci = (ROOT / ".github/workflows/ci.yml").read_text()
+        self.assert_shared_rust_calls(ci)
+        self.assertEqual(
+            POLICY.task("coverage").commands,
+            (
+                ("cargo", "llvm-cov", "clean", "--locked"),
+                (
+                    "cargo",
+                    "llvm-cov",
+                    "--locked",
+                    "--no-clean",
+                    "--workspace",
+                    "--all-features",
+                    "--all-targets",
+                    "--summary-only",
+                    "--fail-under-regions",
+                    "88",
+                    "--fail-under-functions",
+                    "87",
+                    "--fail-under-lines",
+                    "89",
+                ),
+            ),
+        )
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        self.assertIn("uses: ./.github/workflows/ci.yml", release)
+        self.assertIn("api_purpose: published", release)
+
+    def test_shared_rust_calls_reject_missing_or_false_strict_flags(self) -> None:
+        ci = (ROOT / ".github/workflows/ci.yml").read_text()
+        for job, successor in (
+            ("rust", "coverage"),
+            ("coverage", "msrv"),
+            ("msrv", "dependencies"),
+        ):
+            start = ci.index(f"  {job}:\n")
+            end = ci.index(f"  {successor}:\n", start)
+            block = ci[start:end]
+            flag = "      require_configured_task: true\n"
+            self.assertEqual(block.count(flag), 1)
+            for replacement in ("", "      require_configured_task: false\n"):
+                changed = ci[:start] + block.replace(flag, replacement, 1) + ci[end:]
+                with (
+                    self.subTest(job=job, replacement=replacement),
+                    self.assertRaises(AssertionError),
+                ):
+                    self.assert_shared_rust_calls(changed)
+
     def test_explicit_msrv_task_preserves_selected_fallback_and_budget(self) -> None:
         from dataclasses import replace
 
@@ -143,6 +230,115 @@ class ConsumerContractTests(unittest.TestCase):
         self.assertEqual(selected.commands, expected)
         self.assertEqual(selected.timeout_seconds, 900)
         self.assertEqual(selected, previous)
+
+    def test_feature_qualification_has_only_the_required_read_permissions(self) -> None:
+        workflow = (ROOT / ".github/workflows/devcontainer-feature-qualification.yml").read_text()
+        header, jobs = workflow.split("\njobs:\n", 1)
+        self.assertEqual(
+            header.split("permissions:\n", 1)[1],
+            "  contents: read\n  checks: read\n  statuses: read",
+        )
+        self.assertNotIn("permissions:", jobs)
+        self.assertIn("shared-devcontainer-updates.yml@" + MANIFEST["revision"], jobs)
+        self.assertIn("automation-sha: " + MANIFEST["revision"], jobs)
+
+    def test_candidate_coverage_metadata_and_dispatch_fail_closed(self) -> None:
+        # Execute the admitted verifier with synthetic executables; no builds,
+        # installation or network. Their channel assertions exercise forwarding.
+        selected = cargo_tools.select(ROOT, "cargo-llvm-cov", require_candidate=True)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".devcontainer").mkdir()
+            metadata = root / ".devcontainer/Dockerfile"
+            original = (ROOT / ".devcontainer/Dockerfile").read_text()
+            metadata.write_text(original)
+            (root / "rust-toolchain.toml").write_text((ROOT / "rust-toolchain.toml").read_text())
+            binary = root / "bin"
+            binary.mkdir()
+
+            def executable(name: str, body: str) -> Path:
+                path = binary / name
+                path.write_text("#!/bin/sh\nset -eu\n" + body)
+                path.chmod(0o755)
+                return path
+
+            channel_assertion = f'[ "$RUSTUP_TOOLCHAIN" = "{selected.rust_channel}" ]\n'
+            executable("rustup", "exit 0\n")
+            executable(
+                "rustc", channel_assertion + f"printf 'rustc {selected.rust_channel} (test)\\n'\n"
+            )
+            executable(
+                "cargo",
+                channel_assertion
+                + f'if [ "$1" = --version ]; then printf \'cargo {selected.rust_channel} (test)\\n\'; else exec cargo-llvm-cov "$@"; fi\n',
+            )
+            plugin = executable(
+                "cargo-llvm-cov", f"printf 'cargo-llvm-cov {selected.version}\\n'\n"
+            )
+            environment = {"PATH": str(binary), "CARGO_HOME": str(root / "home")}
+            self.assertEqual(cargo_tools.verify(selected, root, environment), plugin)
+            plugin.write_text("#!/bin/sh\nprintf 'cargo-llvm-cov 99.98.97\\n'\n")
+            with self.assertRaisesRegex(ContractError, "declared"):
+                cargo_tools.verify(selected, root, environment)
+            executable("cargo-llvm-cov", f"printf 'cargo-llvm-cov {selected.version}\\n'\n")
+            shadow = root / "home/bin/cargo-llvm-cov"
+            shadow.parent.mkdir(parents=True)
+            shutil.copyfile(plugin, shadow)
+            with self.assertRaisesRegex(ContractError, "shadows"):
+                cargo_tools.verify(selected, root, environment)
+            shadow.unlink()
+            (root / ".cargo").mkdir()
+            (root / ".cargo/config.toml").write_text('[alias]\nllvm-cov="!false"\n')
+            with self.assertRaisesRegex(ContractError, "overrides"):
+                cargo_tools.verify(selected, root, environment)
+            (root / ".cargo/config.toml").unlink()
+            executable("rustc", "printf 'rustc 99.98.97 (wrong)\\n'\n")
+            with self.assertRaisesRegex(ContractError, "candidate Rust"):
+                cargo_tools.verify(selected, root, environment)
+            metadata.unlink()
+            with self.assertRaisesRegex(ContractError, "candidate Dockerfile"):
+                cargo_tools.select(root, "cargo-llvm-cov", require_candidate=True)
+            metadata.write_text(
+                original.replace(
+                    f"ARG CARGO_LLVM_COV_VERSION={selected.version}",
+                    "ARG CARGO_LLVM_COV_VERSION=latest",
+                )
+            )
+            with self.assertRaises(ContractError):
+                cargo_tools.select(root, "cargo-llvm-cov", require_candidate=True)
+            metadata.write_text(original)
+            (root / "rust-toolchain.toml").write_text('[toolchain]\nchannel="stable"\n')
+            with self.assertRaisesRegex(ContractError, "exact"):
+                cargo_tools.select(root, "cargo-llvm-cov", require_candidate=True)
+
+    def test_coverage_has_one_version_owner_and_one_narrow_hold_exception(self) -> None:
+        config = json.loads((ROOT / ".github/renovate.json").read_text())
+        dockerfile = (ROOT / ".devcontainer/Dockerfile").read_text()
+        owners = []
+        for manager in config["customManagers"]:
+            if manager["managerFilePatterns"] != ["/^\\.devcontainer/Dockerfile$/"]:
+                continue
+            for expression in manager["matchStrings"]:
+                pattern = re.sub(r"\(\?<([A-Za-z_]\w*)>", r"(?P<\1>", expression)
+                owners.extend(
+                    manager["description"]
+                    for match in re.finditer(pattern, dockerfile)
+                    if match.groupdict().get("depName") == "cargo-llvm-cov"
+                )
+        self.assertEqual(owners, ["Update versioned Dev Container tools"])
+        exception = config["packageRules"][-1]
+        self.assertEqual(
+            {key: value for key, value in exception.items() if key != "description"},
+            {
+                "matchManagers": ["custom.regex"],
+                "matchDatasources": ["crate"],
+                "matchFileNames": [".devcontainer/Dockerfile"],
+                "matchPackageNames": ["cargo-llvm-cov"],
+                "enabled": True,
+            },
+        )
+        for manager in config["customManagers"]:
+            self.assertTrue(all("cargo install" not in value for value in manager["matchStrings"]))
 
     def test_image_caller_keeps_original_plan_and_exact_bound_gate(self) -> None:
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -470,7 +666,13 @@ class ConsumerContractTests(unittest.TestCase):
             if any("install-file-tools" in value for value in manager["managerFilePatterns"])
         ]
         self.assertEqual(owners, [])
-        hold = config["packageRules"][-1]
+        holds = [
+            rule
+            for rule in config["packageRules"]
+            if rule.get("matchFileNames") == [".devcontainer/**"]
+        ]
+        self.assertEqual(len(holds), 1)
+        hold = holds[0]
         self.assertEqual(hold["matchFileNames"], [".devcontainer/**"])
         self.assertIs(hold["enabled"], False)
         self.assertIs(hold["dependencyDashboardApproval"], False)
@@ -791,6 +993,7 @@ def verify_cached_native_node_owner(runtime: Path) -> dict[str, object]:
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 const [runtimeArg, sourceArg, selectedArg, outputArg] = process.argv.slice(1);
@@ -812,6 +1015,10 @@ GlobalConfig.set({ localDir: scratch, cacheDir: scratch, baseDir: source });
 const { extractPackageFile: actions } = await load('modules/manager/github-actions/extract.js');
 const { extractPackageFile: regex } = await load('modules/manager/custom/regex/index.js');
 const { applyPackageRules } = await load('util/package-rules/index.js');
+const { doAutoReplace } = await load('workers/repository/update/branch/auto-replace.js');
+const normalizerModule = 'workers/repository/extract/manager-files.js';
+const { normalizeDepNames } = await load(normalizerModule);
+const normalizerSha256 = createHash('sha256').update(fs.readFileSync(path.join(runtime, 'dist', normalizerModule))).digest('hex');
 const { matchRegexOrGlob } = await load('util/string-match.js');
 const { resolveConfigPresets } = await load('config/presets/index.js');
 const common = JSON.parse(fs.readFileSync(path.join(selected, 'renovate-presets/common.json'), 'utf8'));
@@ -849,11 +1056,14 @@ assert.equal(active.length, 0, 'consumer must have no independent Node lookup ro
 async function ownership(contents, file, configuration = config) {
   const found = [];
   async function retain(dependency, manager) {
+    const rawDependency = { ...dependency };
+    normalizeDepNames(dependency);
     const effective = await applyPackageRules({ ...configuration, ...dependency, manager, packageFile: file, updateType: 'patch' });
-    found.push({ manager, depName: dependency.depName, packageName: dependency.packageName,
+    found.push({ ...(dependency.depName === 'cargo-llvm-cov' ? { rawDependency, normalizedDependency: dependency, effectiveConfiguration: effective } : {}), manager, depName: dependency.depName, packageName: dependency.packageName,
       depType: dependency.depType, datasource: dependency.datasource,
       currentValue: dependency.currentValue, currentDigest: dependency.currentDigest,
-      skipReason: dependency.skipReason, enabled: effective.enabled !== false,
+      groupName: effective.groupName ?? null,
+      skipReason: effective.skipReason, enabled: effective.enabled !== false,
       automerge: effective.automerge, approval: effective.dependencyDashboardApproval,
       minimumReleaseAge: effective.minimumReleaseAge,
       minimumReleaseAgeBehaviour: effective.minimumReleaseAgeBehaviour });
@@ -958,6 +1168,67 @@ const ownerControls = {
   rejectedBroadProviderActionRows: actionRows(broadlyBlocked),
   retainedMatrixDiscoveryRows: providerOwnership.matrix,
 };
+// The existing Dockerfile ARG is the single coverage version authority.
+const coverageFile = '.devcontainer/Dockerfile';
+const coverageSource = fs.readFileSync(path.join(source, coverageFile), 'utf8');
+const coverageOwners = [];
+for (const manager of config.customManagers) {
+  if (!(manager.managerFilePatterns ?? []).some(pattern => matchRegexOrGlob(coverageFile, pattern))) continue;
+  const dependencies = regex(coverageSource, coverageFile, manager)?.deps ?? [];
+  for (const [index, dependency] of dependencies.entries())
+    if (dependency.depName === 'cargo-llvm-cov') coverageOwners.push({ manager, dependency, index });
+}
+assert.equal(coverageOwners.length, 1, 'coverage ARG needs exactly one native extraction owner');
+const { manager: coverageManager, dependency: coverageDependency, index: coverageIndex } = coverageOwners[0];
+const nextCoverage = '99.7.3';
+const coverageUpdated = await doAutoReplace({ ...coverageManager, ...coverageDependency,
+  manager: 'regex', depIndex: coverageIndex, packageFile: coverageFile, newValue: nextCoverage }, coverageSource, false);
+assert.equal(coverageUpdated, coverageSource.replace('ARG CARGO_LLVM_COV_VERSION=' + coverageDependency.currentValue,
+  'ARG CARGO_LLVM_COV_VERSION=' + nextCoverage), 'only the existing coverage declaration may change');
+const coveragePolicy = (await ownership(coverageSource, coverageFile)).filter(row => row.depName === 'cargo-llvm-cov');
+assert.equal(coveragePolicy.length, 1);
+ordinaryPolicy(coveragePolicy[0]);
+assert.equal(coveragePolicy[0].groupName, null, 'the existing coverage ARG has no inherited group');
+const heldTools = (await ownership(coverageSource, coverageFile)).filter(row =>
+  ['cargo-deny', 'cargo-semver-checks', 'zizmor', 'docker.io/library/node', 'mcr.microsoft.com/devcontainers/rust'].includes(row.depName));
+assert.equal(heldTools.length, 5);
+assert.ok(heldTools.every(row => !row.enabled), 'other image/tool holds must remain');
+const featurePolicy = await applyPackageRules({ ...config, manager: 'devcontainer', datasource: 'docker',
+  packageName: 'ghcr.io/devcontainers/features/github-cli', packageFile: '.devcontainer/devcontainer.json', updateType: 'patch' });
+assert.equal(featurePolicy.enabled, false, 'Feature proposal hold remains');
+const obsoleteCoverage = '# renovate: datasource=crate depName=cargo-llvm-cov' + NL +
+  '        run: cargo install --locked --version 1.2.3 cargo-llvm-cov' + NL;
+assert.equal((await ownership(obsoleteCoverage, fileName)).filter(row => row.depName === 'cargo-llvm-cov').length, 0,
+  'retired workflow install owner must remain absent');
+const withoutCoverageException = { ...config, packageRules: config.packageRules.filter(rule =>
+  !(rule.enabled === true && rule.matchPackageNames?.includes('cargo-llvm-cov'))) };
+const disabledCoverage = (await ownership(coverageSource, coverageFile, withoutCoverageException)).find(row => row.depName === 'cargo-llvm-cov');
+assert.throws(() => ordinaryPolicy(disabledCoverage), /ordinary update must remain enabled/);
+assert.equal(disabledCoverage.groupName, coveragePolicy[0].groupName, 'the narrow exception must not alter grouping');
+const unnormalizedCoverage = await applyPackageRules({ ...config, ...coverageDependency, manager: 'regex', packageFile: coverageFile, updateType: 'patch' });
+assert.equal(unnormalizedCoverage.enabled, false, 'raw extraction lacks production normalization and cannot prove the exception');
+const coverageOwnership = { normalization: { module: 'dist/' + normalizerModule, sha256: normalizerSha256, unnormalizedEnabled: unnormalizedCoverage.enabled }, ownerCount: coverageOwners.length, exactReplacement: true,
+  policy: coveragePolicy, heldTools, featureHeld: featurePolicy.enabled === false, obsoleteInstallOwners: 0 };
+// Every source revision occurrence retains its existing native/custom owner.
+const sourceRevision = JSON.parse(fs.readFileSync(path.join(source, '.github/automation.json'), 'utf8')).revision;
+const sourcePinOwners = [];
+for (const file of ['.github/automation.json', '.github/renovate.json',
+  ...fs.readdirSync(path.join(source, '.github/workflows')).filter(name => /\.ya?ml$/.test(name)).map(name => '.github/workflows/' + name)]) {
+  const contents = fs.readFileSync(path.join(source, file), 'utf8');
+  const count = contents.split(sourceRevision).length - 1;
+  if (!count) continue;
+  const rows = (await ownership(contents, file)).filter(row => row.depName === 'Strukturpiloten/boxferry');
+  assert.equal(rows.length, count, 'each immutable automation occurrence needs one owner in ' + file);
+  for (const row of rows) {
+    assert.equal(row.currentDigest, sourceRevision, file);
+    assert.equal(row.enabled, true, file);
+    assert.equal(row.groupName, 'Shared BoxFerry automation', file);
+    assert.equal(row.minimumReleaseAge, '0 days', file);
+    assert.equal(row.automerge, true, file);
+    assert.equal(row.approval, false, file);
+  }
+  sourcePinOwners.push({ file, declaredOccurrences: count, rows });
+}
 const policyCases = [];
 for (const [label, dependency, expectedAge, fixed] of [
   ['ordinary Rust', { manager: 'cargo', datasource: 'crate', packageName: 'serde', packageFile: 'Cargo.toml' }, '3 days', false],
@@ -973,7 +1244,7 @@ for (const [label, dependency, expectedAge, fixed] of [
   if (!fixed) assert.equal(effective.automerge, true, label);
   policyCases.push({ label, dependency, enabled: effective.enabled !== false, automerge: effective.automerge, approval: effective.dependencyDashboardApproval, minimumReleaseAge: effective.minimumReleaseAge });
 }
-const report = { runtime: version, selectedRuntimeImage: pin, nativeRows, customRows, active, ownerControls, policyCases, scope: 'real frozen native/custom extraction and effective rules; Node inactivity, unique literal runner owners, disabled qualified provider Python/matrix routes, preserved Action SHA and ordinary Python updates; no registry lookup, updates, engine operations or repository writes' };
+const report = { runtime: version, selectedRuntimeImage: pin, nativeRows, customRows, active, ownerControls, coverageOwnership, sourcePinOwners, policyCases, scope: 'real frozen native/custom extraction and effective rules; Node inactivity, unique literal runner owners, disabled qualified provider Python/matrix routes, preserved Action SHA and ordinary Python updates; no registry lookup, updates, engine operations or repository writes' };
 fs.writeFileSync(output, JSON.stringify(report, null, 2) + NL);
 console.log(JSON.stringify({ nativeNodeRows: nativeRows.length, customNodeRows: customRows.length, activeNodeLookups: active.length }));
 
