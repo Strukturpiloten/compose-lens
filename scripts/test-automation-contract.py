@@ -129,6 +129,21 @@ class ConsumerContractTests(unittest.TestCase):
             POLICY.local_commands["full"], (("bash", "scripts/check-all.sh", "--check"),)
         )
 
+    def test_explicit_msrv_task_preserves_selected_fallback_and_budget(self) -> None:
+        from dataclasses import replace
+
+        expected = (("cargo", "ci-check"), ("cargo", "ci-policy"))
+        previous = replace(
+            POLICY, tasks={name: task for name, task in POLICY.tasks.items() if name != "msrv"}
+        ).task("msrv")
+        self.assertIn("msrv", POLICY.tasks)
+        selected = POLICY.tasks["msrv"]
+        self.assertEqual(previous.commands, expected)
+        self.assertEqual(previous.timeout_seconds, 900)
+        self.assertEqual(selected.commands, expected)
+        self.assertEqual(selected.timeout_seconds, 900)
+        self.assertEqual(selected, previous)
+
     def test_image_caller_keeps_original_plan_and_exact_bound_gate(self) -> None:
         ci = (ROOT / ".github/workflows/ci.yml").read_text()
         self.assertEqual(
@@ -185,7 +200,12 @@ class ConsumerContractTests(unittest.TestCase):
     def test_actual_trusted_seed_and_adopted_prose_use_exact_image_receipts(self) -> None:
         # Reconstruct the exact reviewed preseed bytes, independently admitted by the source.
         adopted_bytes = (ROOT / "scripts/validation-policy.json").read_bytes()
-        seed_bytes = adopted_bytes.replace(
+        # Explicit MSRV was added after image adoption. Keep the historically
+        # admitted seed bytes/hash intact, rather than approving a new seed.
+        historical_adopted_bytes = re.sub(
+            rb'(?ms)^    "msrv": \{\n.*?^    \},\n', b"", adopted_bytes, count=1
+        )
+        seed_bytes = historical_adopted_bytes.replace(
             b'    "lockfile-release-age",\n    "devcontainer-validation"\n  ],',
             b'    "lockfile-release-age"\n  ],',
             1,
