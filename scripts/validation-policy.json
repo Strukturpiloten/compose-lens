@@ -53,6 +53,13 @@
       ],
       "timeout_seconds": 1800
     },
+    "msrv": {
+      "commands": [
+        ["cargo", "ci-check"],
+        ["cargo", "ci-policy"]
+      ],
+      "timeout_seconds": 900
+    },
     "coverage": {
       "commands": [
         ["cargo", "llvm-cov", "clean", "--locked"],
