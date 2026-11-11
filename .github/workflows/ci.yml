@@ -35,7 +35,7 @@ env:
 jobs:
   validation-plan:
     name: Validation plan
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
@@ -149,7 +149,7 @@ jobs:
       api_purpose: ${{ inputs.api_purpose || 'development' }}
   documentation:
     name: Repository files and documentation
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: validation-plan
     if: needs.validation-plan.outputs.select_documentation == 'true'
     timeout-minutes: 15
@@ -246,7 +246,7 @@ jobs:
       - coverage
       - lockfile-release-age
       - devcontainer-validation
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Check out immutable shared automation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
