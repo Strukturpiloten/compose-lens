@@ -29,6 +29,14 @@ The selected shared Python lock owns uv, Ruff and ty; no second Python lock or m
 `scripts/shared-ci.py` verifies the exact archive before dispatch. Local, CI and image file tools, including Actionlint, use `scripts/install-host-tools.sh` and the
 selected shared architecture-specific integrity inventory.
 Local SemVer preflight and development API checks share the verified compiler and isolated storage.
+Coverage preflight requires the candidate's existing Dockerfile declaration and exact Rust channel;
+its clean and ratchet commands use that verified channel, the same Cargo home and isolated artifacts.
+The shared coverage job verifies the same candidate selection before executing the consumer policy.
+Shared Rust quality, coverage and MSRV calls require explicit trusted policy tasks. The explicit MSRV
+task preserves its former shared-default command sequence and budget; no version inventory is added.
+The existing coverage ARG retains one extraction owner and the ordinary third-party age and approval
+policy. Only this crate/path/package has a narrow exception to the Dev Container proposal hold;
+other tool, image and Feature updates remain held. No second coverage version inventory is added.
 
 The CI qualification recipe derives Rust from `rust-toolchain.toml` and exports the same canonical
 downloaded tools and shared Python executables from the selected automation source. Its Feature
