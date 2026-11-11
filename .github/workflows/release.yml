@@ -40,7 +40,7 @@ jobs:
   release-metadata-validation:
     name: Validate release metadata
     if: github.repository == 'Strukturpiloten/compose-lens'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       candidate_sha: ${{ steps.candidate.outputs.sha }}
@@ -85,7 +85,7 @@ jobs:
     name: Validate shared publication inventory without publishing
     needs: release-gate
     if: github.repository == 'Strukturpiloten/compose-lens' && needs.release-gate.result == 'success'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -126,7 +126,7 @@ jobs:
       needs.crate-preparation.result == 'success'
     needs: [release-gate, crate-preparation]
     environment: release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     env:
       RELEASE_GITHUB_API_VERSION: "2026-03-10"
