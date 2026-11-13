@@ -82,8 +82,8 @@
     }
   ],
   "extends": [
-    "github>Strukturpiloten/boxferry//renovate-presets/common#7b9ce867e0de8b05ee5d084581cad7de54d06459",
-    "github>Strukturpiloten/boxferry//renovate-presets/rust#7b9ce867e0de8b05ee5d084581cad7de54d06459"
+    "github>Strukturpiloten/boxferry//renovate-presets/common#32bebc379d7b32e79412eeba65e084484d4d18b0",
+    "github>Strukturpiloten/boxferry//renovate-presets/rust#32bebc379d7b32e79412eeba65e084484d4d18b0"
   ],
   "packageRules": [
     {
