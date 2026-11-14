@@ -74,10 +74,10 @@ jobs:
       - release-metadata-validation
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@5c8a288f7b9ef9d7b2e582153811030919900a22 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@ad56f766fbbb22acc84c82dad44fcb05d407c595 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: 5c8a288f7b9ef9d7b2e582153811030919900a22
+      automation_sha: ad56f766fbbb22acc84c82dad44fcb05d407c595
       policy_sha: ${{ github.sha }}
       config_path: scripts/release-policy.json
       needs_json: ${{ toJSON(needs) }}
@@ -101,7 +101,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: 5c8a288f7b9ef9d7b2e582153811030919900a22
+          ref: ad56f766fbbb22acc84c82dad44fcb05d407c595
           path: _automation
           persist-credentials: false
       - name: Install locked shared Python tooling
@@ -110,7 +110,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: 5c8a288f7b9ef9d7b2e582153811030919900a22
+          automation-sha: ad56f766fbbb22acc84c82dad44fcb05d407c595
           release-config: ${{ github.workspace }}/source/scripts/release-policy.json
           package: compose-lens
           validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}
@@ -149,7 +149,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: 5c8a288f7b9ef9d7b2e582153811030919900a22
+          ref: ad56f766fbbb22acc84c82dad44fcb05d407c595
           path: _automation
           persist-credentials: false
       - name: Install locked shared Python tooling
@@ -386,7 +386,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: 5c8a288f7b9ef9d7b2e582153811030919900a22
+          automation-sha: ad56f766fbbb22acc84c82dad44fcb05d407c595
           release-config: ${{ github.workspace }}/source/scripts/release-policy.json
           package: compose-lens
           validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}
