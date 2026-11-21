@@ -50,7 +50,6 @@ run_step() {
 }
 
 required_tools=(
-  actionlint
   cargo
   cargo-deny
   cargo-llvm-cov
@@ -175,6 +174,12 @@ else
   run_step "Format and lint non-Rust files" bash scripts/check-files.sh --fix
 fi
 run_step "Check whitespace errors" git --no-pager diff --check
+current_step="Install pinned Actionlint"
+workflow_lint_tools="${repository_root}/target/workflow-lint-tools"
+python3 scripts/shared-ci.py tools --destination "${workflow_lint_tools}" --tools actionlint
+test -x "${workflow_lint_tools}/actionlint"
+PATH="${workflow_lint_tools}:${PATH}"
+export PATH
 run_step "Lint GitHub Actions syntax" actionlint
 run_step "Audit GitHub Actions security" zizmor .github/workflows
 if [[ "${format_mode}" == "fix" ]]; then

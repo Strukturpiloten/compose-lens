@@ -53,10 +53,41 @@ class ConsumerContractTests(unittest.TestCase):
             set(config) & {"minimumReleaseAge", "automerge", "lockFileMaintenance"}, set()
         )
 
+    def test_release_packaging_uses_the_pinned_helper_from_source(self) -> None:
+        release = (ROOT / ".github/workflows/release.yml").read_text()
+        protected = release.split("\n  release:\n", 1)[1]
+        job = protected.split("\n    steps:\n", 1)[0]
+        self.assertIn("inputs.validation_only != true &&", job)
+        self.assertIn("environment: release", job)
+
+        checkout = protected.split("- name: Check out immutable shared automation", 1)[1]
+        checkout = checkout.split("- name: Install locked shared Python tooling", 1)[0]
+        self.assertIn("repository: Strukturpiloten/boxferry", checkout)
+        self.assertIn(f"ref: {MANIFEST['revision']}\n          path: _automation", checkout)
+        self.assertIn("persist-credentials: false", checkout)
+
+        packaging = protected.split("- name: Build release package and checksum", 1)[1]
+        packaging = packaging.split("- name: Attest release package", 1)[0]
+        self.assertIn("CRATE: ${{ steps.metadata.outputs.crate }}", packaging)
+        self.assertIn("working-directory: source", packaging)
+        self.assertIn(
+            'uv run --locked --project "${GITHUB_WORKSPACE}/_automation/automation"',
+            packaging,
+        )
+        self.assertIn('python -m boxferry_ci.package_crate "${CRATE}"', packaging)
+        self.assertIn(
+            "subject-path: ${{ github.workspace }}/source/${{ steps.metadata.outputs.crate }}",
+            protected,
+        )
+        self.assertIn('upload_asset "${CRATE}" "application/gzip"', protected)
+        self.assertIn('upload_asset "${CRATE}.sha256" "text/plain"', protected)
+
     def assert_service_permissions(self, workflow: str) -> None:
         header, boundary, jobs = workflow.partition("\njobs:\n")
         self.assertEqual(boundary, "\njobs:\n")
         self.assertEqual(re.findall(r"(?m)^permissions:.*$", header), ["permissions: {}"])
+        self.assertEqual(re.findall(r"(?m)^cache-mode:.*$", header), ["cache-mode: none"])
+        self.assertNotRegex(jobs, r"(?m)^ +cache-mode:")
         self.assertTrue(jobs.startswith("  eligibility:\n"))
         blocks = re.findall(r"(?ms)^    permissions:\n(.*?)(?=^    [a-z][a-z-]*:|\Z)", jobs)
         self.assertEqual(len(blocks), 1)
@@ -101,6 +132,9 @@ class ConsumerContractTests(unittest.TestCase):
             ("      checks: read\n", "      checks: read\n      packages: write\n"),
             ("      statuses: write\n", "      statuses: write\n\n      issues: write\n"),
             ("permissions: {}\n", "permissions: write-all\n"),
+            ("cache-mode: none\n", ""),
+            ("cache-mode: none\n", "cache-mode: write\n"),
+            ("    name: Trusted dependency metadata\n", "    cache-mode: write\n"),
         ):
             with self.subTest(before=before, after=after):
                 changed = workflow.replace(before, after, 1)
@@ -789,6 +823,26 @@ class ConsumerContractTests(unittest.TestCase):
             )
             self.assertEqual(invalid.returncode, 2)
             self.assertFalse(argv_log.exists())
+
+    def test_hosted_actionlint_checks_workflows_after_installing_the_pinned_tool(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+        documentation = workflow.split("  documentation:\n", 1)[1].split(
+            "  lockfile-release-age:\n", 1
+        )[0]
+        install = documentation.index("bash scripts/install-host-tools.sh")
+        set_path = documentation.index(
+            '"${RUNNER_TEMP}/compose-lens-file-tools" >> "${GITHUB_PATH}"'
+        )
+        lint = documentation.index("        run: actionlint\n")
+        contracts = documentation.index(
+            "uv run --locked --project _automation/automation python "
+            "_automation/scripts/test-workflow-lint.py"
+        )
+        self.assertLess(install, set_path)
+        self.assertLess(set_path, lint)
+        self.assertLess(lint, contracts)
+        self.assertNotIn("continue-on-error", documentation)
+        self.assertNotIn("actionlint -ignore", documentation)
 
     def test_hosted_node_uses_selected_authority_and_preserves_cache(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text()
