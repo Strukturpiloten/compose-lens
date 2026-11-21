@@ -19,6 +19,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
 from boxferry_ci import __file__ as shared_module_file
 from boxferry_ci import cargo_tools
 from boxferry_ci import tooling as shared_tooling
@@ -81,6 +82,119 @@ class ConsumerContractTests(unittest.TestCase):
         )
         self.assertIn('upload_asset "${CRATE}" "application/gzip"', protected)
         self.assertIn('upload_asset "${CRATE}.sha256" "text/plain"', protected)
+
+    def test_provider_candidate_requires_every_verified_matrix_job(self) -> None:
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/provider-conformance.yml").read_text(),
+            Loader=yaml.BaseLoader,
+        )
+        jobs = workflow["jobs"]
+        matrix_job = jobs["observed-provider-config"]
+        matrix = matrix_job["strategy"]["matrix"]
+        targets = matrix["target"]
+        self.assertEqual(set(matrix), {"runner", "target"})
+        self.assertEqual(len(matrix["runner"]), 1)
+        self.assertEqual(len(targets), len(set(targets)))
+        self.assertGreater(len(targets), 0)
+        self.assertEqual(
+            matrix_job["outputs"],
+            {target: f"${{{{ steps.receipt.outputs.{target} }}}}" for target in targets},
+        )
+        capture, evidence, row = matrix_job["steps"][-3:]
+        self.assertEqual(capture["id"], "conformance")
+        self.assertEqual(evidence["id"], "evidence")
+        self.assertEqual(evidence["if"], "always()")
+        self.assertEqual(row["id"], "receipt")
+        self.assertEqual(
+            row["if"],
+            "success() && steps.conformance.outcome == 'success' && "
+            "steps.evidence.outcome == 'success'",
+        )
+        self.assertEqual(
+            row["env"],
+            {
+                "TARGET": "${{ matrix.target }}",
+                "VERIFIED_SHA": "${{ steps.candidate.outputs.sha }}",
+                "MATRIX_TOTAL": "${{ strategy.job-total }}",
+            },
+        )
+
+        gate = jobs["provider-candidate"]
+        self.assertEqual(gate["needs"], "observed-provider-config")
+        self.assertEqual(gate["if"], "${{ !cancelled() }}")
+        self.assertEqual(gate["permissions"], {})
+        self.assertEqual(
+            gate["outputs"], {"candidate_sha": "${{ steps.receipt.outputs.candidate_sha }}"}
+        )
+        self.assertEqual(
+            workflow["on"]["workflow_call"]["outputs"]["candidate_sha"]["value"],
+            "${{ jobs.provider-candidate.outputs.candidate_sha }}",
+        )
+        (step,) = gate["steps"]
+        self.assertEqual(
+            step["env"],
+            {
+                "CANDIDATE_SHA": "${{ inputs.candidate_sha || github.sha }}",
+                "MATRIX_RESULT": "${{ needs.observed-provider-config.result }}",
+                "MATRIX_RECEIPTS": "${{ toJSON(needs.observed-provider-config.outputs) }}",
+            },
+        )
+
+        candidate = "a" * 40
+
+        def execute(
+            script: str, env: dict[str, str]
+        ) -> tuple[subprocess.CompletedProcess[str], str]:
+            with tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / "output"
+                result = subprocess.run(
+                    ["bash", "-c", script],
+                    env={**os.environ, **env, "GITHUB_OUTPUT": str(output)},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10,
+                )
+                return result, output.read_text() if output.exists() else ""
+
+        receipts = {}
+        for target in targets:
+            result, output = execute(
+                row["run"],
+                {"TARGET": target, "VERIFIED_SHA": candidate, "MATRIX_TOTAL": str(len(targets))},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            key, receipt = output.strip().split("=")
+            self.assertEqual(key, target)
+            receipts[key] = receipt
+
+        missing = {key: value for key, value in receipts.items() if key != targets[0]}
+        mismatched = {**receipts, targets[0]: f"{'b' * 40}:{len(targets)}"}
+        for status, selected, report, accepted in (
+            ("success", candidate, receipts, True),
+            ("failure", candidate, receipts, False),
+            ("cancelled", candidate, receipts, False),
+            ("skipped", candidate, receipts, False),
+            ("success", candidate, {}, False),
+            ("success", candidate, missing, False),
+            ("success", candidate, mismatched, False),
+            ("success", "invalid", receipts, False),
+        ):
+            with self.subTest(status=status, candidate=selected, receipts=report):
+                result, output = execute(
+                    step["run"],
+                    {
+                        "CANDIDATE_SHA": selected,
+                        "MATRIX_RESULT": status,
+                        "MATRIX_RECEIPTS": json.dumps(report),
+                    },
+                )
+                if accepted:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(output, f"candidate_sha={candidate}\n")
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(output, "")
 
     def assert_service_permissions(self, workflow: str) -> None:
         header, boundary, jobs = workflow.partition("\njobs:\n")
@@ -1152,16 +1266,17 @@ function uniqueLiteralRunners(contents, rows) {
   for (const row of runners) ordinaryPolicy(row);
   return runners;
 }
+const providerFile = '.github/workflows/provider-conformance.yml';
 const ordinaryRunnerFiles = [];
 for (const file of fs.readdirSync(path.join(source, '.github/workflows')).filter(name => /\.ya?ml$/.test(name)).sort()) {
   const filePath = '.github/workflows/' + file;
+  if (filePath === providerFile) continue;
   const contents = fs.readFileSync(path.join(source, filePath), 'utf8');
   if (!/^\s+runs-on:\s*["']?(?:ubuntu|macos|windows)-[A-Za-z0-9.-]+["']?\s*$/m.test(contents)) continue;
   const rows = await ownership(contents, filePath);
   ordinaryRunnerFiles.push({ file: filePath, rows: uniqueLiteralRunners(contents, rows) });
 }
 assert.ok(ordinaryRunnerFiles.some(file => file.file === fileName));
-const providerFile = '.github/workflows/provider-conformance.yml';
 const provider = fs.readFileSync(path.join(source, providerFile), 'utf8');
 function fixedProvider(rows) {
   const nativePython = nativePythonRows(rows);
@@ -1171,17 +1286,18 @@ function fixedProvider(rows) {
   assert.equal(customPython.length, 1, 'fixed provider custom Python must remain discoverable');
   assert.equal(customPython[0].enabled, false);
   assert.equal(nativePython[0].currentValue, customPython[0].currentValue);
-  const matrix = runnerRows(rows);
+  const matrix = runnerRows(rows).filter(row => row.manager === 'regex');
   assert.equal(matrix.length, 1, 'annotated provider matrix must retain its one discovery owner');
   assert.equal(matrix[0].manager, 'regex');
   assert.equal(matrix[0].enabled, false);
+  const literal = uniqueLiteralRunners(provider, rows.filter(row => row !== matrix[0]));
   const actions = actionRows(rows);
   const declared = [...provider.matchAll(/^\s+uses:\s+[^\s]+@([a-f0-9]{40})\s/gm)];
   assert.equal(actions.length, declared.length, 'every provider Action SHA must remain discoverable');
   assert.ok(actions.length > 0);
   for (const row of actions) ordinaryPolicy(row);
   assert.equal(actions.filter(row => row.depName === 'actions/setup-python').length, 1);
-  return { nativePython, customPython, matrix, actions };
+  return { nativePython, customPython, matrix, literal, actions };
 }
 const providerOwnership = fixedProvider(await ownership(provider, providerFile));
 // Only the path changes in this inert source fixture: ordinary setup-python remains automatic.
@@ -1205,7 +1321,7 @@ const matrixOwner = config.customManagers.find(manager => manager.description ==
 assert.ok(matrixOwner);
 const withoutMatrix = { ...config, customManagers: config.customManagers.filter(manager => manager !== matrixOwner) };
 const lostMatrix = await ownership(provider, providerFile, withoutMatrix);
-assert.equal(runnerRows(lostMatrix).length, 0);
+assert.deepEqual(runnerRows(lostMatrix), providerOwnership.literal);
 assert.throws(() => fixedProvider(lostMatrix), /annotated provider matrix must retain/);
 // Deliberately reintroduce the retired overlapping pattern as a negative configuration fixture.
 const overlappingLiteral = String.raw`(?:^|\n)\s*runs-on:\s*(?<depName>ubuntu)-(?<currentValue>[0-9]+(?:\.[0-9]+)?(?:-[a-z0-9]+)*)\s*(?:\n|$)`;
