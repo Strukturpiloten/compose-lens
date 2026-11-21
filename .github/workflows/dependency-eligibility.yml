@@ -21,6 +21,6 @@ jobs:
       contents: read
       pull-requests: write
       statuses: write
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-dependency-eligibility.yml@b31291a2eaf41dac300959b1098d47f18696108a # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-dependency-eligibility.yml@4a5e10c15d5866be2e073e80eeb0eb62601bacd1 # automation-v1 interface v1
     with:
-      automation-sha: b31291a2eaf41dac300959b1098d47f18696108a
+      automation-sha: 4a5e10c15d5866be2e073e80eeb0eb62601bacd1
