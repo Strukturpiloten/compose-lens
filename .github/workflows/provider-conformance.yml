@@ -8,6 +8,10 @@ on:
         description: Exact immutable commit being validated.
         required: true
         type: string
+    outputs:
+      candidate_sha:
+        description: Exact commit verified by every configured provider job.
+        value: ${{ jobs.provider-candidate.outputs.candidate_sha }}
   workflow_dispatch:
     inputs:
       candidate_sha:
@@ -32,6 +36,14 @@ jobs:
       # The same matrix value selects the runner and records its provenance.
       COMPOSE_LENS_CONFORMANCE_RUNNER_LABEL: ${{ matrix.runner }}
     timeout-minutes: 30
+    # Each matrix job sets only its own output.
+    outputs:
+      docker-compose-2-24-3: ${{ steps.receipt.outputs.docker-compose-2-24-3 }}
+      docker-compose-2-24-4: ${{ steps.receipt.outputs.docker-compose-2-24-4 }}
+      docker-compose-2-40-3: ${{ steps.receipt.outputs.docker-compose-2-40-3 }}
+      docker-compose-5-3-1: ${{ steps.receipt.outputs.docker-compose-5-3-1 }}
+      podman-compose-1-3-0: ${{ steps.receipt.outputs.podman-compose-1-3-0 }}
+      podman-compose-1-5-0: ${{ steps.receipt.outputs.podman-compose-1-5-0 }}
     strategy:
       fail-fast: false
       matrix:
@@ -69,6 +81,7 @@ jobs:
           test "${actual}" = "${CANDIDATE_SHA}"
           printf 'sha=%s\n' "${actual}" >> "${GITHUB_OUTPUT}"
       - name: Run only reviewed provider configuration rows
+        id: conformance
         shell: bash
         env:
           CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
@@ -84,6 +97,7 @@ jobs:
           bash scripts/run-observed-provider-config.sh "${TARGET}" \
             "${EVIDENCE_DIRECTORY}/captures"
       - name: Retain current-run native evidence
+        id: evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -92,3 +106,47 @@ jobs:
           if-no-files-found: error
           overwrite: true
           retention-days: 14
+      - name: Report the verified provider job
+        id: receipt
+        if: >-
+          success() && steps.conformance.outcome == 'success' &&
+          steps.evidence.outcome == 'success'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          VERIFIED_SHA: ${{ steps.candidate.outputs.sha }}
+          MATRIX_TOTAL: ${{ strategy.job-total }}
+        run: |
+          printf '%s=%s:%s\n' "${TARGET}" "${VERIFIED_SHA}" "${MATRIX_TOTAL}" >> "${GITHUB_OUTPUT}"
+
+  provider-candidate:
+    name: Require complete exact-candidate provider evidence
+    needs: observed-provider-config
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      candidate_sha: ${{ steps.receipt.outputs.candidate_sha }}
+    steps:
+      - name: Require a verified receipt from every configured provider job
+        id: receipt
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+          MATRIX_RESULT: ${{ needs.observed-provider-config.result }}
+          MATRIX_RECEIPTS: ${{ toJSON(needs.observed-provider-config.outputs) }}
+        run: |
+          set -euo pipefail
+          if [[ "${MATRIX_RESULT}" != success || ! "${CANDIDATE_SHA}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo 'Provider matrix did not succeed on a valid candidate.' >&2
+            exit 1
+          fi
+          if ! jq -e --arg candidate "${CANDIDATE_SHA}" '
+            type == "object" and length > 0 and
+            (length as $count | all(.[]; . == "\($candidate):\($count)"))
+          ' <<< "${MATRIX_RECEIPTS}" >/dev/null; then
+            echo 'Provider matrix lacks complete receipts for the exact candidate.' >&2
+            exit 1
+          fi
+          printf 'candidate_sha=%s\n' "${CANDIDATE_SHA}" >> "${GITHUB_OUTPUT}"

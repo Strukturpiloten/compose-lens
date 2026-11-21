@@ -27,6 +27,10 @@ environments and uses no daemon socket; `podman-compose` retains `--dry-run`. A 
 timed-out, absent, or skipped worker blocks the Release dependent job. Planned and runtime-effect
 rows remain outside this workflow and retain no release-support claim.
 
+Each matrix job reports its verified SHA and configured matrix size under a distinct target
+output after conformance and artifact retention succeed. A final non-matrix job checks the full
+receipt set and exports `candidate_sha` to the existing shared Release gate.
+
 ## Consequences
 
 - Each release candidate has current, traceable configuration evidence without claiming deployment
