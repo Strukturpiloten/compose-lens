@@ -33,7 +33,8 @@ tests. A development implementation override is explicitly marked mutable and ca
 publication evidence.
 
 Local, CI and image file tools, including Actionlint, use `scripts/install-host-tools.sh` and the
-canonical shared inventory. The compatibility `scripts/install-file-tools.sh` forwards to this
+canonical shared inventory. The complete local gate provisions its own pinned Actionlint
+before linting so an older binary on `PATH` cannot take precedence. The compatibility `scripts/install-file-tools.sh` forwards to this
 same launcher. Python tooling is bootstrapped from the selected locked project. Package and
 compiler declarations keep their existing ordinary owners even when an image consumes those files.
 
@@ -83,7 +84,8 @@ cargo ci-test
 cargo ci-doctest
 RUSTDOCFLAGS="-D warnings" cargo ci-doc
 cargo deny check
-actionlint
+python3 scripts/shared-ci.py tools --destination target/workflow-lint-tools --tools actionlint
+target/workflow-lint-tools/actionlint
 zizmor .github/workflows
 lychee --config lychee.toml --root-dir . --offline './**/*.md'
 ```

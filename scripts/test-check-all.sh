@@ -16,6 +16,10 @@ cat > "${test_root}/bin/mock" << 'MOCK'
 #!/bin/bash
 set -Eeuo pipefail
 command_name="${0##*/}"
+# The ambient Actionlint stub refuses to execute.
+if [[ "${command_name}" == actionlint && "${0%/*}" != */target/workflow-lint-tools ]]; then
+  exit 18
+fi
 # Metadata is piped to jq, so its command order is deliberately not asserted.
 case "${command_name}:$*" in
   cargo:metadata* | jq:*) ;;
@@ -30,6 +34,10 @@ if [[ "${CHECK_ALL_TEST_FAIL:-}" == "${command_name}" ||
 fi
 case "${command_name}:$*" in
   git:ls-files*) printf 'README.md\0' ;;
+  python3:scripts/shared-ci.py\ tools\ --destination*)
+    [[ "$5" == --tools && "$6" == actionlint ]]
+    mkdir -p -- "$4"
+    ln -sf -- "${0%/*}/mock" "$4/actionlint" ;;
   jq:-er\ .rust_channel) printf '9.8.7\n' ;;
   jq:*) printf '1.98.1\n' ;;
   python3:scripts/shared-ci.py\ cargo-tools\ verify*--package\ cargo-llvm-cov\ --require-candidate)
@@ -200,6 +208,17 @@ for mode in default fix check; do
   fi
   [[ "$(tail -n 1 "${test_root}/${mode}.commands")" == *'--task api-development'* ]]
   grep -Fq 'passed all 29 steps' "${test_root}/${mode}.output"
+done
+
+# A failed installation cannot fall back to the ambient Actionlint.
+actionlint_install="python3 scripts/shared-ci.py tools --destination ${test_root}/repository/target/workflow-lint-tools --tools actionlint"
+for mode in fix check; do
+  assert_contains "${mode}" "${actionlint_install}"
+  status=0
+  CHECK_ALL_TEST_FAIL_COMMAND="${actionlint_install}" run_gate tool_failure "--${mode}" || status=$?
+  [[ "${status}" == 17 ]]
+  [[ "$(tail -n 1 "${test_root}/tool_failure.commands")" == "${actionlint_install}" ]]
+  grep -Fq 'Install pinned Actionlint (exit 17)' "${test_root}/tool_failure.output"
 done
 
 # A failed check must stop the gate and preserve its exit status in either mode.
