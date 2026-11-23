@@ -74,10 +74,10 @@ jobs:
       - release-metadata-validation
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@b2e07985372159a7c522addbfba8e9b79200c332 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@b597b850c23c006ee0880532f6a3b9df5343db10 # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: b2e07985372159a7c522addbfba8e9b79200c332
+      automation_sha: b597b850c23c006ee0880532f6a3b9df5343db10
       policy_sha: ${{ github.sha }}
       config_path: scripts/release-policy.json
       needs_json: ${{ toJSON(needs) }}
@@ -85,37 +85,17 @@ jobs:
     name: Validate shared publication inventory without publishing
     needs: release-gate
     if: github.repository == 'Strukturpiloten/compose-lens' && needs.release-gate.result == 'success'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 10
     permissions:
       contents: read
-    steps:
-      - name: Check out exact candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          path: source
-          persist-credentials: false
-      - name: Check out immutable shared automation
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: Strukturpiloten/boxferry
-          # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: b2e07985372159a7c522addbfba8e9b79200c332
-          path: _automation
-          persist-credentials: false
-      - name: Install locked shared Python tooling
-        uses: ./_automation/.github/actions/shared-python
-      - name: Validate exact-gated crate inventory without credentials or registry access
-        uses: ./_automation/.github/actions/shared-crate-publish
-        with:
-          candidate-sha: ${{ github.sha }}
-          automation-sha: b2e07985372159a7c522addbfba8e9b79200c332
-          release-config: ${{ github.workspace }}/source/scripts/release-policy.json
-          package: compose-lens
-          validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}
-          validation-result: ${{ needs.release-gate.result }}
-          validation-only: "true"
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-inventory.yml@b597b850c23c006ee0880532f6a3b9df5343db10 # automation-v1 interface v1
+    with:
+      candidate_sha: ${{ github.sha }}
+      automation_sha: b597b850c23c006ee0880532f6a3b9df5343db10
+      policy_sha: ${{ github.sha }}
+      config_path: scripts/release-policy.json
+      validation_sha: ${{ needs.release-gate.outputs.candidate_sha }}
+      validation_result: ${{ needs.release-gate.result }}
+      published_api_candidate_sha: ${{ needs.release-gate.outputs.published_api_candidate_sha }}
 
   release:
     name: Publish ComposeLens
@@ -149,7 +129,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: b2e07985372159a7c522addbfba8e9b79200c332
+          ref: b597b850c23c006ee0880532f6a3b9df5343db10
           path: _automation
           persist-credentials: false
       - name: Install locked shared Python tooling
@@ -386,7 +366,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: b2e07985372159a7c522addbfba8e9b79200c332
+          automation-sha: b597b850c23c006ee0880532f6a3b9df5343db10
           release-config: ${{ github.workspace }}/source/scripts/release-policy.json
           package: compose-lens
           validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}

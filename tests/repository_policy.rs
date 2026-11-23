@@ -1147,13 +1147,16 @@ fn release_workflow_uses_only_trusted_publishing() -> Result<(), String> {
     if workflow
         .matches("uses: ./_automation/.github/actions/shared-crate-publish")
         .count()
-        != 2
+        != 1
     {
-        return Err("Release must use shared inventory and protected trusted publication".to_owned());
+        return Err("Release must retain one protected trusted publisher".to_owned());
     }
     for required in [
         "id-token: write",
-        "validation-only: \"true\"",
+        "shared-release-inventory.yml@",
+        "validation_result: ${{ needs.release-gate.result }}",
+        "validation_sha: ${{ needs.release-gate.outputs.candidate_sha }}",
+        "published_api_candidate_sha: ${{ needs.release-gate.outputs.published_api_candidate_sha }}",
         "validation-only: ${{ inputs.validation_only }}",
         "validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}",
         "validation-result: ${{ needs.release-gate.result }}",
