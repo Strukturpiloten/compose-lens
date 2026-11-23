@@ -74,10 +74,10 @@ jobs:
       - release-metadata-validation
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@b597b850c23c006ee0880532f6a3b9df5343db10 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml@cf3578f47416e1b27b770fe4a81918844fb2d58b # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: b597b850c23c006ee0880532f6a3b9df5343db10
+      automation_sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
       policy_sha: ${{ github.sha }}
       config_path: scripts/release-policy.json
       needs_json: ${{ toJSON(needs) }}
@@ -87,10 +87,10 @@ jobs:
     if: github.repository == 'Strukturpiloten/compose-lens' && needs.release-gate.result == 'success'
     permissions:
       contents: read
-    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-inventory.yml@b597b850c23c006ee0880532f6a3b9df5343db10 # automation-v1 interface v1
+    uses: Strukturpiloten/boxferry/.github/workflows/shared-release-inventory.yml@cf3578f47416e1b27b770fe4a81918844fb2d58b # automation-v1 interface v1
     with:
       candidate_sha: ${{ github.sha }}
-      automation_sha: b597b850c23c006ee0880532f6a3b9df5343db10
+      automation_sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
       policy_sha: ${{ github.sha }}
       config_path: scripts/release-policy.json
       validation_sha: ${{ needs.release-gate.outputs.candidate_sha }}
@@ -129,7 +129,7 @@ jobs:
         with:
           repository: Strukturpiloten/boxferry
           # renovate: datasource=github-digest depName=Strukturpiloten/boxferry currentValue=automation-v1
-          ref: b597b850c23c006ee0880532f6a3b9df5343db10
+          ref: cf3578f47416e1b27b770fe4a81918844fb2d58b
           path: _automation
           persist-credentials: false
       - name: Install locked shared Python tooling
@@ -366,7 +366,7 @@ jobs:
         uses: ./_automation/.github/actions/shared-crate-publish
         with:
           candidate-sha: ${{ github.sha }}
-          automation-sha: b597b850c23c006ee0880532f6a3b9df5343db10
+          automation-sha: cf3578f47416e1b27b770fe4a81918844fb2d58b
           release-config: ${{ github.workspace }}/source/scripts/release-policy.json
           package: compose-lens
           validation-sha: ${{ needs.release-gate.outputs.candidate_sha }}
