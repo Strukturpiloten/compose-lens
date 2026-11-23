@@ -313,6 +313,7 @@ fn is_immutable_versioned_action(reference: &str) -> bool {
                     | "Strukturpiloten/boxferry/.github/workflows/shared-rust-semver.yml"
                     | "Strukturpiloten/boxferry/.github/workflows/shared-release-prepare.yml"
                     | "Strukturpiloten/boxferry/.github/workflows/shared-release-validation.yml"
+                    | "Strukturpiloten/boxferry/.github/workflows/shared-release-inventory.yml"
                     | "Strukturpiloten/boxferry/.github/workflows/shared-dependency-eligibility.yml"
                     | "Strukturpiloten/boxferry/.github/workflows/shared-dependency-wait.yml"
                     | "Strukturpiloten/boxferry/.github/workflows/shared-devcontainer-validation.yml"
@@ -361,6 +362,7 @@ mod tests {
             "shared-rust-semver.yml",
             "shared-release-prepare.yml",
             "shared-release-validation.yml",
+            "shared-release-inventory.yml",
             "shared-dependency-eligibility.yml",
             "shared-dependency-wait.yml",
             "shared-devcontainer-validation.yml",

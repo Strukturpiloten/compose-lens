@@ -771,13 +771,64 @@ class ConsumerContractTests(unittest.TestCase):
         self.assertIn("api_purpose: published", release)
         self.assertIn("needs.crate-preparation.result == 'success'", release)
         self.assertEqual(
-            release.count("uses: ./_automation/.github/actions/shared-crate-publish"), 2
+            release.count("uses: ./_automation/.github/actions/shared-crate-publish"), 1
         )
         self.assertNotIn("cargo publish --locked", release)
         command = POLICY.task("api-development").commands[0]
         self.assertIn("--release-type", command)
         self.assertEqual(command.count("--repository"), 1)
         self.assertEqual(command[command.index("--repository") + 1], "Strukturpiloten/compose-lens")
+
+    def test_release_inventory_delegates_actual_gate_receipts_read_only(self) -> None:
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/release.yml").read_text(), Loader=yaml.BaseLoader
+        )
+        jobs = workflow["jobs"]
+        inventory = jobs["crate-preparation"]
+        self.assertEqual(inventory["needs"], "release-gate")
+        self.assertEqual(
+            inventory["if"],
+            "github.repository == 'Strukturpiloten/compose-lens' && "
+            "needs.release-gate.result == 'success'",
+        )
+        self.assertEqual(inventory["permissions"], {"contents": "read"})
+        self.assertEqual(
+            inventory["uses"],
+            "Strukturpiloten/boxferry/.github/workflows/shared-release-inventory.yml@"
+            + MANIFEST["revision"],
+        )
+        self.assertEqual(
+            inventory["with"],
+            {
+                "candidate_sha": "${{ github.sha }}",
+                "automation_sha": MANIFEST["revision"],
+                "policy_sha": "${{ github.sha }}",
+                "config_path": "scripts/release-policy.json",
+                "validation_sha": "${{ needs.release-gate.outputs.candidate_sha }}",
+                "validation_result": "${{ needs.release-gate.result }}",
+                "published_api_candidate_sha": (
+                    "${{ needs.release-gate.outputs.published_api_candidate_sha }}"
+                ),
+            },
+        )
+        self.assertEqual(set(inventory), {"name", "needs", "if", "permissions", "uses", "with"})
+        gate = jobs["release-gate"]
+        self.assertEqual(gate["if"], "always()")
+        self.assertEqual(
+            gate["needs"],
+            [
+                "provider-config-conformance",
+                "deterministic-validation",
+                "release-metadata-validation",
+            ],
+        )
+        self.assertEqual(gate["with"]["needs_json"], "${{ toJSON(needs) }}")
+        self.assertEqual(jobs["deterministic-validation"]["with"], {"api_purpose": "published"})
+        self.assertEqual(jobs["release"]["needs"], ["release-gate", "crate-preparation"])
+        policy = json.loads((ROOT / "scripts/release-policy.json").read_text())
+        self.assertEqual(policy["packages"], ["compose-lens"])
+        self.assertEqual(policy["required_jobs"], gate["needs"])
+        self.assertIs(policy["publication_enabled"], True)
 
     def test_qualification_recipe_reuses_the_local_canonical_tool_launcher(self) -> None:
         dockerfile = (ROOT / ".devcontainer/Dockerfile").read_text()
