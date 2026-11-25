@@ -21,7 +21,7 @@ from unittest.mock import patch
 
 import yaml
 from boxferry_ci import __file__ as shared_module_file
-from boxferry_ci import cargo_tools
+from boxferry_ci import cargo_tools, devcontainer_validation
 from boxferry_ci import tooling as shared_tooling
 from boxferry_ci.contracts import ContractError
 from boxferry_ci.gate import GateFailure, verify_devcontainer_gate
@@ -34,6 +34,102 @@ POLICY = load_policy(ROOT / "scripts/validation-policy.json")
 
 
 class ConsumerContractTests(unittest.TestCase):
+    def test_lifecycle_image_selection_does_not_require_an_environment_selector(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tools = Path(temporary)
+            # Isolate the selector boundary: stub the earlier venv prerequisite and
+            # stop at the following missing-Cargo-home diagnostic before other tools.
+            python = tools / "python3"
+            python.write_text(
+                '#!/bin/bash\n[[ "$1 $2" == "-m venv" ]] || exit 99\n'
+                '/bin/mkdir -p "$3/bin"\n/bin/ln -s /bin/true "$3/bin/python"\n'
+            )
+            python.chmod(0o755)
+            for selector in (None, "/opt/compose-lens-file-tools", "/tmp/unexpected-tools"):
+                with self.subTest(selector=selector):
+                    environment = {"PATH": str(tools) + os.pathsep + os.environ["PATH"]}
+                    if selector is not None:
+                        environment["COMPOSE_LENS_NODE_TOOLS_ROOT"] = selector
+                    result = subprocess.run(
+                        ["bash", str(ROOT / ".devcontainer/verify-tools.sh")],
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                    )
+                    self.assertEqual(result.returncode, 1)
+                    expected = (
+                        "Unexpected ComposeLens image Node installation"
+                        if selector == "/tmp/unexpected-tools"
+                        else "ComposeLens Dev Container is missing CARGO_HOME."
+                    )
+                    self.assertIn(expected, result.stderr)
+
+    def test_image_formatters_survive_both_finite_runtime_paths(self) -> None:
+        config = json.loads((ROOT / ".devcontainer/devcontainer.json").read_text())
+        provider_environment = dict(
+            value.split("=", 1)
+            for value in devcontainer_validation._runtime_environment(config, {}, "compose-lens")
+        )
+        image = (ROOT / ".devcontainer/Dockerfile").read_text()
+        links = re.findall(
+            r"ln -s (/opt/compose-lens-file-tools/node_modules/\.bin/\S+) "
+            r"(/usr/local/bin/[^;\s]+);",
+            image,
+        )
+        self.assertEqual(
+            links,
+            [
+                (f"/opt/compose-lens-file-tools/node_modules/.bin/{name}", f"/usr/local/bin/{name}")
+                for name in ("markdownlint-cli2", "prettier")
+            ],
+        )
+        for label, path in (
+            ("developer", config["containerEnv"]["PATH"]),
+            ("provider", provider_environment["PATH"]),
+        ):
+            with self.subTest(runtime=label), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                # Relocate every finite PATH entry into a private image filesystem fixture.
+                environment = {"PATH": ":".join(str(root / part[1:]) for part in path.split(":"))}
+                for source, destination in links:
+                    executable = root / source[1:]
+                    executable.parent.mkdir(parents=True, exist_ok=True)
+                    executable.write_text("#!/bin/bash\nprintf '%s\\n' selected-installation\n")
+                    executable.chmod(0o755)
+                    public = root / destination[1:]
+                    public.parent.mkdir(parents=True, exist_ok=True)
+                command = "command -v markdownlint-cli2 && command -v prettier"
+                missing = subprocess.run(
+                    ["/bin/bash", "-c", command], env=environment, capture_output=True, timeout=10
+                )
+                self.assertEqual(missing.returncode, 1)
+                for source, destination in links:
+                    (root / destination[1:]).symlink_to(root / source[1:])
+                found = subprocess.run(
+                    ["/bin/bash", "-c", command + "; markdownlint-cli2; prettier"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                self.assertEqual(found.returncode, 0, found.stderr)
+                self.assertEqual(
+                    found.stdout.splitlines(),
+                    [str(root / destination[1:]) for _, destination in links]
+                    + ["selected-installation"] * 2,
+                )
+
+    def test_node_tool_dispatch_fixtures(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/test-node-tools.py")],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_immutable_shared_source_has_one_authority(self) -> None:
         revision = MANIFEST["revision"]
         self.assertRegex(revision, r"^[a-f0-9]{40}$")
@@ -650,8 +746,7 @@ class ConsumerContractTests(unittest.TestCase):
                 ".github/automation.json",
                 "scripts/shared-ci.py",
                 "scripts/install-host-tools.sh",
-                "package.json",
-                "package-lock.json",
+                ".github/node-tools.json",
             },
         )
         inputs = [
@@ -733,6 +828,21 @@ class ConsumerContractTests(unittest.TestCase):
 
             def executable(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
                 name = argv[0]
+                if name == "python3":
+                    self.assertEqual(
+                        argv[1:],
+                        [
+                            "/opt/compose-lens-file-tools/boxferry-node-tools.py",
+                            "image-node-tool",
+                            "--repository-root",
+                            str(ROOT),
+                            "--cwd",
+                            str(ROOT),
+                            "prettier",
+                            "--version",
+                        ],
+                    )
+                    return subprocess.CompletedProcess(argv, 0, "", "")
                 if name == "rustup":
                     return subprocess.CompletedProcess(
                         argv, 0, "rustc " + argv[2] + " (test)\n", ""
@@ -750,6 +860,17 @@ class ConsumerContractTests(unittest.TestCase):
                 expected["ruff"] = "0.0.0"
                 with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
                     exec(compile(body, "verify-tools", "exec"), {"__name__": "__main__"})
+            (tooling / ".github/automation.json").write_text(
+                json.dumps({**MANIFEST, "revision": "a" * 40})
+            )
+            with (
+                patch.object(sys, "argv", ["verify-tools", str(ROOT), str(tooling)]),
+                patch("subprocess.run") as invoked,
+                self.assertRaises(SystemExit),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                exec(compile(body, "verify-tools", "exec"), {"__name__": "__main__"})
+            invoked.assert_not_called()
 
     def test_ordinary_local_gate_does_not_require_image_storage_or_privilege(self) -> None:
         script = (ROOT / "scripts/check-all.sh").read_text()
@@ -1030,7 +1151,11 @@ class ConsumerContractTests(unittest.TestCase):
             for i, step in enumerate(steps)
             if "uses: ./_automation/.github/actions/shared-node\n" in step
         )
-        npm = next(i for i, step in enumerate(steps) if "npm ci --ignore-scripts\n" in step)
+        npm = next(
+            i
+            for i, step in enumerate(steps)
+            if "bash scripts/node-tool.sh prettier --version\n" in step
+        )
         self.assertLess(checkout, python)
         self.assertLess(python, node)
         self.assertLess(node, npm)
@@ -1043,8 +1168,10 @@ class ConsumerContractTests(unittest.TestCase):
         self.assertIn("ref: " + MANIFEST["revision"] + "\n", steps[checkout])
         self.assertIn("automation-sha: " + MANIFEST["revision"] + "\n", steps[node])
         self.assertIn("cache: npm\n", steps[node])
-        self.assertIn("cache-dependency-path: package-lock.json\n", steps[node])
-        self.assertTrue((ROOT / "package-lock.json").is_file())
+        self.assertIn("cache-dependency-path: _automation/package-lock.json\n", steps[node])
+        self.assertFalse((ROOT / "package-lock.json").exists())
+        self.assertFalse((ROOT / "package.json").exists())
+        self.assertNotIn("/node_modules/.bin", documentation)
         self.assertNotRegex(workflow, r"(?m)^\s+node-version:")
         self.assertNotIn("uses: actions/setup-node@", workflow)
         self.assertNotIn("# renovate: datasource=node-version depName=node", workflow)

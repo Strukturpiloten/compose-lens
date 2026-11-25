@@ -13,7 +13,7 @@ qualification remains separate from this source integration.
 | Rust dependency resolution               | `Cargo.lock`                                     |
 | Container base and installed tools       | `.devcontainer/Dockerfile`                       |
 | Dev Container features                   | `.devcontainer/devcontainer-lock.json`           |
-| Node-based file tools                    | `package-lock.json`                              |
+| Node-based file tools                    | Selected shared `package-lock.json`              |
 | Downloaded tool versions and checksums   | Selected shared `automation/tool-artifacts.json` |
 
 CI and release workflows read versions from these files instead of maintaining another prose copy.
@@ -146,3 +146,31 @@ The CI qualification recipe calls that same launcher and separately exports cano
 tools. The compatibility installer has no independent inventory or update owner. Image and
 Feature proposals stay disabled until fresh GitHub qualification; this source integration does
 not establish native qualification or change ordinary package/compiler ownership.
+
+Node file checks dispatch through `scripts/node-tool.sh` and the selected shared
+`node-tool` interface. The shared source owns the npm manifests, package versions and
+lock integrity; `.github/node-tools.json` declares that ownership for image qualification.
+Ordinary hosts acquire tools through the existing verified shared bootstrap. CI keys
+its npm cache with the immutable checkout lock and uses the same dispatch.
+ComposeLens retains its Prettier and Markdownlint configuration, ignore rules and
+fixture exclusions; checks explicitly select these configs and disable EditorConfig.
+
+The image installs once with `node-tool --installation-root /opt/compose-lens-file-tools
+--install-only` and exposes its public `node_modules/.bin` for native qualification probes.
+Fixed links in `/usr/local/bin` retain discovery under the finite developer and provider
+runtime PATHs; format operations still use the selected-installation dispatcher.
+It sets `COMPOSE_LENS_NODE_TOOLS_ROOT` so subsequent checks select the retained
+`/opt/compose-lens-file-tools/boxferry-node-tools.py` image entry point for read-only
+verification and execution. Unexpected image roots are rejected before loading code.
+The retained entry point checks the checkout's selected revision without bootstrapping,
+fetching or writing a checkout cache. Hosts leave this variable unset; installation
+directory presence alone never selects an image. A stale image fails verification and
+requires rebuilding against the checkout selected automation revision.
+
+The image-only lifecycle uses that fixed retained helper after comparing automation
+manifests, including under the provider's sanitized environment without the selector.
+An explicitly supplied incorrect selector still fails. Ordinary contract tests execute
+the lifecycle shell's selector boundary and check the retained helper invocation after
+manifest equality. Run them through
+`python3 scripts/shared-ci.py run --task python-quality`; hosted native image qualification
+remains the complete environment and lifecycle authority.
