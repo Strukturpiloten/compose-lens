@@ -158,13 +158,14 @@ checkout and must not perform those writes.
 Use [`presentation_worker`](.codex/agents/presentation-worker.toml) (`gpt-6.1-terra`/`medium`) for bounded
 documentation/presentation fixes. Retain Sol escalation/review; start new trusted sessions.
 
-Model defaults: [`.codex/config.toml`](.codex/config.toml); task settings:
-[`.codex/agents/`](.codex/agents/). The primary manager always uses `gpt-6-sol` with `xhigh` reasoning;
-implementation/research/review use `gpt-6.1-sol` with `high` reasoning; check-only verification uses
-`gpt-6-luna` with `high` reasoning. Use Luna for bounded read-only exploration and Sol for difficult
-failure diagnosis. Task-specific subagents may use `gpt-6.1-sol`, `gpt-6.1-terra`, or `gpt-6-luna` with `medium`, `high`,
-or `xhigh` reasoning. Use `gpt-6-astra` only with `xhigh` reasoning for particularly difficult
-architectural questions. Models do not expand scope or permissions.
+Model defaults are in [`.codex/config.toml`](.codex/config.toml) and role settings are in
+[`.codex/agents/`](.codex/agents/). The primary manager always uses `gpt-6-sol` with `xhigh` reasoning.
+Default subagents use `gpt-6.2-sol` with `medium` reasoning. Implementation, research, and review use
+`gpt-6.2-sol` with `high` reasoning. Check-only verification uses `gpt-6-luna` with `high` reasoning.
+Use Luna for bounded read-only exploration and Sol for difficult failure diagnosis. Task-specific
+subagents may use `gpt-6.2-sol`, `gpt-6.1-terra`, `gpt-6-luna`, or `gpt-6.2-astra` with `medium`,
+`high`, or `xhigh` reasoning. Reserve `gpt-6.2-astra` for very hard tasks. Models do not expand scope
+or permissions.
 
 `agents.max_concurrent_threads_per_session` excludes the primary manager.
 
