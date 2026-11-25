@@ -120,3 +120,18 @@ and again at execution rather than silently selecting a shared fallback.
 PR and merge-queue policy remains bound to its trusted base. The explicit MSRV declaration must
 reach that base before strict MSRV caller adoption can pass; candidate policy cannot seed its own
 trusted admission. A strict draft alone does not establish a publishable adoption or hosted success.
+
+## 2026-11-25 shared Node file-tool ownership
+
+ComposeLens file checks delegate to the selected shared `node-tool` interface through
+a thin consumer launcher. The producer owns package declarations, lock integrity,
+acquisition and installed identity validation. Local and hosted calls retain explicit
+ComposeLens configs and exclusions. Images install once into a persistent root and
+select it explicitly through `COMPOSE_LENS_NODE_TOOLS_ROOT`; normal execution verifies
+the installation without modifying it. The image marker declares automation ownership.
+Image execution uses the retained authenticated shared entry point at the fixed image
+installation path, avoiding consumer bootstrap/cache writes in the sealed runtime.
+Lifecycle verification compares the retained and checkout automation manifests first.
+No additional downloader, package inventory, source pin or candidate authority is added.
+Admission of a producer revision implementing this interface and native hosted image
+qualification remain prerequisites for rollout; source fixture checks establish neither.

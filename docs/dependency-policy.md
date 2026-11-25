@@ -53,3 +53,9 @@ GitHub CI image qualification and subsequent updater activation are separate req
 issue #563. The qualification caller does not itself establish native image or App evidence.
 
 `yaml-edit` remains a private exact dependency under [ADR 0002](decisions/0002-loss-aware-yaml-syntax.md).
+
+Node file tools have one package owner: the selected shared source npm manifests and
+lockfile. ComposeLens has no root npm graph or second formatter revision pin. Existing
+shared-automation Renovate grouping owns the adoption manifest, preset refs and workflow
+refs together; the general producer Node rule remains canonical. The image ownership
+marker adds no version extraction. Existing image/Feature holds and native pins remain.

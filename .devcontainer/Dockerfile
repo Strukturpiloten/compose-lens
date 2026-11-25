@@ -40,14 +40,17 @@ cargo "+${rust_channel}" install --locked --version "${ZIZMOR_VERSION}" zizmor
 COPY .github/automation.json /opt/compose-lens-tooling/.github/
 COPY scripts/shared-ci.py /opt/compose-lens-tooling/scripts/
 COPY scripts/install-host-tools.sh /opt/compose-lens-tooling/scripts/
-COPY package.json package-lock.json /opt/compose-lens-file-tools/
-ENV UV_CACHE_DIR=/opt/compose-lens-tooling/uv-cache \
+COPY .github/node-tools.json /opt/compose-lens-tooling/.github/
+ENV COMPOSE_LENS_NODE_TOOLS_ROOT=/opt/compose-lens-file-tools \
+    PATH=/opt/compose-lens-file-tools/node_modules/.bin:${PATH} \
+    UV_CACHE_DIR=/opt/compose-lens-tooling/uv-cache \
     UV_PYTHON_INSTALL_DIR=/opt/compose-lens-tooling/python
 
 RUN set -eux; \
-    npm ci --ignore-scripts --prefix /opt/compose-lens-file-tools; \
-    ln -s /opt/compose-lens-file-tools/node_modules/.bin/markdownlint-cli2 \
-      /usr/local/bin/markdownlint-cli2; \
+    python3 /opt/compose-lens-tooling/scripts/shared-ci.py node-tool \
+      --cwd /opt/compose-lens-tooling \
+      --installation-root /opt/compose-lens-file-tools --install-only; \
+    ln -s /opt/compose-lens-file-tools/node_modules/.bin/markdownlint-cli2 /usr/local/bin/markdownlint-cli2; \
     ln -s /opt/compose-lens-file-tools/node_modules/.bin/prettier /usr/local/bin/prettier; \
     bash /opt/compose-lens-tooling/scripts/install-host-tools.sh /usr/local/bin; \
     python3 /opt/compose-lens-tooling/scripts/shared-ci.py tools \

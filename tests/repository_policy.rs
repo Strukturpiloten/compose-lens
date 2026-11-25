@@ -648,9 +648,9 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
         "git ls-files --cached --others --exclude-standard",
         "list_existing_files",
         ":(exclude)schema/compose-spec.json",
-        "markdownlint-cli2 --fix",
-        "prettier --write",
-        "prettier --check",
+        "markdownlint-cli2 --config .markdownlint.json --fix",
+        "prettier --config .prettierrc.json --no-editorconfig --write",
+        "prettier --config .prettierrc.json --no-editorconfig --check",
         "check_yaml_document_markers",
         "tombi format --check --offline",
         "tombi lint --error-on-warnings --offline",
@@ -696,10 +696,10 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
         return Err("only the release-plz-owned CHANGELOG.md may be excluded from Prettier".to_owned());
     }
     for required in [
-        r#"prettier --write --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}""#,
-        r#"markdownlint-cli2 --fix "${markdown_literals[@]}""#,
-        r#"markdownlint-cli2 "${markdown_literals[@]}""#,
-        r#"prettier --check --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}""#,
+        r#"prettier --config .prettierrc.json --no-editorconfig --write --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}""#,
+        r#"markdownlint-cli2 --config .markdownlint.json --fix "${markdown_literals[@]}""#,
+        r#"markdownlint-cli2 --config .markdownlint.json "${markdown_literals[@]}""#,
+        r#"prettier --config .prettierrc.json --no-editorconfig --check --ignore-path .prettierignore --ignore-unknown "${markdown_files[@]}""#,
     ] {
         if !script.contains(required) {
             return Err(format!(
@@ -708,17 +708,15 @@ fn non_rust_file_quality_is_locked_and_required() -> Result<(), String> {
         }
     }
 
-    let lock = read_repository_file("package-lock.json")?;
-    for package in ["markdownlint-cli2", "prettier"] {
-        if !lock.contains(&format!("\"{package}\"")) {
-            return Err(format!("package-lock.json must lock `{package}`"));
-        }
+    let marker = read_repository_file(".github/node-tools.json")?;
+    if !marker.contains(r#""source": "automation""#) {
+        return Err("Node tool versions must be owned by selected automation".to_owned());
     }
 
     for workflow_name in ["ci.yml"] {
         let workflow = read_repository_file(&format!(".github/workflows/{workflow_name}"))?;
         for required in [
-            "npm ci --ignore-scripts",
+            "bash scripts/node-tool.sh prettier --version",
             "bash scripts/install-host-tools.sh",
             "bash scripts/check-files.sh --check",
         ] {
