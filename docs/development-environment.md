@@ -166,3 +166,11 @@ The retained entry point checks the checkout's selected revision without bootstr
 fetching or writing a checkout cache. Hosts leave this variable unset; installation
 directory presence alone never selects an image. A stale image fails verification and
 requires rebuilding against the checkout selected automation revision.
+
+The image-only lifecycle uses that fixed retained helper after comparing automation
+manifests, including under the provider's sanitized environment without the selector.
+An explicitly supplied incorrect selector still fails. Ordinary contract tests execute
+the lifecycle shell's selector boundary and check the retained helper invocation after
+manifest equality. Run them through
+`python3 scripts/shared-ci.py run --task python-quality`; hosted native image qualification
+remains the complete environment and lifecycle authority.

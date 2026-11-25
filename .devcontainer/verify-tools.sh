@@ -31,8 +31,9 @@ fi
 check_python_venv
 
 # Verify the read-only image installation against this checkout selected authority.
-if [[ -z "${COMPOSE_LENS_NODE_TOOLS_ROOT:-}" ]]; then
-  printf 'ComposeLens Dev Container is missing COMPOSE_LENS_NODE_TOOLS_ROOT.\n' >&2
+if [[ -n "${COMPOSE_LENS_NODE_TOOLS_ROOT:-}" &&
+  "${COMPOSE_LENS_NODE_TOOLS_ROOT}" != /opt/compose-lens-file-tools ]]; then
+  printf 'Unexpected ComposeLens image Node installation; rebuild the Dev Container.\n' >&2
   exit 1
 fi
 
@@ -109,8 +110,10 @@ try:
     retained = json.loads((tooling / ".github/automation.json").read_text())
     if retained != manifest:
         raise ValueError("retained shared-tool authority differs from the checkout")
-    subprocess.run(["bash", str(repository / "scripts/node-tool.sh"), "prettier", "--version"],
-                   check=True, timeout=30)
+    subprocess.run([
+        "python3", "/opt/compose-lens-file-tools/boxferry-node-tools.py", "image-node-tool",
+        "--repository-root", str(repository), "--cwd", str(repository), "prettier", "--version",
+    ], check=True, timeout=30)
     project = tooling / "target/boxferry-automation" / manifest["revision"] / "automation"
     metadata = tomllib.loads((project / "pyproject.toml").read_text())
     uv_requirement = metadata["tool"]["uv"]["required-version"]

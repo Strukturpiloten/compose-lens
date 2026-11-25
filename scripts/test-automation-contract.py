@@ -34,6 +34,37 @@ POLICY = load_policy(ROOT / "scripts/validation-policy.json")
 
 
 class ConsumerContractTests(unittest.TestCase):
+    def test_lifecycle_image_selection_does_not_require_an_environment_selector(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tools = Path(temporary)
+            # Isolate the selector boundary: stub the earlier venv prerequisite and
+            # stop at the following missing-Cargo-home diagnostic before other tools.
+            python = tools / "python3"
+            python.write_text(
+                '#!/bin/bash\n[[ "$1 $2" == "-m venv" ]] || exit 99\n'
+                '/bin/mkdir -p "$3/bin"\n/bin/ln -s /bin/true "$3/bin/python"\n'
+            )
+            python.chmod(0o755)
+            for selector in (None, "/opt/compose-lens-file-tools", "/tmp/unexpected-tools"):
+                with self.subTest(selector=selector):
+                    environment = {"PATH": str(tools) + os.pathsep + os.environ["PATH"]}
+                    if selector is not None:
+                        environment["COMPOSE_LENS_NODE_TOOLS_ROOT"] = selector
+                    result = subprocess.run(
+                        ["bash", str(ROOT / ".devcontainer/verify-tools.sh")],
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                    )
+                    self.assertEqual(result.returncode, 1)
+                    expected = (
+                        "Unexpected ComposeLens image Node installation"
+                        if selector == "/tmp/unexpected-tools"
+                        else "ComposeLens Dev Container is missing CARGO_HOME."
+                    )
+                    self.assertIn(expected, result.stderr)
+
     def test_image_formatters_survive_both_finite_runtime_paths(self) -> None:
         config = json.loads((ROOT / ".devcontainer/devcontainer.json").read_text())
         provider_environment = dict(
@@ -797,9 +828,19 @@ class ConsumerContractTests(unittest.TestCase):
 
             def executable(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
                 name = argv[0]
-                if name == "bash":
+                if name == "python3":
                     self.assertEqual(
-                        argv[1:], [str(ROOT / "scripts/node-tool.sh"), "prettier", "--version"]
+                        argv[1:],
+                        [
+                            "/opt/compose-lens-file-tools/boxferry-node-tools.py",
+                            "image-node-tool",
+                            "--repository-root",
+                            str(ROOT),
+                            "--cwd",
+                            str(ROOT),
+                            "prettier",
+                            "--version",
+                        ],
                     )
                     return subprocess.CompletedProcess(argv, 0, "", "")
                 if name == "rustup":
